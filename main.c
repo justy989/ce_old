@@ -23,17 +23,12 @@ NOTES:
 #define COLOR_BRIGHT_WHITE 15
 
 typedef struct {
-     char* start; // NULL terminated, does not include '\n' character at the end
-     int64_t length;
-} Line;
-
-typedef struct {
      int64_t x;
      int64_t y;
 } Point;
 
 typedef struct {
-     Line* lines;
+     char** lines; // NULL terminated, not newline terminated
      int64_t line_count;
      Point cursor;
 } Buffer;
@@ -92,33 +87,37 @@ int main(int argc, char** argv)
           return -1;
      }
 
-#if 0
+     // alloc buffer
      Buffer buffer = {0};
-     buffer.lines = malloc(line_count * sizeof(Line));
-     if(!buffer.lines){
-          printf("failed to allocate buffer for %ld line file %s\n", line_count, filename);
-          return -1;
-     }
-     buffer.line_count = line_count;
-#endif
-
-     // build lines from content
-     Line* content_lines = malloc(line_count * sizeof(Line));
      {
-          content_lines[0].start = contents;
+          buffer.lines = malloc(line_count * sizeof(char*));
+          if(!buffer.lines){
+               printf("failed to allocate buffer for %ld line file %s\n", line_count, filename);
+               return -1;
+          }
+          buffer.line_count = line_count;
+     }
+
+     // fill buffer from file contents
+     {
+          char* last_newline = contents - 1;
           for(size_t i = 0, l = 0; i < content_size; ++i){
-               if(contents[i] == NEWLINE){
-                    l++;
-                    Line* cur_line = content_lines + l;
-                    Line* prev_line = cur_line - 1;
-                    cur_line->start = contents + i + 1; // exclude the newline
-                    prev_line->length = (contents + i + 1) - prev_line->start; // include the newline
-               }
+               if(contents[i] != NEWLINE) continue;
+               l++;
+
+               char* current_char = contents + i;
+               size_t len = current_char - last_newline;
+               char* prev_line = malloc(len + 1);
+
+               strncpy(prev_line, last_newline + 1, len);
+
+               prev_line[len] = 0;
+               last_newline = current_char;
+               buffer.lines[l - 1] = prev_line;
           }
 
-          // fix up the last line since it won't get touched in the loop
-          Line* last_line = content_lines + line_count - 1;
-          last_line->length = (contents + content_size) - last_line->start;
+          // finish up the last line
+          strncpy(buffer.lines[line_count - 1], last_newline + 1, (contents + content_size) - (last_newline + 1));
      }
 
      start_color();
@@ -136,11 +135,9 @@ int main(int argc, char** argv)
           int prev_width = 0;
           int height = 0;
 
-          Point cursor = {0};
+          int key = 0;
 
           while(!done){
-               move(0, 0);
-
                // macro that modifies height and width
                getmaxyx(stdscr, height, width);
 
@@ -155,8 +152,8 @@ int main(int argc, char** argv)
                int64_t last_line = start_line + (height - 2);
 
                // adjust the starting line based on where the cursor is
-               if(cursor.y > last_line) start_line++;
-               if(cursor.y < start_line) start_line--;
+               if(buffer.cursor.y > last_line) start_line++;
+               if(buffer.cursor.y < start_line) start_line--;
 
                // recalc the starting line
                last_line = start_line + (height - 2);
@@ -171,9 +168,11 @@ int main(int argc, char** argv)
                // print the range of lines we want to show
                standend();
                for(int64_t i = start_line; i <= last_line; ++i){
+                    move(i - start_line, 0);
                     memset(line_buffer, 0, width + 1);
-                    int64_t max = width < content_lines[i].length ? width : content_lines[i].length;
-                    strncpy(line_buffer, content_lines[i].start, max);
+                    int64_t line_length = strlen(buffer.lines[i]);
+                    int64_t max = width < line_length ? width : line_length;
+                    strncpy(line_buffer, buffer.lines[i], max);
                     addstr(line_buffer); // NOTE: rather than printw() because it could contain format specifiers
                }
 
@@ -181,58 +180,71 @@ int main(int argc, char** argv)
                attron(A_REVERSE);
                mvprintw(height - 1, 0, "%s %d lines", filename, line_count);
                memset(line_buffer, 0, width + 1);
-               snprintf(line_buffer, width, "term: %d, %d cursor: %ld, %ld, lines: %ld, %ld",
-                        width, height, cursor.x, cursor.y, start_line, last_line);
+               snprintf(line_buffer, width, "key: %d, term: %d, %d cursor: %ld, %ld, lines: %ld, %ld",
+                        key, width, height, buffer.cursor.x, buffer.cursor.y, start_line, last_line);
                attroff(A_REVERSE);
                attron(COLOR_PAIR(color_id));
                mvaddstr(height - 1, width - strlen(line_buffer), line_buffer);
                attroff(COLOR_PAIR(color_id));
 
                // reset the cursor
-               move(cursor.y - start_line, cursor.x);
+               move(buffer.cursor.y - start_line, buffer.cursor.x);
 
                // swap the back buffer
                refresh();
 
                // perform actions
-               int ch = getch();
-               switch(ch){
+               key = getch();
+
+               switch(key){
                default:
+                    break;
+               case 'q':
                     done = true;
                     break;
                case 'j':
-                    if(cursor.y < (line_count - 1)){
-                         cursor.y++;
+               case 66: // down
+               {
+                    if(buffer.cursor.y < (line_count - 1)){
+                         buffer.cursor.y++;
                     }
 
-                    if(cursor.x >= content_lines[cursor.y].length){
-                         cursor.x = content_lines[cursor.y].length - 1;
-                         if(cursor.x < 0){
-                              cursor.x = 0;
+                    int64_t line_length = strlen(buffer.lines[buffer.cursor.y]);
+
+                    if(buffer.cursor.x >= line_length){
+                         buffer.cursor.x = line_length - 1;
+                         if(buffer.cursor.x < 0){
+                              buffer.cursor.x = 0;
                          }
                     }
-                    break;
+               } break;
                case 'k':
-                    if(cursor.y > 0){
-                         cursor.y--;
+               case 65: // up
+                    if(buffer.cursor.y > 0){
+                         buffer.cursor.y--;
                     }
 
-                    if(cursor.x >= content_lines[cursor.y].length){
-                         cursor.x = content_lines[cursor.y].length - 1;
-                         if(cursor.x < 0){
-                              cursor.x = 0;
+                    int64_t line_length = strlen(buffer.lines[buffer.cursor.y]);
+
+                    if(buffer.cursor.x >= line_length){
+                         buffer.cursor.x = line_length - 1;
+                         if(buffer.cursor.x < 0){
+                              buffer.cursor.x = 0;
                          }
                     }
                     break;
                case 'h':
-                    if(cursor.x > 0){
-                         cursor.x--;
+               case 68: // left
+                    if(buffer.cursor.x > 0){
+                         buffer.cursor.x--;
                     }
                     break;
                case 'l':
+               case 67: // right
                {
-                    if(cursor.x < (content_lines[cursor.y].length - 1)){
-                         cursor.x++;
+                    int64_t line_length = strlen(buffer.lines[buffer.cursor.y]);
+                    if(buffer.cursor.x < (line_length - 2)){
+                         buffer.cursor.x++;
                     }
                } break;
                }

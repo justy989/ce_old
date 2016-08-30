@@ -89,7 +89,8 @@ int main(int argc, char** argv)
      }
 
      // alloc buffer
-     Buffer buffer = {0};
+     Buffer buffer;
+     memset(&buffer, 0, sizeof(buffer));
      {
           buffer.lines = malloc(line_count * sizeof(char*));
           if(!buffer.lines){
@@ -104,13 +105,13 @@ int main(int argc, char** argv)
           char* last_newline = contents - 1; // well that's pretty dangerous ?
           for(size_t i = 0, l = 0; i < content_size; ++i){
                if(contents[i] != NEWLINE) continue;
-               l++;
                char* current_char = contents + i;
 
                // if the previous character was a newline, add a blank line
                if(last_newline == (current_char - 1)){
                     last_newline = current_char;
-                    buffer.lines[l - 1] = NULL;
+                    buffer.lines[l] = NULL;
+                    l++;
                     continue;
                }
 
@@ -121,17 +122,29 @@ int main(int argc, char** argv)
 
                prev_line[len] = 0;
                last_newline = current_char;
-               buffer.lines[l - 1] = prev_line;
+               buffer.lines[l] = prev_line;
+               l++;
           }
 
-          // finish up the last line
-          char* last_line = buffer.lines[buffer.line_count - 1];
-          strncpy(last_line, last_newline + 1, (contents + content_size) - (last_newline + 1));
+          if(last_newline == (contents + content_size - 1)){
+               // pass
+          }else if(last_newline == (contents + content_size - 2)){
+               buffer.lines[buffer.line_count - 1] = 0;
+          }else{
+               int64_t len = (contents + content_size) - (last_newline + 1);
+               char* last_line = malloc(len + 1);
 
-          // strip newline if one exists at the end
-          int64_t len = strlen(last_line);
-          if(last_line[len-1] == NEWLINE){
-               last_line[len-1] = 0;
+               // finish up the last line
+               strncpy(last_line, last_newline + 1, len);
+
+               last_line[len] = 0;
+
+               // strip newline if one exists at the end
+               if(last_line[len-1] == NEWLINE){
+                    last_line[len-1] = 0;
+               }
+
+               buffer.lines[buffer.line_count - 1] = last_line;
           }
      }
 
@@ -361,7 +374,9 @@ int main(int argc, char** argv)
                          insert = true;
                          break;
                     case 'a':
-                         buffer.cursor.x++;
+                         if(buffer.lines[buffer.cursor.y]){
+                              buffer.cursor.x++;
+                         }
                          insert = true;
                          break;
                     case 's':

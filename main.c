@@ -1,6 +1,7 @@
 /*
 NOTES:
 -tabs suck, do we have to deal with them?
+-get full file path
 */
 
 #include <stdio.h>
@@ -100,13 +101,20 @@ int main(int argc, char** argv)
 
      // fill buffer from file contents
      {
-          char* last_newline = contents - 1;
+          char* last_newline = contents - 1; // well that's pretty dangerous ?
           for(size_t i = 0, l = 0; i < content_size; ++i){
                if(contents[i] != NEWLINE) continue;
                l++;
-
                char* current_char = contents + i;
-               size_t len = current_char - last_newline;
+
+               // if the previous character was a newline, add a blank line
+               if(last_newline == (current_char - 1)){
+                    last_newline = current_char;
+                    buffer.lines[l - 1] = NULL;
+                    continue;
+               }
+
+               size_t len = current_char - (last_newline + 1);
                char* prev_line = malloc(len + 1);
 
                strncpy(prev_line, last_newline + 1, len);
@@ -117,7 +125,14 @@ int main(int argc, char** argv)
           }
 
           // finish up the last line
-          strncpy(buffer.lines[line_count - 1], last_newline + 1, (contents + content_size) - (last_newline + 1));
+          char* last_line = buffer.lines[buffer.line_count - 1];
+          strncpy(last_line, last_newline + 1, (contents + content_size) - (last_newline + 1));
+
+          // strip newline if one exists at the end
+          int64_t len = strlen(last_line);
+          if(last_line[len-1] == NEWLINE){
+               last_line[len-1] = 0;
+          }
      }
 
      start_color();
@@ -129,12 +144,12 @@ int main(int argc, char** argv)
      // main loop
      {
           bool done = false;
-          int64_t start_line = 0;
+          bool insert = false;
           char* line_buffer = NULL;
+          int64_t start_line = 0;
           int width = 0;
           int prev_width = 0;
           int height = 0;
-
           int key = 0;
 
           while(!done){
@@ -158,8 +173,8 @@ int main(int argc, char** argv)
                // recalc the starting line
                last_line = start_line + (height - 2);
 
-               if(last_line > (line_count - 1)){
-                    last_line = line_count - 1;
+               if(last_line > (buffer.line_count - 1)){
+                    last_line = buffer.line_count - 1;
                     start_line = last_line - (height - 2);
                }
 
@@ -169,16 +184,19 @@ int main(int argc, char** argv)
                standend();
                for(int64_t i = start_line; i <= last_line; ++i){
                     move(i - start_line, 0);
+                    clrtoeol();
+                    if(!buffer.lines[i]) continue;
+
                     memset(line_buffer, 0, width + 1);
                     int64_t line_length = strlen(buffer.lines[i]);
-                    int64_t max = width < line_length ? width : line_length;
-                    strncpy(line_buffer, buffer.lines[i], max);
+                    int64_t min = width < line_length ? width : line_length;
+                    strncpy(line_buffer, buffer.lines[i], min);
                     addstr(line_buffer); // NOTE: rather than printw() because it could contain format specifiers
                }
 
                // print the file and terminal info
                attron(A_REVERSE);
-               mvprintw(height - 1, 0, "%s %d lines", filename, line_count);
+               mvprintw(height - 1, 0, "%s %d lines %s", filename, buffer.line_count, insert ? "INSERT" : "NORMAL");
                memset(line_buffer, 0, width + 1);
                snprintf(line_buffer, width, "key: %d, term: %d, %d cursor: %ld, %ld, lines: %ld, %ld",
                         key, width, height, buffer.cursor.x, buffer.cursor.y, start_line, last_line);
@@ -196,57 +214,177 @@ int main(int argc, char** argv)
                // perform actions
                key = getch();
 
-               switch(key){
-               default:
-                    break;
-               case 'q':
-                    done = true;
-                    break;
-               case 'j':
-               case 66: // down
-               {
-                    if(buffer.cursor.y < (line_count - 1)){
+               if(insert){
+                    // TODO: should be a switch
+                    if(key == 27){ // escape
+                         insert = false;
+                    }else if(key == 127){ // backspace
+                         if(buffer.cursor.x != 0){
+                              char* line = buffer.lines[buffer.cursor.y];
+                              int64_t len = strlen(line);
+                              char* start = line + buffer.cursor.x - 1;
+                              char* next = start + 1;
+
+                              // shift characters down
+                              while(*next){
+                                   *start = *next;
+                                   start++;
+                                   next++;
+                              }
+
+                              // alloc shorter string
+                              char* new = malloc(len);
+                              if(!new){
+                                   printf("failed to malloc line %ld\n", buffer.cursor.y);
+                                   return -1;
+                              }
+                              strncpy(new, line, len - 1);
+                              new[len - 1] = 0;
+
+                              // free old
+                              free(line);
+
+                              // update
+                              buffer.lines[buffer.cursor.y] = new;
+                              buffer.cursor.x--;
+                         }
+                    }else if(key == 10){ // add empty line
+                         char** lines = malloc((buffer.line_count + 1) * sizeof(char*));
+                         if(!lines){
+                              printf("failed to malloc new lines: %ld\n", buffer.line_count + 1);
+                              return -1;
+                         }
+
+                         // update the cursor position
+                         // TODO: indentation?
                          buffer.cursor.y++;
-                    }
+                         buffer.cursor.x = 0;
 
-                    int64_t line_length = strlen(buffer.lines[buffer.cursor.y]);
-
-                    if(buffer.cursor.x >= line_length){
-                         buffer.cursor.x = line_length - 1;
-                         if(buffer.cursor.x < 0){
-                              buffer.cursor.x = 0;
+                         // copy up to new empty
+                         for(int64_t i = 0; i < buffer.cursor.y; ++i){
+                              lines[i] = buffer.lines[i];
                          }
-                    }
-               } break;
-               case 'k':
-               case 65: // up
-                    if(buffer.cursor.y > 0){
-                         buffer.cursor.y--;
-                    }
 
-                    int64_t line_length = strlen(buffer.lines[buffer.cursor.y]);
+                         // alloc empty string in new slot
+                         lines[buffer.cursor.y] = NULL;
 
-                    if(buffer.cursor.x >= line_length){
-                         buffer.cursor.x = line_length - 1;
-                         if(buffer.cursor.x < 0){
-                              buffer.cursor.x = 0;
+                         // copy after new empty
+                         for(int64_t i = buffer.cursor.y; i < buffer.line_count; ++i){
+                              lines[i + 1] = buffer.lines[i];
                          }
-                    }
-                    break;
-               case 'h':
-               case 68: // left
-                    if(buffer.cursor.x > 0){
-                         buffer.cursor.x--;
-                    }
-                    break;
-               case 'l':
-               case 67: // right
-               {
-                    int64_t line_length = strlen(buffer.lines[buffer.cursor.y]);
-                    if(buffer.cursor.x < (line_length - 2)){
+
+                         // free and update the buffer ptr
+                         free(buffer.lines);
+                         buffer.lines = lines;
+                         buffer.line_count++;
+                    }else{ // insert
+                         char* line = buffer.lines[buffer.cursor.y];
+                         char* new = NULL;
+                         if(!line){
+                              new = malloc(2);
+                              new[0] = key;
+                              new[1] = 0;
+                         }else{
+                              char* start = line + buffer.cursor.x;
+                              int64_t len = strlen(line) + 1;
+                              new = malloc(len + 1);
+                              char* end = line + len - 1;
+                              strncpy(new, line, buffer.cursor.x);
+                              new[buffer.cursor.x] = key;
+                              strncpy(new + buffer.cursor.x + 1, start, end - start);
+                              new[len] = 0;
+                              free(line);
+                         }
+                         buffer.lines[buffer.cursor.y] = new;
                          buffer.cursor.x++;
                     }
-               } break;
+               }else{
+                    switch(key){
+                    default:
+                         break;
+                    case 'q':
+                         done = true;
+                         break;
+                    case 'j':
+                    {
+                         if(buffer.cursor.y < (buffer.line_count - 1)){
+                              buffer.cursor.y++;
+                         }
+
+                         if(buffer.lines[buffer.cursor.y]){
+                              int64_t line_length = strlen(buffer.lines[buffer.cursor.y]);
+
+                              if(buffer.cursor.x >= line_length){
+                                   buffer.cursor.x = line_length - 1;
+                                   if(buffer.cursor.x < 0){
+                                        buffer.cursor.x = 0;
+                                   }
+                              }
+                         }else{
+                              buffer.cursor.x = 0;
+                         }
+                    } break;
+                    case 'k':
+                    {
+                         if(buffer.cursor.y > 0){
+                              buffer.cursor.y--;
+                         }
+
+                         if(buffer.lines[buffer.cursor.y]){
+                              int64_t line_length = strlen(buffer.lines[buffer.cursor.y]);
+
+                              if(buffer.cursor.x >= line_length){
+                                   buffer.cursor.x = line_length - 1;
+                                   if(buffer.cursor.x < 0){
+                                        buffer.cursor.x = 0;
+                                   }
+                              }
+                         }else{
+                              buffer.cursor.x = 0;
+                         }
+                    } break;
+                    case 'h':
+                         if(buffer.cursor.x > 0){
+                              buffer.cursor.x--;
+                         }
+                         break;
+                    case 'l':
+                    {
+                         if(buffer.lines[buffer.cursor.y]){
+                              int64_t line_length = strlen(buffer.lines[buffer.cursor.y]);
+                              if(buffer.cursor.x < (line_length - 1)){
+                                   buffer.cursor.x++;
+                              }
+                         }
+                    } break;
+                    case 'i':
+                         insert = true;
+                         break;
+                    case 'a':
+                         buffer.cursor.x++;
+                         insert = true;
+                         break;
+                    case 's':
+                    {
+                         FILE* file = fopen(filename, "w");
+                         if(!file){
+                              // TODO: console output ?
+                              printf("failed to save: '%s'\n", filename);
+                              perror(NULL);
+                              break;
+                         }
+
+                         for(int64_t i = 0; i < buffer.line_count; ++i){
+                              if(buffer.lines[i]){
+                                   size_t len = strlen(buffer.lines[i]);
+                                   fwrite(buffer.lines[i], len, 1, file);
+                              }
+                              fwrite("\n", 1, 1, file);
+                         }
+
+                         fclose(file);
+                    } break;
+                    }
                }
           }
 

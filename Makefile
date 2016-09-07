@@ -8,4 +8,4 @@ ce: main.c
 	touch empty_file.txt
 
 clean:
-	rm -f ce empty_file.txt one_line_file.txt test_file.txt
+	rm -f ce empty_file.txt one_line_file.txt test_file.txt messages.txt

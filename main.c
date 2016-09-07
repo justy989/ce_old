@@ -10,6 +10,7 @@ NOTES:
 #include <stdint.h>
 #include <stdbool.h>
 #include <ncurses.h>
+#include <errno.h>
 
 #define NEWLINE 10
 #define COLOR_BACKGROUND -1
@@ -25,7 +26,7 @@ NOTES:
 
 #define CHECK_PTR_ARG(arg)                                                \
      if(!arg){                                                            \
-          printf("%s() received NULL argument %s\n", __FUNCTION__, #arg); \
+          message("%s() received NULL argument %s\n", __FUNCTION__, #arg); \
           return false;                                                   \
      }
 
@@ -39,6 +40,10 @@ typedef struct {
      int64_t line_count;
      char* filename;
 } Buffer;
+
+Buffer* g_message_buffer;
+
+bool message(const char* format, ...);
 
 // TODO: strdup() isn't in my string.h c standard libary ?
 char* alloc_string(const char* string)
@@ -55,14 +60,16 @@ bool alloc_lines(Buffer* buffer, int64_t line_count)
 {
      CHECK_PTR_ARG(buffer);
 
+     message("allocating %ld lines", line_count);
+
      if(line_count <= 0){
-          printf("tried to allocate %ld lines for a buffer, but we can only allocated > 0 lines\n", line_count);
+          message("tried to allocate %ld lines for a buffer, but we can only allocated > 0 lines", line_count);
           return false;
      }
 
      buffer->lines = malloc(line_count * sizeof(char*));
      if(!buffer->lines){
-          printf("failed to allocate %ld lines for buffer\n", line_count);
+          message("failed to allocate %ld lines for buffer", line_count);
           return false;
      }
 
@@ -72,19 +79,21 @@ bool alloc_lines(Buffer* buffer, int64_t line_count)
      for(int64_t i = 0; i < line_count; ++i){
           buffer->lines[i] = NULL;
      }
+
      return true;
 }
 
 bool load_file(Buffer* buffer, const char* filename)
 {
+     message("loading %s into buffer", filename);
+
      // read the entire file
      size_t content_size;
      char* contents = NULL;
      {
           FILE* file = fopen(filename, "rb");
           if(!file){
-               printf("%s() failed to open: '%s'\n", __FUNCTION__, filename);
-               perror(NULL);
+               message("%s", strerror(errno));
                return false;
           }
 
@@ -92,8 +101,9 @@ bool load_file(Buffer* buffer, const char* filename)
           content_size = ftell(file);
           fseek(file, 0, SEEK_SET);
 
-          contents = malloc(content_size);
+          contents = malloc(content_size + 1);
           fread(contents, content_size, 1, file);
+          contents[content_size] = 0;
 
           fclose(file);
 
@@ -111,24 +121,28 @@ bool load_file(Buffer* buffer, const char* filename)
      if(line_count){
           alloc_lines(buffer, line_count);
           int64_t last_newline = -1;
-          for(int64_t i = 0; i < (int64_t)(content_size); ++i){
+          for(int64_t i = 0, l = 0; i < (int64_t)(content_size); ++i){
                if(contents[i] != NEWLINE) continue;
 
-               int64_t length = i - last_newline;
+               int64_t length = (i - 1) - last_newline;
                char* new_line = malloc(length + 1);
                strncpy(new_line, contents + last_newline + 1, length);
                new_line[length] = 0;
-               buffer->lines[i] = new_line;
+               buffer->lines[l] = new_line;
+               last_newline = i;
+               l++;
           }
 
           int64_t length = (content_size - 1) - last_newline;
-          char* new_line = malloc(length + 1);
-          strncpy(new_line, contents + last_newline + 1, length);
-          new_line[length] = 0;
-          if(new_line[length - 1] == NEWLINE){
-               new_line[length - 1] = 0;
+          if(length){
+               char* new_line = malloc(length + 1);
+               strncpy(new_line, contents + last_newline + 1, length);
+               new_line[length] = 0;
+               if(new_line[length - 1] == NEWLINE){
+                    new_line[length - 1] = 0;
+               }
+               buffer->lines[line_count - 1] = new_line;
           }
-          buffer->lines[line_count - 1] = new_line;
      }
 
      return true;
@@ -139,6 +153,8 @@ void free_buffer(Buffer* buffer)
      if(!buffer){
           return;
      }
+
+     message("freeing buffer: '%s'", buffer->filename);
 
      if(buffer->filename){
           free(buffer->filename);
@@ -159,13 +175,12 @@ void free_buffer(Buffer* buffer)
 bool point_on_buffer(const Buffer* buffer, const Point* location)
 {
      if(location->y < 0 || location->x < 0){
-          printf("%ld, %ld not in buffer\n",
-                 location->x, location->y);
+          message("%ld, %ld not in buffer", location->x, location->y);
           return false;
      }
 
      if(location->y >= buffer->line_count){
-          printf("%ld, %ld not in buffer with %ld lines\n",
+          message("%ld, %ld not in buffer with %ld lines",
                  location->x, location->y, buffer->line_count);
           return false;
      }
@@ -176,7 +191,7 @@ bool point_on_buffer(const Buffer* buffer, const Point* location)
      if(line) line_len = strlen(line);
 
      if(location->x > line_len){
-          printf("%ld, %ld not in buffer with line %ld only %ld characters long\n",
+          message("%ld, %ld not in buffer with line %ld only %ld characters long",
                  location->x, location->y, buffer->line_count, line_len);
           return false;
      }
@@ -190,7 +205,6 @@ bool insert_char(Buffer* buffer, const Point* location, char c)
      CHECK_PTR_ARG(location);
 
      if(!point_on_buffer(buffer, location)){
-          printf("%s() invalid location\n", __FUNCTION__);
           return false;
      }
 
@@ -202,7 +216,7 @@ bool insert_char(Buffer* buffer, const Point* location, char c)
           int64_t new_len = line_len + 2;
           new_line = malloc(new_len);
           if(!new_line){
-               printf("%s() failed to allocate line with %ld characters\n", __FUNCTION__, new_len);
+               message("failed to allocate line with %ld characters", new_len);
                return false;
           }
 
@@ -217,7 +231,7 @@ bool insert_char(Buffer* buffer, const Point* location, char c)
      }else{
           new_line = malloc(2);
           if(!new_line){
-               printf("%s() failed to allocate line with 2 characters\n", __FUNCTION__);
+               message("failed to allocate line with 2 characters");
                return false;
           }
           new_line[0] = c;
@@ -235,7 +249,6 @@ bool insert_string(Buffer* buffer, const Point* location, const char* string)
      CHECK_PTR_ARG(string);
 
      if(!point_on_buffer(buffer, location)){
-          printf("%s() invalid location\n", __FUNCTION__);
           return false;
      }
 
@@ -248,7 +261,7 @@ bool insert_string(Buffer* buffer, const Point* location, const char* string)
           int64_t new_len = line_len + string_len + 1;
           new_line = malloc(new_len);
           if(!new_line){
-               printf("%s() failed to allocate line with %ld characters\n", __FUNCTION__, new_len);
+               message("failed to allocate line with %ld characters", new_len);
                return false;
           }
 
@@ -263,7 +276,7 @@ bool insert_string(Buffer* buffer, const Point* location, const char* string)
      }else{
           new_line = malloc(string_len + 1);
           if(!new_line){
-               printf("%s() failed to allocate line with 2 characters\n", __FUNCTION__);
+               message("failed to allocate line with %ld characters", string_len + 1);
                return false;
           }
           strncpy(new_line, string, string_len);
@@ -317,7 +330,7 @@ bool insert_line(Buffer* buffer, int64_t line, const char* string)
      int64_t new_line_count = buffer->line_count + 1;
      char** new_lines = malloc(new_line_count * sizeof(char*));
      if(!new_lines){
-          printf("%s() failed to malloc new lines: %ld\n", __FUNCTION__, new_line_count);
+          printf("failed to malloc new lines: %ld\n", new_line_count);
           return -1;
      }
 
@@ -344,14 +357,12 @@ bool append_line(Buffer* buffer, const char* string)
      CHECK_PTR_ARG(string);
 
      bool rc = insert_line(buffer, buffer->line_count, string);
-     if(!rc) printf("%s() failed\n", __FUNCTION__);
      return rc;
 }
 
 bool insert_newline(Buffer* buffer, int64_t line)
 {
      bool rc = insert_line(buffer, line, NULL);
-     if(!rc) printf("%s() failed\n", __FUNCTION__);
      return rc;
 }
 
@@ -362,7 +373,7 @@ bool remove_line(Buffer* buffer, int64_t line)
      int64_t new_line_count = buffer->line_count - 1;
      char** new_lines = malloc(new_line_count * sizeof(char*));
      if(!new_lines){
-          printf("%s() failed to malloc new lines: %ld\n", __FUNCTION__, new_line_count);
+          message("failed to malloc new lines: %ld\n", new_line_count);
           return -1;
      }
 
@@ -384,7 +395,7 @@ bool set_line(Buffer* buffer, int64_t line, const char* string)
      CHECK_PTR_ARG(buffer);
 
      if(line < 0 || line >= buffer->line_count){
-          printf("%s() line %ld outside buffer with %ld lines\n", __FUNCTION__, line, buffer->line_count);
+          message("line %ld outside buffer with %ld lines\n", line, buffer->line_count);
           return false;
      }
 
@@ -394,6 +405,48 @@ bool set_line(Buffer* buffer, int64_t line, const char* string)
 
      buffer->lines[line] = alloc_string(string);
      return true;
+}
+
+bool save_buffer(const Buffer* buffer, const char* filename)
+{
+     message("saving buffer to '%s'", filename);
+
+     // save file loaded
+     FILE* file = fopen(filename, "w");
+     if(!file){
+          // TODO: console output ? perror!
+          message("%s", strerror(errno));
+          return false;;
+     }
+
+     for(int64_t i = 0; i < buffer->line_count; ++i){
+          if(buffer->lines[i]){
+               size_t len = strlen(buffer->lines[i]);
+               fwrite(buffer->lines[i], len, 1, file);
+          }
+          fwrite("\n", 1, 1, file);
+     }
+
+     fclose(file);
+     return true;
+}
+
+bool message(const char* format, ...)
+{
+     if(!g_message_buffer){
+          printf("%s() NULL buffer argument\n", __FUNCTION__);
+          return false;
+     }
+
+     const int64_t max_line_size = 1024;
+     char line[max_line_size];
+
+     va_list args;
+     va_start(args, format);
+     vsnprintf(line, max_line_size, format, args);
+     va_end(args);
+
+     return append_line(g_message_buffer, line);
 }
 
 int main(int argc, char** argv)
@@ -407,8 +460,10 @@ int main(int argc, char** argv)
           return -1;
      }
 
-     Buffer error_buffer = {0};
+     Buffer message_buffer = {0};
      Buffer buffer = {0};
+
+     g_message_buffer = &message_buffer;
 
      if(argc == 2){
           load_file(&buffer, argv[1]);
@@ -416,8 +471,6 @@ int main(int argc, char** argv)
           alloc_lines(&buffer, 1);
           buffer.filename = alloc_string("test_file.txt");
      }
-
-     alloc_lines(&error_buffer, 1);
 
      start_color();
      use_default_colors();
@@ -625,24 +678,7 @@ int main(int argc, char** argv)
                     break;
                     case 's':
                     {
-                         // save file loaded
-                         FILE* file = fopen(buffer.filename, "w");
-                         if(!file){
-                              // TODO: console output ?
-                              printf("failed to save: '%s'\n", buffer.filename);
-                              perror(NULL);
-                              break;
-                         }
-
-                         for(int64_t i = 0; i < buffer.line_count; ++i){
-                              if(buffer.lines[i]){
-                                   size_t len = strlen(buffer.lines[i]);
-                                   fwrite(buffer.lines[i], len, 1, file);
-                              }
-                              fwrite("\n", 1, 1, file);
-                         }
-
-                         fclose(file);
+                         save_buffer(&buffer, buffer.filename);
                     } break;
                     }
                }
@@ -653,7 +689,8 @@ int main(int argc, char** argv)
 
      // ncurses_free()
      endwin();
+     save_buffer(&message_buffer, "messages.txt");
      free_buffer(&buffer);
-     free_buffer(&error_buffer);
+     free_buffer(&message_buffer);
      return 0;
 }

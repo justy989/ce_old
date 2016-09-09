@@ -5,9 +5,7 @@ LINK=-lncurses
 all: ce ce_config.so
 
 ce: main.c ce.o
-	$(CC) $(CFLAGS) $^ -o $@ $(LINK) -ldl
-	echo "testing" > one_line_file.txt
-	touch empty_file.txt
+	$(CC) $(CFLAGS) $^ -o $@ $(LINK) -ldl -Wl,-rpath=.
 
 ce.o: ce.c
 	$(CC) -c -fpic $(CFLAGS) $^ -o $@

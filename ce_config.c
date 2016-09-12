@@ -2,6 +2,14 @@
 
 bool insert = false;
 
+bool initializer(Buffer* message_buffer, Point* cursor)
+{
+     (void)(cursor);
+     g_message_buffer = message_buffer;
+
+     return true;
+}
+
 bool key_handler(int key, Buffer* buffer, Point* cursor)
 {
      if(insert){
@@ -114,9 +122,6 @@ bool key_handler(int key, Buffer* buffer, Point* cursor)
                               }
                          }
                     }
-                    break;
-               case 'p':
-                    ce_append_line(buffer, "TACOS");
                     break;
                case 's':
                     ce_save_buffer(buffer, buffer->filename);

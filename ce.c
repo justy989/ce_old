@@ -1,6 +1,7 @@
 #include "ce.h"
 
 Buffer* g_message_buffer = NULL;
+Point* g_terminal_dimensions = NULL;
 
 // TODO: strdup() isn't in my string.h c standard libary ?
 char* ce_alloc_string(const char* string)
@@ -15,18 +16,16 @@ char* ce_alloc_string(const char* string)
 
 bool ce_alloc_lines(Buffer* buffer, int64_t line_count)
 {
-     CHECK_PTR_ARG(buffer);
-
-     ce_message("allocating %ld lines", line_count);
+     CE_CHECK_PTR_ARG(buffer);
 
      if(line_count <= 0){
-          ce_message("tried to allocate %ld lines for a buffer, but we can only allocated > 0 lines", line_count);
+          ce_message("%s() tried to allocate %ld lines for a buffer, but we can only allocated > 0 lines", line_count);
           return false;
      }
 
      buffer->lines = malloc(line_count * sizeof(char*));
      if(!buffer->lines){
-          ce_message("failed to allocate %ld lines for buffer", line_count);
+          ce_message("%s() failed to allocate %ld lines for buffer", line_count);
           return false;
      }
 
@@ -42,8 +41,6 @@ bool ce_alloc_lines(Buffer* buffer, int64_t line_count)
 
 bool ce_load_file(Buffer* buffer, const char* filename)
 {
-     ce_message("loading %s into buffer", filename);
-
      // read the entire file
      size_t content_size;
      char* contents = NULL;
@@ -111,8 +108,6 @@ void ce_free_buffer(Buffer* buffer)
           return;
      }
 
-     ce_message("freeing buffer: '%s'", buffer->filename);
-
      if(buffer->filename){
           free(buffer->filename);
      }
@@ -132,13 +127,13 @@ void ce_free_buffer(Buffer* buffer)
 bool ce_point_on_buffer(const Buffer* buffer, const Point* location)
 {
      if(location->y < 0 || location->x < 0){
-          ce_message("%ld, %ld not in buffer", location->x, location->y);
+          ce_message("%s() %ld, %ld not in buffer", __FUNCTION__, location->x, location->y);
           return false;
      }
 
      if(location->y >= buffer->line_count){
-          ce_message("%ld, %ld not in buffer with %ld lines",
-                 location->x, location->y, buffer->line_count);
+          ce_message("%s() %ld, %ld not in buffer with %ld lines",
+                     __FUNCTION__, location->x, location->y, buffer->line_count);
           return false;
      }
 
@@ -148,8 +143,8 @@ bool ce_point_on_buffer(const Buffer* buffer, const Point* location)
      if(line) line_len = strlen(line);
 
      if(location->x > line_len){
-          ce_message("%ld, %ld not in buffer with line %ld only %ld characters long",
-                 location->x, location->y, buffer->line_count, line_len);
+          ce_message("%s() %ld, %ld not in buffer with line %ld only %ld characters long",
+                     __FUNCTION__, location->x, location->y, buffer->line_count, line_len);
           return false;
      }
 
@@ -158,8 +153,8 @@ bool ce_point_on_buffer(const Buffer* buffer, const Point* location)
 
 bool ce_insert_char(Buffer* buffer, const Point* location, char c)
 {
-     CHECK_PTR_ARG(buffer);
-     CHECK_PTR_ARG(location);
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
 
      if(!ce_point_on_buffer(buffer, location)){
           return false;
@@ -173,7 +168,7 @@ bool ce_insert_char(Buffer* buffer, const Point* location, char c)
           int64_t new_len = line_len + 2;
           new_line = malloc(new_len);
           if(!new_line){
-               ce_message("failed to allocate line with %ld characters", new_len);
+               ce_message("%s() failed to allocate line with %ld characters", __FUNCTION__, new_len);
                return false;
           }
 
@@ -188,7 +183,7 @@ bool ce_insert_char(Buffer* buffer, const Point* location, char c)
      }else{
           new_line = malloc(2);
           if(!new_line){
-               ce_message("failed to allocate line with 2 characters");
+               ce_message("%s() failed to allocate line with 2 characters", __FUNCTION__);
                return false;
           }
           new_line[0] = c;
@@ -201,9 +196,9 @@ bool ce_insert_char(Buffer* buffer, const Point* location, char c)
 
 bool ce_insert_string(Buffer* buffer, const Point* location, const char* string)
 {
-     CHECK_PTR_ARG(buffer);
-     CHECK_PTR_ARG(location);
-     CHECK_PTR_ARG(string);
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+     CE_CHECK_PTR_ARG(string);
 
      if(!ce_point_on_buffer(buffer, location)){
           return false;
@@ -218,7 +213,7 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* string)
           int64_t new_len = line_len + string_len + 1;
           new_line = malloc(new_len);
           if(!new_line){
-               ce_message("failed to allocate line with %ld characters", new_len);
+               ce_message("%s() failed to allocate line with %ld characters", __FUNCTION__, new_len);
                return false;
           }
 
@@ -233,7 +228,7 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* string)
      }else{
           new_line = malloc(string_len + 1);
           if(!new_line){
-               ce_message("failed to allocate line with %ld characters", string_len + 1);
+               ce_message("%s() failed to allocate line with %ld characters", __FUNCTION__, string_len + 1);
                return false;
           }
           strncpy(new_line, string, string_len);
@@ -246,14 +241,14 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* string)
 
 bool ce_remove_char(Buffer* buffer, const Point* location)
 {
-     CHECK_PTR_ARG(buffer);
-     CHECK_PTR_ARG(location);
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
 
      if(!ce_point_on_buffer(buffer, location)) return false;
 
      char* line = buffer->lines[location->y];
      if(!line){
-          printf("cannot remove character from empty line\n");
+          ce_message("%s() cannot remove character from empty line\n", __FUNCTION__);
           return false;
      }
 
@@ -282,12 +277,12 @@ bool ce_remove_char(Buffer* buffer, const Point* location)
 // NOTE: passing NULL to string causes an empty line to be inserted
 bool ce_insert_line(Buffer* buffer, int64_t line, const char* string)
 {
-     CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(buffer);
 
      int64_t new_line_count = buffer->line_count + 1;
      char** new_lines = malloc(new_line_count * sizeof(char*));
      if(!new_lines){
-          printf("failed to malloc new lines: %ld\n", new_line_count);
+          ce_message("%s() failed to malloc new lines: %ld\n", __FUNCTION__, new_line_count);
           return -1;
      }
 
@@ -310,8 +305,8 @@ bool ce_insert_line(Buffer* buffer, int64_t line, const char* string)
 
 bool ce_append_line(Buffer* buffer, const char* string)
 {
-     CHECK_PTR_ARG(buffer);
-     CHECK_PTR_ARG(string);
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(string);
 
      bool rc = ce_insert_line(buffer, buffer->line_count, string);
      return rc;
@@ -325,12 +320,12 @@ bool ce_insert_newline(Buffer* buffer, int64_t line)
 
 bool ce_remove_line(Buffer* buffer, int64_t line)
 {
-     CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(buffer);
 
      int64_t new_line_count = buffer->line_count - 1;
      char** new_lines = malloc(new_line_count * sizeof(char*));
      if(!new_lines){
-          ce_message("failed to malloc new lines: %ld\n", new_line_count);
+          ce_message("%s() failed to malloc new lines: %ld\n", __FUNCTION__, new_line_count);
           return -1;
      }
 
@@ -349,10 +344,10 @@ bool ce_remove_line(Buffer* buffer, int64_t line)
 // NOTE: unused/untested
 bool ce_set_line(Buffer* buffer, int64_t line, const char* string)
 {
-     CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(buffer);
 
      if(line < 0 || line >= buffer->line_count){
-          ce_message("line %ld outside buffer with %ld lines\n", line, buffer->line_count);
+          ce_message("%s() line %ld outside buffer with %ld lines\n", __FUNCTION__, line, buffer->line_count);
           return false;
      }
 
@@ -366,13 +361,11 @@ bool ce_set_line(Buffer* buffer, int64_t line, const char* string)
 
 bool ce_save_buffer(const Buffer* buffer, const char* filename)
 {
-     ce_message("saving buffer to '%s'", filename);
-
      // save file loaded
      FILE* file = fopen(filename, "w");
      if(!file){
           // TODO: console output ? perror!
-          ce_message("%s", strerror(errno));
+          ce_message("%s() failed to open '%s': %s", __FUNCTION__, filename, strerror(errno));
           return false;;
      }
 
@@ -391,7 +384,7 @@ bool ce_save_buffer(const Buffer* buffer, const char* filename)
 bool ce_message(const char* format, ...)
 {
      if(!g_message_buffer){
-          printf("%s() NULL buffer argument\n", __FUNCTION__);
+          printf("%s() NULL message buffer\n", __FUNCTION__);
           return false;
      }
 
@@ -406,3 +399,51 @@ bool ce_message(const char* format, ...)
      return ce_append_line(g_message_buffer, line);
 }
 
+bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Point* term_bottom_right,
+                    const Point* buffer_top_left)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(term_top_left);
+     CE_CHECK_PTR_ARG(term_bottom_right);
+     CE_CHECK_PTR_ARG(buffer_top_left);
+
+     if(!g_terminal_dimensions){
+          ce_message("%s() unknown terminal dimensions", __FUNCTION__);
+          return false;
+     }
+
+     if(term_top_left->x >= term_bottom_right->x){
+          ce_message("%s() top_left must be lower than bottom_right horizontally", __FUNCTION__);
+          return false;
+     }
+
+     if(term_top_left->y >= term_bottom_right->y){
+          ce_message("%s() top_left must be lower than bottom_right vertically", __FUNCTION__);
+          return false;
+     }
+
+     char line_to_print[g_terminal_dimensions->x];
+
+     int64_t last_line = buffer_top_left->y + (term_bottom_right->y - term_top_left->y) - 1;
+     if(last_line >= buffer->line_count) last_line = buffer->line_count - 1;
+
+     for(int64_t i = buffer_top_left->y; i <= last_line; ++i) {
+          move(term_top_left->y + (i - buffer_top_left->y), term_top_left->x);
+
+          if(!buffer->lines[i]) continue;
+          const char* buffer_line = buffer->lines[i];
+          int64_t line_length = strlen(buffer_line);
+
+          // skip line if we are offset by too much and can't show the line
+          if(line_length <= buffer_top_left->x) continue;
+          buffer_line += buffer_top_left->x;
+          line_length = strlen(buffer_line);
+
+          int64_t min = g_terminal_dimensions->x < line_length ? g_terminal_dimensions->x : line_length;
+          memset(line_to_print, 0, min + 1);
+          strncpy(line_to_print, buffer_line, min);
+          addstr(line_to_print); // NOTE: use addstr() rather than printw() because it could contain format specifiers
+     }
+
+     return true;
+}

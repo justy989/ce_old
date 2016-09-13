@@ -447,3 +447,47 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
 
      return true;
 }
+
+BufferNode* ce_append_buffer_to_list(BufferNode* head, Buffer* buffer)
+{
+     CE_CHECK_PTR_ARG(head);
+     CE_CHECK_PTR_ARG(buffer);
+
+     // find last element
+     while(head->next){
+          head = head->next;
+     }
+
+     BufferNode* new = malloc(sizeof(BufferNode));
+     if(!new){
+          ce_message("%s() failed to alloc new BufferNode for '%s'", __FUNCTION__, buffer->filename);
+          return NULL;
+     }
+
+     head->next = new;
+     new->buffer = buffer;
+     new->next = NULL;
+
+     return new;
+}
+
+bool ce_remove_buffer_from_list(BufferNode* head, BufferNode** node)
+{
+     CE_CHECK_PTR_ARG(head);
+     CE_CHECK_PTR_ARG(node);
+
+     BufferNode* tmp = head;
+     while(head){
+          if(head == *node){
+               tmp->next = head->next;
+               free(head);
+               *node = NULL;
+               return true;
+          }
+          tmp = head;
+          head = head->next;
+     }
+
+     // didn't find the node to remove
+     return false;
+}

@@ -17,8 +17,8 @@ int64_t g_start_line = 0;
 int g_last_key = 0;
 bool g_split = false;
 
-bool default_key_handler(int key, Buffer* buffer, Point* cursor);
-void default_view_drawer(const Buffer* buffer, const Point* cursor);
+bool default_key_handler(int key, BufferNode* head, Point* cursor);
+void default_view_drawer(const BufferNode* head, const Point* cursor);
 
 int main(int argc, char** argv)
 {
@@ -31,11 +31,13 @@ int main(int argc, char** argv)
           return -1;
      }
 
-     Buffer message_buffer = {0};
-     Buffer buffer = {0};
+     g_message_buffer = malloc(sizeof(Buffer));
+     g_message_buffer->filename = ce_alloc_string(MESSAGE_FILE);
      Point cursor = {0, 0};
 
-     g_message_buffer = &message_buffer;
+     BufferNode* buffer_list_head = malloc(sizeof(BufferNode));
+     buffer_list_head->buffer = g_message_buffer;
+     buffer_list_head->next = NULL;
 
      // try to load the config shared object
      ce_initializer* initializer = NULL;
@@ -69,15 +71,21 @@ int main(int argc, char** argv)
      g_terminal_dimensions = &terminal_dimensions;
 
      if(initializer){
-          initializer(&message_buffer, g_terminal_dimensions);
+          initializer(g_message_buffer, g_terminal_dimensions);
      }
 
      // load the file given as the first argument
      if(argc == 2){
-          ce_load_file(&buffer, argv[1]);
+          Buffer* buffer = malloc(sizeof(buffer));
+          if(ce_load_file(buffer, argv[1])){
+               if(!ce_append_buffer_to_list(buffer_list_head, buffer)){
+                    free(buffer);
+               }
+          }else{
+               free(buffer);
+          }
      }else{
-          ce_alloc_lines(&buffer, 1);
-          buffer.filename = ce_alloc_string("test_file.txt");
+          ce_message("no file opened on startup");
      }
 
      start_color();
@@ -101,7 +109,7 @@ int main(int argc, char** argv)
           }
 
           // user-defined or default draw_view()
-          view_drawer(&buffer, &cursor);
+          view_drawer(buffer_list_head, &cursor);
 
           // update the terminal with what we drew
           refresh();
@@ -109,7 +117,7 @@ int main(int argc, char** argv)
           g_last_key = getch();
 
           // user-defined or default key_handler()
-          if(!key_handler(g_last_key, &buffer, &cursor)){
+          if(!key_handler(g_last_key, buffer_list_head, &cursor)){
                done = true;
           }
      }
@@ -117,18 +125,28 @@ int main(int argc, char** argv)
      // cleanup ncurses
      endwin();
 
-     // free our open buffers
-     ce_save_buffer(&message_buffer, "messages.txt");
-     ce_free_buffer(&buffer);
-     ce_free_buffer(&message_buffer);
+     ce_save_buffer(g_message_buffer, g_message_buffer->filename);
 
-     dlclose(config_so_handle);
+     // free our buffers
+     BufferNode* itr = buffer_list_head;
+     BufferNode* tmp = itr;
+     while(itr){
+          itr = itr->next;
+          ce_free_buffer(tmp->buffer);
+          free(tmp);
+          tmp = itr;
+     }
+
+     if(config_so_handle) dlclose(config_so_handle);
 
      return 0;
 }
 
-bool default_key_handler(int key, Buffer* buffer, Point* cursor)
+bool default_key_handler(int key, BufferNode* head, Point* cursor)
 {
+     Buffer* buffer = head->buffer;
+     if(head->next) buffer = head->next->buffer;
+
      switch(key){
      default:
           if(ce_insert_char(buffer, cursor, key)) cursor->x++;
@@ -143,8 +161,11 @@ bool default_key_handler(int key, Buffer* buffer, Point* cursor)
      return true;
 }
 
-void default_view_drawer(const Buffer* buffer, const Point* cursor)
+void default_view_drawer(const BufferNode* head, const Point* cursor)
 {
+     Buffer* buffer = head->buffer;
+     if(head->next) buffer = head->next->buffer;
+
      // calculate the last line we can draw
      int64_t last_line = g_start_line + (g_terminal_dimensions->y - 2);
 

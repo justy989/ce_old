@@ -10,6 +10,7 @@
 #include <errno.h>
 
 #define CE_CONFIG "ce_config.so"
+#define MESSAGE_FILE "messages.txt"
 
 #define NEWLINE 10
 #define COLOR_BACKGROUND -1
@@ -23,10 +24,10 @@
 #define COLOR_BRIGHT_CYAN 14
 #define COLOR_BRIGHT_WHITE 15
 
-#define CE_CHECK_PTR_ARG(arg)                                                \
-     if(!arg){                                                            \
+#define CE_CHECK_PTR_ARG(arg)                                                 \
+     if(!arg){                                                                \
           ce_message("%s() received NULL argument %s\n", __FUNCTION__, #arg); \
-          return false;                                                   \
+          return false;                                                       \
      }
 
 typedef struct {
@@ -38,11 +39,17 @@ typedef struct {
      char** lines; // NULL terminated, does not contain newlines
      int64_t line_count;
      char* filename;
+     void* user_data;
 } Buffer;
 
+typedef struct BufferNode {
+     Buffer* buffer;
+     struct BufferNode* next;
+} BufferNode;
+
 typedef bool ce_initializer(Buffer*, Point*);
-typedef bool ce_key_handler(int, Buffer*, Point*);
-typedef void ce_view_drawer(const Buffer*, const Point*);
+typedef bool ce_key_handler(int, BufferNode*, Point*);
+typedef void ce_view_drawer(const BufferNode*, const Point*);
 
 extern Buffer* g_message_buffer;
 extern Point* g_terminal_dimensions;
@@ -70,5 +77,8 @@ bool ce_message(const char* format, ...);
 
 bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Point* term_bottom_right,
                     const Point* buffer_top_left);
+
+BufferNode* ce_append_buffer_to_list(BufferNode* head, Buffer* buffer);
+bool ce_remove_buffer_from_list(BufferNode* head, BufferNode** node);
 
 #endif

@@ -12,8 +12,11 @@ bool initializer(Buffer* message_buffer, Point* terminal_dimensions)
      return true;
 }
 
-bool key_handler(int key, Buffer* buffer, Point* cursor)
+bool key_handler(int key, BufferNode* head, Point* cursor)
 {
+     Buffer* buffer = head->buffer;
+     if(head->next) buffer = head->next->buffer;
+
      if(g_insert){
           // TODO: should be a switch
           if(key == 27){ // escape
@@ -137,8 +140,11 @@ bool key_handler(int key, Buffer* buffer, Point* cursor)
      return true;
 }
 
-void view_drawer(const Buffer* buffer, const Point* cursor)
+void view_drawer(const BufferNode* head, const Point* cursor)
 {
+     Buffer* buffer = head->buffer;
+     if(head->next) buffer = head->next->buffer;
+
      // calculate the last line we can draw
      int64_t last_line = g_start_line + (g_terminal_dimensions->y - 2);
 
@@ -173,6 +179,10 @@ void view_drawer(const Buffer* buffer, const Point* cursor)
                ce_draw_buffer(buffer, &term_top_left, &term_bottom_right, &buffer_top_left);
           }
      }
+
+     attron(A_REVERSE);
+     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %d lines", buffer->filename, buffer->line_count);
+     attroff(A_REVERSE);
 
      // reset the cursor
      move(cursor->y - buffer_top_left.y, cursor->x);

@@ -15,6 +15,7 @@ WANTS:
 
 int64_t g_start_line = 0;
 int g_last_key = 0;
+bool g_split = false;
 
 bool default_key_handler(int key, Buffer* buffer, Point* cursor);
 void default_view_drawer(const Buffer* buffer, const Point* cursor);
@@ -64,7 +65,12 @@ int main(int argc, char** argv)
           }
      }
 
-     initializer(&message_buffer, &cursor);
+     Point terminal_dimensions = {0, 0};
+     g_terminal_dimensions = &terminal_dimensions;
+
+     if(initializer){
+          initializer(&message_buffer, g_terminal_dimensions);
+     }
 
      // load the file given as the first argument
      if(argc == 2){
@@ -80,9 +86,6 @@ int main(int argc, char** argv)
      // NOTE: just messing with colors
      int color_id = 1;
      init_pair(color_id, COLOR_RED, COLOR_BACKGROUND);
-
-     Point terminal_dimensions = {0, 0};
-     g_terminal_dimensions = &terminal_dimensions;
 
      bool done = false;
 

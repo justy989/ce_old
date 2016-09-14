@@ -3,19 +3,42 @@
 bool g_insert = false;
 bool g_split = false;
 int64_t g_start_line = 0;
+BufferNode* g_current_buffer_node = NULL;
 
-bool initializer(Buffer* message_buffer, Point* terminal_dimensions)
+bool initializer(BufferNode* head, Buffer* message_buffer, Point* terminal_dimensions)
 {
      g_message_buffer = message_buffer;
      g_terminal_dimensions = terminal_dimensions;
+     g_current_buffer_node = head;
+
+     while(head){
+          Point* cursor = malloc(sizeof(Point));
+          cursor->x = 0;
+          cursor->y = 0;
+          head->buffer->user_data = cursor;
+          head = head->next;
+     }
 
      return true;
 }
 
-bool key_handler(int key, BufferNode* head, Point* cursor)
+bool destroyer(BufferNode* head)
 {
-     Buffer* buffer = head->buffer;
-     if(head->next) buffer = head->next->buffer;
+     while(head){
+          Point* cursor = head->buffer->user_data;
+          free(cursor);
+          head->buffer->user_data = NULL;
+          head = head->next;
+     }
+
+     return true;
+}
+
+bool key_handler(int key, BufferNode* head)
+{
+     Buffer* buffer = g_current_buffer_node->buffer;
+
+     Point* cursor = buffer->user_data;
 
      if(g_insert){
           // TODO: should be a switch
@@ -134,16 +157,25 @@ bool key_handler(int key, BufferNode* head, Point* cursor)
           case 'v':
                g_split = !g_split;
                break;
+          case 'b':
+          {
+               g_current_buffer_node = g_current_buffer_node->next;
+               if(!g_current_buffer_node){
+                    g_current_buffer_node = head;
+               }
+          }
+               break;
           }
      }
 
      return true;
 }
 
-void view_drawer(const BufferNode* head, const Point* cursor)
+void view_drawer(const BufferNode* head)
 {
-     Buffer* buffer = head->buffer;
-     if(head->next) buffer = head->next->buffer;
+     (void)(head);
+     Buffer* buffer = g_current_buffer_node->buffer;
+     Point* cursor = buffer->user_data;
 
      // calculate the last line we can draw
      int64_t last_line = g_start_line + (g_terminal_dimensions->y - 2);

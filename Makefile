@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-Wall -Werror -Wextra -std=c11 -g
+CFLAGS=-Wall -Werror -Wextra -std=c11 -ggdb3
 LINK=-lncurses
 
 all: ce ce_config.so

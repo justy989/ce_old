@@ -47,9 +47,10 @@ typedef struct BufferNode {
      struct BufferNode* next;
 } BufferNode;
 
-typedef bool ce_initializer(Buffer*, Point*);
-typedef bool ce_key_handler(int, BufferNode*, Point*);
-typedef void ce_view_drawer(const BufferNode*, const Point*);
+typedef bool ce_initializer(BufferNode*, Buffer*, Point*);
+typedef void ce_destroyer(BufferNode*);
+typedef bool ce_key_handler(int, BufferNode*);
+typedef void ce_view_drawer(const BufferNode*);
 
 extern Buffer* g_message_buffer;
 extern Point* g_terminal_dimensions;

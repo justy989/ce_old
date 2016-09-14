@@ -99,6 +99,8 @@ bool ce_load_file(Buffer* buffer, const char* filename)
           }
      }
 
+     free(contents);
+
      return true;
 }
 
@@ -108,12 +110,10 @@ void ce_free_buffer(Buffer* buffer)
           return;
      }
 
-     if(buffer->filename){
-          free(buffer->filename);
-     }
+     free(buffer->filename);
 
      if(buffer->lines){
-          for(int64_t i; i < buffer->line_count; ++i){
+          for(int64_t i = 0; i < buffer->line_count; ++i){
                if(buffer->lines[i]){
                     free(buffer->lines[i]);
                }
@@ -282,7 +282,11 @@ bool ce_insert_line(Buffer* buffer, int64_t line, const char* string)
      int64_t new_line_count = buffer->line_count + 1;
      char** new_lines = malloc(new_line_count * sizeof(char*));
      if(!new_lines){
-          ce_message("%s() failed to malloc new lines: %ld\n", __FUNCTION__, new_line_count);
+          if(buffer == g_message_buffer){
+               printf("%s() failed to malloc new lines: %ld\n", __FUNCTION__, new_line_count);
+          }else{
+               ce_message("%s() failed to malloc new lines: %ld\n", __FUNCTION__, new_line_count);
+          }
           return -1;
      }
 

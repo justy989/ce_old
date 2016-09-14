@@ -3,17 +3,6 @@
 Buffer* g_message_buffer = NULL;
 Point* g_terminal_dimensions = NULL;
 
-// TODO: strdup() isn't in my string.h c standard libary ?
-char* ce_alloc_string(const char* string)
-{
-     int64_t length = strlen(string);
-     char* new = malloc(length + 1);
-     strncpy(new, string, length);
-     new[length] = 0;
-
-     return new;
-}
-
 bool ce_alloc_lines(Buffer* buffer, int64_t line_count)
 {
      CE_CHECK_PTR_ARG(buffer);
@@ -61,7 +50,7 @@ bool ce_load_file(Buffer* buffer, const char* filename)
 
           fclose(file);
 
-          buffer->filename = ce_alloc_string(filename);
+          buffer->filename = strdup(filename);
      }
 
      // count lines
@@ -88,7 +77,7 @@ bool ce_load_file(Buffer* buffer, const char* filename)
           }
 
           int64_t length = (content_size - 1) - last_newline;
-          if(length){
+          if(length > 1){
                char* new_line = malloc(length + 1);
                strncpy(new_line, contents + last_newline + 1, length);
                new_line[length] = 0;
@@ -96,6 +85,8 @@ bool ce_load_file(Buffer* buffer, const char* filename)
                     new_line[length - 1] = 0;
                }
                buffer->lines[line_count - 1] = new_line;
+          }else{
+               buffer->lines[line_count - 1] = NULL;
           }
      }
 
@@ -248,7 +239,7 @@ bool ce_remove_char(Buffer* buffer, const Point* location)
 
      char* line = buffer->lines[location->y];
      if(!line){
-          ce_message("%s() cannot remove character from empty line\n", __FUNCTION__);
+          ce_message("%s() cannot remove character from empty line", __FUNCTION__);
           return false;
      }
 
@@ -285,15 +276,15 @@ bool ce_insert_line(Buffer* buffer, int64_t line, const char* string)
           if(buffer == g_message_buffer){
                printf("%s() failed to malloc new lines: %ld\n", __FUNCTION__, new_line_count);
           }else{
-               ce_message("%s() failed to malloc new lines: %ld\n", __FUNCTION__, new_line_count);
+               ce_message("%s() failed to malloc new lines: %ld", __FUNCTION__, new_line_count);
           }
-          return -1;
+          return false;
      }
 
      // copy up to new empty line, add empty line, copy the rest in the buffer
      for(int64_t i = 0; i < line; ++i) new_lines[i] = buffer->lines[i];
      if(string){
-          new_lines[line] = ce_alloc_string(string);
+          new_lines[line] = strdup(string);
      }else{
           new_lines[line] = NULL;
      }
@@ -312,14 +303,12 @@ bool ce_append_line(Buffer* buffer, const char* string)
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(string);
 
-     bool rc = ce_insert_line(buffer, buffer->line_count, string);
-     return rc;
+     return ce_insert_line(buffer, buffer->line_count, string);
 }
 
 bool ce_insert_newline(Buffer* buffer, int64_t line)
 {
-     bool rc = ce_insert_line(buffer, line, NULL);
-     return rc;
+     return ce_insert_line(buffer, line, NULL);
 }
 
 bool ce_remove_line(Buffer* buffer, int64_t line)
@@ -329,7 +318,7 @@ bool ce_remove_line(Buffer* buffer, int64_t line)
      int64_t new_line_count = buffer->line_count - 1;
      char** new_lines = malloc(new_line_count * sizeof(char*));
      if(!new_lines){
-          ce_message("%s() failed to malloc new lines: %ld\n", __FUNCTION__, new_line_count);
+          ce_message("%s() failed to malloc new lines: %ld", __FUNCTION__, new_line_count);
           return -1;
      }
 
@@ -351,7 +340,7 @@ bool ce_set_line(Buffer* buffer, int64_t line, const char* string)
      CE_CHECK_PTR_ARG(buffer);
 
      if(line < 0 || line >= buffer->line_count){
-          ce_message("%s() line %ld outside buffer with %ld lines\n", __FUNCTION__, line, buffer->line_count);
+          ce_message("%s() line %ld outside buffer with %ld lines", __FUNCTION__, line, buffer->line_count);
           return false;
      }
 
@@ -359,7 +348,7 @@ bool ce_set_line(Buffer* buffer, int64_t line, const char* string)
           free(buffer->lines[line]);
      }
 
-     buffer->lines[line] = ce_alloc_string(string);
+     buffer->lines[line] = strdup(string);
      return true;
 }
 
@@ -494,4 +483,35 @@ bool ce_remove_buffer_from_list(BufferNode* head, BufferNode** node)
 
      // didn't find the node to remove
      return false;
+}
+
+bool ce_move_cursor(const Buffer* buffer, Point* cursor, Point* delta)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(cursor);
+     CE_CHECK_PTR_ARG(delta);
+
+     Point dst = *cursor;
+     dst.x += delta->x;
+     dst.y += delta->y;
+
+     if(dst.x < 0) dst.x = 0;
+     if(dst.y < 0) dst.y = 0;
+
+     if(dst.y >= buffer->line_count) dst.y = buffer->line_count - 1;
+
+     if(buffer->lines[dst.y]){
+          int64_t line_len = strlen(buffer->lines[dst.y]);
+          if(!line_len){
+               dst.x = 0;
+          }else if(dst.x >= line_len){
+               dst.x = line_len - 1;
+          }
+     }else{
+          dst.x = 0;
+     }
+
+     *cursor = dst;
+
+     return true;
 }

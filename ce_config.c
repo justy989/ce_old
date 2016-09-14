@@ -3,6 +3,7 @@
 bool g_insert = false;
 bool g_split = false;
 int64_t g_start_line = 0;
+int g_last_key = 0;
 BufferNode* g_current_buffer_node = NULL;
 
 bool initializer(BufferNode* head, Buffer* message_buffer, Point* terminal_dimensions)
@@ -37,8 +38,9 @@ bool destroyer(BufferNode* head)
 bool key_handler(int key, BufferNode* head)
 {
      Buffer* buffer = g_current_buffer_node->buffer;
-
      Point* cursor = buffer->user_data;
+
+     g_last_key = key;
 
      if(g_insert){
           // TODO: should be a switch
@@ -83,60 +85,28 @@ bool key_handler(int key, BufferNode* head)
                return false; // exit !
           case 'j':
           {
-               if(cursor->y < (buffer->line_count - 1)){
-                    cursor->y++;
-               }
-
-               if(buffer->lines[cursor->y]){
-                    int64_t line_length = strlen(buffer->lines[cursor->y]);
-
-                    if(cursor->x >= line_length){
-                         cursor->x = line_length - 1;
-                         if(cursor->x < 0){
-                              cursor->x = 0;
-                         }
-                    }
-               }else{
-                    cursor->x = 0;
-               }
+               Point delta = {0, 1};
+               ce_move_cursor(buffer, cursor, &delta);
           } break;
           case 'k':
           {
-               if(cursor->y > 0){
-                    cursor->y--;
-               }
-
-               if(buffer->lines[cursor->y]){
-                    int64_t line_length = strlen(buffer->lines[cursor->y]);
-
-                    if(cursor->x >= line_length){
-                         cursor->x = line_length - 1;
-                         if(cursor->x < 0){
-                              cursor->x = 0;
-                         }
-                    }
-               }else{
-                    cursor->x = 0;
-               }
+               Point delta = {0, -1};
+               ce_move_cursor(buffer, cursor, &delta);
           } break;
           case 'h':
-          if(cursor->x > 0){
-               cursor->x--;
-          }
-          break;
+          {
+               Point delta = {-1, 0};
+               ce_move_cursor(buffer, cursor, &delta);
+          } break;
           case 'l':
           {
-               if(buffer->lines[cursor->y]){
-                    int64_t line_length = strlen(buffer->lines[cursor->y]);
-                    if(cursor->x < (line_length - 1)){
-                         cursor->x++;
-                    }
-               }
+               Point delta = {1, 0};
+               ce_move_cursor(buffer, cursor, &delta);
           } break;
           case 'i':
                g_insert = true;
                break;
-          case '':
+          case 'a':
                if(buffer->lines[cursor->y]){
                     cursor->x++;
                }
@@ -158,13 +128,21 @@ bool key_handler(int key, BufferNode* head)
                g_split = !g_split;
                break;
           case 'b':
-          {
                g_current_buffer_node = g_current_buffer_node->next;
                if(!g_current_buffer_node){
                     g_current_buffer_node = head;
                }
-          }
                break;
+          case 21: // Ctrl + d
+          {
+               Point delta = {0, -g_terminal_dimensions->y / 2};
+               ce_move_cursor(buffer, cursor, &delta);
+          } break;
+          case 4: // Ctrl + u
+          {
+               Point delta = {0, g_terminal_dimensions->y / 2};
+               ce_move_cursor(buffer, cursor, &delta);
+          } break;
           }
      }
 
@@ -213,7 +191,7 @@ void view_drawer(const BufferNode* head)
      }
 
      attron(A_REVERSE);
-     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %d lines", buffer->filename, buffer->line_count);
+     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %d lines, key %d", buffer->filename, buffer->line_count, g_last_key);
      attroff(A_REVERSE);
 
      // reset the cursor

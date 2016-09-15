@@ -1,4 +1,5 @@
 #include "ce.h"
+#include <assert.h>
 
 typedef struct{
      bool insert;

@@ -49,7 +49,7 @@ static void advance_to_boundary(Buffer* buffer, Point* cursor, const char* bound
           if(boundary_char){
                if(boundary_char == search_char){
                     cursor->x++;
-                    advance_to_boundary(buffer, cursor, boundary_str );
+                    advance_to_boundary(buffer, cursor, boundary_str);
                }
                else{
                     cursor->x += (boundary_char--) - search_char;

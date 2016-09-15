@@ -1,20 +1,35 @@
 #include "ce.h"
-#include "assert.h"
 
-bool g_insert = false;
-bool g_split = false;
-int64_t g_start_line = 0;
-int g_last_key = 0;
-BufferNode* g_current_buffer_node = NULL;
+typedef struct{
+     bool insert;
+     bool split;
+     int64_t start_line;
+     int last_key;
+     BufferNode* current_buffer_node;
+} ConfigState;
 
-bool initializer(BufferNode* head, Buffer* message_buffer, Point* terminal_dimensions)
+bool initializer(BufferNode* head, Point* terminal_dimensions, void** user_data)
 {
-     g_message_buffer = message_buffer;
+     // NOTE: need to set these in this module
+     g_message_buffer = head->buffer;
      g_terminal_dimensions = terminal_dimensions;
-     g_current_buffer_node = head;
 
+     // setup the config's state
+     ConfigState* config_state = malloc(sizeof(*config_state));
+     if(!config_state) return false;
+
+     config_state->insert = false;
+     config_state->split = false;
+     config_state->start_line = 0;
+     config_state->last_key = 0;
+     config_state->current_buffer_node = head;
+
+     *user_data = config_state;
+
+     // setup state for the buffers
      while(head){
           Point* cursor = malloc(sizeof(Point));
+          if(!cursor) return false;
           cursor->x = 0;
           cursor->y = 0;
           head->buffer->user_data = cursor;
@@ -24,7 +39,7 @@ bool initializer(BufferNode* head, Buffer* message_buffer, Point* terminal_dimen
      return true;
 }
 
-bool destroyer(BufferNode* head)
+bool destroyer(BufferNode* head, void* user_data)
 {
      while(head){
           Point* cursor = head->buffer->user_data;
@@ -33,6 +48,7 @@ bool destroyer(BufferNode* head)
           head = head->next;
      }
 
+     free(user_data);
      return true;
 }
 
@@ -66,17 +82,18 @@ static void advance_to_boundary(Buffer* buffer, Point* cursor, const char* bound
      }
 }
 
-bool key_handler(int key, BufferNode* head)
+bool key_handler(int key, BufferNode* head, void* user_data)
 {
-     Buffer* buffer = g_current_buffer_node->buffer;
+     ConfigState* config_state = user_data;
+     Buffer* buffer = config_state->current_buffer_node->buffer;
      Point* cursor = buffer->user_data;
 
-     g_last_key = key;
+     config_state->last_key = key;
 
-     if(g_insert){
+     if(config_state->insert){
           // TODO: should be a switch
           if(key == 27){ // escape
-               g_insert = false;
+               config_state->insert = false;
                if(buffer->lines[cursor->y]){
                     int64_t line_len = strlen(buffer->lines[cursor->y]);
                     if(cursor->x == line_len){
@@ -143,13 +160,13 @@ bool key_handler(int key, BufferNode* head)
                ce_move_cursor(buffer, cursor, &delta);
           } break;
           case 'i':
-               g_insert = true;
+               config_state->insert = true;
                break;
           case 'a':
                if(buffer->lines[cursor->y]){
                     cursor->x++;
                }
-               g_insert = true;
+               config_state->insert = true;
           case 'd':
                // delete line
                if(buffer->line_count){
@@ -164,12 +181,12 @@ bool key_handler(int key, BufferNode* head)
                ce_save_buffer(buffer, buffer->filename);
                break;
           case 'v':
-               g_split = !g_split;
+               config_state->split = !config_state->split;
                break;
           case 'b':
-               g_current_buffer_node = g_current_buffer_node->next;
-               if(!g_current_buffer_node){
-                    g_current_buffer_node = head;
+               config_state->current_buffer_node = config_state->current_buffer_node->next;
+               if(!config_state->current_buffer_node){
+                    config_state->current_buffer_node = head;
                }
                break;
           case 21: // Ctrl + d
@@ -188,36 +205,37 @@ bool key_handler(int key, BufferNode* head)
      return true;
 }
 
-void view_drawer(const BufferNode* head)
+void view_drawer(const BufferNode* head, void* user_data)
 {
      (void)(head);
-     Buffer* buffer = g_current_buffer_node->buffer;
+     ConfigState* config_state = user_data;
+     Buffer* buffer = config_state->current_buffer_node->buffer;
      Point* cursor = buffer->user_data;
 
      // calculate the last line we can draw
-     int64_t last_line = g_start_line + (g_terminal_dimensions->y - 2);
+     int64_t last_line = config_state->start_line + (g_terminal_dimensions->y - 2);
 
      // adjust the starting line based on where the cursor is
-     if(cursor->y > last_line) g_start_line++;
-     if(cursor->y < g_start_line) g_start_line--;
+     if(cursor->y > last_line) config_state->start_line++;
+     if(cursor->y < config_state->start_line) config_state->start_line--;
 
      // recalc the starting line
-     last_line = g_start_line + (g_terminal_dimensions->y - 2);
+     last_line = config_state->start_line + (g_terminal_dimensions->y - 2);
 
      if(last_line > (buffer->line_count - 1)){
           last_line = buffer->line_count - 1;
-          g_start_line = last_line - (g_terminal_dimensions->y - 2);
+          config_state->start_line = last_line - (g_terminal_dimensions->y - 2);
      }
 
-     if(g_start_line < 0) g_start_line = 0;
+     if(config_state->start_line < 0) config_state->start_line = 0;
 
      // print the range of lines we want to show
-     Point buffer_top_left = {0, g_start_line};
+     Point buffer_top_left = {0, config_state->start_line};
      if(buffer->line_count){
           standend();
           Point term_top_left = {0, 0};
           Point term_bottom_right = {g_terminal_dimensions->x, g_terminal_dimensions->y - 1};
-          if(!g_split){
+          if(!config_state->split){
                ce_draw_buffer(buffer, &term_top_left, &term_bottom_right, &buffer_top_left);
           }else{
                term_bottom_right.x = (g_terminal_dimensions->x / 2) - 1;
@@ -230,7 +248,8 @@ void view_drawer(const BufferNode* head)
      }
 
      attron(A_REVERSE);
-     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %d lines, key %d", buffer->filename, buffer->line_count, g_last_key);
+     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s %d lines, key %d", config_state->insert ? "INSERT" : "NORMAL",
+              buffer->filename, buffer->line_count, config_state->last_key);
      attroff(A_REVERSE);
 
      // reset the cursor

@@ -26,13 +26,17 @@ WANTS:
 
 #include "ce.h"
 
-int64_t g_start_line = 0;
-int g_last_key = 0;
-bool g_split = false;
-Point g_cursor = {0, 0};
+typedef struct{
+     int64_t start_line;
+     int last_key;
+     bool split;
+     Point cursor;
+} DefaultConfigState;
 
-bool default_key_handler(int key, BufferNode* head);
-void default_view_drawer(const BufferNode* head);
+bool default_initializer(BufferNode* head, Point* terminal_dimensions, void** user_data);
+void default_destroyer(BufferNode* head, void* user_data);
+bool default_key_handler(int key, BufferNode* head, void* user_data);
+void default_view_drawer(const BufferNode* head, void* user_data);
 
 typedef struct{
      void* so_handle;
@@ -47,7 +51,7 @@ Config current_config;
 
 const Config config_defaults = {NULL, NULL, NULL, default_key_handler, default_view_drawer};
 
-bool config_open(Config* config, const char* path, BufferNode* head){
+bool config_open(Config* config, const char* path, BufferNode* head, void** user_data){
      // try to load the config shared object
      *config = config_defaults;
      config->so_handle = dlopen(path, RTLD_NOW);
@@ -68,13 +72,13 @@ bool config_open(Config* config, const char* path, BufferNode* head){
      config->view_drawer = dlsym(config->so_handle, "view_drawer");
      if(!config->view_drawer) ce_message("no draw_view() found in '%s', using default", path);
 
-     if(config->initializer) config->initializer(head, g_message_buffer, g_terminal_dimensions);
+     if(config->initializer) config->initializer(head, g_terminal_dimensions, user_data);
      return true;
 }
 
-void config_close(Config*config, BufferNode* head){
+void config_close(Config*config, BufferNode* head, void* user_data){
      if(!config->so_handle) return;
-     if(config->destroyer) config->destroyer(head);
+     if(config->destroyer) config->destroyer(head, user_data);
      if(dlclose(config->so_handle)) ce_message("dlclose() failed with error %s", dlerror());
 }
 
@@ -146,6 +150,8 @@ int main(int argc, char** argv)
           ce_message("no file opened on startup");
      }
 
+     void* user_data = NULL;
+
      start_color();
      use_default_colors();
 
@@ -155,7 +161,7 @@ int main(int argc, char** argv)
 
      bool done = false;
 
-     config_open(&stable_config, CE_CONFIG, buffer_list_head);
+     config_open(&stable_config, CE_CONFIG, buffer_list_head, &user_data);
      current_config = stable_config;
 
      struct sigaction sa;
@@ -180,20 +186,20 @@ int main(int argc, char** argv)
           }
 
           // user-defined or default draw_view()
-          current_config.view_drawer(buffer_list_head);
+          current_config.view_drawer(buffer_list_head, user_data);
 
           // update the terminal with what we drew
           refresh();
 
-          g_last_key = getch();
-          if(g_last_key == ''){
+          int key = getch();
+          if(key == ''){
                ce_message("reloading config");
-               if(!config_open(&current_config, "ce_config2.so", buffer_list_head)){
+               if(!config_open(&current_config, "ce_config2.so", buffer_list_head, &user_data)){
                     config_revert();
                }
           }
           // user-defined or default key_handler()
-          else if(!current_config.key_handler(g_last_key, buffer_list_head)){
+          else if(!current_config.key_handler(key, buffer_list_head, user_data)){
                done = true;
           }
      }
@@ -204,8 +210,8 @@ int main(int argc, char** argv)
      ce_save_buffer(g_message_buffer, g_message_buffer->filename);
 
      if(current_config.so_handle != stable_config.so_handle)
-          config_close(&current_config, buffer_list_head);
-     config_close(&stable_config, buffer_list_head);
+          config_close(&current_config, buffer_list_head, user_data);
+     config_close(&stable_config, buffer_list_head, user_data);
 
      // free our buffers
      BufferNode* itr = buffer_list_head;
@@ -221,14 +227,35 @@ int main(int argc, char** argv)
      return 0;
 }
 
-bool default_key_handler(int key, BufferNode* head)
+bool default_initializer(BufferNode* head, Point* terminal_dimensions, void** user_data)
 {
+     (void)(head);
+     (void)(terminal_dimensions);
+
+     DefaultConfigState* config_state = malloc(sizeof(*config_state));
+     if(!config_state) return false;
+
+     *user_data = config_state;
+     return true;
+}
+
+void default_destroyer(BufferNode* head, void* user_data)
+{
+     (void)(head);
+     free(user_data);
+}
+
+bool default_key_handler(int key, BufferNode* head, void* user_data)
+{
+     DefaultConfigState* config_state = user_data;
      Buffer* buffer = head->buffer;
      if(head->next) buffer = head->next->buffer;
 
+     config_state->last_key = key;
+
      switch(key){
      default:
-          if(ce_insert_char(buffer, &g_cursor, key)) g_cursor.x++;
+          if(ce_insert_char(buffer, &config_state->cursor, key)) config_state->cursor.x++;
           break;
      case '':
           return false;
@@ -240,30 +267,31 @@ bool default_key_handler(int key, BufferNode* head)
      return true;
 }
 
-void default_view_drawer(const BufferNode* head)
+void default_view_drawer(const BufferNode* head, void* user_data)
 {
+     DefaultConfigState* config_state = user_data;
      Buffer* buffer = head->buffer;
      if(head->next) buffer = head->next->buffer;
 
      // calculate the last line we can draw
-     int64_t last_line = g_start_line + (g_terminal_dimensions->y - 2);
+     int64_t last_line = config_state->start_line + (g_terminal_dimensions->y - 2);
 
      // adjust the starting line based on where the cursor is
-     if(g_cursor.y > last_line) g_start_line++;
-     if(g_cursor.y < g_start_line) g_start_line--;
+     if(config_state->cursor.y > last_line) config_state->start_line++;
+     if(config_state->cursor.y < config_state->start_line) config_state->start_line--;
 
      // recalc the starting line
-     last_line = g_start_line + (g_terminal_dimensions->y - 2);
+     last_line = config_state->start_line + (g_terminal_dimensions->y - 2);
 
      if(last_line > (buffer->line_count - 1)){
           last_line = buffer->line_count - 1;
-          g_start_line = last_line - (g_terminal_dimensions->y - 2);
+          config_state->start_line = last_line - (g_terminal_dimensions->y - 2);
      }
 
-     if(g_start_line < 0) g_start_line = 0;
+     if(config_state->start_line < 0) config_state->start_line = 0;
 
      // print the range of lines we want to show
-     Point buffer_top_left = {0, g_start_line};
+     Point buffer_top_left = {0, config_state->start_line};
      if(buffer->line_count){
           standend();
           Point term_top_left = {0, 0};
@@ -276,10 +304,10 @@ void default_view_drawer(const BufferNode* head)
      attron(A_REVERSE);
      mvprintw(g_terminal_dimensions->y - 1, 0, "%s %d lines", buffer->filename, buffer->line_count);
      snprintf(line_info, g_terminal_dimensions->x, "DEFAULT_CONFIG key: %d, term: %ld, %ld cursor: %ld, %ld",
-              g_last_key, g_terminal_dimensions->x, g_terminal_dimensions->y, g_cursor.x, g_cursor.y);
+              config_state->last_key, g_terminal_dimensions->x, g_terminal_dimensions->y, config_state->cursor.x, config_state->cursor.y);
      mvaddstr(g_terminal_dimensions->y - 1, g_terminal_dimensions->x - strlen(line_info), line_info);
      attroff(A_REVERSE);
 
      // reset the cursor
-     move(g_cursor.y - buffer_top_left.y, g_cursor.x);
+     move(config_state->cursor.y - buffer_top_left.y, config_state->cursor.x);
 }

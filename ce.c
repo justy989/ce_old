@@ -406,17 +406,42 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
      }
 
      if(term_top_left->x >= term_bottom_right->x){
-          ce_message("%s() top_left must be lower than bottom_right horizontally", __FUNCTION__);
+          ce_message("%s() top_left's x (%d) must be lower than bottom_right's x(%d)", __FUNCTION__,
+                     term_top_left->x, term_bottom_right->x);
           return false;
      }
 
      if(term_top_left->y >= term_bottom_right->y){
-          ce_message("%s() top_left must be lower than bottom_right vertically", __FUNCTION__);
+          ce_message("%s() top_left's y (%d) must be lower than bottom_right's y(%d)", __FUNCTION__,
+                     term_top_left->y, term_bottom_right->y);
+          return false;
+     }
+
+     if(term_top_left->x < 0){
+          ce_message("%s() top_left's x(%d) must be greater than 0", __FUNCTION__, term_top_left->x);
+          return false;
+     }
+
+     if(term_top_left->y < 0){
+          ce_message("%s() top_left's y(%d) must be greater than 0", __FUNCTION__, term_top_left->y);
+          return false;
+     }
+
+     if(term_bottom_right->x >= g_terminal_dimensions->x){
+          ce_message("%s() bottom_right's x(%d) must be less than the terminal dimensions x(%d)", __FUNCTION__,
+                     term_bottom_right->x, g_terminal_dimensions->x);
+          return false;
+     }
+
+     if(term_bottom_right->y >= g_terminal_dimensions->y){
+          ce_message("%s() bottom_right's y(%d) must be less than the terminal dimensions y(%d)", __FUNCTION__,
+                     term_bottom_right->y, g_terminal_dimensions->y);
           return false;
      }
 
      char line_to_print[g_terminal_dimensions->x];
 
+     int64_t max_width = term_bottom_right->x - term_top_left->x;
      int64_t last_line = buffer_top_left->y + (term_bottom_right->y - term_top_left->y) - 1;
      if(last_line >= buffer->line_count) last_line = buffer->line_count - 1;
 
@@ -432,7 +457,7 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
           buffer_line += buffer_top_left->x;
           line_length = strlen(buffer_line);
 
-          int64_t min = g_terminal_dimensions->x < line_length ? g_terminal_dimensions->x : line_length;
+          int64_t min = max_width < line_length ? max_width : line_length;
           memset(line_to_print, 0, min + 1);
           strncpy(line_to_print, buffer_line, min);
           addstr(line_to_print); // NOTE: use addstr() rather than printw() because it could contain format specifiers
@@ -485,7 +510,7 @@ bool ce_remove_buffer_from_list(BufferNode* head, BufferNode** node)
      return false;
 }
 
-bool ce_move_cursor(const Buffer* buffer, Point* cursor, Point* delta)
+bool ce_move_cursor(const Buffer* buffer, Point* cursor, const Point* delta)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
@@ -512,6 +537,25 @@ bool ce_move_cursor(const Buffer* buffer, Point* cursor, Point* delta)
      }
 
      *cursor = dst;
+
+     return true;
+}
+
+bool ce_follow_cursor(const Point* cursor, int64_t* top_line, int64_t view_height)
+{
+     CE_CHECK_PTR_ARG(cursor);
+     CE_CHECK_PTR_ARG(top_line);
+
+     view_height--;
+
+     int64_t bottom_line = *top_line + view_height;
+
+     if(cursor->y < *top_line){
+          *top_line = cursor->y;
+     }else if(cursor->y > bottom_line){
+          bottom_line = cursor->y;
+          *top_line = bottom_line - view_height;
+     }
 
      return true;
 }

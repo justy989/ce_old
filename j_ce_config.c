@@ -3,10 +3,14 @@
 typedef struct{
      bool insert;
      bool split;
-     int64_t start_line;
      int last_key;
      BufferNode* current_buffer_node;
 } ConfigState;
+
+typedef struct{
+     Point cursor;
+     int64_t start_line;
+} BufferState;
 
 bool initializer(BufferNode* head, Point* terminal_dimensions, void** user_data)
 {
@@ -20,19 +24,22 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, void** user_data)
 
      config_state->insert = false;
      config_state->split = false;
-     config_state->start_line = 0;
      config_state->last_key = 0;
      config_state->current_buffer_node = head;
 
      *user_data = config_state;
 
-     // setup state for the buffers
+     // setup state for each buffer
      while(head){
-          Point* cursor = malloc(sizeof(Point));
-          if(!cursor) return false;
-          cursor->x = 0;
-          cursor->y = 0;
-          head->buffer->user_data = cursor;
+          BufferState* buffer_state = malloc(sizeof(*buffer_state));
+          if(!buffer_state){
+               ce_message("failed to allocate buffer state.");
+               return false;
+          }
+          buffer_state->cursor.x = 0;
+          buffer_state->cursor.y = 0;
+          buffer_state->start_line = 0;
+          head->buffer->user_data = buffer_state;
           head = head->next;
      }
 
@@ -42,8 +49,8 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, void** user_data)
 bool destroyer(BufferNode* head, void* user_data)
 {
      while(head){
-          Point* cursor = head->buffer->user_data;
-          free(cursor);
+          BufferState* buffer_state = head->buffer->user_data;
+          free(buffer_state);
           head->buffer->user_data = NULL;
           head = head->next;
      }
@@ -56,7 +63,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
 {
      ConfigState* config_state = user_data;
      Buffer* buffer = config_state->current_buffer_node->buffer;
-     Point* cursor = buffer->user_data;
+     BufferState* buffer_state = buffer->user_data;
+     Point* cursor = &buffer_state->cursor;
 
      config_state->last_key = key;
 
@@ -172,39 +180,26 @@ void view_drawer(const BufferNode* head, void* user_data)
      (void)(head);
      ConfigState* config_state = user_data;
      Buffer* buffer = config_state->current_buffer_node->buffer;
-     Point* cursor = buffer->user_data;
+     BufferState* buffer_state = buffer->user_data;
 
-     // calculate the last line we can draw
-     int64_t last_line = config_state->start_line + (g_terminal_dimensions->y - 2);
+     int64_t draw_height = g_terminal_dimensions->y - 1;
 
-     // adjust the starting line based on where the cursor is
-     if(cursor->y > last_line) config_state->start_line++;
-     if(cursor->y < config_state->start_line) config_state->start_line--;
-
-     // recalc the starting line
-     last_line = config_state->start_line + (g_terminal_dimensions->y - 2);
-
-     if(last_line > (buffer->line_count - 1)){
-          last_line = buffer->line_count - 1;
-          config_state->start_line = last_line - (g_terminal_dimensions->y - 2);
-     }
-
-     if(config_state->start_line < 0) config_state->start_line = 0;
+     ce_follow_cursor(&buffer_state->cursor, &buffer_state->start_line, draw_height);
 
      // print the range of lines we want to show
-     Point buffer_top_left = {0, config_state->start_line};
+     Point buffer_top_left = {0, buffer_state->start_line};
      if(buffer->line_count){
           standend();
           Point term_top_left = {0, 0};
-          Point term_bottom_right = {g_terminal_dimensions->x, g_terminal_dimensions->y - 1};
+          Point term_bottom_right = {g_terminal_dimensions->x - 1, draw_height};
           if(!config_state->split){
                ce_draw_buffer(buffer, &term_top_left, &term_bottom_right, &buffer_top_left);
           }else{
                term_bottom_right.x = (g_terminal_dimensions->x / 2) - 1;
                ce_draw_buffer(buffer, &term_top_left, &term_bottom_right, &buffer_top_left);
 
-               term_top_left.x = (g_terminal_dimensions->x / 2) + 1;
-               term_bottom_right.x = g_terminal_dimensions->x;
+               term_top_left.x = (g_terminal_dimensions->x / 2);
+               term_bottom_right.x = term_top_left.x + ((g_terminal_dimensions->x / 2) - 1);
                ce_draw_buffer(buffer, &term_top_left, &term_bottom_right, &buffer_top_left);
           }
      }
@@ -215,5 +210,5 @@ void view_drawer(const BufferNode* head, void* user_data)
      attroff(A_REVERSE);
 
      // reset the cursor
-     move(cursor->y - buffer_top_left.y, cursor->x);
+     move(buffer_state->cursor.y - buffer_top_left.y, buffer_state->cursor.x);
 }

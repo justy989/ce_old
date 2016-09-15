@@ -8,6 +8,8 @@ TODO:
 -user input
 -undo/redo
 -use tabs instead of spaces
+-window management library
+-client/server
 
 WANTS:
 -realloc() rather than malloc() ?

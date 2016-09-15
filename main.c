@@ -3,11 +3,20 @@ NOTES:
 -tabs suck, do we have to deal with them?
 -get full file path
 
+TODO:
+-crash resurrections
+-user input
+-undo/redo
+-use tabs instead of spaces
+
 WANTS:
+-realloc() rather than malloc() ?
 -be able to yank from man pages
--regexes that don't suck
+-regexes that don't suck, regcomp()
 -tailing files
 -visual section changes using . always uses the top of the region
+-input box should act like a buffer in terms of key mappings
+-pair programming? Each connected user can edit text with their own cursor? show other users' cursors!
 */
 
 #include <dlfcn.h>
@@ -40,7 +49,7 @@ int main(int argc, char** argv)
           return -1;
      }
 
-     g_message_buffer->filename = ce_alloc_string(MESSAGE_FILE);
+     g_message_buffer->filename = strdup(MESSAGE_FILE);
      g_message_buffer->line_count = 0;
      g_message_buffer->lines = NULL;
      g_message_buffer->user_data = NULL;
@@ -57,35 +66,26 @@ int main(int argc, char** argv)
      // try to load the config shared object
      ce_initializer* initializer = NULL;
      ce_destroyer* destroyer = NULL;
-     ce_key_handler* key_handler = NULL;
-     ce_view_drawer* view_drawer = NULL;
+     ce_key_handler* key_handler = default_key_handler;
+     ce_view_drawer* view_drawer = default_view_drawer;
      void* config_so_handle = dlopen(CE_CONFIG, RTLD_NOW);
      if(!config_so_handle){
-          ce_message("missing config '%s': '%s', using defaults\n", CE_CONFIG, strerror(errno));
+          ce_message("missing config '%s': '%s', using defaults", CE_CONFIG, strerror(errno));
           key_handler = default_key_handler;
           view_drawer = default_view_drawer;
      }else{
+          // TODO: macro?
           initializer = dlsym(config_so_handle, "initializer");
-          if(!initializer){
-               ce_message("no initializer() found in '%s'", CE_CONFIG);
-          }
+          if(!initializer) ce_message("no initializer() found in '%s'", CE_CONFIG);
 
           destroyer = dlsym(config_so_handle, "destroyer");
-          if(!view_drawer){
-               ce_message("no destroyer() found in '%s'", CE_CONFIG);
-          }
+          if(!destroyer) ce_message("no destroyer() found in '%s'", CE_CONFIG);
 
           key_handler = dlsym(config_so_handle, "key_handler");
-          if(!key_handler){
-               ce_message("no key_handler() found in '%s', using default", CE_CONFIG);
-               key_handler = default_key_handler;
-          }
+          if(!key_handler) ce_message("no key_handler() found in '%s', using default", CE_CONFIG);
 
           view_drawer = dlsym(config_so_handle, "view_drawer");
-          if(!view_drawer){
-               ce_message("no draw_view() found in '%s', using default", CE_CONFIG);
-               view_drawer = default_view_drawer;
-          }
+          if(!view_drawer) ce_message("no draw_view() found in '%s', using default", CE_CONFIG);
      }
 
      Point terminal_dimensions = {0, 0};

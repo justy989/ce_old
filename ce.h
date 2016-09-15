@@ -36,7 +36,7 @@ typedef struct {
 } Point;
 
 typedef struct {
-     char** lines; // NULL terminated, does not contain newlines
+     char** lines; // '\0' terminated, does not contain newlines, NULL if empty
      int64_t line_count;
      char* filename;
      void* user_data;
@@ -55,8 +55,6 @@ typedef void ce_view_drawer(const BufferNode*);
 extern Buffer* g_message_buffer;
 extern Point* g_terminal_dimensions;
 
-// TODO: strdup() isn't in my string.h c standard libary ?
-char* ce_alloc_string(const char* string);
 bool ce_alloc_lines(Buffer* buffer, int64_t line_count);
 bool ce_load_file(Buffer* buffer, const char* filename);
 void ce_free_buffer(Buffer* buffer);
@@ -70,16 +68,17 @@ bool ce_insert_line(Buffer* buffer, int64_t line, const char* string);
 bool ce_append_line(Buffer* buffer, const char* string);
 bool ce_insert_newline(Buffer* buffer, int64_t line);
 bool ce_remove_line(Buffer* buffer, int64_t line);
-
-// NOTE: unused/untested
 bool ce_set_line(Buffer* buffer, int64_t line, const char* string);
-bool ce_save_buffer(const Buffer* buffer, const char* filename);
-bool ce_message(const char* format, ...);
 
+bool ce_save_buffer(const Buffer* buffer, const char* filename);
 bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Point* term_bottom_right,
                     const Point* buffer_top_left);
 
+bool ce_message(const char* format, ...);
+
 BufferNode* ce_append_buffer_to_list(BufferNode* head, Buffer* buffer);
 bool ce_remove_buffer_from_list(BufferNode* head, BufferNode** node);
+
+bool ce_move_cursor(const Buffer* buffer, Point* cursor, Point* delta);
 
 #endif

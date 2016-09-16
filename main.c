@@ -45,17 +45,20 @@ int main(int argc, char** argv)
      int parsed_args = 1;
      bool done_parsing = false;
 
+     // TODO: create config parser
+     // TODO: pass unhandled main arguments to the config's arg parser?
 	while((opt = getopt(argc, argv, "c:h")) != -1 && !done_parsing){
           parsed_args++;
           switch(opt){
           case 'c':
                config = optarg;
+               parsed_args++;
                break;
           case 'h':
                printf("usage: %s [options]\n", argv[0]);
                printf(" -c [config] shared object config\n");
                printf(" -h see this message for help");
-               break;
+               return 0;
           default:
                parsed_args--;
                done_parsing = true;
@@ -207,7 +210,6 @@ bool default_key_handler(int key, BufferNode* head, void* user_data)
 {
      DefaultConfigState* config_state = user_data;
      Buffer* buffer = head->buffer;
-     if(head->next) buffer = head->next->buffer;
 
      config_state->last_key = key;
 
@@ -229,7 +231,6 @@ void default_view_drawer(const BufferNode* head, void* user_data)
 {
      DefaultConfigState* config_state = user_data;
      Buffer* buffer = head->buffer;
-     if(head->next) buffer = head->next->buffer;
 
      // calculate the last line we can draw
      int64_t last_line = config_state->start_line + (g_terminal_dimensions->y - 2);

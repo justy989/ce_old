@@ -5,12 +5,14 @@ typedef struct{
      bool split;
      int last_key;
      BufferNode* current_buffer_node;
+     Point start_insert;
 } ConfigState;
 
 typedef struct{
      Point cursor;
      int64_t start_line;
      int64_t left_collumn;
+     BufferChangeNode* changes_tail;
 } BufferState;
 
 bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** argv, void** user_data)
@@ -57,6 +59,7 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
           buffer_state->cursor.x = 0;
           buffer_state->cursor.y = 0;
           buffer_state->start_line = 0;
+          buffer_state->changes_tail = NULL;
           head->buffer->user_data = buffer_state;
           head = head->next;
      }
@@ -90,6 +93,16 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           // TODO: should be a switch
           if(key == 27){ // escape
                config_state->insert = false;
+               // TODO: handle newlines for saving state
+               if(config_state->start_insert.x < cursor->x){
+                    BufferChange change;
+                    change.start = config_state->start_insert;
+                    change.start.x++;
+                    change.cursor = *cursor;
+                    change.length = cursor->x - config_state->start_insert.x;
+                    change.insertion = true;
+                    ce_buffer_change(&buffer_state->changes_tail, &change);
+               }
                if(buffer->lines[cursor->y]){
                     int64_t line_len = strlen(buffer->lines[cursor->y]);
                     if(cursor->x == line_len){
@@ -147,12 +160,14 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case 'i':
                config_state->insert = true;
+               config_state->start_insert = *cursor;
                break;
           case 'a':
                if(buffer->lines[cursor->y]){
                     cursor->x++;
                }
                config_state->insert = true;
+               config_state->start_insert = *cursor;
           case 'd':
                // delete line
                if(buffer->line_count){
@@ -175,6 +190,29 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     config_state->current_buffer_node = head;
                }
                break;
+          case 'u':
+               if(buffer_state->changes_tail){
+                    Point new_cursor = buffer_state->changes_tail->change.cursor;
+                    if(ce_buffer_undo(buffer, &buffer_state->changes_tail)){
+                         *cursor = new_cursor;
+                    }
+               }
+               break;
+          case 'x':
+          {
+               char c;
+               Point loc = *cursor;
+               loc.x++;
+               if(ce_get_char(buffer, cursor, &c) && ce_remove_char(buffer, &loc)){
+                    BufferChange change;
+                    change.insertion = false;
+                    change.start = *cursor;
+                    change.cursor = *cursor;
+                    change.c = c;
+                    ce_buffer_change(&buffer_state->changes_tail, &change);
+               }
+          }
+          break;
           case 21: // Ctrl + d
           {
                Point delta = {0, -g_terminal_dimensions->y / 2};

@@ -47,6 +47,21 @@ typedef struct BufferNode {
      struct BufferNode* next;
 } BufferNode;
 
+typedef struct BufferChange {
+     bool insertion; // insertion or deletion
+     Point start;
+     Point cursor;
+     union{
+          int64_t length; // insertion
+          char c; // deletion
+     };
+} BufferChange;
+
+typedef struct BufferChangeNode {
+     BufferChange change;
+     struct BufferChangeNode* prev;
+} BufferChangeNode;
+
 typedef bool ce_initializer(BufferNode*, Point*, int, char**, void**);
 typedef void ce_destroyer(BufferNode*, void*);
 typedef bool ce_key_handler(int, BufferNode*, void*);
@@ -62,6 +77,7 @@ void ce_free_buffer(Buffer* buffer);
 bool ce_point_on_buffer(const Buffer* buffer, const Point* location);
 bool ce_insert_char(Buffer* buffer, const Point* location, char c);
 bool ce_remove_char(Buffer* buffer, const Point* location);
+bool ce_get_char(Buffer* buffer, const Point* location, char* c);
 
 // NOTE: passing NULL to string causes an empty line to be inserted
 bool ce_insert_line(Buffer* buffer, int64_t line, const char* string);
@@ -80,5 +96,8 @@ bool ce_remove_buffer_from_list(BufferNode* head, BufferNode** node);
 
 bool ce_move_cursor(const Buffer* buffer, Point* cursor, const Point* delta);
 bool ce_follow_cursor(const Point* cursor, int64_t* top_line, int64_t* left_collumn, int64_t view_height, int64_t view_width);
+
+bool ce_buffer_change(BufferChangeNode** tail, const BufferChange* change);
+bool ce_buffer_undo(Buffer* buffer, BufferChangeNode** tail);
 
 #endif

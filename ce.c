@@ -213,6 +213,8 @@ bool ce_remove_char(Buffer* buffer, const Point* location)
           return true;
      }
 
+     // NOTE: mallocing a new line because I'm thinking about overall memory usage here
+     //       if you trim the a ton of lines, then you would be using a lot more memory then the file requires
      char* new_line = malloc(line_len);
 
      // copy before the removed char copy after the removed char
@@ -222,6 +224,18 @@ bool ce_remove_char(Buffer* buffer, const Point* location)
 
      free(line);
      buffer->lines[location->y] = new_line;
+
+     return true;
+}
+
+bool ce_get_char(Buffer* buffer, const Point* location, char* c)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+
+     if(!ce_point_on_buffer(buffer, location)) return false;
+
+     *c = buffer->lines[location->y][location->x];
 
      return true;
 }
@@ -528,5 +542,51 @@ bool ce_follow_cursor(const Point* cursor, int64_t* top_line, int64_t* left_coll
           *left_collumn = right_collumn - view_width;
      }
 
+     return true;
+}
+
+bool ce_buffer_change(BufferChangeNode** tail, const BufferChange* change)
+{
+     CE_CHECK_PTR_ARG(tail);
+     CE_CHECK_PTR_ARG(change);
+
+     BufferChangeNode* new_change = malloc(sizeof(*new_change));
+     if(!new_change){
+          ce_message("%s() failed to allocate new change", __FUNCTION__);
+          return false;
+     }
+
+     new_change->change = *change;
+     new_change->prev = *tail;
+     *tail = new_change;
+
+     return true;
+}
+
+bool ce_buffer_undo(Buffer* buffer, BufferChangeNode** tail)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(tail);
+
+     if(!*tail){
+          ce_message("%s() empty undo history", __FUNCTION__);
+          return false;
+     }
+
+     BufferChangeNode* undo_change = *tail;
+     BufferChange* change = &undo_change->change;
+
+     *tail = (*tail)->prev;
+
+     if(change->insertion){
+          // TODO: create api to remove a range of characters
+          for(int64_t i = 0; i < change->length; ++i){
+               ce_remove_char(buffer, &change->start);
+          }
+     }else{
+          ce_insert_char(buffer, &change->start, change->c);
+     }
+
+     free(undo_change);
      return true;
 }

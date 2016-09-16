@@ -52,7 +52,7 @@ typedef struct Config{
 
 const Config config_defaults = {NULL, NULL, default_initializer, default_destroyer, default_key_handler, default_view_drawer};
 
-bool config_open_and_init(Config* config, const char* path, BufferNode* head, void** user_data){
+bool config_open_and_init(Config* config, const char* path, BufferNode* head, int argc, char** argv, void** user_data){
      // try to load the config shared object
      *config = config_defaults;
      config->so_handle = dlopen(path, RTLD_NOW);
@@ -74,7 +74,7 @@ bool config_open_and_init(Config* config, const char* path, BufferNode* head, vo
      config->view_drawer = dlsym(config->so_handle, "view_drawer");
      if(!config->view_drawer) ce_message("no draw_view() found in '%s', using default", path);
 
-     if(config->initializer) config->initializer(head, g_terminal_dimensions, user_data);
+     if(config->initializer) config->initializer(head, g_terminal_dimensions, argc, argv, user_data);
      return true;
 }
 
@@ -170,7 +170,7 @@ int main(int argc, char** argv)
      bool done = false;
 
      Config stable_config;
-     config_open_and_init(&stable_config, CE_CONFIG, buffer_list_head, &user_data);
+     config_open_and_init(&stable_config, config, buffer_list_head, argc + parsed_args, argv + parsed_args, &user_data);
      Config current_config = stable_config;
 
      struct sigaction sa;
@@ -217,7 +217,8 @@ int main(int argc, char** argv)
           if(key == ''){
                ce_message("reloading config '%s'", current_config.path);
                // TODO: specify the path for the test config to load here
-               if(!config_open_and_init(&current_config, current_config.path, buffer_list_head, &user_data)){
+               if(!config_open_and_init(&current_config, current_config.path, buffer_list_head,
+                                        argc + parsed_args, argv + parsed_args, &user_data)){
                     current_config = stable_config;
                }
           }

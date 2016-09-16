@@ -191,6 +191,54 @@ bool ce_insert_char(Buffer* buffer, const Point* location, char c)
      return true;
 }
 
+bool ce_insert_string(Buffer* buffer, const Point* location, const char* string)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+     CE_CHECK_PTR_ARG(string);
+
+     if(!ce_point_on_buffer(buffer, location)){
+          return false;
+     }
+
+#if 0
+     char* current_line = buffer->lines[location->y];
+     if(!current_line){
+
+     }
+
+     int64_t new_string_length = strlen(string);
+     const char* first_part = current_line;
+     const char* second_part = current_line + location->x;
+
+     if(location->x == 0) first_part = NULL;
+     if(location->x >= string_length) second_part = NULL;
+
+     int64_t string_length = strlen(string);
+     int64_t first_length = first_part ? strlen(first_part) : 0;
+     int64_t second_length = second_part ? strlen(second_part) : 0;
+
+     // find the first line
+     const char* itr = string;
+     const char* end_of_line = string;
+     while(*end_of_line != NEWLINE && *end_of_line != 0) end_of_line++;
+
+     if(*end_of_line == 0){
+          // we are only adding a single line
+          int64_t new_line_length = new_string_length + first_length + second_length;
+          char* new_line = malloc();
+
+          if(first_part) strncpy();
+     }else{
+
+     }
+
+     return true;
+#endif
+     ce_message("unimplemented");
+     return false;
+}
+
 bool ce_remove_char(Buffer* buffer, const Point* location)
 {
      CE_CHECK_PTR_ARG(buffer);

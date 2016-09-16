@@ -76,6 +76,7 @@ bool ce_save_buffer(const Buffer* buffer, const char* filename);
 void ce_free_buffer(Buffer* buffer);
 bool ce_point_on_buffer(const Buffer* buffer, const Point* location);
 bool ce_insert_char(Buffer* buffer, const Point* location, char c);
+bool ce_insert_string(Buffer* buffer, const Point* location, const char* string);
 bool ce_remove_char(Buffer* buffer, const Point* location);
 bool ce_get_char(Buffer* buffer, const Point* location, char* c);
 

@@ -36,7 +36,7 @@ bool ce_load_file(Buffer* buffer, const char* filename)
      {
           FILE* file = fopen(filename, "rb");
           if(!file){
-               ce_message("%s", strerror(errno));
+               ce_message("%s() fopen('%s', 'rb') failed: %s", __FUNCTION__, filename, strerror(errno));
                return false;
           }
 
@@ -68,15 +68,17 @@ bool ce_load_file(Buffer* buffer, const char* filename)
                if(contents[i] != NEWLINE) continue;
 
                int64_t length = (i - 1) - last_newline;
-               char* new_line = malloc(length + 1);
-               strncpy(new_line, contents + last_newline + 1, length);
-               new_line[length] = 0;
-               buffer->lines[l] = new_line;
+               if(length){
+                    char* new_line = malloc(length + 1);
+                    strncpy(new_line, contents + last_newline + 1, length);
+                    new_line[length] = 0;
+                    buffer->lines[l] = new_line;
+               }
                last_newline = i;
                l++;
           }
 
-          int64_t length = (content_size - 1) - last_newline;
+          int64_t length = content_size - last_newline;
           if(length > 1){
                char* new_line = malloc(length + 1);
                strncpy(new_line, contents + last_newline + 1, length);
@@ -85,12 +87,12 @@ bool ce_load_file(Buffer* buffer, const char* filename)
                     new_line[length - 1] = 0;
                }
                buffer->lines[line_count - 1] = new_line;
-          }else{
-               buffer->lines[line_count - 1] = NULL;
           }
      }
 
      free(contents);
+
+     ce_message("loaded file '%s'", filename);
 
      return true;
 }
@@ -147,9 +149,13 @@ bool ce_insert_char(Buffer* buffer, const Point* location, char c)
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
 
+     if(buffer->line_count == 0 && location->x == 0 && location->y == 0) ce_alloc_lines(buffer, 1);
+
      if(!ce_point_on_buffer(buffer, location)){
           return false;
      }
+
+     if(c == NEWLINE) return ce_insert_line(buffer, location->y, NULL);
 
      char* line = buffer->lines[location->y];
      char* new_line = NULL;
@@ -195,39 +201,42 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* string)
           return false;
      }
 
-     char* line = buffer->lines[location->y];
-     char* new_line = NULL;
-     int64_t string_len = strlen(string);
-     if(line){
-          // allocate new line with length + 1 + NULL terminator
-          int64_t line_len = strlen(line);
-          int64_t new_len = line_len + string_len + 1;
-          new_line = malloc(new_len);
-          if(!new_line){
-               ce_message("%s() failed to allocate line with %ld characters", __FUNCTION__, new_len);
-               return false;
-          }
+#if 0
+     char* current_line = buffer->lines[location->y];
+     if(!current_line){
 
-          // copy before the insert, add the new char, copy after the insert
-          for(int64_t i = 0; i < location->x; ++i){new_line[i] = line[i];}
-          strncpy(new_line + location->x, string, string_len);
-          for(int64_t i = location->x; i < line_len; ++i){new_line[i + string_len] = line[i];}
-
-          // NULL terminate the newline, and free the old line
-          new_line[new_len - 1] = 0;
-          free(line);
-     }else{
-          new_line = malloc(string_len + 1);
-          if(!new_line){
-               ce_message("%s() failed to allocate line with %ld characters", __FUNCTION__, string_len + 1);
-               return false;
-          }
-          strncpy(new_line, string, string_len);
-          new_line[string_len] = 0;
      }
 
-     buffer->lines[location->y] = new_line;
+     int64_t new_string_length = strlen(string);
+     const char* first_part = current_line;
+     const char* second_part = current_line + location->x;
+
+     if(location->x == 0) first_part = NULL;
+     if(location->x >= string_length) second_part = NULL;
+
+     int64_t string_length = strlen(string);
+     int64_t first_length = first_part ? strlen(first_part) : 0;
+     int64_t second_length = second_part ? strlen(second_part) : 0;
+
+     // find the first line
+     const char* itr = string;
+     const char* end_of_line = string;
+     while(*end_of_line != NEWLINE && *end_of_line != 0) end_of_line++;
+
+     if(*end_of_line == 0){
+          // we are only adding a single line
+          int64_t new_line_length = new_string_length + first_length + second_length;
+          char* new_line = malloc();
+
+          if(first_part) strncpy();
+     }else{
+
+     }
+
      return true;
+#endif
+     ce_message("unimplemented");
+     return false;
 }
 
 bool ce_remove_char(Buffer* buffer, const Point* location)
@@ -252,6 +261,8 @@ bool ce_remove_char(Buffer* buffer, const Point* location)
           return true;
      }
 
+     // NOTE: mallocing a new line because I'm thinking about overall memory usage here
+     //       if you trim the a ton of lines, then you would be using a lot more memory then the file requires
      char* new_line = malloc(line_len);
 
      // copy before the removed char copy after the removed char
@@ -261,6 +272,18 @@ bool ce_remove_char(Buffer* buffer, const Point* location)
 
      free(line);
      buffer->lines[location->y] = new_line;
+
+     return true;
+}
+
+bool ce_get_char(Buffer* buffer, const Point* location, char* c)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+
+     if(!ce_point_on_buffer(buffer, location)) return false;
+
+     *c = buffer->lines[location->y][location->x];
 
      return true;
 }
@@ -406,17 +429,42 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
      }
 
      if(term_top_left->x >= term_bottom_right->x){
-          ce_message("%s() top_left must be lower than bottom_right horizontally", __FUNCTION__);
+          ce_message("%s() top_left's x (%d) must be lower than bottom_right's x(%d)", __FUNCTION__,
+                     term_top_left->x, term_bottom_right->x);
           return false;
      }
 
      if(term_top_left->y >= term_bottom_right->y){
-          ce_message("%s() top_left must be lower than bottom_right vertically", __FUNCTION__);
+          ce_message("%s() top_left's y (%d) must be lower than bottom_right's y(%d)", __FUNCTION__,
+                     term_top_left->y, term_bottom_right->y);
+          return false;
+     }
+
+     if(term_top_left->x < 0){
+          ce_message("%s() top_left's x(%d) must be greater than 0", __FUNCTION__, term_top_left->x);
+          return false;
+     }
+
+     if(term_top_left->y < 0){
+          ce_message("%s() top_left's y(%d) must be greater than 0", __FUNCTION__, term_top_left->y);
+          return false;
+     }
+
+     if(term_bottom_right->x >= g_terminal_dimensions->x){
+          ce_message("%s() bottom_right's x(%d) must be less than the terminal dimensions x(%d)", __FUNCTION__,
+                     term_bottom_right->x, g_terminal_dimensions->x);
+          return false;
+     }
+
+     if(term_bottom_right->y >= g_terminal_dimensions->y){
+          ce_message("%s() bottom_right's y(%d) must be less than the terminal dimensions y(%d)", __FUNCTION__,
+                     term_bottom_right->y, g_terminal_dimensions->y);
           return false;
      }
 
      char line_to_print[g_terminal_dimensions->x];
 
+     int64_t max_width = term_bottom_right->x - term_top_left->x;
      int64_t last_line = buffer_top_left->y + (term_bottom_right->y - term_top_left->y) - 1;
      if(last_line >= buffer->line_count) last_line = buffer->line_count - 1;
 
@@ -432,7 +480,7 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
           buffer_line += buffer_top_left->x;
           line_length = strlen(buffer_line);
 
-          int64_t min = g_terminal_dimensions->x < line_length ? g_terminal_dimensions->x : line_length;
+          int64_t min = max_width < line_length ? max_width : line_length;
           memset(line_to_print, 0, min + 1);
           strncpy(line_to_print, buffer_line, min);
           addstr(line_to_print); // NOTE: use addstr() rather than printw() because it could contain format specifiers
@@ -485,7 +533,7 @@ bool ce_remove_buffer_from_list(BufferNode* head, BufferNode** node)
      return false;
 }
 
-bool ce_move_cursor(const Buffer* buffer, Point* cursor, Point* delta)
+bool ce_move_cursor(const Buffer* buffer, Point* cursor, const Point* delta)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
@@ -513,5 +561,80 @@ bool ce_move_cursor(const Buffer* buffer, Point* cursor, Point* delta)
 
      *cursor = dst;
 
+     return true;
+}
+
+bool ce_follow_cursor(const Point* cursor, int64_t* top_line, int64_t* left_collumn, int64_t view_height, int64_t view_width)
+{
+     CE_CHECK_PTR_ARG(cursor);
+     CE_CHECK_PTR_ARG(top_line);
+
+     view_height--;
+     view_width--;
+
+     int64_t bottom_line = *top_line + view_height;
+
+     if(cursor->y < *top_line){
+          *top_line = cursor->y;
+     }else if(cursor->y > bottom_line){
+          bottom_line = cursor->y;
+          *top_line = bottom_line - view_height;
+     }
+
+     int64_t right_collumn = *left_collumn + view_width;
+
+     if(cursor->x < *left_collumn){
+          *left_collumn = cursor->x;
+     }else if(cursor->x > right_collumn){
+          right_collumn = cursor->x;
+          *left_collumn = right_collumn - view_width;
+     }
+
+     return true;
+}
+
+bool ce_buffer_change(BufferChangeNode** tail, const BufferChange* change)
+{
+     CE_CHECK_PTR_ARG(tail);
+     CE_CHECK_PTR_ARG(change);
+
+     BufferChangeNode* new_change = malloc(sizeof(*new_change));
+     if(!new_change){
+          ce_message("%s() failed to allocate new change", __FUNCTION__);
+          return false;
+     }
+
+     new_change->change = *change;
+     new_change->prev = *tail;
+     *tail = new_change;
+
+     return true;
+}
+
+bool ce_buffer_undo(Buffer* buffer, BufferChangeNode** tail)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(tail);
+
+     if(!*tail){
+          ce_message("%s() empty undo history", __FUNCTION__);
+          return false;
+     }
+
+     BufferChangeNode* undo_change = *tail;
+     BufferChange* change = &undo_change->change;
+
+     *tail = (*tail)->prev;
+
+     if(change->insertion){
+          // TODO: create api to remove a range of characters
+          for(int64_t i = 0; i < change->length; ++i){
+               ce_remove_char(buffer, &change->start);
+          }
+     }else{
+          ce_insert_char(buffer, &change->start, change->c);
+     }
+
+     free(undo_change);
      return true;
 }

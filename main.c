@@ -4,10 +4,11 @@ NOTES:
 -get full file path
 
 TODO:
--crash resurrections
 -user input
 -undo/redo
 -use tabs instead of spaces
+-window management library
+-client/server
 
 WANTS:
 -realloc() rather than malloc() ?
@@ -20,6 +21,7 @@ WANTS:
 */
 
 #include <dlfcn.h>
+#include <getopt.h>
 #include <setjmp.h>
 #include <signal.h>
 #include <stdbool.h>
@@ -33,7 +35,7 @@ typedef struct{
      Point cursor;
 } DefaultConfigState;
 
-bool default_initializer(BufferNode* head, Point* terminal_dimensions, void** user_data);
+bool default_initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** argv, void** user_data);
 void default_destroyer(BufferNode* head, void* user_data);
 bool default_key_handler(int key, BufferNode* head, void* user_data);
 void default_view_drawer(const BufferNode* head, void* user_data);
@@ -47,9 +49,9 @@ typedef struct Config{
      ce_view_drawer* view_drawer;
 }Config;
 
-const Config config_defaults = {NULL, NULL, NULL, NULL, default_key_handler, default_view_drawer};
+const Config config_defaults = {NULL, NULL, default_initializer, default_destroyer, default_key_handler, default_view_drawer};
 
-bool config_open_and_init(Config* config, const char* path, BufferNode* head, void** user_data){
+bool config_open_and_init(Config* config, const char* path, BufferNode* head, int argc, char** argv, void** user_data){
      // try to load the config shared object
      *config = config_defaults;
      config->so_handle = dlopen(path, RTLD_NOW);
@@ -71,7 +73,7 @@ bool config_open_and_init(Config* config, const char* path, BufferNode* head, vo
      config->view_drawer = dlsym(config->so_handle, "view_drawer");
      if(!config->view_drawer) ce_message("no draw_view() found in '%s', using default", path);
 
-     if(config->initializer) config->initializer(head, g_terminal_dimensions, user_data);
+     if(config->initializer) config->initializer(head, g_terminal_dimensions, argc, argv, user_data);
      return true;
 }
 
@@ -96,6 +98,32 @@ void segv_handler(int signo){
 
 int main(int argc, char** argv)
 {
+     const char* config = CE_CONFIG;
+     int opt = 0;
+     int parsed_args = 1;
+     bool done_parsing = false;
+
+     // TODO: create config parser
+     // TODO: pass unhandled main arguments to the config's arg parser?
+	while((opt = getopt(argc, argv, "c:h")) != -1 && !done_parsing){
+          parsed_args++;
+          switch(opt){
+          case 'c':
+               config = optarg;
+               parsed_args++;
+               break;
+          case 'h':
+               printf("usage: %s [options]\n", argv[0]);
+               printf(" -c [config] shared object config\n");
+               printf(" -h see this message for help");
+               return 0;
+          default:
+               parsed_args--;
+               done_parsing = true;
+               break;
+          }
+     }
+
      // ncurses_init()
      initscr();
      cbreak();
@@ -129,22 +157,6 @@ int main(int argc, char** argv)
      Point terminal_dimensions = {0, 0};
      g_terminal_dimensions = &terminal_dimensions;
 
-     // load the file given as the first argument
-     if(argc == 2){
-          ce_message("loading '%s' at startup", argv[1]);
-          Buffer* buffer = malloc(sizeof(*buffer));
-          if(ce_load_file(buffer, argv[1])){
-               BufferNode* node = ce_append_buffer_to_list(buffer_list_head, buffer);
-               if(!node){
-                    free(buffer);
-               }
-          }else{
-               free(buffer);
-          }
-     }else{
-          ce_message("no file opened on startup");
-     }
-
      void* user_data = NULL;
 
      start_color();
@@ -157,7 +169,7 @@ int main(int argc, char** argv)
      bool done = false;
 
      Config stable_config;
-     config_open_and_init(&stable_config, CE_CONFIG, buffer_list_head, &user_data);
+     config_open_and_init(&stable_config, config, buffer_list_head, argc - parsed_args, argv + parsed_args, &user_data);
      Config current_config = stable_config;
 
      struct sigaction sa;
@@ -204,7 +216,8 @@ int main(int argc, char** argv)
           if(key == ''){
                ce_message("reloading config '%s'", current_config.path);
                // TODO: specify the path for the test config to load here
-               if(!config_open_and_init(&current_config, current_config.path, buffer_list_head, &user_data)){
+               if(!config_open_and_init(&current_config, current_config.path, buffer_list_head,
+                                        argc + parsed_args, argv - parsed_args, &user_data)){
                     current_config = stable_config;
                }
           }
@@ -237,8 +250,10 @@ int main(int argc, char** argv)
      return 0;
 }
 
-bool default_initializer(BufferNode* head, Point* terminal_dimensions, void** user_data)
+bool default_initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** argv, void** user_data)
 {
+     (void)(argc);
+     (void)(argv);
      (void)(head);
      (void)(terminal_dimensions);
 
@@ -259,7 +274,6 @@ bool default_key_handler(int key, BufferNode* head, void* user_data)
 {
      DefaultConfigState* config_state = user_data;
      Buffer* buffer = head->buffer;
-     if(head->next) buffer = head->next->buffer;
 
      config_state->last_key = key;
 
@@ -281,7 +295,6 @@ void default_view_drawer(const BufferNode* head, void* user_data)
 {
      DefaultConfigState* config_state = user_data;
      Buffer* buffer = head->buffer;
-     if(head->next) buffer = head->next->buffer;
 
      // calculate the last line we can draw
      int64_t last_line = config_state->start_line + (g_terminal_dimensions->y - 2);

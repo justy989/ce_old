@@ -115,26 +115,12 @@ int main(int argc, char** argv)
 
           view_drawer = dlsym(config_so_handle, "view_drawer");
           if(!view_drawer) ce_message("no draw_view() found in '%s', using default", config);
+
+          ce_message("loaded config %s", config);
      }
 
      Point terminal_dimensions = {0, 0};
      g_terminal_dimensions = &terminal_dimensions;
-
-     // load the file given as the first argument
-     if(argc == 2){
-          ce_message("loading '%s' at startup", argv[1]);
-          Buffer* buffer = malloc(sizeof(*buffer));
-          if(ce_load_file(buffer, argv[1])){
-               BufferNode* node = ce_append_buffer_to_list(buffer_list_head, buffer);
-               if(!node){
-                    free(buffer);
-               }
-          }else{
-               free(buffer);
-          }
-     }else{
-          ce_message("no file opened on startup");
-     }
 
      void* user_data = NULL;
 

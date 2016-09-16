@@ -61,7 +61,6 @@ bool ce_save_buffer(const Buffer* buffer, const char* filename);
 void ce_free_buffer(Buffer* buffer);
 bool ce_point_on_buffer(const Buffer* buffer, const Point* location);
 bool ce_insert_char(Buffer* buffer, const Point* location, char c);
-bool ce_insert_string(Buffer* buffer, const Point* location, const char* string);
 bool ce_remove_char(Buffer* buffer, const Point* location);
 
 // NOTE: passing NULL to string causes an empty line to be inserted
@@ -80,6 +79,6 @@ BufferNode* ce_append_buffer_to_list(BufferNode* head, Buffer* buffer);
 bool ce_remove_buffer_from_list(BufferNode* head, BufferNode** node);
 
 bool ce_move_cursor(const Buffer* buffer, Point* cursor, const Point* delta);
-bool ce_follow_cursor(const Point* cursor, int64_t* top_line, int64_t view_height);
+bool ce_follow_cursor(const Point* cursor, int64_t* top_line, int64_t* left_collumn, int64_t view_height, int64_t view_width);
 
 #endif

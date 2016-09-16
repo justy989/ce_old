@@ -68,15 +68,17 @@ bool ce_load_file(Buffer* buffer, const char* filename)
                if(contents[i] != NEWLINE) continue;
 
                int64_t length = (i - 1) - last_newline;
-               char* new_line = malloc(length + 1);
-               strncpy(new_line, contents + last_newline + 1, length);
-               new_line[length] = 0;
-               buffer->lines[l] = new_line;
+               if(length){
+                    char* new_line = malloc(length + 1);
+                    strncpy(new_line, contents + last_newline + 1, length);
+                    new_line[length] = 0;
+                    buffer->lines[l] = new_line;
+               }
                last_newline = i;
                l++;
           }
 
-          int64_t length = (content_size - 1) - last_newline;
+          int64_t length = content_size - last_newline;
           if(length > 1){
                char* new_line = malloc(length + 1);
                strncpy(new_line, contents + last_newline + 1, length);
@@ -85,12 +87,12 @@ bool ce_load_file(Buffer* buffer, const char* filename)
                     new_line[length - 1] = 0;
                }
                buffer->lines[line_count - 1] = new_line;
-          }else{
-               buffer->lines[line_count - 1] = NULL;
           }
      }
 
      free(contents);
+
+     ce_message("loaded file '%s'", filename);
 
      return true;
 }
@@ -147,9 +149,13 @@ bool ce_insert_char(Buffer* buffer, const Point* location, char c)
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
 
+     if(buffer->line_count == 0 && location->x == 0 && location->y == 0) ce_alloc_lines(buffer, 1);
+
      if(!ce_point_on_buffer(buffer, location)){
           return false;
      }
+
+     if(c == NEWLINE) return ce_insert_line(buffer, location->y, NULL);
 
      char* line = buffer->lines[location->y];
      char* new_line = NULL;
@@ -179,51 +185,6 @@ bool ce_insert_char(Buffer* buffer, const Point* location, char c)
           }
           new_line[0] = c;
           new_line[1] = 0;
-     }
-
-     buffer->lines[location->y] = new_line;
-     return true;
-}
-
-bool ce_insert_string(Buffer* buffer, const Point* location, const char* string)
-{
-     CE_CHECK_PTR_ARG(buffer);
-     CE_CHECK_PTR_ARG(location);
-     CE_CHECK_PTR_ARG(string);
-
-     if(!ce_point_on_buffer(buffer, location)){
-          return false;
-     }
-
-     char* line = buffer->lines[location->y];
-     char* new_line = NULL;
-     int64_t string_len = strlen(string);
-     if(line){
-          // allocate new line with length + 1 + NULL terminator
-          int64_t line_len = strlen(line);
-          int64_t new_len = line_len + string_len + 1;
-          new_line = malloc(new_len);
-          if(!new_line){
-               ce_message("%s() failed to allocate line with %ld characters", __FUNCTION__, new_len);
-               return false;
-          }
-
-          // copy before the insert, add the new char, copy after the insert
-          for(int64_t i = 0; i < location->x; ++i){new_line[i] = line[i];}
-          strncpy(new_line + location->x, string, string_len);
-          for(int64_t i = location->x; i < line_len; ++i){new_line[i + string_len] = line[i];}
-
-          // NULL terminate the newline, and free the old line
-          new_line[new_len - 1] = 0;
-          free(line);
-     }else{
-          new_line = malloc(string_len + 1);
-          if(!new_line){
-               ce_message("%s() failed to allocate line with %ld characters", __FUNCTION__, string_len + 1);
-               return false;
-          }
-          strncpy(new_line, string, string_len);
-          new_line[string_len] = 0;
      }
 
      buffer->lines[location->y] = new_line;
@@ -541,12 +502,13 @@ bool ce_move_cursor(const Buffer* buffer, Point* cursor, const Point* delta)
      return true;
 }
 
-bool ce_follow_cursor(const Point* cursor, int64_t* top_line, int64_t view_height)
+bool ce_follow_cursor(const Point* cursor, int64_t* top_line, int64_t* left_collumn, int64_t view_height, int64_t view_width)
 {
      CE_CHECK_PTR_ARG(cursor);
      CE_CHECK_PTR_ARG(top_line);
 
      view_height--;
+     view_width--;
 
      int64_t bottom_line = *top_line + view_height;
 
@@ -555,6 +517,15 @@ bool ce_follow_cursor(const Point* cursor, int64_t* top_line, int64_t view_heigh
      }else if(cursor->y > bottom_line){
           bottom_line = cursor->y;
           *top_line = bottom_line - view_height;
+     }
+
+     int64_t right_collumn = *left_collumn + view_width;
+
+     if(cursor->x < *left_collumn){
+          *left_collumn = cursor->x;
+     }else if(cursor->x > right_collumn){
+          right_collumn = cursor->x;
+          *left_collumn = right_collumn - view_width;
      }
 
      return true;

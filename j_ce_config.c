@@ -10,10 +10,15 @@ typedef struct{
 typedef struct{
      Point cursor;
      int64_t start_line;
+     int64_t left_collumn;
 } BufferState;
 
 bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** argv, void** user_data)
 {
+     // NOTE: need to set these in this module
+     g_message_buffer = head->buffer;
+     g_terminal_dimensions = terminal_dimensions;
+
      for(int i = 0; i < argc; ++i){
           Buffer* buffer = malloc(sizeof(*buffer));
           if(!buffer){
@@ -30,10 +35,6 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
                free(buffer);
           }
      }
-
-     // NOTE: need to set these in this module
-     g_message_buffer = head->buffer;
-     g_terminal_dimensions = terminal_dimensions;
 
      // setup the config's state
      ConfigState* config_state = malloc(sizeof(*config_state));
@@ -116,8 +117,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     cursor->x = 0;
                }
           }else{ // insert
-               if(buffer->line_count == 0) ce_alloc_lines(buffer, 1);
-
                if(ce_insert_char(buffer, cursor, key)) cursor->x++;
           }
      }else{
@@ -199,16 +198,18 @@ void view_drawer(const BufferNode* head, void* user_data)
      Buffer* buffer = config_state->current_buffer_node->buffer;
      BufferState* buffer_state = buffer->user_data;
 
-     int64_t draw_height = g_terminal_dimensions->y - 1;
+     int64_t bottom = g_terminal_dimensions->y - 1;
+     int64_t right = g_terminal_dimensions->x - 1;
 
-     ce_follow_cursor(&buffer_state->cursor, &buffer_state->start_line, draw_height);
+     ce_follow_cursor(&buffer_state->cursor, &buffer_state->start_line, &buffer_state->left_collumn,
+                      bottom, right);
 
      // print the range of lines we want to show
-     Point buffer_top_left = {0, buffer_state->start_line};
+     Point buffer_top_left = {buffer_state->left_collumn, buffer_state->start_line};
      if(buffer->line_count){
           standend();
           Point term_top_left = {0, 0};
-          Point term_bottom_right = {g_terminal_dimensions->x - 1, draw_height};
+          Point term_bottom_right = {right, bottom};
           if(!config_state->split){
                ce_draw_buffer(buffer, &term_top_left, &term_bottom_right, &buffer_top_left);
           }else{
@@ -227,5 +228,5 @@ void view_drawer(const BufferNode* head, void* user_data)
      attroff(A_REVERSE);
 
      // reset the cursor
-     move(buffer_state->cursor.y - buffer_top_left.y, buffer_state->cursor.x);
+     move(buffer_state->cursor.y - buffer_top_left.y, buffer_state->cursor.x - buffer_top_left.x);
 }

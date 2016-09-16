@@ -36,7 +36,7 @@ bool ce_load_file(Buffer* buffer, const char* filename)
      {
           FILE* file = fopen(filename, "rb");
           if(!file){
-               ce_message("%s", strerror(errno));
+               ce_message("%s() fopen('%s', 'rb') failed: %s", __FUNCTION__, filename, strerror(errno));
                return false;
           }
 

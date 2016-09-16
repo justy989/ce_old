@@ -4,7 +4,6 @@ NOTES:
 -get full file path
 
 TODO:
--crash resurrections
 -user input
 -undo/redo
 -use tabs instead of spaces
@@ -170,7 +169,7 @@ int main(int argc, char** argv)
      bool done = false;
 
      Config stable_config;
-     config_open_and_init(&stable_config, config, buffer_list_head, argc + parsed_args, argv + parsed_args, &user_data);
+     config_open_and_init(&stable_config, config, buffer_list_head, argc - parsed_args, argv + parsed_args, &user_data);
      Config current_config = stable_config;
 
      struct sigaction sa;
@@ -218,7 +217,7 @@ int main(int argc, char** argv)
                ce_message("reloading config '%s'", current_config.path);
                // TODO: specify the path for the test config to load here
                if(!config_open_and_init(&current_config, current_config.path, buffer_list_head,
-                                        argc + parsed_args, argv + parsed_args, &user_data)){
+                                        argc + parsed_args, argv - parsed_args, &user_data)){
                     current_config = stable_config;
                }
           }

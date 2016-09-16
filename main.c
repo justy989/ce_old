@@ -38,7 +38,8 @@ void default_destroyer(BufferNode* head, void* user_data);
 bool default_key_handler(int key, BufferNode* head, void* user_data);
 void default_view_drawer(const BufferNode* head, void* user_data);
 
-typedef struct{
+typedef struct Config{
+     char* path;
      void* so_handle;
      ce_initializer* initializer;
      ce_destroyer* destroyer;
@@ -46,12 +47,9 @@ typedef struct{
      ce_view_drawer* view_drawer;
 }Config;
 
-Config stable_config;
-Config current_config;
+const Config config_defaults = {NULL, NULL, NULL, NULL, default_key_handler, default_view_drawer};
 
-const Config config_defaults = {NULL, NULL, NULL, default_key_handler, default_view_drawer};
-
-bool config_open(Config* config, const char* path, BufferNode* head, void** user_data){
+bool config_open_and_init(Config* config, const char* path, BufferNode* head, void** user_data){
      // try to load the config shared object
      *config = config_defaults;
      config->so_handle = dlopen(path, RTLD_NOW);
@@ -60,6 +58,7 @@ bool config_open(Config* config, const char* path, BufferNode* head, void** user
           return false;
      }
      // TODO: macro?
+     config->path = strdup(path);
      config->initializer = dlsym(config->so_handle, "initializer");
      if(!config->initializer) ce_message("no initializer() found in '%s'", path);
 
@@ -76,15 +75,11 @@ bool config_open(Config* config, const char* path, BufferNode* head, void** user
      return true;
 }
 
-void config_close(Config*config, BufferNode* head, void* user_data){
+void config_close(Config* config, BufferNode* head, void* user_data){
      if(!config->so_handle) return;
+     free(config->path);
      if(config->destroyer) config->destroyer(head, user_data);
      if(dlclose(config->so_handle)) ce_message("dlclose() failed with error %s", dlerror());
-}
-
-void config_revert(){
-     ce_message("reverting to previous config");
-     current_config = stable_config;
 }
 
 sigjmp_buf segv_ctxt;
@@ -161,8 +156,9 @@ int main(int argc, char** argv)
 
      bool done = false;
 
-     config_open(&stable_config, CE_CONFIG, buffer_list_head, &user_data);
-     current_config = stable_config;
+     Config stable_config;
+     config_open_and_init(&stable_config, CE_CONFIG, buffer_list_head, &user_data);
+     Config current_config = stable_config;
 
      struct sigaction sa;
      sa.sa_handler = segv_handler;
@@ -172,7 +168,20 @@ int main(int argc, char** argv)
      }
 
      // handle the segfault by reverting the config
-     if(sigsetjmp(segv_ctxt, 1) != 0) config_revert();
+     if(sigsetjmp(segv_ctxt, 1) != 0){
+          if(current_config.so_handle == stable_config.so_handle){
+               done = true;
+          }
+          else{
+               ce_message("config '%s' crashed with SIGSEGV. restoring stable config '%s'",
+                          current_config.path, stable_config.path);
+               free(current_config.path);
+               if(!dlclose(current_config.so_handle)){
+                    ce_message("dlclose(crash_recovery) failed with error %s", dlerror());
+               }
+               current_config = stable_config;
+          }
+     }
 
      // main loop
      while(!done){
@@ -193,9 +202,10 @@ int main(int argc, char** argv)
 
           int key = getch();
           if(key == ''){
-               ce_message("reloading config");
-               if(!config_open(&current_config, "ce_config2.so", buffer_list_head, &user_data)){
-                    config_revert();
+               ce_message("reloading config '%s'", current_config.path);
+               // TODO: specify the path for the test config to load here
+               if(!config_open_and_init(&current_config, current_config.path, buffer_list_head, &user_data)){
+                    current_config = stable_config;
                }
           }
           // user-defined or default key_handler()

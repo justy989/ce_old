@@ -168,6 +168,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     cursor->x++;
                }
                config_state->insert = true;
+               break;
           case 'd':
                // delete line
                if(buffer->line_count){

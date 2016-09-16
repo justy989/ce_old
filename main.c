@@ -20,6 +20,9 @@ WANTS:
 */
 
 #include <dlfcn.h>
+#include <setjmp.h>
+#include <signal.h>
+#include <stdbool.h>
 
 #include "ce.h"
 
@@ -34,6 +37,62 @@ bool default_initializer(BufferNode* head, Point* terminal_dimensions, void** us
 void default_destroyer(BufferNode* head, void* user_data);
 bool default_key_handler(int key, BufferNode* head, void* user_data);
 void default_view_drawer(const BufferNode* head, void* user_data);
+
+typedef struct Config{
+     char* path;
+     void* so_handle;
+     ce_initializer* initializer;
+     ce_destroyer* destroyer;
+     ce_key_handler* key_handler;
+     ce_view_drawer* view_drawer;
+}Config;
+
+const Config config_defaults = {NULL, NULL, NULL, NULL, default_key_handler, default_view_drawer};
+
+bool config_open_and_init(Config* config, const char* path, BufferNode* head, void** user_data){
+     // try to load the config shared object
+     *config = config_defaults;
+     config->so_handle = dlopen(path, RTLD_NOW);
+     if(!config->so_handle){
+          ce_message("missing config '%s': '%s', using defaults", path, strerror(errno));
+          return false;
+     }
+     // TODO: macro?
+     config->path = strdup(path);
+     config->initializer = dlsym(config->so_handle, "initializer");
+     if(!config->initializer) ce_message("no initializer() found in '%s'", path);
+
+     config->destroyer = dlsym(config->so_handle, "destroyer");
+     if(!config->destroyer) ce_message("no destroyer() found in '%s'", path);
+
+     config->key_handler = dlsym(config->so_handle, "key_handler");
+     if(!config->key_handler) ce_message("no key_handler() found in '%s', using default", path);
+
+     config->view_drawer = dlsym(config->so_handle, "view_drawer");
+     if(!config->view_drawer) ce_message("no draw_view() found in '%s', using default", path);
+
+     if(config->initializer) config->initializer(head, g_terminal_dimensions, user_data);
+     return true;
+}
+
+void config_close(Config* config, BufferNode* head, void* user_data){
+     if(!config->so_handle) return;
+     free(config->path);
+     if(config->destroyer) config->destroyer(head, user_data);
+     if(dlclose(config->so_handle)) ce_message("dlclose() failed with error %s", dlerror());
+}
+
+sigjmp_buf segv_ctxt;
+void segv_handler(int signo){
+     (void)signo;
+     struct sigaction sa;
+     sa.sa_handler = segv_handler;
+     sigemptyset(&sa.sa_mask);
+     if(sigaction(SIGSEGV, &sa, NULL) == -1){
+          // TODO: handle error
+     }
+     siglongjmp(segv_ctxt, 1);
+}
 
 int main(int argc, char** argv)
 {
@@ -67,30 +126,6 @@ int main(int argc, char** argv)
      buffer_list_head->buffer = g_message_buffer;
      buffer_list_head->next = NULL;
 
-     // try to load the config shared object
-     ce_initializer* initializer = default_initializer;
-     ce_destroyer* destroyer = default_destroyer;
-     ce_key_handler* key_handler = default_key_handler;
-     ce_view_drawer* view_drawer = default_view_drawer;
-     void* config_so_handle = dlopen(CE_CONFIG, RTLD_NOW);
-     if(!config_so_handle){
-          ce_message("missing config '%s': '%s', using defaults", CE_CONFIG, strerror(errno));
-     }else{
-          // TODO: macro?
-          // NOTE: if we fail to load the initializer buf succeed in loading the destroyer, that seems bad
-          initializer = dlsym(config_so_handle, "initializer");
-          if(!initializer) ce_message("no initializer() found in '%s', using default", CE_CONFIG);
-
-          destroyer = dlsym(config_so_handle, "destroyer");
-          if(!destroyer) ce_message("no destroyer() found in '%s', using default", CE_CONFIG);
-
-          key_handler = dlsym(config_so_handle, "key_handler");
-          if(!key_handler) ce_message("no key_handler() found in '%s', using default", CE_CONFIG);
-
-          view_drawer = dlsym(config_so_handle, "view_drawer");
-          if(!view_drawer) ce_message("no draw_view() found in '%s', using default", CE_CONFIG);
-     }
-
      Point terminal_dimensions = {0, 0};
      g_terminal_dimensions = &terminal_dimensions;
 
@@ -112,8 +147,6 @@ int main(int argc, char** argv)
 
      void* user_data = NULL;
 
-     initializer(buffer_list_head, g_terminal_dimensions, &user_data);
-
      start_color();
      use_default_colors();
 
@@ -122,6 +155,33 @@ int main(int argc, char** argv)
      init_pair(color_id, COLOR_RED, COLOR_BACKGROUND);
 
      bool done = false;
+
+     Config stable_config;
+     config_open_and_init(&stable_config, CE_CONFIG, buffer_list_head, &user_data);
+     Config current_config = stable_config;
+
+     struct sigaction sa;
+     sa.sa_handler = segv_handler;
+     sigemptyset(&sa.sa_mask);
+     if(sigaction(SIGSEGV, &sa, NULL) == -1){
+          // TODO: handle error
+     }
+
+     // handle the segfault by reverting the config
+     if(sigsetjmp(segv_ctxt, 1) != 0){
+          if(current_config.so_handle == stable_config.so_handle){
+               done = true;
+          }
+          else{
+               ce_message("config '%s' crashed with SIGSEGV. restoring stable config '%s'",
+                          current_config.path, stable_config.path);
+               free(current_config.path);
+               if(!dlclose(current_config.so_handle)){
+                    ce_message("dlclose(crash_recovery) failed with error %s", dlerror());
+               }
+               current_config = stable_config;
+          }
+     }
 
      // main loop
      while(!done){
@@ -135,15 +195,21 @@ int main(int argc, char** argv)
           }
 
           // user-defined or default draw_view()
-          view_drawer(buffer_list_head, user_data);
+          current_config.view_drawer(buffer_list_head, user_data);
 
           // update the terminal with what we drew
           refresh();
 
           int key = getch();
-
+          if(key == ''){
+               ce_message("reloading config '%s'", current_config.path);
+               // TODO: specify the path for the test config to load here
+               if(!config_open_and_init(&current_config, current_config.path, buffer_list_head, &user_data)){
+                    current_config = stable_config;
+               }
+          }
           // user-defined or default key_handler()
-          if(!key_handler(key, buffer_list_head, user_data)){
+          else if(!current_config.key_handler(key, buffer_list_head, user_data)){
                done = true;
           }
      }
@@ -151,9 +217,11 @@ int main(int argc, char** argv)
      // cleanup ncurses
      endwin();
 
-     destroyer(buffer_list_head, user_data);
-
      ce_save_buffer(g_message_buffer, g_message_buffer->filename);
+
+     if(current_config.so_handle != stable_config.so_handle)
+          config_close(&current_config, buffer_list_head, user_data);
+     config_close(&stable_config, buffer_list_head, user_data);
 
      // free our buffers
      BufferNode* itr = buffer_list_head;
@@ -165,8 +233,6 @@ int main(int argc, char** argv)
           free(tmp->buffer);
           free(tmp);
      }
-
-     if(config_so_handle) dlclose(config_so_handle);
 
      return 0;
 }
@@ -247,7 +313,7 @@ void default_view_drawer(const BufferNode* head, void* user_data)
      char line_info[g_terminal_dimensions->x];
      attron(A_REVERSE);
      mvprintw(g_terminal_dimensions->y - 1, 0, "%s %d lines", buffer->filename, buffer->line_count);
-     snprintf(line_info, g_terminal_dimensions->x, "key: %d, term: %ld, %ld cursor: %ld, %ld",
+     snprintf(line_info, g_terminal_dimensions->x, "DEFAULT_CONFIG key: %d, term: %ld, %ld cursor: %ld, %ld",
               config_state->last_key, g_terminal_dimensions->x, g_terminal_dimensions->y, config_state->cursor.x, config_state->cursor.y);
      mvaddstr(g_terminal_dimensions->y - 1, g_terminal_dimensions->x - strlen(line_info), line_info);
      attroff(A_REVERSE);

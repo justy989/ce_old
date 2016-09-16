@@ -12,8 +12,25 @@ typedef struct{
      int64_t start_line;
 } BufferState;
 
-bool initializer(BufferNode* head, Point* terminal_dimensions, void** user_data)
+bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** argv, void** user_data)
 {
+     for(int i = 0; i < argc; ++i){
+          Buffer* buffer = malloc(sizeof(*buffer));
+          if(!buffer){
+               ce_message("failed to allocate buffer");
+               return false;
+          }
+
+          if(!ce_load_file(buffer, argv[i])){
+               free(buffer);
+               continue;
+          }
+
+          if(!ce_append_buffer_to_list(head, buffer)){
+               free(buffer);
+          }
+     }
+
      // NOTE: need to set these in this module
      g_message_buffer = head->buffer;
      g_terminal_dimensions = terminal_dimensions;

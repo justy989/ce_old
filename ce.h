@@ -47,7 +47,7 @@ typedef struct BufferNode {
      struct BufferNode* next;
 } BufferNode;
 
-typedef bool ce_initializer(BufferNode*, Point*, void**);
+typedef bool ce_initializer(BufferNode*, Point*, int, char**, void**);
 typedef void ce_destroyer(BufferNode*, void*);
 typedef bool ce_key_handler(int, BufferNode*, void*);
 typedef void ce_view_drawer(const BufferNode*, void*);

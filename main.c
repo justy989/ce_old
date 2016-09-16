@@ -22,6 +22,7 @@ WANTS:
 */
 
 #include <dlfcn.h>
+#include <getopt.h>
 
 #include "ce.h"
 
@@ -32,13 +33,36 @@ typedef struct{
      Point cursor;
 } DefaultConfigState;
 
-bool default_initializer(BufferNode* head, Point* terminal_dimensions, void** user_data);
+bool default_initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** argv, void** user_data);
 void default_destroyer(BufferNode* head, void* user_data);
 bool default_key_handler(int key, BufferNode* head, void* user_data);
 void default_view_drawer(const BufferNode* head, void* user_data);
 
 int main(int argc, char** argv)
 {
+     const char* config = CE_CONFIG;
+     int opt = 0;
+     int parsed_args = 1;
+     bool done_parsing = false;
+
+	while((opt = getopt(argc, argv, "c:h")) != -1 && !done_parsing){
+          parsed_args++;
+          switch(opt){
+          case 'c':
+               config = optarg;
+               break;
+          case 'h':
+               printf("usage: %s [options]\n", argv[0]);
+               printf(" -c [config] shared object config\n");
+               printf(" -h see this message for help");
+               break;
+          default:
+               parsed_args--;
+               done_parsing = true;
+               break;
+          }
+     }
+
      // ncurses_init()
      initscr();
      cbreak();
@@ -74,23 +98,23 @@ int main(int argc, char** argv)
      ce_destroyer* destroyer = default_destroyer;
      ce_key_handler* key_handler = default_key_handler;
      ce_view_drawer* view_drawer = default_view_drawer;
-     void* config_so_handle = dlopen(CE_CONFIG, RTLD_NOW);
+     void* config_so_handle = dlopen(config, RTLD_NOW);
      if(!config_so_handle){
-          ce_message("missing config '%s': '%s', using defaults", CE_CONFIG, strerror(errno));
+          ce_message("missing config '%s': '%s', using defaults", config, strerror(errno));
      }else{
           // TODO: macro?
           // NOTE: if we fail to load the initializer buf succeed in loading the destroyer, that seems bad
           initializer = dlsym(config_so_handle, "initializer");
-          if(!initializer) ce_message("no initializer() found in '%s', using default", CE_CONFIG);
+          if(!initializer) ce_message("no initializer() found in '%s', using default", config);
 
           destroyer = dlsym(config_so_handle, "destroyer");
-          if(!destroyer) ce_message("no destroyer() found in '%s', using default", CE_CONFIG);
+          if(!destroyer) ce_message("no destroyer() found in '%s', using default", config);
 
           key_handler = dlsym(config_so_handle, "key_handler");
-          if(!key_handler) ce_message("no key_handler() found in '%s', using default", CE_CONFIG);
+          if(!key_handler) ce_message("no key_handler() found in '%s', using default", config);
 
           view_drawer = dlsym(config_so_handle, "view_drawer");
-          if(!view_drawer) ce_message("no draw_view() found in '%s', using default", CE_CONFIG);
+          if(!view_drawer) ce_message("no draw_view() found in '%s', using default", config);
      }
 
      Point terminal_dimensions = {0, 0};
@@ -114,7 +138,7 @@ int main(int argc, char** argv)
 
      void* user_data = NULL;
 
-     initializer(buffer_list_head, g_terminal_dimensions, &user_data);
+     initializer(buffer_list_head, g_terminal_dimensions, argc - parsed_args, argv + parsed_args, &user_data);
 
      start_color();
      use_default_colors();
@@ -173,8 +197,10 @@ int main(int argc, char** argv)
      return 0;
 }
 
-bool default_initializer(BufferNode* head, Point* terminal_dimensions, void** user_data)
+bool default_initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** argv, void** user_data)
 {
+     (void)(argc);
+     (void)(argv);
      (void)(head);
      (void)(terminal_dimensions);
 

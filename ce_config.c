@@ -49,15 +49,10 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
      }
 
      // setup the config's state
-     ConfigState* config_state = malloc(sizeof(*config_state));
+     ConfigState* config_state = calloc(1, sizeof(*config_state));
      if(!config_state) return false;
 
-     config_state->insert = false;
-     config_state->split = false;
-     config_state->last_key = 0;
-     config_state->command_key = '\0';
      config_state->current_buffer_node = head;
-
      *user_data = config_state;
 
      // setup state for each buffer
@@ -339,18 +334,20 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           }
           break;
           case ';':
+          {
+               if(config_state->find_command.command_key == '\0') break;
                find_command(config_state->find_command.command_key,
                             config_state->find_command.find_char, buffer, cursor);
-          break;
+          } break;
           case ',':
           {
+               if(config_state->find_command.command_key == '\0') break;
                char command_key = config_state->find_command.command_key;
                if(isupper(command_key)) command_key = tolower(command_key);
                else command_key = toupper(command_key);
 
                find_command(command_key, config_state->find_command.find_char, buffer, cursor);
-          }
-          break;
+          } break;
           case 'f':
           case 't':
           case 'F':

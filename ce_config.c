@@ -181,6 +181,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }
                config_state->insert = true;
                config_state->start_insert = *cursor;
+               break;
           case 'd':
                // delete line
                if(buffer->line_count){

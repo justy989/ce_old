@@ -35,6 +35,8 @@ typedef struct {
      int64_t y;
 } Point;
 
+// TODO: ce_offset_point(Point* p, int64_t dx, int64_t dy);
+
 typedef struct {
      char** lines; // '\0' terminated, does not contain newlines, NULL if empty
      int64_t line_count;

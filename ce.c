@@ -436,10 +436,15 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
 
+     // TODO: should this return false and not do anything if we try to remove
+     //       a string longer than the size of the rest of the buffer?
+
      if(!ce_point_on_buffer(buffer, location)) return false;
 
      char* current_line = buffer->lines[location->y];
-     int64_t current_line_len = strlen(current_line);
+     int64_t current_line_len = 0;
+
+     if(current_line) current_line_len = strlen(current_line);
      int64_t rest_of_the_line_len = current_line_len - location->x;
 
      if(length < rest_of_the_line_len){
@@ -458,7 +463,49 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
           buffer->lines[location->y] = new_line;
           free(current_line);
      }else{
+          int64_t line_index = location->y;
 
+          if(current_line){
+               char* new_line = malloc(location->x + 1);
+               strncpy(new_line, current_line, location->x);
+               new_line[location->x] = 0;
+               buffer->lines[location->y] = new_line;
+               free(current_line);
+               length -= rest_of_the_line_len;
+               line_index++;
+          }else{
+               ce_remove_line(buffer, location->y);
+               length--;
+          }
+
+          while(length > 0){
+               if(line_index >= buffer->line_count) break;
+
+               current_line = buffer->lines[line_index];
+               current_line_len = 0;
+               if(current_line) current_line_len = strlen(current_line);
+               if(length >= current_line_len){
+                    ce_remove_line(buffer, line_index);
+                    if(current_line_len == 0){
+                         length--;
+                    }else{
+                         length -= current_line_len;
+                    }
+               }else{
+                    int64_t new_line_len = current_line_len - length;
+                    char* new_line = malloc(new_line_len + 1);
+                    if(!new_line){
+                         ce_message("%s() failed to malloc new line", __FUNCTION__);
+                         return false;
+                    }
+
+                    strncpy(new_line, current_line + length, new_line_len);
+                    new_line[new_line_len] = 0;
+                    buffer->lines[line_index] = new_line;
+                    if(current_line) free(current_line);
+                    length = 0;
+               }
+          }
      }
 
      return true;

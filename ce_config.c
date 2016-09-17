@@ -106,7 +106,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     change.str = malloc(str_len + 1);
                     strncpy(change.str, buffer->lines[cursor->y] + config_state->start_insert.x, str_len);
                     change.str[str_len] = 0;
-                    ce_message("change: '%s' start: %d, %d cursor: %d, %d", change.str, change.start, change.cursor);
                     ce_buffer_change(&buffer_state->changes_tail, &change);
                }else if(config_state->start_insert.x > cursor->x){
                     // backspace!

@@ -9,6 +9,7 @@ TODO:
 -use tabs instead of spaces
 -window management library
 -client/server
+-UNDO DURING MACROS!
 
 WANTS:
 -realloc() rather than malloc() ?

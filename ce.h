@@ -38,7 +38,10 @@ typedef struct {
 typedef struct {
      char** lines; // '\0' terminated, does not contain newlines, NULL if empty
      int64_t line_count;
-     char* filename;
+     union {
+          char* filename;
+          char* name;
+     };
      void* user_data;
 } Buffer;
 
@@ -71,6 +74,7 @@ extern Buffer* g_message_buffer;
 extern Point* g_terminal_dimensions;
 
 bool ce_alloc_lines(Buffer* buffer, int64_t line_count);
+void ce_load_string(Buffer* buffer, const char* str);
 bool ce_load_file(Buffer* buffer, const char* filename);
 bool ce_save_buffer(const Buffer* buffer, const char* filename);
 void ce_free_buffer(Buffer* buffer);

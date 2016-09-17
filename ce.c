@@ -30,6 +30,49 @@ bool ce_alloc_lines(Buffer* buffer, int64_t line_count)
      return true;
 }
 
+void ce_load_string(Buffer* buffer, const char* str){
+     // TODO: merge with ce_insert_string
+     // count lines
+     size_t str_size = strlen(str);
+     int64_t line_count = 1;
+     for(size_t i = 0; i < str_size; ++i){
+          if(str[i] != NEWLINE) continue;
+
+          line_count++;
+     }
+
+     if(!line_count && str_size) line_count = 1;
+
+     if(line_count){
+          ce_alloc_lines(buffer, line_count);
+          int64_t last_newline = -1;
+          for(int64_t i = 0, l = 0; i < (int64_t)(str_size); ++i){
+               if(str[i] != NEWLINE) continue;
+
+               int64_t length = (i - 1) - last_newline;
+               if(length){
+                    char* new_line = malloc(length + 1);
+                    strncpy(new_line, str + last_newline + 1, length);
+                    new_line[length] = 0;
+                    buffer->lines[l] = new_line;
+               }
+               last_newline = i;
+               l++;
+          }
+
+          int64_t length = str_size - last_newline;
+          if(length > 1){
+               char* new_line = malloc(length + 1);
+               strncpy(new_line, str + last_newline + 1, length);
+               new_line[length] = 0;
+               if(new_line[length - 1] == NEWLINE){
+                    new_line[length - 1] = 0;
+               }
+               buffer->lines[line_count - 1] = new_line;
+          }
+     }
+}
+
 bool ce_load_file(Buffer* buffer, const char* filename)
 {
      // read the entire file
@@ -50,47 +93,13 @@ bool ce_load_file(Buffer* buffer, const char* filename)
           fread(contents, content_size, 1, file);
           contents[content_size] = 0;
 
+          ce_load_string(buffer, contents);
+
           fclose(file);
 
           buffer->filename = strdup(filename);
      }
 
-     // count lines
-     int64_t line_count = 0;
-     for(size_t i = 0; i < content_size; ++i){
-          if(contents[i] != NEWLINE) continue;
-
-          line_count++;
-     }
-
-     if(line_count){
-          ce_alloc_lines(buffer, line_count);
-          int64_t last_newline = -1;
-          for(int64_t i = 0, l = 0; i < (int64_t)(content_size); ++i){
-               if(contents[i] != NEWLINE) continue;
-
-               int64_t length = (i - 1) - last_newline;
-               if(length){
-                    char* new_line = malloc(length + 1);
-                    strncpy(new_line, contents + last_newline + 1, length);
-                    new_line[length] = 0;
-                    buffer->lines[l] = new_line;
-               }
-               last_newline = i;
-               l++;
-          }
-
-          int64_t length = content_size - last_newline;
-          if(length > 1){
-               char* new_line = malloc(length + 1);
-               strncpy(new_line, contents + last_newline + 1, length);
-               new_line[length] = 0;
-               if(new_line[length - 1] == NEWLINE){
-                    new_line[length - 1] = 0;
-               }
-               buffer->lines[line_count - 1] = new_line;
-          }
-     }
 
      free(contents);
 

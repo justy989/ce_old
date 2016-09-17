@@ -3,12 +3,13 @@
 
 #include <assert.h>
 #include <ctype.h>
+#include <unistd.h>
 
 typedef struct{
      bool insert;
      bool split;
      int last_key;
-     char command_key;
+     char command_key; // TODO: make a command string for multi-character commands
      struct {
           // state for fF and tT
           char command_key;
@@ -25,28 +26,99 @@ typedef struct{
      BufferChangeNode* changes_tail;
 } BufferState;
 
+bool initialize_buffer(Buffer* buffer){
+     BufferState* buffer_state = malloc(sizeof(*buffer_state));
+     if(!buffer_state){
+          ce_message("failed to allocate buffer state.");
+          return false;
+     }
+     buffer_state->cursor.x = 0;
+     buffer_state->cursor.y = 0;
+     buffer_state->start_line = 0;
+     buffer_state->changes_tail = NULL;
+     buffer->user_data = buffer_state;
+     return true;
+}
+
+// NOTE: need to free the allocated str
+char* str_from_file_stream(FILE* file){
+     fseek(file, 0, SEEK_END);
+     size_t file_size = ftell(file);
+     fseek(file, 0, SEEK_SET);
+
+     char* str = malloc(file_size + 1);
+     fread(str, file_size, 1, file);
+     str[file_size] = 0;
+     return str;
+}
+
+BufferNode* new_buffer_from_string(BufferNode* head, const char* name, const char* str){
+     Buffer* buffer = calloc(1, sizeof(*buffer));
+     if(!buffer){
+          ce_message("failed to allocate buffer");
+          return NULL;
+     }
+
+     buffer->name = strdup(name);
+     if(!buffer->name){
+          ce_message("failed to allocate buffer name");
+          free(buffer);
+          return NULL;
+     }
+
+     if(!initialize_buffer(buffer)){
+          free(buffer->name);
+          free(buffer);
+          return NULL;
+     }
+
+     ce_load_string(buffer, str);
+
+     BufferNode* new_buffer_node = ce_append_buffer_to_list(head, buffer);
+     if(!new_buffer_node){
+          free(buffer->name);
+          free(buffer->user_data);
+          free(buffer);
+          return NULL;
+     }
+
+     return new_buffer_node;
+}
+
+BufferNode* new_buffer_from_file(BufferNode* head, const char* filename)
+{
+     Buffer* buffer = malloc(sizeof(*buffer));
+     if(!buffer){
+          ce_message("failed to allocate buffer");
+          return NULL;
+     }
+
+     if(!ce_load_file(buffer, filename)){
+          free(buffer);
+          return NULL;
+     }
+
+     if(!initialize_buffer(buffer)){
+          free(buffer->filename);
+          free(buffer);
+     }
+
+     BufferNode* new_buffer_node = ce_append_buffer_to_list(head, buffer);
+     if(!new_buffer_node){
+          free(buffer->filename);
+          free(buffer->user_data);
+          free(buffer);
+          return NULL;
+     }
+
+     return new_buffer_node;
+}
+
 bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** argv, void** user_data)
 {
      // NOTE: need to set these in this module
      g_message_buffer = head->buffer;
      g_terminal_dimensions = terminal_dimensions;
-
-     for(int i = 0; i < argc; ++i){
-          Buffer* buffer = malloc(sizeof(*buffer));
-          if(!buffer){
-               ce_message("failed to allocate buffer");
-               return false;
-          }
-
-          if(!ce_load_file(buffer, argv[i])){
-               free(buffer);
-               continue;
-          }
-
-          if(!ce_append_buffer_to_list(head, buffer)){
-               free(buffer);
-          }
-     }
 
      // setup the config's state
      ConfigState* config_state = calloc(1, sizeof(*config_state));
@@ -55,19 +127,15 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
      config_state->current_buffer_node = head;
      *user_data = config_state;
 
+     BufferNode* itr = head;
      // setup state for each buffer
-     while(head){
-          BufferState* buffer_state = malloc(sizeof(*buffer_state));
-          if(!buffer_state){
-               ce_message("failed to allocate buffer state.");
-               return false;
-          }
-          buffer_state->cursor.x = 0;
-          buffer_state->cursor.y = 0;
-          buffer_state->start_line = 0;
-          buffer_state->changes_tail = NULL;
-          head->buffer->user_data = buffer_state;
-          head = head->next;
+     while(itr){
+          initialize_buffer(itr->buffer);
+          itr = itr->next;
+     }
+
+     for(int i = 0; i < argc; ++i){
+          if(!new_buffer_from_file(head, argv[i])) continue;
      }
 
      return true;
@@ -273,6 +341,15 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                config_state->insert = true;
                config_state->start_insert = *cursor;
           } break;
+          case 'm':
+          {
+               FILE* pfile = popen("echo justin stinkkkks", "r");
+               char* pstr = str_from_file_stream(pfile);
+               config_state->current_buffer_node = new_buffer_from_string(head, "test_buffer", pstr);
+               free(pstr);
+               pclose(pfile);
+               break;
+          }
           case 'a':
                if(buffer->lines[cursor->y]){
                     cursor->x++;
@@ -425,7 +502,7 @@ void view_drawer(const BufferNode* head, void* user_data)
 
      attron(A_REVERSE);
      mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s %d lines, key %d", config_state->insert ? "INSERT" : "NORMAL",
-              buffer->filename, buffer->line_count, config_state->last_key);
+              buffer->name, buffer->line_count, config_state->last_key);
      attroff(A_REVERSE);
 
      // reset the cursor

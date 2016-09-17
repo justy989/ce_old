@@ -175,6 +175,9 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                config_state->insert = true;
                config_state->start_insert = *cursor;
                break;
+          case '$':
+               cursor->x += ce_find_end_of_line(buffer, cursor);
+               break;
           case 'A':
           {
                cursor->x += ce_find_end_of_line(buffer, cursor) + 1;

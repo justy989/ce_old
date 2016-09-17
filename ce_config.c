@@ -1,4 +1,5 @@
 #include "ce.h"
+#include "assert.h"
 
 #include <assert.h>
 #include <ctype.h>
@@ -131,6 +132,36 @@ void find_command(int command_key, int find_char, Buffer* buffer, Point* cursor)
 
 #define COMMAND if(config_state->command_key == '\0'){ config_state->command_key = key; } else
 
+const char* weak_word_boundary_characters = " [](){}+->.,=!?\"'";
+const char* strong_word_boundary_characters = " ";
+// move cursor to next word boundary
+static void advance_to_boundary(Buffer* buffer, Point* cursor, const char* boundary_str) {
+     if(buffer->lines[cursor->y][0] == '\0') return;
+     const char* search_char = &buffer->lines[cursor->y][cursor->x+1];
+     assert(cursor->x <= (int64_t)strlen(buffer->lines[cursor->y]));
+     if(search_char != '\0'){
+          // search for a word boundary character after our current character
+          const char* boundary_char = strpbrk(search_char, boundary_str);
+          if(boundary_char){
+               if(boundary_char == search_char){
+                    cursor->x++;
+                    advance_to_boundary(buffer, cursor, boundary_str );
+               }
+               else{
+                    cursor->x += (boundary_char--) - search_char;
+               }
+               // we end at the character before the boundary
+               // character if we did not start at a word boundary,
+               // or the last boundary character if we started at a word boundary
+               return;
+          }
+          else {
+               cursor->x = strlen(buffer->lines[cursor->y])-1;
+               return;
+          }
+     }
+}
+
 bool key_handler(int key, BufferNode* head, void* user_data)
 {
      ConfigState* config_state = user_data;
@@ -206,6 +237,14 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           {
                Point delta = {0, -1};
                ce_move_cursor(buffer, cursor, &delta);
+          } break;
+          case 'e':
+          {
+               advance_to_boundary(buffer, cursor, weak_word_boundary_characters);
+          } break;
+          case 'E':
+          {
+               advance_to_boundary(buffer, cursor, strong_word_boundary_characters);
           } break;
           case 'h':
           {

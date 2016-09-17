@@ -576,6 +576,20 @@ bool ce_remove_buffer_from_list(BufferNode* head, BufferNode** node)
      return false;
 }
 
+// return x delta to the last character in the line, -1 on error
+int64_t ce_find_end_of_line(const Buffer* buffer, Point* cursor)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(cursor);
+
+     if(!ce_point_on_buffer(buffer, cursor)) return -1;
+
+     const char* line = buffer->lines[cursor->y];
+     return (strlen(line) - 1) - cursor->x;
+
+     return true;
+}
+
 bool ce_move_cursor(const Buffer* buffer, Point* cursor, const Point* delta)
 {
      CE_CHECK_PTR_ARG(buffer);

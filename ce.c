@@ -319,6 +319,18 @@ bool ce_get_char(Buffer* buffer, const Point* location, char* c)
      return true;
 }
 
+bool ce_set_char(Buffer* buffer, const Point* location, char c)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+
+     if(!ce_point_on_buffer(buffer, location)) return false;
+
+     buffer->lines[location->y][location->x] = c;
+
+     return true;
+}
+
 // NOTE: passing NULL to string causes an empty line to be inserted
 bool ce_insert_line(Buffer* buffer, int64_t line, const char* string)
 {

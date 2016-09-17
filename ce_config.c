@@ -229,7 +229,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'f':
           {
                COMMAND{
-                    // TODO: find whichever character they press after f
                     int64_t x_delta = ce_find_char_forward_in_line(buffer, cursor, key);
                     if(x_delta == -1) break;
                     Point delta = {x_delta, 0};
@@ -240,7 +239,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 't':
           {
                COMMAND{
-                    // TODO: find whichever character they press after t
                     int64_t x_delta = ce_find_char_forward_in_line(buffer, cursor, key);
                     if(x_delta-- <= 0) break;
                     Point delta = {x_delta, 0};
@@ -251,7 +249,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'F':
           {
                COMMAND{
-                    // TODO: find whichever character they press after F
                     int64_t x_delta = ce_find_char_backward_in_line(buffer, cursor, key);
                     if(x_delta == -1) break;
                     Point delta = {-x_delta, 0};
@@ -262,11 +259,18 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'T':
           {
                COMMAND{
-                    // TODO: find whichever character they press after T
                     int64_t x_delta = ce_find_char_backward_in_line(buffer, cursor, key);
                     if(x_delta-- <= -1) break;
                     Point delta = {-x_delta, 0};
                     ce_move_cursor(buffer, cursor, &delta);
+                    // TODO: devise a better way to clear command_key following a movement
+                    config_state->command_key = '\0';
+               }
+          } break;
+          case 'r':
+          {
+               COMMAND{
+                    ce_set_char(buffer, cursor, key);
                     // TODO: devise a better way to clear command_key following a movement
                     config_state->command_key = '\0';
                }

@@ -79,6 +79,7 @@ bool ce_insert_char(Buffer* buffer, const Point* location, char c);
 bool ce_insert_string(Buffer* buffer, const Point* location, const char* string);
 bool ce_remove_char(Buffer* buffer, const Point* location);
 bool ce_get_char(Buffer* buffer, const Point* location, char* c);
+bool ce_set_char(Buffer* buffer, const Point* location, char c);
 int64_t ce_find_char_forward_in_line(Buffer* buffer, const Point* location, char c);
 int64_t ce_find_char_backward_in_line(Buffer* buffer, const Point* location, char c);
 

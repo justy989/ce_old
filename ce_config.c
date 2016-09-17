@@ -59,7 +59,10 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
           buffer_state->cursor.x = 0;
           buffer_state->cursor.y = 0;
           buffer_state->start_line = 0;
-          buffer_state->changes_tail = NULL;
+          buffer_state->changes_tail = malloc(sizeof(*buffer_state->changes_tail));
+          buffer_state->changes_tail->change.type = BCT_NONE;
+          buffer_state->changes_tail->next = NULL;
+          buffer_state->changes_tail->prev = NULL;
           head->buffer->user_data = buffer_state;
           head = head->next;
      }
@@ -96,12 +99,17 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                // TODO: handle newlines for saving state
                if(config_state->start_insert.x < cursor->x){
                     BufferChange change;
+                    change.type = BCT_INSERT_STRING;
                     change.start = config_state->start_insert;
-                    change.start.x++;
-                    change.cursor = *cursor;
-                    change.length = cursor->x - config_state->start_insert.x;
-                    change.insertion = true;
+                    change.cursor = config_state->start_insert;
+                    int64_t str_len = cursor->x - config_state->start_insert.x;
+                    change.str = malloc(str_len + 1);
+                    strncpy(change.str, buffer->lines[cursor->y] + config_state->start_insert.x, str_len);
+                    change.str[str_len] = 0;
+                    ce_message("change: '%s' start: %d, %d cursor: %d, %d", change.str, change.start, change.cursor);
                     ce_buffer_change(&buffer_state->changes_tail, &change);
+               }else if(config_state->start_insert.x > cursor->x){
+                    // backspace!
                }
                if(buffer->lines[cursor->y]){
                     int64_t line_len = strlen(buffer->lines[cursor->y]);
@@ -130,6 +138,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     cursor->x = 0;
                }
           }else{ // insert
+               // TODO: handle newlines when inserting individual chars
                if(ce_insert_char(buffer, cursor, key)) cursor->x++;
           }
      }else{
@@ -163,11 +172,12 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                config_state->start_insert = *cursor;
                break;
           case 'a':
-               if(buffer->lines[cursor->y]){
-                    cursor->x++;
-               }
+          {
+               Point delta = {1, 0};
+               ce_move_cursor(buffer, cursor, &delta);
                config_state->insert = true;
                config_state->start_insert = *cursor;
+          } break;
           case 'd':
                // delete line
                if(buffer->line_count){
@@ -191,7 +201,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }
                break;
           case 'u':
-               if(buffer_state->changes_tail){
+               if(buffer_state->changes_tail && buffer_state->changes_tail->change.type != BCT_NONE){
                     Point new_cursor = buffer_state->changes_tail->change.cursor;
                     if(ce_buffer_undo(buffer, &buffer_state->changes_tail)){
                          *cursor = new_cursor;
@@ -201,15 +211,21 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'x':
           {
                char c;
-               Point loc = *cursor;
-               loc.x++;
-               if(ce_get_char(buffer, cursor, &c) && ce_remove_char(buffer, &loc)){
+               if(ce_get_char(buffer, cursor, &c) && ce_remove_char(buffer, cursor)){
                     BufferChange change;
-                    change.insertion = false;
+                    change.type = BCT_REMOVE_CHAR;
                     change.start = *cursor;
                     change.cursor = *cursor;
                     change.c = c;
                     ce_buffer_change(&buffer_state->changes_tail, &change);
+               }
+          }
+          break;
+          case 18:
+          if(buffer_state->changes_tail && buffer_state->changes_tail->next){
+               Point new_cursor = buffer_state->changes_tail->next->change.cursor;
+               if(ce_buffer_redo(buffer, &buffer_state->changes_tail)){
+                    *cursor = new_cursor;
                }
           }
           break;

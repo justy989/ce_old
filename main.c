@@ -182,6 +182,7 @@ int main(int argc, char** argv)
      // handle the segfault by reverting the config
      if(sigsetjmp(segv_ctxt, 1) != 0){
           if(current_config.so_handle == stable_config.so_handle){
+               ce_message("stable config sigsegv'd");
                done = true;
           }
           else{
@@ -213,7 +214,7 @@ int main(int argc, char** argv)
           refresh();
 
           int key = getch();
-          if(key == ''){
+          if(key == '`'){
                ce_message("reloading config '%s'", current_config.path);
                // TODO: specify the path for the test config to load here
                if(!config_open_and_init(&current_config, current_config.path, buffer_list_head,

@@ -47,19 +47,28 @@ typedef struct BufferNode {
      struct BufferNode* next;
 } BufferNode;
 
+typedef enum {
+     BCT_NONE,
+     BCT_INSERT_CHAR,
+     BCT_INSERT_STRING,
+     BCT_REMOVE_CHAR,
+     BCT_REMOVE_STRING,
+} BufferChangeType;
+
 typedef struct BufferChange {
-     bool insertion; // insertion or deletion
+     BufferChangeType type;
      Point start;
      Point cursor;
-     union{
-          int64_t length; // insertion
-          char c; // deletion
+     union {
+          char c;
+          char* str;
      };
 } BufferChange;
 
 typedef struct BufferChangeNode {
      BufferChange change;
      struct BufferChangeNode* prev;
+     struct BufferChangeNode* next;
 } BufferChangeNode;
 
 typedef bool ce_initializer(BufferNode*, Point*, int, char**, void**);
@@ -77,6 +86,7 @@ void ce_free_buffer(Buffer* buffer);
 bool ce_point_on_buffer(const Buffer* buffer, const Point* location);
 bool ce_insert_char(Buffer* buffer, const Point* location, char c);
 bool ce_insert_string(Buffer* buffer, const Point* location, const char* string);
+bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length);
 bool ce_remove_char(Buffer* buffer, const Point* location);
 bool ce_get_char(Buffer* buffer, const Point* location, char* c);
 
@@ -100,5 +110,6 @@ bool ce_follow_cursor(const Point* cursor, int64_t* top_line, int64_t* left_coll
 
 bool ce_buffer_change(BufferChangeNode** tail, const BufferChange* change);
 bool ce_buffer_undo(Buffer* buffer, BufferChangeNode** tail);
+bool ce_buffer_redo(Buffer* buffer, BufferChangeNode** tail);
 
 #endif

@@ -1,11 +1,18 @@
 #include "ce.h"
+
 #include <assert.h>
+#include <ctype.h>
 
 typedef struct{
      bool insert;
      bool split;
      int last_key;
      char command_key;
+     struct {
+          // state for fF and tT
+          char command_key;
+          char find_char;
+     } find_command;
      BufferNode* current_buffer_node;
      Point start_insert;
 } ConfigState;
@@ -81,6 +88,45 @@ bool destroyer(BufferNode* head, void* user_data)
 
      free(user_data);
      return true;
+}
+
+void find_command(int command_key, int find_char, Buffer* buffer, Point* cursor)
+{
+     switch(command_key){
+     case 'f':
+     {
+          int64_t x_delta = ce_find_char_forward_in_line(buffer, cursor, find_char);
+          if(x_delta == -1) break;
+          Point delta = {x_delta, 0};
+          ce_move_cursor(buffer, cursor, &delta);
+     } break;
+     case 't':
+     {
+          Point search_point = {cursor->x + 1, cursor->y};
+          int64_t x_delta = ce_find_char_forward_in_line(buffer, &search_point, find_char);
+          if(x_delta <= 0) break;
+          Point delta = {x_delta, 0};
+          ce_move_cursor(buffer, cursor, &delta);
+     } break;
+     case 'F':
+     {
+          int64_t x_delta = ce_find_char_backward_in_line(buffer, cursor, find_char);
+          if(x_delta == -1) break;
+          Point delta = {-x_delta, 0};
+          ce_move_cursor(buffer, cursor, &delta);
+     } break;
+     case 'T':
+     {
+          Point search_point = {cursor->x - 1, cursor->y};
+          int64_t x_delta = ce_find_char_backward_in_line(buffer, &search_point, find_char);
+          if(x_delta <= 0) break;
+          Point delta = {-x_delta, 0};
+          ce_move_cursor(buffer, cursor, &delta);
+     } break;
+     default:
+          assert(0);
+          break;
+     }
 }
 
 #define COMMAND if(config_state->command_key == '\0'){ config_state->command_key = key; } else
@@ -253,43 +299,28 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }
           }
           break;
+          case ';':
+               find_command(config_state->find_command.command_key,
+                            config_state->find_command.find_char, buffer, cursor);
+          break;
+          case ',':
+          {
+               char command_key = config_state->find_command.command_key;
+               if(isupper(command_key)) command_key = tolower(command_key);
+               else command_key = toupper(command_key);
+
+               find_command(command_key, config_state->find_command.find_char, buffer, cursor);
+          }
+          break;
           case 'f':
-          {
-               COMMAND{
-                    int64_t x_delta = ce_find_char_forward_in_line(buffer, cursor, key);
-                    if(x_delta == -1) break;
-                    Point delta = {x_delta, 0};
-                    ce_move_cursor(buffer, cursor, &delta);
-                    config_state->command_key = '\0';
-               }
-          } break;
           case 't':
-          {
-               COMMAND{
-                    int64_t x_delta = ce_find_char_forward_in_line(buffer, cursor, key);
-                    if(x_delta-- <= 0) break;
-                    Point delta = {x_delta, 0};
-                    ce_move_cursor(buffer, cursor, &delta);
-                    config_state->command_key = '\0';
-               }
-          } break;
           case 'F':
-          {
-               COMMAND{
-                    int64_t x_delta = ce_find_char_backward_in_line(buffer, cursor, key);
-                    if(x_delta == -1) break;
-                    Point delta = {-x_delta, 0};
-                    ce_move_cursor(buffer, cursor, &delta);
-                    config_state->command_key = '\0';
-               }
-          } break;
           case 'T':
           {
                COMMAND{
-                    int64_t x_delta = ce_find_char_backward_in_line(buffer, cursor, key);
-                    if(x_delta-- <= -1) break;
-                    Point delta = {-x_delta, 0};
-                    ce_move_cursor(buffer, cursor, &delta);
+                    config_state->find_command.command_key = config_state->command_key;
+                    config_state->find_command.find_char = key;
+                    find_command(config_state->command_key, key, buffer, cursor);
                     // TODO: devise a better way to clear command_key following a movement
                     config_state->command_key = '\0';
                }

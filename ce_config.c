@@ -1,11 +1,86 @@
 #include "ce.h"
 
+typedef struct BackspaceNode{
+     char c;
+     struct BackspaceNode* next;
+} BackspaceNode;
+
+BackspaceNode* backspace_append(BackspaceNode** tail, char c)
+{
+     BackspaceNode* new_node = malloc(sizeof(*new_node));
+     if(!new_node){
+          ce_message("%s() failed to malloc node", __FUNCTION__);
+          return NULL;
+     }
+
+     new_node->c = c;
+     new_node->next = NULL;
+
+     if(*tail) (*tail)->next = new_node;
+
+     (*tail) = new_node;
+
+     return new_node;
+}
+
+// string is allocated and returned, it is the user's responsibility to free it
+char* backspace_get_string(BackspaceNode* head)
+{
+     int64_t len = 0;
+     BackspaceNode* itr = head;
+     while(itr){
+          len++;
+          itr = itr->next;
+     }
+
+     char* str = malloc(len + 1);
+     if(!str){
+          ce_message("%s() failed to alloc string");
+          return NULL;
+     }
+
+     int64_t s = 0;
+     itr = head;
+     while(itr){
+          str[s] = itr->c;
+          s++;
+          itr = itr->next;
+     }
+
+     // reverse_string
+     {
+          char* f = str;
+          char* e = str + (len - 1);
+          while(f < e){
+               char t = *f;
+               *f = *e;
+               *e = t;
+               f++;
+               e--;
+          }
+     }
+
+     str[len] = 0;
+     return str;
+}
+
+void backspace_free(BackspaceNode** head)
+{
+     while(*head){
+          BackspaceNode* tmp = *head;
+          *head = (*head)->next;
+          free(tmp);
+     }
+}
+
 typedef struct{
      bool insert;
      bool split;
      int last_key;
      BufferNode* current_buffer_node;
      Point start_insert;
+     BackspaceNode* backspace_head;
+     BackspaceNode* backspace_tail;
 } ConfigState;
 
 typedef struct{
@@ -46,6 +121,8 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
      config_state->split = false;
      config_state->last_key = 0;
      config_state->current_buffer_node = head;
+     config_state->backspace_head = NULL;
+     config_state->backspace_tail = NULL;
 
      *user_data = config_state;
 
@@ -108,7 +185,16 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     change.str[str_len] = 0;
                     ce_buffer_change(&buffer_state->changes_tail, &change);
                }else if(config_state->start_insert.x > cursor->x){
-                    // backspace!
+                    // exclusively backspace!
+                    BufferChange change;
+                    change.type = BCT_REMOVE_STRING;
+                    change.start = *cursor;
+                    change.cursor = config_state->start_insert;
+                    change.str = backspace_get_string(config_state->backspace_head);
+                    ce_message("backspaced string: '%s'", change.str);
+                    ce_buffer_change(&buffer_state->changes_tail, &change);
+                    backspace_free(&config_state->backspace_head);
+                    config_state->backspace_tail = NULL;
                }
                if(buffer->lines[cursor->y]){
                     int64_t line_len = strlen(buffer->lines[cursor->y]);
@@ -126,12 +212,19 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          Point delta = {0, -1};
                          ce_move_cursor(buffer, cursor, &delta);
                          cursor->x = line_len;
+                         backspace_append(&config_state->backspace_tail, '\n');
+                         if(!config_state->backspace_head) config_state->backspace_head = config_state->backspace_tail;
                     }else{
                          Point previous = *cursor;
                          previous.x--;
-                         if(ce_remove_char(buffer, &previous)){
-                              Point delta = {-1, 0};
-                              ce_move_cursor(buffer, cursor, &delta);
+                         char c = 0;
+                         if(ce_get_char(buffer, &previous, &c)){
+                              backspace_append(&config_state->backspace_tail, c);
+                              if(!config_state->backspace_head) config_state->backspace_head = config_state->backspace_tail;
+                              if(ce_remove_char(buffer, &previous)){
+                                   Point delta = {-1, 0};
+                                   ce_move_cursor(buffer, cursor, &delta);
+                              }
                          }
                     }
                }

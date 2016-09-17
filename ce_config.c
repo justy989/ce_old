@@ -171,9 +171,18 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                Point delta = {1, 0};
                ce_move_cursor(buffer, cursor, &delta);
           } break;
+          case 'I':
+          {
+               cursor->x = 0;
+               config_state->insert = true;
+               config_state->start_insert = *cursor;
+          } break;
           case 'i':
                config_state->insert = true;
                config_state->start_insert = *cursor;
+               break;
+          case '0':
+               cursor->x = 0;
                break;
           case '$':
                cursor->x += ce_find_end_of_line(buffer, cursor);
@@ -192,13 +201,18 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                config_state->start_insert = *cursor;
                break;
           case 'd':
-               // delete line
-               if(buffer->line_count){
-                    if(ce_remove_line(buffer, cursor->y)){
-                         if(cursor->y >= buffer->line_count){
-                              cursor->y = buffer->line_count - 1;
+               COMMAND{
+                    if(key == 'd'){
+                         // delete line
+                         if(buffer->line_count){
+                              if(ce_remove_line(buffer, cursor->y)){
+                                   // TODO more explicit method to put cursor on the line
+                                   Point delta = {0, 0};
+                                   ce_move_cursor(buffer, cursor, &delta);
+                              }
                          }
                     }
+                    config_state->command_key = '\0';
                }
                break;
           case 's':

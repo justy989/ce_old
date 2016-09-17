@@ -95,14 +95,14 @@ bool key_handler(int key, BufferNode* head, void* user_data)
      config_state->last_key = key;
 
      // command keys are followed by a movement key which clears the command key
-     if(config_state->command_key !='\0' && key == 27){
+     if(config_state->command_key != '\0' && key == 27){
           // escape cancels a movement
           config_state->command_key = '\0';
           return true;
      }
 
      if(config_state->insert){
-          assert(config_state->command_key != '\0');
+          assert(config_state->command_key == '\0');
           // TODO: should be a switch
           if(key == 27){ // escape
                config_state->insert = false;
@@ -192,6 +192,11 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }
                break;
           case 's':
+               ce_remove_char(buffer, cursor);
+               config_state->insert = true;
+               config_state->start_insert = *cursor;
+               break;
+          case '':
                ce_save_buffer(buffer, buffer->filename);
                break;
           case 'v':
@@ -214,9 +219,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'x':
           {
                char c;
-               Point loc = *cursor;
-               loc.x++;
-               if(ce_get_char(buffer, cursor, &c) && ce_remove_char(buffer, &loc)){
+               if(ce_get_char(buffer, cursor, &c) && ce_remove_char(buffer, cursor)){
                     BufferChange change;
                     change.insertion = false;
                     change.start = *cursor;

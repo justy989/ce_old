@@ -268,8 +268,8 @@ bool ce_remove_char(Buffer* buffer, const Point* location)
      char* new_line = malloc(line_len);
 
      // copy before the removed char copy after the removed char
-     for(int64_t i = 0; i < location->x; ++i){new_line[i] = line[i];}
-     for(int64_t i = location->x; i < line_len; ++i){new_line[i-1] = line[i];}
+     for(int64_t i = 0; i <= location->x; ++i){new_line[i] = line[i];}
+     for(int64_t i = location->x + 1; i < line_len; ++i){new_line[i-1] = line[i];}
      new_line[line_len-1] = 0;
 
      free(line);

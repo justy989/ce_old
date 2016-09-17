@@ -118,13 +118,20 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }
           }else if(key == 127){ // backspace
                if(buffer->line_count){
-                    if(cursor->x == 0){
-                         if(cursor->y != 0){
-                              // remove the line and join the next line with the previous
-                         }
+                    if(cursor->x == 0 && cursor->y != 0){
+                         int64_t line_len = 0;
+                         if(buffer->lines[cursor->y - 1]) line_len = strlen(buffer->lines[cursor->y - 1]);
+                         ce_append_string(buffer, cursor->y - 1, buffer->lines[cursor->y]);
+                         ce_remove_line(buffer, cursor->y);
+                         Point delta = {0, -1};
+                         ce_move_cursor(buffer, cursor, &delta);
+                         cursor->x = line_len;
                     }else{
-                         if(ce_remove_char(buffer, cursor)){
-                              cursor->x--;
+                         Point previous = *cursor;
+                         previous.x--;
+                         if(ce_remove_char(buffer, &previous)){
+                              Point delta = {-1, 0};
+                              ce_move_cursor(buffer, cursor, &delta);
                          }
                     }
                }

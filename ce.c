@@ -61,6 +61,7 @@ bool ce_load_file(Buffer* buffer, const char* filename)
           line_count++;
      }
 
+     // TODO: use ce_load_string
      if(line_count){
           ce_alloc_lines(buffer, line_count);
           int64_t last_newline = -1;
@@ -306,6 +307,13 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
 
      free(current_line);
      return true;
+}
+
+bool ce_append_string(Buffer* buffer, int64_t line, const char* new_string)
+{
+     Point end_of_line = {0, line};
+     if(buffer->lines[line]) end_of_line.x = strlen(buffer->lines[line]);
+     return ce_insert_string(buffer, &end_of_line, new_string);
 }
 
 bool ce_remove_char(Buffer* buffer, const Point* location)

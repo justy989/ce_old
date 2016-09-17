@@ -174,7 +174,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           if(key == 27){ // escape
                config_state->insert = false;
                // TODO: handle newlines for saving state
-               if(config_state->start_insert.x < cursor->x){
+               if(config_state->start_insert.x < cursor->x &&
+                  config_state->start_insert.y < cursor->y){
                     BufferChange change;
                     change.type = BCT_INSERT_STRING;
                     change.start = config_state->start_insert;
@@ -184,14 +185,22 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     strncpy(change.str, buffer->lines[cursor->y] + config_state->start_insert.x, str_len);
                     change.str[str_len] = 0;
                     ce_buffer_change(&buffer_state->changes_tail, &change);
-               }else if(config_state->start_insert.x > cursor->x){
+               }else if(config_state->start_insert.x > cursor->x ||
+                        config_state->start_insert.y > cursor->y){
                     // exclusively backspace!
                     BufferChange change;
                     change.type = BCT_REMOVE_STRING;
                     change.start = *cursor;
                     change.cursor = config_state->start_insert;
                     change.str = backspace_get_string(config_state->backspace_head);
-                    ce_message("backspaced string: '%s'", change.str);
+                    char* my_str = strdup(change.str);
+                    char* s = my_str;
+                    while(*s){
+                         if(*s == NEWLINE) *s = '|';
+                         ++s;
+                    }
+                    ce_message("remove_string: %s", my_str);
+                    free(my_str);
                     ce_buffer_change(&buffer_state->changes_tail, &change);
                     backspace_free(&config_state->backspace_head);
                     config_state->backspace_tail = NULL;
@@ -320,6 +329,9 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }
           }
           break;
+          case 'e':
+          ce_remove_string(buffer, cursor, 3);
+          break;
           case 18:
           if(buffer_state->changes_tail && buffer_state->changes_tail->next){
                Point new_cursor = buffer_state->changes_tail->next->change.cursor;
@@ -376,8 +388,8 @@ void view_drawer(const BufferNode* head, void* user_data)
      }
 
      attron(A_REVERSE);
-     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s %d lines, key %d", config_state->insert ? "INSERT" : "NORMAL",
-              buffer->filename, buffer->line_count, config_state->last_key);
+     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s %d lines, key %d, cursor %ld, %ld", config_state->insert ? "INSERT" : "NORMAL",
+              buffer->filename, buffer->line_count, config_state->last_key, buffer_state->cursor.x, buffer_state->cursor.y);
      attroff(A_REVERSE);
 
      // reset the cursor

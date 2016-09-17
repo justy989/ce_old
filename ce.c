@@ -198,6 +198,8 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
      CE_CHECK_PTR_ARG(location);
      CE_CHECK_PTR_ARG(new_string);
 
+     ce_message("inserting '%s' at %ld, %ld", new_string, location->x, location->y);
+
      if(!ce_point_on_buffer(buffer, location)){
           return false;
      }
@@ -453,9 +455,9 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
      int64_t current_line_len = 0;
 
      if(current_line) current_line_len = strlen(current_line);
-     int64_t rest_of_the_line_len = current_line_len - location->x;
+     int64_t rest_of_the_line_len = (current_line_len - location->x);
 
-     if(length < rest_of_the_line_len){
+     if(length <= rest_of_the_line_len){
           int64_t new_line_len = current_line_len - length;
           char* new_line = malloc(new_line_len + 1);
           if(!new_line){
@@ -474,44 +476,44 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
           int64_t line_index = location->y;
 
           if(current_line){
-               char* new_line = malloc(location->x + 1);
-               strncpy(new_line, current_line, location->x);
-               new_line[location->x] = 0;
-               buffer->lines[location->y] = new_line;
-               free(current_line);
                length -= rest_of_the_line_len;
+               length--; // account for line newline
                line_index++;
           }else{
+               // removing has to be counted as 1 in length due to 'newline' character's being used
+               // to insert strings. They need to be symmetrical
                ce_remove_line(buffer, location->y);
                length--;
           }
 
-          while(length > 0){
+          while(length >= 0){
                if(line_index >= buffer->line_count) break;
 
-               current_line = buffer->lines[line_index];
-               current_line_len = 0;
-               if(current_line) current_line_len = strlen(current_line);
-               if(length >= current_line_len){
+               char* next_line = buffer->lines[line_index];
+               int64_t next_line_len = 0;
+               if(next_line) next_line_len = strlen(next_line);
+               if(length >= next_line_len){
+                    // remove any lines that we have the length to remove completely
                     ce_remove_line(buffer, line_index);
-                    if(current_line_len == 0){
-                         length--;
-                    }else{
-                         length -= current_line_len;
+                    if(next_line_len != 0){
+                         length -= next_line_len;
                     }
+                    length--; // account for line newline
                }else{
-                    int64_t new_line_len = current_line_len - length;
+                    int64_t new_line_len = location->x + next_line_len - length;
                     char* new_line = malloc(new_line_len + 1);
                     if(!new_line){
                          ce_message("%s() failed to malloc new line", __FUNCTION__);
                          return false;
                     }
 
-                    strncpy(new_line, current_line + length, new_line_len);
+                    strncpy(new_line, current_line, location->x);
+                    strncpy(new_line + location->x, next_line + length, next_line_len);
                     new_line[new_line_len] = 0;
-                    buffer->lines[line_index] = new_line;
-                    if(current_line) free(current_line);
-                    length = 0;
+                    buffer->lines[location->y] = new_line;
+                    ce_remove_line(buffer, line_index);
+                    if(next_line) free(next_line);
+                    length = -1;
                }
           }
      }

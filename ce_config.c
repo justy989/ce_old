@@ -307,9 +307,16 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                config_state->split = !config_state->split;
                break;
           case 'b':
-               config_state->current_buffer_node = config_state->current_buffer_node->next;
-               if(!config_state->current_buffer_node){
-                    config_state->current_buffer_node = head;
+               break;
+          case 'g':
+               COMMAND{
+                    if(key == 't'){
+                         config_state->current_buffer_node = config_state->current_buffer_node->next;
+                         if(!config_state->current_buffer_node){
+                              config_state->current_buffer_node = head;
+                         }
+                    }
+                    config_state->command_key = '\0';
                }
                break;
           case 'u':

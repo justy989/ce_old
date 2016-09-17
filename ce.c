@@ -1,4 +1,6 @@
+#define _GNU_SOURCE
 #include "ce.h"
+#include <string.h>
 
 Buffer* g_message_buffer = NULL;
 Point* g_terminal_dimensions = NULL;
@@ -274,6 +276,35 @@ bool ce_remove_char(Buffer* buffer, const Point* location)
      buffer->lines[location->y] = new_line;
 
      return true;
+}
+
+// return x delta between location and the located character 'c' if found. return -1 if not found
+int64_t ce_find_char_forward_in_line(Buffer* buffer, const Point* location, char c)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+
+     const char* cur_char = &buffer->lines[location->y][location->x];
+     if(cur_char == '\0') return -1; // we are at the end of the line
+     const char* search_str = cur_char + 1; // start looking forward from the next character
+     const char* found_char = strchr(search_str, c);
+     if(!found_char) return -1;
+     return found_char - cur_char;
+}
+
+// return -x delta between location and the located character 'c' if found. return -1 if not found
+int64_t ce_find_char_backward_in_line(Buffer* buffer, const Point* location, char c)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+
+     // TODO do I need to validate that the provided location is a real character in the buffer?
+     const char* cur_char = &buffer->lines[location->y][location->x];
+     const char* line = buffer->lines[location->y];
+     if(!line) return -1; // TODO is this possible?
+     const char* found_char = memrchr(line, c, cur_char - line);
+     if(!found_char) return -1;
+     return cur_char - found_char;
 }
 
 bool ce_get_char(Buffer* buffer, const Point* location, char* c)

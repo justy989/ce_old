@@ -1,9 +1,11 @@
 #include "ce.h"
+#include <assert.h>
 
 typedef struct{
      bool insert;
      bool split;
      int last_key;
+     char command_key;
      BufferNode* current_buffer_node;
      Point start_insert;
 } ConfigState;
@@ -45,6 +47,7 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
      config_state->insert = false;
      config_state->split = false;
      config_state->last_key = 0;
+     config_state->command_key = '\0';
      config_state->current_buffer_node = head;
 
      *user_data = config_state;
@@ -80,6 +83,8 @@ bool destroyer(BufferNode* head, void* user_data)
      return true;
 }
 
+#define COMMAND if(config_state->command_key == '\0'){ config_state->command_key = key; } else
+
 bool key_handler(int key, BufferNode* head, void* user_data)
 {
      ConfigState* config_state = user_data;
@@ -89,7 +94,15 @@ bool key_handler(int key, BufferNode* head, void* user_data)
 
      config_state->last_key = key;
 
+     // command keys are followed by a movement key which clears the command key
+     if(config_state->command_key !='\0' && key == 27){
+          // escape cancels a movement
+          config_state->command_key = '\0';
+          return true;
+     }
+
      if(config_state->insert){
+          assert(config_state->command_key != '\0');
           // TODO: should be a switch
           if(key == 27){ // escape
                config_state->insert = false;
@@ -133,7 +146,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                if(ce_insert_char(buffer, cursor, key)) cursor->x++;
           }
      }else{
-          switch(key){
+          switch((config_state->command_key != '\0') ? config_state->command_key : key){
           default:
                break;
           case 'q':
@@ -213,6 +226,51 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }
           }
           break;
+          case 'f':
+          {
+               COMMAND{
+                    // TODO: find whichever character they press after f
+                    int64_t x_delta = ce_find_char_forward_in_line(buffer, cursor, key);
+                    if(x_delta == -1) break;
+                    Point delta = {x_delta, 0};
+                    ce_move_cursor(buffer, cursor, &delta);
+                    config_state->command_key = '\0';
+               }
+          } break;
+          case 't':
+          {
+               COMMAND{
+                    // TODO: find whichever character they press after t
+                    int64_t x_delta = ce_find_char_forward_in_line(buffer, cursor, key);
+                    if(x_delta-- <= 0) break;
+                    Point delta = {x_delta, 0};
+                    ce_move_cursor(buffer, cursor, &delta);
+                    config_state->command_key = '\0';
+               }
+          } break;
+          case 'F':
+          {
+               COMMAND{
+                    // TODO: find whichever character they press after F
+                    int64_t x_delta = ce_find_char_backward_in_line(buffer, cursor, key);
+                    if(x_delta == -1) break;
+                    Point delta = {-x_delta, 0};
+                    ce_move_cursor(buffer, cursor, &delta);
+                    config_state->command_key = '\0';
+               }
+          } break;
+          case 'T':
+          {
+               COMMAND{
+                    // TODO: find whichever character they press after T
+                    int64_t x_delta = ce_find_char_backward_in_line(buffer, cursor, key);
+                    if(x_delta-- <= -1) break;
+                    Point delta = {-x_delta, 0};
+                    ce_move_cursor(buffer, cursor, &delta);
+                    // TODO: devise a better way to clear command_key following a movement
+                    config_state->command_key = '\0';
+               }
+          } break;
           case 21: // Ctrl + d
           {
                Point delta = {0, -g_terminal_dimensions->y / 2};

@@ -330,6 +330,61 @@ bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor)
      return true;
 }
 
+// return -1 on failure, delta to move left to the beginning of the word on success
+int64_t ce_find_beginning_of_word(Buffer* buffer, const Point* location)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+
+     if(!ce_point_on_buffer(buffer, location)) return -1;
+     const char* line = buffer->lines[location->y];
+     int i = location->x;
+     if(i == 0) return 0;
+     while(i > 0){
+          if(isblank(line[i-1])){
+               // we are starting at a boundary move to the beginning of the previous word
+               while(isblank(line[i-1]) && i) i--;
+          }
+          else if(ispunct(line[i-1])){
+               while(ispunct(line[i-1]) && i) i--;
+               break;
+          }
+          else{
+               while(!isblank(line[i-1]) && !ispunct(line[i-1]) && i) i--;
+               break;
+          }
+     }
+     return location->x - i;
+}
+
+// return -1 on failure, delta to move left to the beginning of the word on success
+int64_t ce_find_end_of_word(Buffer* buffer, const Point* location)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+
+     if(!ce_point_on_buffer(buffer, location)) return -1;
+     const char* line = buffer->lines[location->y];
+     int line_len = strlen(line);
+     int i = location->x;
+     if(i == line_len) return 0;
+     while(i < line_len){
+          if(isblank(line[i+1])){
+               // we are starting at a boundary move to the beginning of the previous word
+               while(isblank(line[i+1]) && i < line_len) i++;
+          }
+          else if(ispunct(line[i+1])){
+               while(ispunct(line[i+1]) && i < line_len) i++;
+               break;
+          }
+          else{
+               while(!isblank(line[i+1]) && !ispunct(line[i+1]) && i < line_len) i++;
+               break;
+          }
+     }
+     return i - location->x;
+}
+
 bool ce_get_char(Buffer* buffer, const Point* location, char* c)
 {
      CE_CHECK_PTR_ARG(buffer);

@@ -302,10 +302,12 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                ce_move_cursor(buffer, cursor, &delta);
           } break;
           case 'b':
+               cursor->x -= ce_find_beginning_of_word(buffer, cursor);
                break;
           case 'e':
           {
-               advance_to_boundary(buffer, cursor, weak_word_boundary_characters);
+               //advance_to_boundary(buffer, cursor, weak_word_boundary_characters);
+               cursor->x += ce_find_end_of_word(buffer, cursor);
           } break;
           case 'E':
           {

@@ -301,6 +301,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                Point delta = {0, -1};
                ce_move_cursor(buffer, cursor, &delta);
           } break;
+          case 'b':
+               break;
           case 'e':
           {
                advance_to_boundary(buffer, cursor, weak_word_boundary_characters);
@@ -319,16 +321,20 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                Point delta = {1, 0};
                ce_move_cursor(buffer, cursor, &delta);
           } break;
-          case 'I':
-          {
-               cursor->x = 0;
-               config_state->insert = true;
-               config_state->start_insert = *cursor;
-          } break;
           case 'i':
                config_state->insert = true;
                config_state->start_insert = *cursor;
                break;
+          case 'I':
+          {
+               ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
+               config_state->insert = true;
+               config_state->start_insert = *cursor;
+          } break;
+          case '^':
+          {
+               ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
+          } break;
           case '0':
                cursor->x = 0;
                break;
@@ -382,8 +388,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                break;
           case 'v':
                config_state->split = !config_state->split;
-               break;
-          case 'b':
                break;
           case 'g':
                COMMAND{

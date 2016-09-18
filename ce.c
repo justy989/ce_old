@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include "ce.h"
+#include <ctype.h>
 #include <string.h>
 
 Buffer* g_message_buffer = NULL;
@@ -314,6 +315,19 @@ int64_t ce_find_char_backward_in_line(Buffer* buffer, const Point* location, cha
      const char* found_char = memrchr(line, c, cur_char - line);
      if(!found_char) return -1;
      return cur_char - found_char;
+}
+
+bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(cursor);
+
+     if(!ce_point_on_buffer(buffer, cursor)) false;
+     const char* line = buffer->lines[cursor->y];
+     int i;
+     for(i = 0; isblank(line[i]); i++);
+     cursor->x = i;
+     return true;
 }
 
 bool ce_get_char(Buffer* buffer, const Point* location, char* c)

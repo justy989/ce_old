@@ -87,6 +87,7 @@ bool ce_set_char(Buffer* buffer, const Point* location, char c);
 int64_t ce_find_end_of_line(const Buffer* buffer, Point* cursor);
 int64_t ce_find_char_forward_in_line(Buffer* buffer, const Point* location, char c);
 int64_t ce_find_char_backward_in_line(Buffer* buffer, const Point* location, char c);
+bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor);
 
 // NOTE: passing NULL to string causes an empty line to be inserted
 bool ce_insert_line(Buffer* buffer, int64_t line, const char* string);

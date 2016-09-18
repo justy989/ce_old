@@ -193,6 +193,12 @@ void find_command(int command_key, int find_char, Buffer* buffer, Point* cursor)
      }
 }
 
+void enter_insert_mode(ConfigState* config_state, Point* cursor)
+{
+     config_state->insert = true;
+     config_state->start_insert = *cursor;
+}
+
 #define COMMAND if(config_state->command_key == '\0'){ config_state->command_key = key; } else
 
 bool key_handler(int key, BufferNode* head, void* user_data)
@@ -272,18 +278,14 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                ce_move_cursor(buffer, cursor, &delta);
           } break;
           case 'b':
-               cursor->x -= ce_find_beginning_of_word(buffer, cursor, true);
-               break;
           case 'B':
-               cursor->x -= ce_find_beginning_of_word(buffer, cursor, false);
-               break;
-          case 'e':
           {
-               cursor->x += ce_find_end_of_word(buffer, cursor, true);
+               cursor->x -= ce_find_beginning_of_word(buffer, cursor, key == 'b');
           } break;
+          case 'e':
           case 'E':
           {
-               cursor->x += ce_find_end_of_word(buffer, cursor, false);
+               cursor->x += ce_find_end_of_word(buffer, cursor, key == 'e');
           } break;
           case 'h':
           {
@@ -296,14 +298,12 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                ce_move_cursor(buffer, cursor, &delta);
           } break;
           case 'i':
-               config_state->insert = true;
-               config_state->start_insert = *cursor;
+               enter_insert_mode(config_state, cursor);
                break;
           case 'I':
           {
                ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
-               config_state->insert = true;
-               config_state->start_insert = *cursor;
+               enter_insert_mode(config_state, cursor);
           } break;
           case '^':
           {
@@ -318,8 +318,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'A':
           {
                cursor->x += ce_find_end_of_line(buffer, cursor) + 1;
-               config_state->insert = true;
-               config_state->start_insert = *cursor;
+               enter_insert_mode(config_state, cursor);
           } break;
           case 'm':
           {
@@ -334,12 +333,12 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                if(buffer->lines[cursor->y]){
                     cursor->x++;
                }
-               config_state->insert = true;
-               config_state->start_insert = *cursor;
+               enter_insert_mode(config_state, cursor);
                break;
+          case 'c':
           case 'd':
                COMMAND{
-                    if(key == 'd'){
+                    if(key == config_state->command_key){ // cc or dd
                          // delete line
                          if(buffer->line_count){
                               if(ce_remove_line(buffer, cursor->y)){
@@ -349,13 +348,32 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                               }
                          }
                     }
+                    // TODO: provide a vim movement function which gives you
+                    // the appropriate delta for the movement key sequence and
+                    // use that everywhere
+                    else if(key == 'e' || key == 'E'){
+                         int64_t n_deletes = ce_find_end_of_word(buffer, cursor, key == 'e') + 1;
+                         while(n_deletes){
+                              ce_remove_char(buffer, cursor);
+                              n_deletes--;
+                         }
+                    }
+                    else if(key == 'b' || key == 'B'){
+                         int64_t n_deletes = ce_find_beginning_of_word(buffer, cursor, key == 'b');
+                         while(n_deletes){
+                              cursor->x--;
+                              ce_remove_char(buffer, cursor);
+                              n_deletes--;
+                         }
+                    }
+
+                    if(config_state->command_key == 'c') enter_insert_mode(config_state, cursor);
                     config_state->command_key = '\0';
                }
                break;
           case 's':
                ce_remove_char(buffer, cursor);
-               config_state->insert = true;
-               config_state->start_insert = *cursor;
+               enter_insert_mode(config_state, cursor);
                break;
           case '':
                ce_save_buffer(buffer, buffer->filename);

@@ -305,6 +305,18 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
                enter_insert_mode(config_state, cursor);
           } break;
+          case 'O':
+          case 'o':
+          {
+               if(!buffer->line_count){
+                    ce_alloc_lines(buffer, 1);
+               }
+               if(ce_insert_newline(buffer, cursor->y + (key == 'o'))){
+                    cursor->y += (key == 'o');
+                    cursor->x = 0;
+               }
+               enter_insert_mode(config_state, cursor);
+          } break;
           case '^':
           {
                ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);

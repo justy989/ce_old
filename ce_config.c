@@ -371,6 +371,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'c':
           case 'd':
                COMMAND{
+                    bool handled_key = true;
                     if(key == config_state->command_key){ // cc or dd
                          if(key == 'c'){
                               // TODO: unify with 'S'
@@ -393,33 +394,44 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                               }
                          }
                     }
-                    // TODO: provide a vim movement function which gives you
-                    // the appropriate delta for the movement key sequence and
-                    // use that everywhere
-                    else if(key == 'e' || key == 'E'){
-                         int64_t n_deletes = ce_find_end_of_word(buffer, cursor, key == 'e') + 1;
-                         while(n_deletes){
-                              ce_remove_char(buffer, cursor);
-                              n_deletes--;
-                         }
-                    }
-                    else if(key == 'b' || key == 'B'){
-                         int64_t n_deletes = ce_find_beginning_of_word(buffer, cursor, key == 'b');
-                         while(n_deletes){
-                              cursor->x--;
-                              ce_remove_char(buffer, cursor);
-                              n_deletes--;
-                         }
-                    }
-                    else if(key == '$'){
-                         int64_t n_deletes = ce_find_end_of_line(buffer, cursor) + 1;
-                         while(n_deletes){
-                              ce_remove_char(buffer, cursor);
-                              n_deletes--;
+                    else{
+                         // TODO: provide a vim movement function which gives you
+                         // the appropriate delta for the movement key sequence and
+                         // use that everywhere?
+                         switch(key){
+                         case 'e':
+                         case 'E':
+                         {
+                              int64_t n_deletes = ce_find_end_of_word(buffer, cursor, key == 'e') + 1;
+                              while(n_deletes){
+                                   ce_remove_char(buffer, cursor);
+                                   n_deletes--;
+                              }
+                         } break;
+                         case 'b':
+                         case 'B':
+                         {
+                              int64_t n_deletes = ce_find_beginning_of_word(buffer, cursor, key == 'b');
+                              while(n_deletes){
+                                   cursor->x--;
+                                   ce_remove_char(buffer, cursor);
+                                   n_deletes--;
+                              }
+                         } break;
+                         case '$':
+                         {
+                              int64_t n_deletes = ce_find_end_of_line(buffer, cursor) + 1;
+                              while(n_deletes){
+                                   ce_remove_char(buffer, cursor);
+                                   n_deletes--;
+                              }
+                         } break;
+                         default:
+                              handled_key = false;
                          }
                     }
 
-                    if(config_state->command_key == 'c') enter_insert_mode(config_state, cursor);
+                    if(handled_key && config_state->command_key == 'c') enter_insert_mode(config_state, cursor);
                     config_state->command_key = '\0';
                }
                break;

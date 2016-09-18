@@ -82,14 +82,20 @@ typedef struct BufferChangeNode {
      struct BufferChangeNode* next;
 } BufferChangeNode;
 
+// horizontal split []|[]
+
+// vertical split
+// []
+// --
+// []
 typedef struct BufferView {
      Point top_left;
      Point bottom_right;
      BufferNode* buffer_node;
-     struct BufferView* horizontal_split; // []|[]
-     struct BufferView* vertical_split; // []
-                                        // --
-                                        // []
+     struct BufferView* prev_horizontal;
+     struct BufferView* next_horizontal;
+     struct BufferView* prev_vertical;
+     struct BufferView* next_vertical;
 } BufferView;
 
 typedef bool ce_initializer(BufferNode*, Point*, int, char**, void**);
@@ -137,7 +143,7 @@ bool ce_buffer_undo(Buffer* buffer, BufferChangeNode** tail);
 bool ce_buffer_redo(Buffer* buffer, BufferChangeNode** tail);
 
 bool ce_split_view(BufferView* view, BufferNode* buffer_node, bool horizontal);
-bool ce_draw_view(BufferView* view);
+bool ce_draw_view(BufferView* head);
 bool ce_free_view(BufferView** view);
 
 #endif

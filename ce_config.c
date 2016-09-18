@@ -80,12 +80,12 @@ void backspace_free(BackspaceNode** head, BackspaceNode** tail)
 typedef struct{
      bool insert;
      int last_key;
-     BufferNode* current_buffer_node;
      Point start_insert;
      Point original_start_insert;
      BackspaceNode* backspace_head;
      BackspaceNode* backspace_tail;
-     BufferView* buffer_view;
+     BufferView* view_head;
+     BufferView* view_current;
 } ConfigState;
 
 typedef struct{
@@ -105,6 +105,8 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
                return false;
           }
 
+          memset(buffer, 0, sizeof(*buffer));
+
           if(!ce_load_file(buffer, argv[i])){
                free(buffer);
                continue;
@@ -121,18 +123,18 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
 
      config_state->insert = false;
      config_state->last_key = 0;
-     config_state->current_buffer_node = head ? head->next : head;
      config_state->backspace_head = NULL;
      config_state->backspace_tail = NULL;
-     config_state->buffer_view = malloc(sizeof(*config_state->buffer_view));
-     if(!config_state->buffer_view){
+     config_state->view_head = malloc(sizeof(*config_state->view_head));
+     if(!config_state->view_head){
           ce_message("failed to allocate buffer view.");
           return false;
      }
 
-     config_state->buffer_view->buffer_node = head->next;
-     config_state->buffer_view->horizontal_split = NULL;
-     config_state->buffer_view->vertical_split = NULL;
+     memset(config_state->view_head, 0, sizeof(*config_state->view_head));
+     config_state->view_head->buffer_node = head ? head->next : head;
+
+     config_state->view_current = config_state->view_head;
 
      *user_data = config_state;
 
@@ -164,8 +166,9 @@ bool destroyer(BufferNode* head, void* user_data)
      }
 
      ConfigState* config_state = user_data;
-     if(config_state->buffer_view){
-          ce_free_view(&config_state->buffer_view);
+     if(config_state->view_head){
+          ce_free_view(&config_state->view_head);
+          config_state->view_current = NULL;
      }
      free(user_data);
      return true;
@@ -174,7 +177,7 @@ bool destroyer(BufferNode* head, void* user_data)
 bool key_handler(int key, BufferNode* head, void* user_data)
 {
      ConfigState* config_state = user_data;
-     Buffer* buffer = config_state->current_buffer_node->buffer;
+     Buffer* buffer = config_state->view_current->buffer_node->buffer;
      BufferState* buffer_state = buffer->user_data;
      Point* cursor = &buffer->cursor;
 
@@ -327,15 +330,15 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                ce_save_buffer(buffer, buffer->filename);
                break;
           case 'v':
-               ce_split_view(config_state->buffer_view, config_state->current_buffer_node, true);
+               ce_split_view(config_state->view_current, config_state->view_current->buffer_node, true);
                break;
           case 'c':
-               ce_split_view(config_state->buffer_view, config_state->current_buffer_node, false);
+               ce_split_view(config_state->view_current, config_state->view_current->buffer_node, false);
                break;
           case 'b':
-               config_state->current_buffer_node = config_state->current_buffer_node->next;
-               if(!config_state->current_buffer_node){
-                    config_state->current_buffer_node = head;
+               config_state->view_current->buffer_node = config_state->view_current->buffer_node->next;
+               if(!config_state->view_current->buffer_node){
+                    config_state->view_current->buffer_node = head;
                }
                break;
           case 'u':
@@ -377,6 +380,50 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                Point delta = {0, g_terminal_dimensions->y / 2};
                ce_move_cursor(buffer, cursor, &delta);
           } break;
+          case 8: // Ctrl + h
+          {
+               if(config_state->view_current->prev_horizontal){
+                    config_state->view_current = config_state->view_current->prev_horizontal;
+               }else if(config_state->view_current->next_horizontal){
+                    while(config_state->view_current->next_horizontal){
+                         config_state->view_current = config_state->view_current->next_horizontal;
+                    }
+               }
+          }
+          break;
+          case 10: // Ctrl + j
+          {
+               if(config_state->view_current->next_vertical){
+                    config_state->view_current = config_state->view_current->next_vertical;
+               }else if(config_state->view_current->prev_vertical){
+                    while(config_state->view_current->prev_vertical){
+                         config_state->view_current = config_state->view_current->prev_vertical;
+                    }
+               }
+          }
+          break;
+          case 11: // Ctrl + k
+          {
+               if(config_state->view_current->prev_vertical){
+                    config_state->view_current = config_state->view_current->prev_vertical;
+               }else if(config_state->view_current->next_vertical){
+                    while(config_state->view_current->next_vertical){
+                         config_state->view_current = config_state->view_current->next_vertical;
+                    }
+               }
+          }
+          break;
+          case 12: // Ctrl + l
+          {
+               if(config_state->view_current->next_horizontal){
+                    config_state->view_current = config_state->view_current->next_horizontal;
+               }else if(config_state->view_current->prev_horizontal){
+                    while(config_state->view_current->prev_horizontal){
+                         config_state->view_current = config_state->view_current->prev_horizontal;
+                    }
+               }
+          }
+          break;
           }
      }
 
@@ -387,17 +434,19 @@ void view_drawer(const BufferNode* head, void* user_data)
 {
      (void)(head);
      ConfigState* config_state = user_data;
-     Buffer* buffer = config_state->current_buffer_node->buffer;
-     BufferView* buffer_view = config_state->buffer_view;
+     Buffer* buffer = config_state->view_current->buffer_node->buffer;
+     BufferView* buffer_view = config_state->view_current;
      Point* cursor = &buffer->cursor;
 
      ce_follow_cursor(cursor, &buffer->top_row, &buffer->left_collumn,
-                      buffer_view->bottom_right.y, buffer_view->bottom_right.x);
+                      buffer_view->bottom_right.y - buffer_view->top_left.y,
+                      buffer_view->bottom_right.x - buffer_view->top_left.x);
 
      // print the range of lines we want to show
      if(buffer->line_count){
           standend();
-          ce_draw_view(config_state->buffer_view);
+          // NOTE: always draw from the head
+          ce_draw_view(config_state->view_head);
      }
 
      attron(A_REVERSE);
@@ -407,6 +456,6 @@ void view_drawer(const BufferNode* head, void* user_data)
      attroff(A_REVERSE);
 
      // reset the cursor
-     move(cursor->y - buffer->top_row + config_state->buffer_view->top_left.y,
-          cursor->x - buffer->left_collumn + config_state->buffer_view->top_left.x);
+     move(cursor->y - buffer->top_row + config_state->view_current->top_left.y,
+          cursor->x - buffer->left_collumn + config_state->view_current->top_left.x);
 }

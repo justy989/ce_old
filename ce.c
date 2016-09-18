@@ -722,10 +722,6 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
           return false;
      }
 
-     // TODO: remove
-     ce_message("%ld, %ld -> %ld, %ld b: %ld, %ld", term_top_left->x, term_top_left->y,
-                term_bottom_right->x, term_bottom_right->y, buffer_top_left->x, buffer_top_left->y);
-
      char line_to_print[g_terminal_dimensions->x];
 
      int64_t max_width = term_bottom_right->x - term_top_left->x;
@@ -1004,12 +1000,12 @@ bool ce_split_view(BufferView* view, BufferNode* buffer_node, bool horizontal)
 
      // loop to the end of the list
      if(horizontal){
-          while(itr->horizontal_split){
-               itr = itr->horizontal_split;
+          while(itr->next_horizontal){
+               itr = itr->next_horizontal;
           }
      }else{
-          while(itr->vertical_split){
-               itr = itr->vertical_split;
+          while(itr->next_vertical){
+               itr = itr->next_vertical;
           }
      }
 
@@ -1019,14 +1015,15 @@ bool ce_split_view(BufferView* view, BufferNode* buffer_node, bool horizontal)
           return false;
      }
 
+     memset(new_view, 0, sizeof(*new_view));
      new_view->buffer_node = buffer_node;
-     new_view->horizontal_split = NULL;
-     new_view->vertical_split = NULL;
 
      if(horizontal){
-          itr->horizontal_split = new_view;
+          itr->next_horizontal = new_view;
+          new_view->prev_horizontal = itr;
      }else{
-          itr->vertical_split = new_view;
+          itr->next_vertical = new_view;
+          new_view->prev_vertical = itr;
      }
 
      return true;
@@ -1037,8 +1034,8 @@ bool free_buffer_view(BufferView* view)
 {
      CE_CHECK_PTR_ARG(view);
 
-     if(view->horizontal_split) free_buffer_view(view->horizontal_split);
-     if(view->vertical_split) free_buffer_view(view->vertical_split);
+     if(view->next_horizontal) free_buffer_view(view->next_horizontal);
+     if(view->next_vertical) free_buffer_view(view->next_vertical);
 
      free(view);
 
@@ -1064,7 +1061,7 @@ bool draw_horizontal_views(BufferView* view, const Point* top_left, const Point*
      int64_t view_count = 0;
      BufferView* itr = view;
      while(itr){
-          itr = itr->horizontal_split;
+          itr = itr->next_horizontal;
           view_count++;
      }
 
@@ -1077,8 +1074,8 @@ bool draw_horizontal_views(BufferView* view, const Point* top_left, const Point*
      while(itr){
           itr->top_left = new_top_left;
           itr->bottom_right = new_bottom_right;
-          if(!first_drawn && itr == view && itr->vertical_split){
-               if(itr->vertical_split) draw_vertical_views(itr, &new_top_left, &new_bottom_right, true);
+          if(!first_drawn && itr == view && itr->next_vertical){
+               if(itr->next_vertical) draw_vertical_views(itr, &new_top_left, &new_bottom_right, true);
           }else{
                Point buffer_top_left = {itr->buffer_node->buffer->left_collumn, itr->buffer_node->buffer->top_row};
                ce_draw_buffer(itr->buffer_node->buffer, &new_top_left, &new_bottom_right, &buffer_top_left);
@@ -1086,7 +1083,7 @@ bool draw_horizontal_views(BufferView* view, const Point* top_left, const Point*
 
           new_top_left.x += shift;
           new_bottom_right.x += shift;
-          itr = itr->horizontal_split;
+          itr = itr->next_horizontal;
      }
 
      return true;
@@ -1097,7 +1094,7 @@ bool draw_vertical_views(BufferView* view, const Point* top_left, const Point* b
      int64_t view_count = 0;
      BufferView* itr = view;
      while(itr){
-          itr = itr->vertical_split;
+          itr = itr->next_vertical;
           view_count++;
      }
 
@@ -1110,7 +1107,7 @@ bool draw_vertical_views(BufferView* view, const Point* top_left, const Point* b
      while(itr){
           itr->top_left = new_top_left;
           itr->bottom_right = new_bottom_right;
-          if(!first_drawn && itr == view && itr->horizontal_split){
+          if(!first_drawn && itr == view && itr->next_horizontal){
                draw_horizontal_views(itr, &new_top_left, &new_bottom_right, true);
           }else{
                Point buffer_top_left = {itr->buffer_node->buffer->left_collumn, itr->buffer_node->buffer->top_row};
@@ -1119,7 +1116,7 @@ bool draw_vertical_views(BufferView* view, const Point* top_left, const Point* b
 
           new_top_left.y += shift;
           new_bottom_right.y += shift;
-          itr = itr->vertical_split;
+          itr = itr->next_vertical;
      }
 
      return true;

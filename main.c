@@ -96,7 +96,7 @@ void segv_handler(int signo){
      if(sigaction(SIGSEGV, &sa, NULL) == -1){
           // TODO: handle error
      }
-     //siglongjmp(segv_ctxt, 1);
+     siglongjmp(segv_ctxt, 1);
 }
 
 int main(int argc, char** argv)

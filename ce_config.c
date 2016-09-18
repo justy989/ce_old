@@ -211,19 +211,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          change.str = ce_dupe_string(buffer, &config_state->start_insert, cursor);
                          change.changed_str = backspace_get_string(config_state->backspace_head);
                          ce_buffer_change(&buffer_state->changes_tail, &change);
-                         char* rem = strdup(change.changed_str);
-                         char* itr = rem;
-                         while(*itr){
-                              if(*itr == NEWLINE) *itr = '|';
-                              itr++;
-                         }
-                         char* ins = strdup(change.str);
-                         itr = ins;
-                         while(*itr){
-                              if(*itr == NEWLINE) *itr = '|';
-                              itr++;
-                         }
-                         ce_message("removed str: '%s', inserted str: '%s'", rem, ins);
                          backspace_free(&config_state->backspace_head, &config_state->backspace_tail);
                     }
                }

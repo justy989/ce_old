@@ -357,16 +357,39 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }
                if(key == 'C') enter_insert_mode(config_state, cursor);
           } break;
+          case 'S':
+          {
+               // TODO: unify with cc
+               ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
+               int64_t n_deletes = ce_find_end_of_line(buffer, cursor) + 1;
+               while(n_deletes){
+                    ce_remove_char(buffer, cursor);
+                    n_deletes--;
+               }
+               enter_insert_mode(config_state, cursor);
+          } break;
           case 'c':
           case 'd':
                COMMAND{
                     if(key == config_state->command_key){ // cc or dd
-                         // delete line
-                         if(buffer->line_count){
-                              if(ce_remove_line(buffer, cursor->y)){
-                                   // TODO more explicit method to put cursor on the line
-                                   Point delta = {0, 0};
-                                   ce_move_cursor(buffer, cursor, &delta);
+                         if(key == 'c'){
+                              // TODO: unify with 'S'
+                              ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
+                              int64_t n_deletes = ce_find_end_of_line(buffer, cursor) + 1;
+                              while(n_deletes){
+                                   ce_remove_char(buffer, cursor);
+                                   n_deletes--;
+                              }
+                              enter_insert_mode(config_state, cursor);
+                         }
+                         else{
+                              // delete line
+                              if(buffer->line_count){
+                                   if(ce_remove_line(buffer, cursor->y)){
+                                        // TODO more explicit method to put cursor on the line
+                                        Point delta = {0, 0};
+                                        ce_move_cursor(buffer, cursor, &delta);
+                                   }
                               }
                          }
                     }

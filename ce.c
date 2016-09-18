@@ -331,7 +331,7 @@ bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor)
 }
 
 // return -1 on failure, delta to move left to the beginning of the word on success
-int64_t ce_find_beginning_of_word(Buffer* buffer, const Point* location)
+int64_t ce_find_beginning_of_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -345,12 +345,12 @@ int64_t ce_find_beginning_of_word(Buffer* buffer, const Point* location)
                // we are starting at a boundary move to the beginning of the previous word
                while(isblank(line[i-1]) && i) i--;
           }
-          else if(ispunct(line[i-1])){
+          else if(punctuation_word_boundaries && ispunct(line[i-1])){
                while(ispunct(line[i-1]) && i) i--;
                break;
           }
           else{
-               while(!isblank(line[i-1]) && !ispunct(line[i-1]) && i) i--;
+               while(!isblank(line[i-1]) && (!punctuation_word_boundaries || !ispunct(line[i-1])) && i) i--;
                break;
           }
      }
@@ -358,7 +358,7 @@ int64_t ce_find_beginning_of_word(Buffer* buffer, const Point* location)
 }
 
 // return -1 on failure, delta to move left to the beginning of the word on success
-int64_t ce_find_end_of_word(Buffer* buffer, const Point* location)
+int64_t ce_find_end_of_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -371,14 +371,14 @@ int64_t ce_find_end_of_word(Buffer* buffer, const Point* location)
      while(i < line_len){
           if(isblank(line[i+1])){
                // we are starting at a boundary move to the beginning of the previous word
-               while(isblank(line[i+1]) && i < line_len) i++;
+               while(isblank(line[i+1]) && i+1 < line_len) i++;
           }
-          else if(ispunct(line[i+1])){
-               while(ispunct(line[i+1]) && i < line_len) i++;
+          else if(punctuation_word_boundaries && ispunct(line[i+1])){
+               while(ispunct(line[i+1]) && i+1 < line_len) i++;
                break;
           }
           else{
-               while(!isblank(line[i+1]) && !ispunct(line[i+1]) && i < line_len) i++;
+               while(!isblank(line[i+1]) && (!punctuation_word_boundaries || !ispunct(line[i+1])) && i+1 < line_len) i++;
                break;
           }
      }

@@ -198,8 +198,6 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
      CE_CHECK_PTR_ARG(location);
      CE_CHECK_PTR_ARG(new_string);
 
-     ce_message("inserting '%s' at %ld, %ld", new_string, location->x, location->y);
-
      if(!ce_point_on_buffer(buffer, location)){
           return false;
      }
@@ -355,6 +353,91 @@ bool ce_remove_char(Buffer* buffer, const Point* location)
      return true;
 }
 
+char* ce_dupe_string(Buffer* buffer, const Point* start, const Point* end)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(start);
+     CE_CHECK_PTR_ARG(end);
+
+     if(!ce_point_on_buffer(buffer, start)) return NULL;
+     if(!ce_point_on_buffer(buffer, end)) return NULL;
+
+     if(start->y > end->y){
+          ce_message("%s() start(%ld, %ld) needs to be below end(%ld, %ld)",
+                     __FUNCTION__, start->x, start->y, end->x, end->y);
+          return NULL;
+     }
+
+     if(start->y == end->y){
+          if(start->x >= end->x){
+               ce_message("%s() start(%ld, %ld) needs to be below end(%ld, %ld)",
+                          __FUNCTION__, start->x, start->y, end->x, end->y);
+               return NULL;
+          }
+
+          // single line allocation
+          int64_t len = end->x - start->x;
+          char* new_str = malloc(len + 1);
+          if(!new_str){
+               ce_message("%s() failed to alloc string", __FUNCTION__);
+               return NULL;
+          }
+          strncpy(new_str, buffer->lines[start->y] + start->x, len);
+          new_str[len] = 0;
+
+          return new_str;
+     }
+
+     // multi line allocation
+
+     // count total length
+     int64_t len = 1; // account for newline
+     if(buffer->lines[start->y]) len += strlen(buffer->lines[start->y] + start->x);
+     for(int64_t i = start->y + 1; i < end->y; ++i){
+          if(buffer->lines[i]) len += strlen(buffer->lines[i]);
+          len++; // account for newline
+     }
+     len += end->x; // do not account for newline
+
+     // build string
+     char* new_str = malloc(len + 1);
+     if(!new_str){
+          ce_message("%s() failed to alloc string", __FUNCTION__);
+          return NULL;
+     }
+
+     char* itr = new_str;
+     if(buffer->lines[start->y]){
+          int64_t len = strlen(buffer->lines[start->y] + start->x);
+          strncpy(itr, buffer->lines[start->y] + start->x, len);
+          itr[len] = '\n'; // add newline
+          itr += len + 1;
+     }
+
+     for(int64_t i = start->y + 1; i < end->y; ++i){
+          if(buffer->lines[i]){
+               int64_t len = strlen(buffer->lines[i]);
+               strncpy(itr, buffer->lines[i], len);
+               itr[len] = '\n';
+               itr += len + 1;
+          }
+     }
+
+     strncpy(itr, buffer->lines[end->y], end->x);
+     new_str[len] = 0;
+
+     return new_str;
+}
+
+char* ce_dupe_line(Buffer* buffer, int64_t line)
+{
+     Point start = {0, line};
+     int64_t line_len = 0;
+     if(buffer->lines[line]) line_len = strlen(buffer->lines[line]);
+     Point end = {line_len, line};
+     return ce_dupe_string(buffer, &start, &end);
+}
+
 bool ce_get_char(Buffer* buffer, const Point* location, char* c)
 {
      CE_CHECK_PTR_ARG(buffer);
@@ -363,6 +446,18 @@ bool ce_get_char(Buffer* buffer, const Point* location, char* c)
      if(!ce_point_on_buffer(buffer, location)) return false;
 
      *c = buffer->lines[location->y][location->x];
+
+     return true;
+}
+
+bool ce_set_char(Buffer* buffer, const Point* location, char c)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+
+     if(!ce_point_on_buffer(buffer, location)) return false;
+
+     buffer->lines[location->y][location->x] = c;
 
      return true;
 }
@@ -477,14 +572,14 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
 
           if(current_line){
                length -= rest_of_the_line_len;
-               length--; // account for line newline
                line_index++;
           }else{
                // removing has to be counted as 1 in length due to 'newline' character's being used
                // to insert strings. They need to be symmetrical
                ce_remove_line(buffer, location->y);
-               length--;
           }
+
+          length--; // account for line newline at the end of lines that doesn't physically exist
 
           while(length >= 0){
                if(line_index >= buffer->line_count) break;
@@ -498,9 +593,10 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
                     if(next_line_len != 0){
                          length -= next_line_len;
                     }
-                    length--; // account for line newline
+                    length--; // account for line newline at the end of lines that doesn't physically exist
                }else{
-                    int64_t new_line_len = location->x + next_line_len - length;
+                    int64_t next_line_part_len = next_line_len - length;
+                    int64_t new_line_len = location->x + next_line_part_len;
                     char* new_line = malloc(new_line_len + 1);
                     if(!new_line){
                          ce_message("%s() failed to malloc new line", __FUNCTION__);
@@ -508,7 +604,7 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
                     }
 
                     strncpy(new_line, current_line, location->x);
-                    strncpy(new_line + location->x, next_line + length, next_line_len);
+                    strncpy(new_line + location->x, next_line + length, next_line_part_len);
                     new_line[new_line_len] = 0;
                     buffer->lines[location->y] = new_line;
                     ce_remove_line(buffer, line_index);
@@ -783,9 +879,10 @@ bool ce_buffer_change(BufferChangeNode** tail, const BufferChange* change)
                     itr = itr->next;
                     if(tmp->change.type == BCT_INSERT_STRING ||
                        tmp->change.type == BCT_REMOVE_STRING){
-                         if(tmp->change.str){
-                              free(tmp->change.str);
-                         }
+                         if(tmp->change.str) free(tmp->change.str);
+                    }else if(tmp->change.type == BCT_CHANGE_STRING){
+                         if(tmp->change.str) free(tmp->change.str);
+                         if(tmp->change.changed_str) free(tmp->change.changed_str);
                     }
                     free(tmp);
                }
@@ -832,6 +929,13 @@ bool ce_buffer_undo(Buffer* buffer, BufferChangeNode** tail)
      case BCT_REMOVE_STRING:
           ce_insert_string(buffer, &change->start, change->str);
           break;
+     case BCT_CHANGE_CHAR:
+          ce_set_char(buffer, &change->start, change->c);
+          break;
+     case BCT_CHANGE_STRING:
+          ce_remove_string(buffer, &change->start, strlen(change->str));
+          ce_insert_string(buffer, &change->start, change->changed_str);
+          break;
      }
 
      *tail = (*tail)->prev;
@@ -874,6 +978,13 @@ bool ce_buffer_redo(Buffer* buffer, BufferChangeNode** tail)
           break;
      case BCT_REMOVE_STRING:
           ce_remove_string(buffer, &change->start, strlen(change->str));
+          break;
+     case BCT_CHANGE_CHAR:
+          ce_set_char(buffer, &change->start, change->changed_c);
+          break;
+     case BCT_CHANGE_STRING:
+          ce_remove_string(buffer, &change->start, strlen(change->changed_str));
+          ce_insert_string(buffer, &change->start, change->str);
           break;
      }
 

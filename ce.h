@@ -55,6 +55,8 @@ typedef enum {
      BCT_INSERT_STRING,
      BCT_REMOVE_CHAR,
      BCT_REMOVE_STRING,
+     BCT_CHANGE_CHAR,
+     BCT_CHANGE_STRING,
 } BufferChangeType;
 
 typedef struct BufferChange {
@@ -64,6 +66,10 @@ typedef struct BufferChange {
      union {
           char c;
           char* str;
+     };
+     union {
+          char changed_c;
+          char* changed_str;
      };
 } BufferChange;
 
@@ -91,7 +97,9 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* string)
 bool ce_append_string(Buffer* buffer, int64_t line, const char* string);
 bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length);
 bool ce_remove_char(Buffer* buffer, const Point* location);
+char* ce_dupe_string(Buffer* buffer, const Point* start, const Point* end);
 bool ce_get_char(Buffer* buffer, const Point* location, char* c);
+bool ce_set_char(Buffer* buffer, const Point* location, char c);
 
 // NOTE: passing NULL to string causes an empty line to be inserted
 bool ce_insert_line(Buffer* buffer, int64_t line, const char* string);

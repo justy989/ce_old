@@ -10,6 +10,8 @@ TODO:
 -window management library
 -client/server
 -UNDO DURING MACROS!
+-EDITABLE MACROS
+-STEP THROUGH MACROS
 
 WANTS:
 -realloc() rather than malloc() ?
@@ -94,7 +96,7 @@ void segv_handler(int signo){
      if(sigaction(SIGSEGV, &sa, NULL) == -1){
           // TODO: handle error
      }
-     siglongjmp(segv_ctxt, 1);
+     //siglongjmp(segv_ctxt, 1);
 }
 
 int main(int argc, char** argv)

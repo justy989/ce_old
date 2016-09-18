@@ -41,6 +41,9 @@ typedef struct {
      char** lines; // '\0' terminated, does not contain newlines, NULL if empty
      int64_t line_count;
      char* filename;
+     Point cursor;
+     int64_t top_row;
+     int64_t left_collumn;
      void* user_data;
 } Buffer;
 
@@ -78,6 +81,16 @@ typedef struct BufferChangeNode {
      struct BufferChangeNode* prev;
      struct BufferChangeNode* next;
 } BufferChangeNode;
+
+typedef struct BufferView {
+     Point top_left;
+     Point bottom_right;
+     BufferNode* buffer_node;
+     struct BufferView* horizontal_split; // []|[]
+     struct BufferView* vertical_split; // []
+                                        // --
+                                        // []
+} BufferView;
 
 typedef bool ce_initializer(BufferNode*, Point*, int, char**, void**);
 typedef void ce_destroyer(BufferNode*, void*);
@@ -117,10 +130,14 @@ BufferNode* ce_append_buffer_to_list(BufferNode* head, Buffer* buffer);
 bool ce_remove_buffer_from_list(BufferNode* head, BufferNode** node);
 
 bool ce_move_cursor(const Buffer* buffer, Point* cursor, const Point* delta);
-bool ce_follow_cursor(const Point* cursor, int64_t* top_line, int64_t* left_collumn, int64_t view_height, int64_t view_width);
+bool ce_follow_cursor(const Point* cursor, int64_t* top_row, int64_t* left_collumn, int64_t view_height, int64_t view_width);
 
 bool ce_buffer_change(BufferChangeNode** tail, const BufferChange* change);
 bool ce_buffer_undo(Buffer* buffer, BufferChangeNode** tail);
 bool ce_buffer_redo(Buffer* buffer, BufferChangeNode** tail);
+
+bool ce_split_view(BufferView* view, BufferNode* buffer_node, bool horizontal);
+bool ce_draw_view(BufferView* view);
+bool ce_free_view(BufferView** view);
 
 #endif

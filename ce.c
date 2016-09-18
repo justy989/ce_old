@@ -722,6 +722,10 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
           return false;
      }
 
+     // TODO: remove
+     ce_message("%ld, %ld -> %ld, %ld b: %ld, %ld", term_top_left->x, term_top_left->y,
+                term_bottom_right->x, term_bottom_right->y, buffer_top_left->x, buffer_top_left->y);
+
      char line_to_print[g_terminal_dimensions->x];
 
      int64_t max_width = term_bottom_right->x - term_top_left->x;
@@ -825,21 +829,21 @@ bool ce_move_cursor(const Buffer* buffer, Point* cursor, const Point* delta)
 }
 
 // TODO: Threshold for top, left, bottom and right before scrolling happens
-bool ce_follow_cursor(const Point* cursor, int64_t* top_line, int64_t* left_collumn, int64_t view_height, int64_t view_width)
+bool ce_follow_cursor(const Point* cursor, int64_t* top_row, int64_t* left_collumn, int64_t view_height, int64_t view_width)
 {
      CE_CHECK_PTR_ARG(cursor);
-     CE_CHECK_PTR_ARG(top_line);
+     CE_CHECK_PTR_ARG(top_row);
 
      view_height--;
      view_width--;
 
-     int64_t bottom_line = *top_line + view_height;
+     int64_t bottom_row = *top_row + view_height;
 
-     if(cursor->y < *top_line){
-          *top_line = cursor->y;
-     }else if(cursor->y > bottom_line){
-          bottom_line = cursor->y;
-          *top_line = bottom_line - view_height;
+     if(cursor->y < *top_row){
+          *top_row = cursor->y;
+     }else if(cursor->y > bottom_row){
+          bottom_row = cursor->y;
+          *top_row = bottom_row - view_height;
      }
 
      int64_t right_collumn = *left_collumn + view_width;
@@ -989,4 +993,143 @@ bool ce_buffer_redo(Buffer* buffer, BufferChangeNode** tail)
      }
 
      return true;
+}
+
+bool ce_split_view(BufferView* view, BufferNode* buffer_node, bool horizontal)
+{
+     CE_CHECK_PTR_ARG(view);
+     CE_CHECK_PTR_ARG(buffer_node);
+
+     BufferView* itr = view;
+
+     // loop to the end of the list
+     if(horizontal){
+          while(itr->horizontal_split){
+               itr = itr->horizontal_split;
+          }
+     }else{
+          while(itr->vertical_split){
+               itr = itr->vertical_split;
+          }
+     }
+
+     BufferView* new_view = malloc(sizeof(*new_view));
+     if(!new_view){
+          ce_message("%s() failed to allocate buffer view", __FUNCTION__);
+          return false;
+     }
+
+     new_view->buffer_node = buffer_node;
+     new_view->horizontal_split = NULL;
+     new_view->vertical_split = NULL;
+
+     if(horizontal){
+          itr->horizontal_split = new_view;
+     }else{
+          itr->vertical_split = new_view;
+     }
+
+     return true;
+}
+
+// NOTE: recursive function for free-ing splits
+bool free_buffer_view(BufferView* view)
+{
+     CE_CHECK_PTR_ARG(view);
+
+     if(view->horizontal_split) free_buffer_view(view->horizontal_split);
+     if(view->vertical_split) free_buffer_view(view->vertical_split);
+
+     free(view);
+
+     return true;
+}
+
+bool ce_free_view(BufferView** view)
+{
+     CE_CHECK_PTR_ARG(view);
+
+     if(!free_buffer_view(*view)){
+          return false;
+     }
+
+     *view = NULL;
+     return true;
+}
+
+bool draw_vertical_views(BufferView* view, const Point* top_left, const Point* bottom_right, bool first_drawn);
+
+bool draw_horizontal_views(BufferView* view, const Point* top_left, const Point* bottom_right, bool first_drawn)
+{
+     int64_t view_count = 0;
+     BufferView* itr = view;
+     while(itr){
+          itr = itr->horizontal_split;
+          view_count++;
+     }
+
+     int64_t shift = (bottom_right->x - top_left->x) / view_count;
+     Point new_top_left = *top_left;
+     Point new_bottom_right = *bottom_right;
+     new_bottom_right.x = new_top_left.x + shift;
+
+     itr = view;
+     while(itr){
+          itr->top_left = new_top_left;
+          itr->bottom_right = new_bottom_right;
+          if(!first_drawn && itr == view && itr->vertical_split){
+               if(itr->vertical_split) draw_vertical_views(itr, &new_top_left, &new_bottom_right, true);
+          }else{
+               Point buffer_top_left = {itr->buffer_node->buffer->left_collumn, itr->buffer_node->buffer->top_row};
+               ce_draw_buffer(itr->buffer_node->buffer, &new_top_left, &new_bottom_right, &buffer_top_left);
+          }
+
+          new_top_left.x += shift;
+          new_bottom_right.x += shift;
+          itr = itr->horizontal_split;
+     }
+
+     return true;
+}
+
+bool draw_vertical_views(BufferView* view, const Point* top_left, const Point* bottom_right, bool first_drawn)
+{
+     int64_t view_count = 0;
+     BufferView* itr = view;
+     while(itr){
+          itr = itr->vertical_split;
+          view_count++;
+     }
+
+     int64_t shift = (bottom_right->y - top_left->y) / view_count;
+     Point new_top_left = *top_left;
+     Point new_bottom_right = *bottom_right;
+     new_bottom_right.y = new_top_left.y + shift;
+
+     itr = view;
+     while(itr){
+          itr->top_left = new_top_left;
+          itr->bottom_right = new_bottom_right;
+          if(!first_drawn && itr == view && itr->horizontal_split){
+               draw_horizontal_views(itr, &new_top_left, &new_bottom_right, true);
+          }else{
+               Point buffer_top_left = {itr->buffer_node->buffer->left_collumn, itr->buffer_node->buffer->top_row};
+               ce_draw_buffer(itr->buffer_node->buffer, &new_top_left, &new_bottom_right, &buffer_top_left);
+          }
+
+          new_top_left.y += shift;
+          new_bottom_right.y += shift;
+          itr = itr->vertical_split;
+     }
+
+     return true;
+}
+
+bool ce_draw_view(BufferView* view)
+{
+     CE_CHECK_PTR_ARG(view);
+
+     Point top_left = {0, 0};
+     Point bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 1};
+     return draw_horizontal_views(view, &top_left, &bottom_right, false);
 }

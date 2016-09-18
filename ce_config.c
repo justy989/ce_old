@@ -79,19 +79,16 @@ void backspace_free(BackspaceNode** head, BackspaceNode** tail)
 
 typedef struct{
      bool insert;
-     bool split;
      int last_key;
      BufferNode* current_buffer_node;
      Point start_insert;
      Point original_start_insert;
      BackspaceNode* backspace_head;
      BackspaceNode* backspace_tail;
+     BufferView* buffer_view;
 } ConfigState;
 
 typedef struct{
-     Point cursor;
-     int64_t start_line;
-     int64_t left_collumn;
      BufferChangeNode* changes_tail;
 } BufferState;
 
@@ -123,11 +120,19 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
      if(!config_state) return false;
 
      config_state->insert = false;
-     config_state->split = false;
      config_state->last_key = 0;
-     config_state->current_buffer_node = head;
+     config_state->current_buffer_node = head ? head->next : head;
      config_state->backspace_head = NULL;
      config_state->backspace_tail = NULL;
+     config_state->buffer_view = malloc(sizeof(*config_state->buffer_view));
+     if(!config_state->buffer_view){
+          ce_message("failed to allocate buffer view.");
+          return false;
+     }
+
+     config_state->buffer_view->buffer_node = head->next;
+     config_state->buffer_view->horizontal_split = NULL;
+     config_state->buffer_view->vertical_split = NULL;
 
      *user_data = config_state;
 
@@ -138,9 +143,6 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
                ce_message("failed to allocate buffer state.");
                return false;
           }
-          buffer_state->cursor.x = 0;
-          buffer_state->cursor.y = 0;
-          buffer_state->start_line = 0;
           buffer_state->changes_tail = malloc(sizeof(*buffer_state->changes_tail));
           buffer_state->changes_tail->change.type = BCT_NONE;
           buffer_state->changes_tail->next = NULL;
@@ -161,6 +163,10 @@ bool destroyer(BufferNode* head, void* user_data)
           head = head->next;
      }
 
+     ConfigState* config_state = user_data;
+     if(config_state->buffer_view){
+          ce_free_view(&config_state->buffer_view);
+     }
      free(user_data);
      return true;
 }
@@ -170,7 +176,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
      ConfigState* config_state = user_data;
      Buffer* buffer = config_state->current_buffer_node->buffer;
      BufferState* buffer_state = buffer->user_data;
-     Point* cursor = &buffer_state->cursor;
+     Point* cursor = &buffer->cursor;
 
      config_state->last_key = key;
 
@@ -321,7 +327,10 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                ce_save_buffer(buffer, buffer->filename);
                break;
           case 'v':
-               config_state->split = !config_state->split;
+               ce_split_view(config_state->buffer_view, config_state->current_buffer_node, true);
+               break;
+          case 'c':
+               ce_split_view(config_state->buffer_view, config_state->current_buffer_node, false);
                break;
           case 'b':
                config_state->current_buffer_node = config_state->current_buffer_node->next;
@@ -379,37 +388,25 @@ void view_drawer(const BufferNode* head, void* user_data)
      (void)(head);
      ConfigState* config_state = user_data;
      Buffer* buffer = config_state->current_buffer_node->buffer;
-     BufferState* buffer_state = buffer->user_data;
+     BufferView* buffer_view = config_state->buffer_view;
+     Point* cursor = &buffer->cursor;
 
-     int64_t bottom = g_terminal_dimensions->y - 1;
-     int64_t right = g_terminal_dimensions->x - 1;
-
-     ce_follow_cursor(&buffer_state->cursor, &buffer_state->start_line, &buffer_state->left_collumn,
-                      bottom, right);
+     ce_follow_cursor(cursor, &buffer->top_row, &buffer->left_collumn,
+                      buffer_view->bottom_right.y, buffer_view->bottom_right.x);
 
      // print the range of lines we want to show
-     Point buffer_top_left = {buffer_state->left_collumn, buffer_state->start_line};
      if(buffer->line_count){
           standend();
-          Point term_top_left = {0, 0};
-          Point term_bottom_right = {right, bottom};
-          if(!config_state->split){
-               ce_draw_buffer(buffer, &term_top_left, &term_bottom_right, &buffer_top_left);
-          }else{
-               term_bottom_right.x = (g_terminal_dimensions->x / 2) - 1;
-               ce_draw_buffer(buffer, &term_top_left, &term_bottom_right, &buffer_top_left);
-
-               term_top_left.x = (g_terminal_dimensions->x / 2);
-               term_bottom_right.x = term_top_left.x + ((g_terminal_dimensions->x / 2) - 1);
-               ce_draw_buffer(buffer, &term_top_left, &term_bottom_right, &buffer_top_left);
-          }
+          ce_draw_view(config_state->buffer_view);
      }
 
      attron(A_REVERSE);
-     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s %d lines, key %d, cursor %ld, %ld", config_state->insert ? "INSERT" : "NORMAL",
-              buffer->filename, buffer->line_count, config_state->last_key, buffer_state->cursor.x, buffer_state->cursor.y);
+     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s %d lines, key %d, cursor %ld, %ld, top left: %ld, %ld",
+              config_state->insert ? "INSERT" : "NORMAL", buffer->filename, buffer->line_count, config_state->last_key,
+              cursor->x, cursor->y, buffer->top_row, buffer->left_collumn);
      attroff(A_REVERSE);
 
      // reset the cursor
-     move(buffer_state->cursor.y - buffer_top_left.y, buffer_state->cursor.x - buffer_top_left.x);
+     move(cursor->y - buffer->top_row + config_state->buffer_view->top_left.y,
+          cursor->x - buffer->left_collumn + config_state->buffer_view->top_left.x);
 }

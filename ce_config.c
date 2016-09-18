@@ -347,6 +347,16 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }
                enter_insert_mode(config_state, cursor);
                break;
+          case 'C':
+          case 'D':
+          {
+               int64_t n_deletes = ce_find_end_of_line(buffer, cursor) + 1;
+               while(n_deletes){
+                    ce_remove_char(buffer, cursor);
+                    n_deletes--;
+               }
+               if(key == 'C') enter_insert_mode(config_state, cursor);
+          } break;
           case 'c':
           case 'd':
                COMMAND{
@@ -374,6 +384,13 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          int64_t n_deletes = ce_find_beginning_of_word(buffer, cursor, key == 'b');
                          while(n_deletes){
                               cursor->x--;
+                              ce_remove_char(buffer, cursor);
+                              n_deletes--;
+                         }
+                    }
+                    else if(key == '$'){
+                         int64_t n_deletes = ce_find_end_of_line(buffer, cursor) + 1;
+                         while(n_deletes){
                               ce_remove_char(buffer, cursor);
                               n_deletes--;
                          }

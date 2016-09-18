@@ -664,8 +664,6 @@ int64_t ce_find_end_of_line(const Buffer* buffer, Point* cursor)
 
      const char* line = buffer->lines[cursor->y];
      return (strlen(line) - 1) - cursor->x;
-
-     return true;
 }
 
 bool ce_move_cursor(const Buffer* buffer, Point* cursor, const Point* delta)

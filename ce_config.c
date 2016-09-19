@@ -402,8 +402,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                                         backspace_append(&buffer_state->backspace_tail, &buffer_state->backspace_head, c);
                                         config_state->start_insert.x--;
                                    }
-                                   Point delta = {-1, 0};
-                                   ce_move_cursor(buffer, cursor, &delta);
+                                   // cannot use move_cursor due to not being able to be ahead of the last character
+                                   cursor->x--;
                               }
                          }
                     }
@@ -512,8 +512,9 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           }
           case 'a':
           {
-               Point delta = {1, 0};
-               ce_move_cursor(buffer, cursor, &delta);
+               if(buffer->lines[cursor->y] && cursor->x < (int64_t)(strlen(buffer->lines[cursor->y]))){
+                    cursor->x++;
+               }
                enter_insert_mode(config_state, cursor);
           } break;
           case 'C':

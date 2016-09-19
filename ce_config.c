@@ -621,6 +621,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           {
                BufferView* new_view = ce_split_view(config_state->view_current, config_state->view_current->buffer_node, true);
                if(new_view){
+                    ce_calc_views(config_state->view_head);
                     new_view->cursor = config_state->view_current->cursor;
                     new_view->top_row = config_state->view_current->top_row;
                     new_view->left_collumn = config_state->view_current->left_collumn;

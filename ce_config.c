@@ -199,7 +199,14 @@ void enter_insert_mode(ConfigState* config_state, Point* cursor)
      config_state->start_insert = *cursor;
 }
 
-#define COMMAND if(config_state->command_key == '\0'){ config_state->command_key = key; } else
+bool should_handle_command(ConfigState* config_state, char key)
+{
+     if(config_state->command_key == '\0'){
+          config_state->command_key = key;
+          return false;
+     }
+     return true;
+}
 
 bool key_handler(int key, BufferNode* head, void* user_data)
 {
@@ -370,7 +377,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case 'c':
           case 'd':
-               COMMAND{
+               if(should_handle_command(config_state, key)){
                     bool handled_key = true;
                     if(key == config_state->command_key){ // cc or dd
                          if(key == 'c'){
@@ -446,7 +453,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                config_state->split = !config_state->split;
                break;
           case 'g':
-               COMMAND{
+               if(should_handle_command(config_state, key)){
                     if(key == 't'){
                          config_state->current_buffer_node = config_state->current_buffer_node->next;
                          if(!config_state->current_buffer_node){
@@ -497,7 +504,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'F':
           case 'T':
           {
-               COMMAND{
+               if(should_handle_command(config_state, key)){
                     config_state->find_command.command_key = config_state->command_key;
                     config_state->find_command.find_char = key;
                     find_command(config_state->command_key, key, buffer, cursor);
@@ -507,7 +514,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case 'r':
           {
-               COMMAND{
+               if(should_handle_command(config_state, key)){
                     ce_set_char(buffer, cursor, key);
                     // TODO: devise a better way to clear command_key following a movement
                     config_state->command_key = '\0';

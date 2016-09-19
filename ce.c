@@ -1,6 +1,5 @@
 #define _GNU_SOURCE
 #include "ce.h"
-#include <assert.h>
 #include <ctype.h>
 #include <string.h>
 #include <inttypes.h>
@@ -370,33 +369,30 @@ bool ce_find_match(Buffer* buffer, const Point* location, Point* delta)
           return false;
      }
 
-     int64_t n_lines = (d == CE_UP) ? location->y : buffer->line_count - location->y;
-     uint64_t counter = 1;
-     int64_t line = location->y;
-     assert(d == -1 || d == 1);
      const char* iter_char = cur_char + d;
-     for(int64_t i = 0; counter && i < n_lines; i++){
-          const char* line_str = buffer->lines[line];
-          if(line_str){
-               if(!iter_char){
-                    iter_char = (d == CE_UP) ? &line_str[strlen(line_str) - 1] : line_str;
+     uint64_t counter = 1; // when counter goes to 0, we have found our match
+
+     int64_t line = location->y;
+     const char* line_str = buffer->lines[line];
+
+     int64_t n_lines = (d == CE_UP) ? location->y : buffer->line_count - location->y;
+     for(int64_t i = 0; counter && i < n_lines;){
+          while(*iter_char != '\0'){
+               // loop over line
+               if(*iter_char == match){
+                    if(--counter == 0) goto found_match;
+               } else if(*iter_char == *cur_char){
+                    counter++;
                }
-               while(*iter_char != '\0'){
-                    // loop over line
-                    if(*iter_char == match){
-                         if(--counter == 0) break;
-                    } else if(*iter_char == *cur_char){
-                         counter++;
-                    }
-                    iter_char += d;
-               }
+               iter_char += d;
           }
-          if(counter){
-               line += d;
-               iter_char = NULL;
-          }
+
+          do i++;
+          while(!(line_str = buffer->lines[line += d]) && ++i < n_lines);
+          iter_char = (d == CE_UP) ? &line_str[strlen(line_str) - 1] : line_str;
      }
 
+found_match:
      delta->x = (iter_char - buffer->lines[line]) - location->x;
      delta->y = line - location->y;
      return !counter;

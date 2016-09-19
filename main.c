@@ -158,6 +158,7 @@ int main(int argc, char** argv)
      buffer_list_head->next = NULL;
 
      Point terminal_dimensions = {0, 0};
+     getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);
      g_terminal_dimensions = &terminal_dimensions;
 
      void* user_data = NULL;

@@ -132,6 +132,7 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
      }
 
      memset(config_state->view_head, 0, sizeof(*config_state->view_head));
+     config_state->view_head->bottom_right = *g_terminal_dimensions;
      config_state->view_head->buffer_node = head ? head->next : head;
 
      config_state->view_current = config_state->view_head;
@@ -382,45 +383,47 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case 8: // Ctrl + h
           {
-               if(config_state->view_current->prev_horizontal){
-                    config_state->view_current = config_state->view_current->prev_horizontal;
-               }else if(config_state->view_current->next_horizontal){
-                    while(config_state->view_current->next_horizontal){
-                         config_state->view_current = config_state->view_current->next_horizontal;
-                    }
+               Point point = config_state->view_current->top_left;
+               point.y = cursor->y;
+               point.x -= 2; // move over by 1 so we are searching outsize our buffer
+               if(point.x < 0) point.x += g_terminal_dimensions->x - 1;
+               BufferView* next_view = ce_find_view_at_point(config_state->view_head, &point);
+               if(next_view){
+                    config_state->view_current = next_view;
                }
           }
           break;
           case 10: // Ctrl + j
           {
-               if(config_state->view_current->next_vertical){
-                    config_state->view_current = config_state->view_current->next_vertical;
-               }else if(config_state->view_current->prev_vertical){
-                    while(config_state->view_current->prev_vertical){
-                         config_state->view_current = config_state->view_current->prev_vertical;
-                    }
+               Point point = config_state->view_current->bottom_right;
+               point.y += 2; // move over by 1 so we are searching outsize our buffer
+               if(point.y >= g_terminal_dimensions->y - 1) point.y = 0;
+               BufferView* next_view = ce_find_view_at_point(config_state->view_head, &point);
+               if(next_view){
+                    config_state->view_current = next_view;
                }
           }
           break;
           case 11: // Ctrl + k
           {
-               if(config_state->view_current->prev_vertical){
-                    config_state->view_current = config_state->view_current->prev_vertical;
-               }else if(config_state->view_current->next_vertical){
-                    while(config_state->view_current->next_vertical){
-                         config_state->view_current = config_state->view_current->next_vertical;
-                    }
+               Point point = config_state->view_current->top_left;
+               point.y -= 2; // move over by 1 so we are searching outsize our buffer
+               if(point.y < 0) point.y += g_terminal_dimensions->y - 1;
+               BufferView* next_view = ce_find_view_at_point(config_state->view_head, &point);
+               if(next_view){
+                    config_state->view_current = next_view;
                }
           }
           break;
           case 12: // Ctrl + l
           {
-               if(config_state->view_current->next_horizontal){
-                    config_state->view_current = config_state->view_current->next_horizontal;
-               }else if(config_state->view_current->prev_horizontal){
-                    while(config_state->view_current->prev_horizontal){
-                         config_state->view_current = config_state->view_current->prev_horizontal;
-                    }
+               Point point = config_state->view_current->bottom_right;
+               point.y = cursor->y;
+               point.x += 2;
+               if(point.x >= g_terminal_dimensions->x - 1) point.x = 0;
+               BufferView* next_view = ce_find_view_at_point(config_state->view_head, &point);
+               if(next_view){
+                    config_state->view_current = next_view;
                }
           }
           break;
@@ -450,9 +453,9 @@ void view_drawer(const BufferNode* head, void* user_data)
      }
 
      attron(A_REVERSE);
-     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s %d lines, key %d, cursor %ld, %ld, top left: %ld, %ld",
+     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s %d lines, key %d, cursor %ld, %ld, buffer: %ld, %ld, term: %ld, %ld",
               config_state->insert ? "INSERT" : "NORMAL", buffer->filename, buffer->line_count, config_state->last_key,
-              cursor->x, cursor->y, buffer->top_row, buffer->left_collumn);
+              cursor->x, cursor->y, buffer->top_row, buffer->left_collumn, g_terminal_dimensions->x, g_terminal_dimensions->y);
      attroff(A_REVERSE);
 
      // reset the cursor

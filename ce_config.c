@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <ctype.h>
 #include <unistd.h>
+#include <inttypes.h>
 
 typedef struct{
      bool insert;
@@ -568,7 +569,7 @@ void view_drawer(const BufferNode* head, void* user_data)
      }
 
      attron(A_REVERSE);
-     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s %d lines, key %d", config_state->insert ? "INSERT" : "NORMAL",
+     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s %"PRId64" lines, key %d", config_state->insert ? "INSERT" : "NORMAL",
               buffer->name, buffer->line_count, config_state->last_key);
      attroff(A_REVERSE);
 

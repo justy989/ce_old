@@ -42,8 +42,6 @@ typedef struct {
      int64_t line_count;
      char* filename;
      Point cursor;
-     int64_t top_row;
-     int64_t left_collumn;
      void* user_data;
 } Buffer;
 
@@ -89,8 +87,11 @@ typedef struct BufferChangeNode {
 // --
 // []
 typedef struct BufferView {
+     Point cursor;
      Point top_left;
      Point bottom_right;
+     int64_t top_row;
+     int64_t left_collumn;
      BufferNode* buffer_node;
      struct BufferView* next_horizontal;
      struct BufferView* next_vertical;
@@ -140,9 +141,10 @@ bool ce_buffer_change(BufferChangeNode** tail, const BufferChange* change);
 bool ce_buffer_undo(Buffer* buffer, BufferChangeNode** tail);
 bool ce_buffer_redo(Buffer* buffer, BufferChangeNode** tail);
 
-bool ce_split_view(BufferView* view, BufferNode* buffer_node, bool horizontal);
+BufferView* ce_split_view(BufferView* view, BufferNode* buffer_node, bool horizontal);
 bool ce_remove_view(BufferView* head, BufferView* view);
-bool ce_draw_view(BufferView* head);
+bool ce_calc_views(BufferView* head);
+bool ce_draw_views(const BufferView* head);
 bool ce_free_views(BufferView** view);
 BufferView* ce_find_view_at_point(BufferView* head, const Point* point);
 

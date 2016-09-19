@@ -991,7 +991,7 @@ bool ce_buffer_redo(Buffer* buffer, BufferChangeNode** tail)
      return true;
 }
 
-bool ce_split_view(BufferView* view, BufferNode* buffer_node, bool horizontal)
+BufferView* ce_split_view(BufferView* view, BufferNode* buffer_node, bool horizontal)
 {
      CE_CHECK_PTR_ARG(view);
      CE_CHECK_PTR_ARG(buffer_node);
@@ -1012,11 +1012,14 @@ bool ce_split_view(BufferView* view, BufferNode* buffer_node, bool horizontal)
      BufferView* new_view = malloc(sizeof(*new_view));
      if(!new_view){
           ce_message("%s() failed to allocate buffer view", __FUNCTION__);
-          return false;
+          return NULL;
      }
 
      memset(new_view, 0, sizeof(*new_view));
      new_view->buffer_node = buffer_node;
+     new_view->bottom_right = *g_terminal_dimensions;
+
+     if(buffer_node->buffer) new_view->cursor = buffer_node->buffer->cursor;
 
      if(horizontal){
           itr->next_horizontal = new_view;
@@ -1024,7 +1027,7 @@ bool ce_split_view(BufferView* view, BufferNode* buffer_node, bool horizontal)
           itr->next_vertical = new_view;
      }
 
-     return true;
+     return new_view;
 }
 
 BufferView* find_connecting_view(BufferView* start, BufferView* match)
@@ -1120,9 +1123,9 @@ bool ce_free_views(BufferView** head)
      return true;
 }
 
-bool draw_vertical_views(BufferView* view, const Point* top_left, const Point* bottom_right, bool first_drawn);
+bool calc_vertical_views(BufferView* view, const Point* top_left, const Point* bottom_right, bool first_calc);
 
-bool draw_horizontal_views(BufferView* view, const Point* top_left, const Point* bottom_right, bool first_drawn)
+bool calc_horizontal_views(BufferView* view, const Point* top_left, const Point* bottom_right, bool first_calc)
 {
      int64_t view_count = 0;
      BufferView* itr = view;
@@ -1141,23 +1144,17 @@ bool draw_horizontal_views(BufferView* view, const Point* top_left, const Point*
      while(itr){
           itr->top_left = new_top_left;
           itr->bottom_right = new_bottom_right;
-          if(!first_drawn && itr == view && itr->next_vertical){
-               draw_vertical_views(itr, &new_top_left, &new_bottom_right, true);
+          if(!first_calc && itr == view && itr->next_vertical){
+               calc_vertical_views(itr, &new_top_left, &new_bottom_right, true);
           }else if(itr != view && itr->next_vertical){
-               draw_vertical_views(itr, &new_top_left, &new_bottom_right, true);
-          }else{
-               Point buffer_top_left = {itr->buffer_node->buffer->left_collumn, itr->buffer_node->buffer->top_row};
-               ce_draw_buffer(itr->buffer_node->buffer, &new_top_left, &new_bottom_right, &buffer_top_left);
+               calc_vertical_views(itr, &new_top_left, &new_bottom_right, true);
           }
 
           if(itr->next_horizontal){
-               for(int64_t i = new_top_left.y; i <= new_bottom_right.y; ++i){
-                    move(i, new_bottom_right.x);
-                    addch('|'); // TODO: make configurable
-               }
+               new_top_left.x++;
           }
 
-          new_top_left.x += shift + 1;
+          new_top_left.x += shift;
           new_bottom_right.x = new_top_left.x + shift;
           if(new_bottom_right.x >= g_terminal_dimensions->x) new_bottom_right.x = g_terminal_dimensions->x - 1;
           itr = itr->next_horizontal;
@@ -1166,7 +1163,7 @@ bool draw_horizontal_views(BufferView* view, const Point* top_left, const Point*
      return true;
 }
 
-bool draw_vertical_views(BufferView* view, const Point* top_left, const Point* bottom_right, bool first_drawn)
+bool calc_vertical_views(BufferView* view, const Point* top_left, const Point* bottom_right, bool first_calc)
 {
      int64_t view_count = 0;
      BufferView* itr = view;
@@ -1175,33 +1172,23 @@ bool draw_vertical_views(BufferView* view, const Point* top_left, const Point* b
           view_count++;
      }
 
-     int64_t width = bottom_right->x - top_left->x;
      int64_t shift = (bottom_right->y - top_left->y) / view_count;
      Point new_top_left = *top_left;
      Point new_bottom_right = *bottom_right;
      new_bottom_right.y = new_top_left.y + shift;
      if(new_bottom_right.y >= g_terminal_dimensions->y) new_bottom_right.y = g_terminal_dimensions->y - 1;
 
-     char separators[width+1];
-     for(int i = 0; i < width; ++i) separators[i] = '-'; // TODO: make configurable
-     separators[width] = 0;
-
      itr = view;
      while(itr){
           itr->top_left = new_top_left;
           itr->bottom_right = new_bottom_right;
-          if(!first_drawn && itr == view && itr->next_horizontal){
-               draw_horizontal_views(itr, &new_top_left, &new_bottom_right, true);
+          if(!first_calc && itr == view && itr->next_horizontal){
+               calc_horizontal_views(itr, &new_top_left, &new_bottom_right, true);
           }else if(itr != view && itr->next_horizontal){
-               draw_horizontal_views(itr, &new_top_left, &new_bottom_right, true);
-          }else{
-               Point buffer_top_left = {itr->buffer_node->buffer->left_collumn, itr->buffer_node->buffer->top_row};
-               ce_draw_buffer(itr->buffer_node->buffer, &new_top_left, &new_bottom_right, &buffer_top_left);
+               calc_horizontal_views(itr, &new_top_left, &new_bottom_right, true);
           }
 
           if(itr->next_vertical){
-               move(new_bottom_right.y, new_top_left.x);
-               addstr(separators);
                new_top_left.y++;
           }
 
@@ -1214,13 +1201,78 @@ bool draw_vertical_views(BufferView* view, const Point* top_left, const Point* b
      return true;
 }
 
-bool ce_draw_view(BufferView* view)
+bool ce_calc_views(BufferView* view)
 {
      CE_CHECK_PTR_ARG(view);
 
      Point top_left = {0, 0};
      Point bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 1};
-     return draw_horizontal_views(view, &top_left, &bottom_right, false);
+     return calc_horizontal_views(view, &top_left, &bottom_right, false);
+}
+
+bool draw_vertical_views(const BufferView* view, bool first_drawn);
+
+bool draw_horizontal_views(const BufferView* view, bool first_drawn)
+{
+     const BufferView* itr = view;
+     while(itr){
+          if(!first_drawn && itr == view && itr->next_vertical){
+               draw_vertical_views(itr, true);
+          }else if(itr != view && itr->next_vertical){
+               draw_vertical_views(itr, true);
+          }else{
+               Point buffer_top_left = {itr->left_collumn, itr->top_row};
+               ce_draw_buffer(itr->buffer_node->buffer, &itr->top_left, &itr->bottom_right, &buffer_top_left);
+          }
+
+          if(itr->next_horizontal){
+               for(int64_t i = itr->top_left.y; i <= itr->bottom_right.y; ++i){
+                    move(i, itr->bottom_right.x);
+                    addch('|'); // TODO: make configurable
+               }
+          }
+
+          itr = itr->next_horizontal;
+     }
+
+     return true;
+}
+
+bool draw_vertical_views(const BufferView* view, bool first_drawn)
+{
+     int64_t width = view->bottom_right.x - view->top_left.x;
+
+     char separators[width+1];
+     for(int i = 0; i < width; ++i) separators[i] = '-'; // TODO: make configurable
+     separators[width] = 0;
+
+     const BufferView* itr = view;
+     while(itr){
+          if(!first_drawn && itr == view && itr->next_horizontal){
+               draw_horizontal_views(itr, true);
+          }else if(itr != view && itr->next_horizontal){
+               draw_horizontal_views(itr, true);
+          }else{
+               Point buffer_top_left = {itr->left_collumn, itr->top_row};
+               ce_draw_buffer(itr->buffer_node->buffer, &itr->top_left, &itr->bottom_right, &buffer_top_left);
+          }
+
+          if(itr->next_vertical){
+               move(itr->bottom_right.y, itr->top_left.x);
+               addstr(separators);
+          }
+
+          itr = itr->next_vertical;
+     }
+
+     return true;
+}
+
+bool ce_draw_views(const BufferView* view)
+{
+     CE_CHECK_PTR_ARG(view);
+
+     return draw_horizontal_views(view, false);
 }
 
 BufferView* find_view_at_point(BufferView* view, const Point* point)

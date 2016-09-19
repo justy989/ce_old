@@ -371,18 +371,38 @@ int64_t ce_find_end_of_word(Buffer* buffer, const Point* location, bool punctuat
      while(i < line_len){
           if(isblank(line[i+1])){
                // we are starting at a boundary move to the beginning of the previous word
-               while(isblank(line[i+1]) && i+1 < line_len) i++;
+               while(isblank(line[i+1]) && (i+1 < line_len)) i++;
           }
           else if(punctuation_word_boundaries && ispunct(line[i+1])){
-               while(ispunct(line[i+1]) && i+1 < line_len) i++;
+               while(ispunct(line[i+1]) && (i+1 < line_len)) i++;
                break;
           }
           else{
-               while(!isblank(line[i+1]) && (!punctuation_word_boundaries || !ispunct(line[i+1])) && i+1 < line_len) i++;
+               while(!isblank(line[i+1]) && (!punctuation_word_boundaries || !ispunct(line[i+1])) && (i+1 < line_len)) i++;
                break;
           }
      }
      return i - location->x;
+}
+
+// return -1 on failure, delta to move left to the beginning of the word on success
+int64_t ce_find_next_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+
+     int64_t delta = ce_find_end_of_word(buffer, location, punctuation_word_boundaries);
+     if(delta == -1) return -1;
+     const char* line = buffer->lines[location->y];
+     int line_len = strlen(line);
+     int cur_x = location->x + delta;
+     if(cur_x + 1 < line_len){
+          do{
+               // churn through all whitespace following end of word
+               cur_x++;
+          } while(isblank(line[cur_x]) && (cur_x+1 < line_len));
+     }
+     return cur_x - location->x;
 }
 
 bool ce_get_char(Buffer* buffer, const Point* location, char* c)

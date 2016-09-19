@@ -302,6 +302,11 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           {
                cursor->x += ce_find_end_of_word(buffer, cursor, key == 'e');
           } break;
+          case 'w':
+          case 'W':
+          {
+               cursor->x += ce_find_next_word(buffer, cursor, key == 'w');
+          } break;
           case 'h':
           {
                Point delta = {-1, 0};
@@ -429,6 +434,15 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                               int64_t n_deletes = ce_find_beginning_of_word(buffer, cursor, key == 'b');
                               while(n_deletes){
                                    cursor->x--;
+                                   ce_remove_char(buffer, cursor);
+                                   n_deletes--;
+                              }
+                         } break;
+                         case 'w':
+                         case 'W':
+                         {
+                              int64_t n_deletes = ce_find_next_word(buffer, cursor, key == 'w');
+                              while(n_deletes){
                                    ce_remove_char(buffer, cursor);
                                    n_deletes--;
                               }

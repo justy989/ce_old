@@ -732,7 +732,7 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
 
           length--; // account for line newline at the end of lines that doesn't physically exist
 
-          while(length >= 0){
+          while(length > 0){
                if(line_index >= buffer->line_count) break;
 
                char* next_line = buffer->lines[line_index];
@@ -741,9 +741,7 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
                if(length >= next_line_len){
                     // remove any lines that we have the length to remove completely
                     ce_remove_line(buffer, line_index);
-                    if(next_line_len != 0){
-                         length -= next_line_len;
-                    }
+                    length -= next_line_len;
                     length--; // account for line newline at the end of lines that doesn't physically exist
                }else{
                     int64_t next_line_part_len = next_line_len - length;

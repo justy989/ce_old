@@ -1521,12 +1521,14 @@ bool calc_horizontal_views(BufferView* view, const Point* top_left, const Point*
                calc_vertical_views(itr, &new_top_left, &new_bottom_right, true);
           }
 
+          new_top_left.x += shift;
+          new_bottom_right.x = new_top_left.x + shift;
+
+          // account for border
           if(itr->next_horizontal){
                new_top_left.x++;
           }
 
-          new_top_left.x += shift;
-          new_bottom_right.x = new_top_left.x + shift;
           if(new_bottom_right.x >= g_terminal_dimensions->x) new_bottom_right.x = g_terminal_dimensions->x - 1;
           itr = itr->next_horizontal;
      }
@@ -1559,12 +1561,14 @@ bool calc_vertical_views(BufferView* view, const Point* top_left, const Point* b
                calc_horizontal_views(itr, &new_top_left, &new_bottom_right, true);
           }
 
+          new_top_left.y += shift;
+          new_bottom_right.y = new_top_left.y + shift;
+
+          // account for border
           if(itr->next_vertical){
                new_top_left.y++;
           }
 
-          new_top_left.y += shift;
-          new_bottom_right.y = new_top_left.y + shift;
           if(new_bottom_right.y >= g_terminal_dimensions->y) new_bottom_right.y = g_terminal_dimensions->y - 1;
           itr = itr->next_vertical;
      }
@@ -1585,6 +1589,12 @@ bool draw_vertical_views(const BufferView* view, bool first_drawn);
 
 bool draw_horizontal_views(const BufferView* view, bool first_drawn)
 {
+     int64_t width = view->bottom_right.x - view->top_left.x;
+
+     char separators[width+1];
+     for(int i = 0; i < width; ++i) separators[i] = '-'; // TODO: make configurable
+     separators[width] = 0;
+
      const BufferView* itr = view;
      while(itr){
           if(!first_drawn && itr == view && itr->next_vertical){
@@ -1596,20 +1606,19 @@ bool draw_horizontal_views(const BufferView* view, bool first_drawn)
                ce_draw_buffer(itr->buffer_node->buffer, &itr->top_left, &itr->bottom_right, &buffer_top_left);
           }
 
-          // draw previous divider
-          if(itr != view){
-               for(int64_t i = itr->top_left.y; i <= itr->bottom_right.y; ++i){
-                    move(i, itr->top_left.x - 1);
-                    addch('|'); // TODO: make configurable
-               }
-          }
-
-          // draw next divider
-          if(itr->next_horizontal){
+          // TODO: consolidate with draw_vertical_views
+          // draw right border
+          if(itr->bottom_right.x < (g_terminal_dimensions->x - 1)){
                for(int64_t i = itr->top_left.y; i <= itr->bottom_right.y; ++i){
                     move(i, itr->bottom_right.x);
                     addch('|'); // TODO: make configurable
                }
+          }
+
+          // draw bottom border
+          if(itr->bottom_right.y < (g_terminal_dimensions->y - 1)){
+               move(itr->bottom_right.y, itr->top_left.x);
+               addstr(separators);
           }
 
           itr = itr->next_horizontal;
@@ -1637,7 +1646,16 @@ bool draw_vertical_views(const BufferView* view, bool first_drawn)
                ce_draw_buffer(itr->buffer_node->buffer, &itr->top_left, &itr->bottom_right, &buffer_top_left);
           }
 
-          if(itr->next_vertical){
+          // draw right border
+          if(itr->bottom_right.x < (g_terminal_dimensions->x - 1)){
+               for(int64_t i = itr->top_left.y; i <= itr->bottom_right.y; ++i){
+                    move(i, itr->bottom_right.x);
+                    addch('|'); // TODO: make configurable
+               }
+          }
+
+          // draw bottom border
+          if(itr->bottom_right.y < (g_terminal_dimensions->y - 1)){
                move(itr->bottom_right.y, itr->top_left.x);
                addstr(separators);
           }

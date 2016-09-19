@@ -1,3 +1,4 @@
+#include <inttypes.h>
 #include "ce.h"
 
 Buffer* g_message_buffer = NULL;
@@ -8,13 +9,13 @@ bool ce_alloc_lines(Buffer* buffer, int64_t line_count)
      CE_CHECK_PTR_ARG(buffer);
 
      if(line_count <= 0){
-          ce_message("%s() tried to allocate %lld lines for a buffer, but we can only allocated > 0 lines", line_count);
+          ce_message("%s() tried to allocate %"PRId64" lines for a buffer, but we can only allocated > 0 lines", line_count);
           return false;
      }
 
      buffer->lines = malloc(line_count * sizeof(char*));
      if(!buffer->lines){
-          ce_message("%s() failed to allocate %lld lines for buffer", line_count);
+          ce_message("%s() failed to allocate %"PRId64" lines for buffer", line_count);
           return false;
      }
 
@@ -120,12 +121,12 @@ void ce_free_buffer(Buffer* buffer)
 bool ce_point_on_buffer(const Buffer* buffer, const Point* location)
 {
      if(location->y < 0 || location->x < 0){
-          ce_message("%s() %lld, %lld not in buffer", __FUNCTION__, location->x, location->y);
+          ce_message("%s() %"PRId64", %"PRId64" not in buffer", __FUNCTION__, location->x, location->y);
           return false;
      }
 
      if(location->y >= buffer->line_count){
-          ce_message("%s() %lld, %lld not in buffer with %lld lines",
+          ce_message("%s() %"PRId64", %"PRId64" not in buffer with %"PRId64" lines",
                      __FUNCTION__, location->x, location->y, buffer->line_count);
           return false;
      }
@@ -136,7 +137,7 @@ bool ce_point_on_buffer(const Buffer* buffer, const Point* location)
      if(line) line_len = strlen(line);
 
      if(location->x > line_len){
-          ce_message("%s() %lld, %lld not in buffer with line %lld only %lld characters long",
+          ce_message("%s() %"PRId64", %"PRId64" not in buffer with line %"PRId64" only %"PRId64" characters long",
                      __FUNCTION__, location->x, location->y, buffer->line_count, line_len);
           return false;
      }
@@ -165,7 +166,7 @@ bool ce_insert_char(Buffer* buffer, const Point* location, char c)
           int64_t new_len = line_len + 2;
           new_line = malloc(new_len);
           if(!new_line){
-               ce_message("%s() failed to allocate line with %lld characters", __FUNCTION__, new_len);
+               ce_message("%s() failed to allocate line with %"PRId64" characters", __FUNCTION__, new_len);
                return false;
           }
 
@@ -297,9 +298,9 @@ bool ce_insert_line(Buffer* buffer, int64_t line, const char* string)
      char** new_lines = malloc(new_line_count * sizeof(char*));
      if(!new_lines){
           if(buffer == g_message_buffer){
-               printf("%s() failed to malloc new lines: %lld\n", __FUNCTION__, new_line_count);
+               printf("%s() failed to malloc new lines: %"PRId64"\n", __FUNCTION__, new_line_count);
           }else{
-               ce_message("%s() failed to malloc new lines: %lld", __FUNCTION__, new_line_count);
+               ce_message("%s() failed to malloc new lines: %"PRId64"", __FUNCTION__, new_line_count);
           }
           return false;
      }
@@ -341,7 +342,7 @@ bool ce_remove_line(Buffer* buffer, int64_t line)
      int64_t new_line_count = buffer->line_count - 1;
      char** new_lines = malloc(new_line_count * sizeof(char*));
      if(!new_lines){
-          ce_message("%s() failed to malloc new lines: %lld", __FUNCTION__, new_line_count);
+          ce_message("%s() failed to malloc new lines: %"PRId64"", __FUNCTION__, new_line_count);
           return -1;
      }
 
@@ -363,7 +364,7 @@ bool ce_set_line(Buffer* buffer, int64_t line, const char* string)
      CE_CHECK_PTR_ARG(buffer);
 
      if(line < 0 || line >= buffer->line_count){
-          ce_message("%s() line %lld outside buffer with %lld lines", __FUNCTION__, line, buffer->line_count);
+          ce_message("%s() line %"PRId64" outside buffer with %"PRId64" lines", __FUNCTION__, line, buffer->line_count);
           return false;
      }
 
@@ -382,7 +383,7 @@ bool ce_save_buffer(const Buffer* buffer, const char* filename)
      if(!file){
           // TODO: console output ? perror!
           ce_message("%s() failed to open '%s': %s", __FUNCTION__, filename, strerror(errno));
-          return false;;
+          return false;
      }
 
      for(int64_t i = 0; i < buffer->line_count; ++i){
@@ -429,35 +430,35 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
      }
 
      if(term_top_left->x >= term_bottom_right->x){
-          ce_message("%s() top_left's x (%d) must be lower than bottom_right's x(%d)", __FUNCTION__,
+          ce_message("%s() top_left's x (%"PRId64") must be lower than bottom_right's x(%"PRId64")", __FUNCTION__,
                      term_top_left->x, term_bottom_right->x);
           return false;
      }
 
      if(term_top_left->y >= term_bottom_right->y){
-          ce_message("%s() top_left's y (%d) must be lower than bottom_right's y(%d)", __FUNCTION__,
+          ce_message("%s() top_left's y (%"PRId64") must be lower than bottom_right's y(%"PRId64")", __FUNCTION__,
                      term_top_left->y, term_bottom_right->y);
           return false;
      }
 
      if(term_top_left->x < 0){
-          ce_message("%s() top_left's x(%d) must be greater than 0", __FUNCTION__, term_top_left->x);
+          ce_message("%s() top_left's x(%"PRId64") must be greater than 0", __FUNCTION__, term_top_left->x);
           return false;
      }
 
      if(term_top_left->y < 0){
-          ce_message("%s() top_left's y(%d) must be greater than 0", __FUNCTION__, term_top_left->y);
+          ce_message("%s() top_left's y(%"PRId64") must be greater than 0", __FUNCTION__, term_top_left->y);
           return false;
      }
 
      if(term_bottom_right->x >= g_terminal_dimensions->x){
-          ce_message("%s() bottom_right's x(%d) must be less than the terminal dimensions x(%d)", __FUNCTION__,
+          ce_message("%s() bottom_right's x(%"PRId64") must be less than the terminal dimensions x(%"PRId64")", __FUNCTION__,
                      term_bottom_right->x, g_terminal_dimensions->x);
           return false;
      }
 
      if(term_bottom_right->y >= g_terminal_dimensions->y){
-          ce_message("%s() bottom_right's y(%d) must be less than the terminal dimensions y(%d)", __FUNCTION__,
+          ce_message("%s() bottom_right's y(%"PRId64") must be less than the terminal dimensions y(%"PRId64")", __FUNCTION__,
                      term_bottom_right->y, g_terminal_dimensions->y);
           return false;
      }

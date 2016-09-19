@@ -202,7 +202,7 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
 
           // copy in the newlines
           if(new_line_count){
-               char** new_lines = malloc(new_line_count * sizeof(char*));
+               char** new_lines = calloc(1, new_line_count * sizeof(char*));
 
                // copy old lines into new lines
                for(int64_t i = 0; i < location->y; ++i) new_lines[i] = buffer->lines[i];
@@ -220,6 +220,7 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
                          new_line[length] = 0;
                          new_lines[l] = new_line;
                     }
+
                     last_newline = i;
                     l++;
                }
@@ -236,7 +237,8 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
                     new_lines[line_count - 1] = new_line;
                }
 
-               free(buffer->lines);
+               if(buffer->lines) free(buffer->lines);
+
                buffer->lines = new_lines;
                buffer->line_count = new_line_count;
           }

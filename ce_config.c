@@ -829,7 +829,7 @@ void view_drawer(const BufferNode* head, void* user_data)
      }
 
      attron(A_REVERSE);
-     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s %d lines, k %d, c %ld, %ld, b: %ld, %ld, bo: %ld, %ld -> %ld, %ld t: %ld, %ld",
+     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s %d lines, k %d, c %ld, %ld, b: %ld, %ld, v: %ld, %ld -> %ld, %ld t: %ld, %ld",
               config_state->insert ? "INSERT" : "NORMAL", buffer->filename, buffer->line_count, config_state->last_key,
               cursor->x, cursor->y, buffer_view->top_row, buffer_view->left_collumn, buffer_view->top_left.x, buffer_view->top_left.y,
               buffer_view->bottom_right.x, buffer_view->bottom_right.y, g_terminal_dimensions->x, g_terminal_dimensions->y);

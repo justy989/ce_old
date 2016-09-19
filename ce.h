@@ -112,4 +112,6 @@ bool ce_follow_cursor(const Point* cursor, int64_t* top_line, int64_t* left_coll
 bool ce_buffer_change(BufferChangeNode** tail, const BufferChange* change);
 bool ce_buffer_undo(Buffer* buffer, BufferChangeNode** tail);
 
+void* ce_memrchr(const void* s, int c, size_t n);
+
 #endif

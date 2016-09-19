@@ -168,7 +168,7 @@ bool destroyer(BufferNode* head, void* user_data)
 
      ConfigState* config_state = user_data;
      if(config_state->view_head){
-          ce_free_view(&config_state->view_head);
+          ce_free_views(&config_state->view_head);
           config_state->view_current = NULL;
      }
      free(user_data);
@@ -336,6 +336,17 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'c':
                ce_split_view(config_state->view_current, config_state->view_current->buffer_node, false);
                break;
+          case 'm':
+          {
+               Point save_cursor = config_state->view_current->buffer_node->buffer->cursor;
+               ce_remove_view(config_state->view_head, config_state->view_current);
+               BufferView* new_view = ce_find_view_at_point(config_state->view_head, &save_cursor);
+               if(new_view){
+                    config_state->view_current = new_view;
+               }else{
+                    config_state->view_current = config_state->view_head;
+               }
+          } break;
           case 'b':
                config_state->view_current->buffer_node = config_state->view_current->buffer_node->next;
                if(!config_state->view_current->buffer_node){

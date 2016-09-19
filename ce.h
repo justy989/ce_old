@@ -141,8 +141,9 @@ bool ce_buffer_undo(Buffer* buffer, BufferChangeNode** tail);
 bool ce_buffer_redo(Buffer* buffer, BufferChangeNode** tail);
 
 bool ce_split_view(BufferView* view, BufferNode* buffer_node, bool horizontal);
+bool ce_remove_view(BufferView* head, BufferView* view);
 bool ce_draw_view(BufferView* head);
-bool ce_free_view(BufferView** view);
+bool ce_free_views(BufferView** view);
 BufferView* ce_find_view_at_point(BufferView* head, const Point* point);
 
 #endif

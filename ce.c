@@ -1027,28 +1027,96 @@ bool ce_split_view(BufferView* view, BufferNode* buffer_node, bool horizontal)
      return true;
 }
 
-// NOTE: recursive function for free-ing splits
-bool free_buffer_view(BufferView* view)
+BufferView* find_connecting_view(BufferView* start, BufferView* match)
 {
+     if(start->next_horizontal){
+          if(start->next_horizontal == match) return start;
+          BufferView* result = find_connecting_view(start->next_horizontal, match);
+          if(result) return result;
+     }
+
+     if(start->next_vertical){
+          if(start->next_vertical == match) return start;
+          BufferView* result = find_connecting_view(start->next_vertical, match);
+          if(result) return result;
+     }
+
+     return NULL;
+}
+
+bool ce_remove_view(BufferView* head, BufferView* view)
+{
+     CE_CHECK_PTR_ARG(head);
      CE_CHECK_PTR_ARG(view);
 
-     if(view->next_horizontal) free_buffer_view(view->next_horizontal);
-     if(view->next_vertical) free_buffer_view(view->next_vertical);
+     BufferView* itr = find_connecting_view(head, view);
+     if(!itr){
+          ce_message("%s() failed to remove unconnected view", __FUNCTION__);
+          return false;
+     }
 
-     free(view);
+     if(itr->next_vertical == view){
+          if(view->next_horizontal){
+               itr->next_vertical = view->next_horizontal;
+               // NOTE: This is totally not what we want going forward, however,
+               //       until we implement a more complicated window system, this
+               //       let's us not lose track of windows
+               // bandage up the windows !
+               if(view->next_vertical){
+                    BufferView* itr = view->next_horizontal;
+                    while(itr->next_vertical) itr = itr->next_vertical;
+                    itr->next_vertical = view->next_vertical;
+               }
+          }else if(view->next_vertical){
+               itr->next_vertical = view->next_vertical;
+          }else{
+               itr->next_vertical = NULL;
+          }
+
+          free(view);
+     }else{
+          // TODO: assert(itr->next_horizontal == view)
+          if(view->next_vertical){
+               itr->next_horizontal = view->next_vertical;
+               if(view->next_horizontal){
+                    BufferView* itr = view->next_vertical;
+                    while(itr->next_horizontal) itr = itr->next_horizontal;
+                    itr->next_horizontal = view->next_horizontal;
+               }
+          }else if(view->next_horizontal){
+               itr->next_horizontal = view->next_horizontal;
+          }else{
+               itr->next_horizontal = NULL;
+          }
+
+          free(view);
+     }
 
      return true;
 }
 
-bool ce_free_view(BufferView** view)
+// NOTE: recursive function for free-ing splits
+bool free_buffer_views(BufferView* head)
 {
-     CE_CHECK_PTR_ARG(view);
+     CE_CHECK_PTR_ARG(head);
 
-     if(!free_buffer_view(*view)){
+     if(head->next_horizontal) free_buffer_views(head->next_horizontal);
+     if(head->next_vertical) free_buffer_views(head->next_vertical);
+
+     free(head);
+
+     return true;
+}
+
+bool ce_free_views(BufferView** head)
+{
+     CE_CHECK_PTR_ARG(head);
+
+     if(!free_buffer_views(*head)){
           return false;
      }
 
-     *view = NULL;
+     *head = NULL;
      return true;
 }
 

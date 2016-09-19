@@ -381,7 +381,8 @@ bool ce_find_match(Buffer* buffer, const Point* location, Point* delta)
                // loop over line
                if(*iter_char == match){
                     if(--counter == 0) goto found_match;
-               } else if(*iter_char == *cur_char){
+               }
+               else if(*iter_char == *cur_char){
                     counter++;
                }
                iter_char += d;

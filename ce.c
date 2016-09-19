@@ -133,9 +133,28 @@ bool ce_insert_char(Buffer* buffer, const Point* location, char c)
           return false;
      }
 
-     if(c == NEWLINE) return ce_insert_line(buffer, location->y, NULL);
-
      char* line = buffer->lines[location->y];
+
+     if(c == NEWLINE){
+          // copy the rest of the line to the next line
+          if(!ce_insert_line(buffer, location->y + 1, line + location->x)){
+               return false;
+          }
+
+          // kill the rest of the current line
+          char* new_line = malloc(location->x + 1);
+          if(!new_line){
+               ce_message("%s() failed to alloc new line after split", __FUNCTION__);
+               return false;
+          }
+
+          strncpy(new_line, line, location->x);
+          new_line[location->x] = 0;
+          buffer->lines[location->y] = new_line;
+          free(line);
+          return true;
+     }
+
      char* new_line = NULL;
      if(line){
           // allocate new line with length + 1 + NULL terminator

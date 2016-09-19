@@ -379,13 +379,15 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case 127: // backspace
                if(buffer->line_count){
-                    if(cursor->x == 0 && cursor->y != 0){
+                    if(cursor->x <= 0 && cursor->y != 0){
                          int64_t line_len = 0;
                          if(buffer->lines[cursor->y - 1]){
                               line_len = strlen(buffer->lines[cursor->y - 1]);
                               ce_append_string(buffer, cursor->y - 1, buffer->lines[cursor->y]);
                          }else{
-                              buffer->lines[cursor->y - 1] = strdup(buffer->lines[cursor->y]);
+                              if(buffer->lines[cursor->y]){
+                                   buffer->lines[cursor->y - 1] = strdup(buffer->lines[cursor->y]);
+                              }
                          }
                          ce_remove_line(buffer, cursor->y);
                          Point delta = {0, -1};
@@ -417,14 +419,20 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     ce_alloc_lines(buffer, 1);
                }
 
-               if(buffer->lines[cursor->y] && cursor->x < (int64_t)(strlen(buffer->lines[cursor->y]))){
-                    char* start = buffer->lines[cursor->y] + cursor->x;
-                    int64_t to_end_of_line_len = strlen(start);
-                    if(ce_insert_line(buffer, cursor->y + 1, start)){
-                         ce_remove_string(buffer, cursor, to_end_of_line_len);
-                         cursor->y++;
-                         cursor->x = 0;
+               if(buffer->lines[cursor->y]){
+                    if(cursor->x < (int64_t)(strlen(buffer->lines[cursor->y]))){
+                         char* start = buffer->lines[cursor->y] + cursor->x;
+                         int64_t to_end_of_line_len = strlen(start);
+                         if(ce_insert_line(buffer, cursor->y + 1, start)){
+                              ce_remove_string(buffer, cursor, to_end_of_line_len);
+                              cursor->y++;
+                              cursor->x = 0;
+                         }
                     }
+               }else{
+                    ce_insert_line(buffer, cursor->y, NULL);
+                    Point delta = {0, 1};
+                    ce_move_cursor(buffer, cursor, &delta);
                }
                break;
           default:
@@ -476,16 +484,23 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                enter_insert_mode(config_state, cursor);
           } break;
           case 'O':
+          {
+               Point end_of_line = {0, cursor->y};
+               if(ce_insert_char(buffer, &end_of_line, '\n')){
+                    cursor->x = 0;
+                    enter_insert_mode(config_state, cursor);
+               }
+          } break;
           case 'o':
           {
-               if(!buffer->line_count){
-                    ce_alloc_lines(buffer, 1);
-               }
-               if(ce_insert_newline(buffer, cursor->y + (key == 'o'))){
-                    cursor->y += (key == 'o');
+               Point end_of_line = *cursor;
+               if(buffer->lines[cursor->y]) end_of_line.x = strlen(buffer->lines[cursor->y]);
+
+               if(ce_insert_char(buffer, &end_of_line, '\n')){
+                    cursor->y++;
                     cursor->x = 0;
+                    enter_insert_mode(config_state, cursor);
                }
-               enter_insert_mode(config_state, cursor);
           } break;
           case '^':
           {

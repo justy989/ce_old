@@ -38,7 +38,10 @@ typedef struct {
 typedef struct {
      char** lines; // '\0' terminated, does not contain newlines, NULL if empty
      int64_t line_count;
-     char* filename;
+     union {
+          char* filename;
+          char* name;
+     };
      void* user_data;
 } Buffer;
 
@@ -71,6 +74,7 @@ extern Buffer* g_message_buffer;
 extern Point* g_terminal_dimensions;
 
 bool ce_alloc_lines(Buffer* buffer, int64_t line_count);
+void ce_load_string(Buffer* buffer, const char* str);
 bool ce_load_file(Buffer* buffer, const char* filename);
 bool ce_save_buffer(const Buffer* buffer, const char* filename);
 void ce_free_buffer(Buffer* buffer);
@@ -79,6 +83,13 @@ bool ce_insert_char(Buffer* buffer, const Point* location, char c);
 bool ce_insert_string(Buffer* buffer, const Point* location, const char* string);
 bool ce_remove_char(Buffer* buffer, const Point* location);
 bool ce_get_char(Buffer* buffer, const Point* location, char* c);
+bool ce_set_char(Buffer* buffer, const Point* location, char c);
+int64_t ce_find_end_of_line(const Buffer* buffer, Point* cursor);
+int64_t ce_find_char_forward_in_line(Buffer* buffer, const Point* location, char c);
+int64_t ce_find_char_backward_in_line(Buffer* buffer, const Point* location, char c);
+int64_t ce_find_beginning_of_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
+int64_t ce_find_end_of_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
+bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor);
 
 // NOTE: passing NULL to string causes an empty line to be inserted
 bool ce_insert_line(Buffer* buffer, int64_t line, const char* string);

@@ -156,6 +156,7 @@ bool destroyer(BufferNode* head, void* user_data)
 
 // location is {left_column, top_line} for the view
 void scroll_view_to_location(BufferState* buffer_state, const Point* location){
+     // TODO: we should be able to scroll the view above our first line
      buffer_state->left_column = (location->x >= 0) ? location->x : 0;
      buffer_state->start_line = (location->y >= 0) ? location->y : 0;
 }
@@ -527,6 +528,28 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     config_state->command_key = '\0';
                }
           } break;
+          case 'H':
+          {
+               // move cursor to top line of view
+               // TODO: sometimes it would be nicer to work in absolutes instead of in deltas
+               Point delta = {0, buffer_state->start_line - cursor->y};
+               ce_move_cursor(buffer, cursor, &delta);
+          } break;
+          case 'M':
+          {
+               // move cursor to middle line of view
+               // TODO: sometimes it would be nicer to work in absolutes instead of in deltas
+               Point delta = {0, (buffer_state->start_line + (g_terminal_dimensions->y - 1) / 2)
+                    - cursor->y};
+               ce_move_cursor(buffer, cursor, &delta);
+          } break;
+          case 'L':
+          {
+               // move cursor to bottom line of view
+               Point delta = {0, (buffer_state->start_line + g_terminal_dimensions->y - 1)
+                    - (cursor->y + 1)};
+               ce_move_cursor(buffer, cursor, &delta);
+          } break;
           case 'z':
           {
                if(should_handle_command(config_state, key)){
@@ -538,11 +561,13 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     } break;
                     case 'z':
                     {
+                         // center view on cursor
                          Point location = {0, cursor->y - (g_terminal_dimensions->y/2)};
                          scroll_view_to_location(buffer_state, &location);
                     } break;
                     case 'b':
                     {
+                         // move current line to bottom of view
                          Point location = {0, cursor->y - g_terminal_dimensions->y};
                          scroll_view_to_location(buffer_state, &location);
                     } break;

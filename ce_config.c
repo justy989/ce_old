@@ -22,7 +22,7 @@ typedef struct{
 typedef struct{
      Point cursor;
      int64_t start_line;
-     int64_t left_collumn;
+     int64_t left_column;
      BufferChangeNode* changes_tail;
 } BufferState;
 
@@ -520,6 +520,13 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     config_state->command_key = '\0';
                }
           } break;
+          case 'z':
+          {
+               if(should_handle_command(config_state, key)){
+                    // TODO: devise a better way to clear command_key following a movement
+                    config_state->command_key = '\0';
+               }
+          } break;
           case 21: // Ctrl + d
           {
                Point delta = {0, -g_terminal_dimensions->y / 2};
@@ -546,11 +553,11 @@ void view_drawer(const BufferNode* head, void* user_data)
      int64_t bottom = g_terminal_dimensions->y - 1;
      int64_t right = g_terminal_dimensions->x - 1;
 
-     ce_follow_cursor(&buffer_state->cursor, &buffer_state->start_line, &buffer_state->left_collumn,
+     ce_follow_cursor(&buffer_state->cursor, &buffer_state->start_line, &buffer_state->left_column,
                       bottom, right);
 
      // print the range of lines we want to show
-     Point buffer_top_left = {buffer_state->left_collumn, buffer_state->start_line};
+     Point buffer_top_left = {buffer_state->left_column, buffer_state->start_line};
      if(buffer->line_count){
           standend();
           Point term_top_left = {0, 0};

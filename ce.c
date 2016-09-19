@@ -697,7 +697,7 @@ bool ce_move_cursor(const Buffer* buffer, Point* cursor, const Point* delta)
      return true;
 }
 
-bool ce_follow_cursor(const Point* cursor, int64_t* top_line, int64_t* left_collumn, int64_t view_height, int64_t view_width)
+bool ce_follow_cursor(const Point* cursor, int64_t* top_line, int64_t* left_column, int64_t view_height, int64_t view_width)
 {
      CE_CHECK_PTR_ARG(cursor);
      CE_CHECK_PTR_ARG(top_line);
@@ -714,13 +714,13 @@ bool ce_follow_cursor(const Point* cursor, int64_t* top_line, int64_t* left_coll
           *top_line = bottom_line - view_height;
      }
 
-     int64_t right_collumn = *left_collumn + view_width;
+     int64_t right_column = *left_column + view_width;
 
-     if(cursor->x < *left_collumn){
-          *left_collumn = cursor->x;
-     }else if(cursor->x > right_collumn){
-          right_collumn = cursor->x;
-          *left_collumn = right_collumn - view_width;
+     if(cursor->x < *left_column){
+          *left_column = cursor->x;
+     }else if(cursor->x > right_column){
+          right_column = cursor->x;
+          *left_column = right_column - view_width;
      }
 
      return true;

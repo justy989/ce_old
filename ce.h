@@ -107,7 +107,7 @@ BufferNode* ce_append_buffer_to_list(BufferNode* head, Buffer* buffer);
 bool ce_remove_buffer_from_list(BufferNode* head, BufferNode** node);
 
 bool ce_move_cursor(const Buffer* buffer, Point* cursor, const Point* delta);
-bool ce_follow_cursor(const Point* cursor, int64_t* top_line, int64_t* left_collumn, int64_t view_height, int64_t view_width);
+bool ce_follow_cursor(const Point* cursor, int64_t* top_line, int64_t* left_column, int64_t view_height, int64_t view_width);
 
 bool ce_buffer_change(BufferChangeNode** tail, const BufferChange* change);
 bool ce_buffer_undo(Buffer* buffer, BufferChangeNode** tail);

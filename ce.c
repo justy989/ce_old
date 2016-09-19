@@ -454,6 +454,9 @@ char* ce_dupe_string(Buffer* buffer, const Point* start, const Point* end)
           strncpy(itr, buffer->lines[start->y] + start->x, len);
           itr[len] = '\n'; // add newline
           itr += len + 1;
+     }else{
+          *itr = '\n'; // add newline
+          itr++;
      }
 
      for(int64_t i = start->y + 1; i < end->y; ++i){
@@ -462,6 +465,9 @@ char* ce_dupe_string(Buffer* buffer, const Point* start, const Point* end)
                strncpy(itr, buffer->lines[i], len);
                itr[len] = '\n';
                itr += len + 1;
+          }else{
+               *itr = '\n'; // add newline
+               itr++;
           }
      }
 
@@ -473,11 +479,17 @@ char* ce_dupe_string(Buffer* buffer, const Point* start, const Point* end)
 
 char* ce_dupe_line(Buffer* buffer, int64_t line)
 {
-     Point start = {0, line};
-     int64_t line_len = 0;
-     if(buffer->lines[line]) line_len = strlen(buffer->lines[line]);
-     Point end = {line_len, line};
-     return ce_dupe_string(buffer, &start, &end);
+     if(buffer->line_count <= line){
+          ce_message("%s() specified line (%d) above buffer line count (%d)",
+                     __FUNCTION__, line, buffer->line_count);
+          return false;
+     }
+
+     if(!buffer->lines[line]){
+          return NULL;
+     }
+
+     return strdup(buffer->lines[line]);
 }
 
 // return x delta between location and the located character 'c' if found. return -1 if not found

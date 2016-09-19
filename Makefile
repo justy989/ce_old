@@ -3,7 +3,7 @@ CFLAGS=-Wall -Werror -Wextra -std=gnu11 -ggdb3
 LINK=-lncurses
 
 ce: main.c ce.o ce_config.so
-	$(CC) $(CFLAGS) $^ -o $@ $(LINK) -ldl -Wl,-rpath=.
+	$(CC) $(CFLAGS) $^ -o $@ $(LINK) -ldl -Wl,-rpath,.
 
 ce.o: ce.c
 	$(CC) -c -fpic $(CFLAGS) $^ -o $@

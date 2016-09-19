@@ -91,6 +91,7 @@ int64_t ce_find_beginning_of_word(Buffer* buffer, const Point* location, bool pu
 int64_t ce_find_end_of_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
 int64_t ce_find_next_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
 bool ce_find_match(Buffer* buffer, const Point* location, Point* delta);
+bool ce_find_str(Buffer* buffer, const Point* location, const char* search_str, Point* delta);
 bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor);
 
 // NOTE: passing NULL to string causes an empty line to be inserted

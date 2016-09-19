@@ -632,6 +632,20 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     ce_move_cursor(buffer, cursor, &delta);
                }
           } break;
+          case '*':
+          {
+               if(!buffer->lines[cursor->y]) break;
+               // TODO: search for the word under the cursor
+               int64_t word_len = ce_find_end_of_word(buffer, cursor, true);
+               char* search_str = alloca(word_len+1);
+               strncpy(search_str, &buffer->lines[cursor->y][cursor->x], sizeof(word_len));
+               search_str[word_len] = '\0';
+
+               Point delta;
+               if(ce_find_str(buffer, cursor, search_str, &delta)){
+                    ce_move_cursor(buffer, cursor, &delta);
+               }
+          } break;
           case 21: // Ctrl + d
           {
                Point delta = {0, -g_terminal_dimensions->y / 2};

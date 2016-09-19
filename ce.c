@@ -376,11 +376,15 @@ bool ce_find_match(Buffer* buffer, const Point* location, Point* delta)
      const char* line_str = buffer->lines[line];
 
      int64_t n_lines = (d == CE_UP) ? location->y : buffer->line_count - location->y;
-     for(int64_t i = 0; counter && i < n_lines;){
+     for(int64_t i = 0; i < n_lines;){
           while(*iter_char != '\0'){
                // loop over line
                if(*iter_char == match){
-                    if(--counter == 0) goto found_match;
+                    if(--counter == 0){
+                         delta->x = (iter_char - buffer->lines[line]) - location->x;
+                         delta->y = line - location->y;
+                         return true;
+                    }
                }
                else if(*iter_char == *cur_char) counter++;
                iter_char += d;
@@ -390,11 +394,35 @@ bool ce_find_match(Buffer* buffer, const Point* location, Point* delta)
           while(!(line_str = buffer->lines[line += d]) && i < n_lines);
           iter_char = (d == CE_UP) ? &line_str[strlen(line_str) - 1] : line_str;
      }
+     return false;
+}
 
-found_match:
-     delta->x = (iter_char - buffer->lines[line]) - location->x;
-     delta->y = line - location->y;
-     return !counter;
+// returns the delta to the matching string; return success
+bool ce_find_str(Buffer* buffer, const Point* location, const char* search_str, Point* delta)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+     CE_CHECK_PTR_ARG(search_str);
+     CE_CHECK_PTR_ARG(delta);
+
+     Direction d = CE_DOWN; // TODO support reverse search
+
+     int64_t line = location->y;
+     const char* line_str = buffer->lines[location->y];
+     if(line_str) line_str = &line_str[location->x + 1];
+
+     int64_t n_lines = (d == CE_UP) ? location->y : buffer->line_count - location->y;
+     for(int64_t i = 0; i < n_lines;){
+          const char* match = strstr(line_str, search_str);
+          if(match){
+               delta->x = (match - line_str) - location->x;
+               delta->y = line - location->y;
+               return true;
+          }
+          do i++;
+          while(!(line_str = buffer->lines[line += d]) && i < n_lines);
+     }
+     return false;
 }
 
 bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor)
@@ -879,7 +907,7 @@ bool ce_buffer_undo(Buffer* buffer, BufferChangeNode** tail)
 
 void* ce_memrchr(const void* s, int c, size_t n)
 {
-     char* rev_search = (void*)s + n;
+     char* rev_search = (void*)s + (n-1);
      while((uintptr_t)rev_search >= (uintptr_t)s){
           if(*rev_search == c) return rev_search;
 	  rev_search--;

@@ -208,12 +208,10 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
      }
 
      if(!buffer->lines || !buffer->lines[location->y]){
-		int64_t line_count = 1;
+		int64_t line_count = 0;
 		for(int64_t i = 0; i < new_string_length; ++i){
-			if(new_string[i] != NEWLINE) continue;
-
-			line_count++;
-		}
+			if(new_string[i] == NEWLINE) line_count++;
+          }
 
 		if(!line_count && new_string_length) line_count = 1;
 
@@ -223,6 +221,10 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
           // copy in the newlines
           if(new_line_count){
                char** new_lines = calloc(1, new_line_count * sizeof(char*));
+               if(!new_lines){
+                    ce_message("%s() failed to calloc new lines", __FUNCTION__);
+                    return false;
+               }
 
                // copy old lines into new lines
                for(int64_t i = 0; i < location->y; ++i) new_lines[i] = buffer->lines[i];
@@ -247,7 +249,7 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
 
                // finish up copying the last line
                int64_t length = new_string_length - last_newline;
-               if(length >= 1){
+               if(length > 1){
                     char* new_line = malloc(length + 1);
                     strncpy(new_line, new_string + last_newline + 1, length);
                     new_line[length] = 0;

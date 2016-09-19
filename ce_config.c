@@ -351,14 +351,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                   config_state->start_insert.y == config_state->original_start_insert.y){
                     // TODO: assert cursor is after start_insert
                     // exclusively inserts
-                    // TODO: remove
-                    char* tmp = ce_dupe_string(buffer, &config_state->start_insert, cursor);
-                    char* itr = tmp;
-                    while(*itr){
-                         if(*itr == NEWLINE) *itr = '|';
-                         itr++;
-                    }
-                    ce_message("insert: '%s'", tmp);
                     ce_commit_insert_string(&buffer_state->commit_tail, &config_state->start_insert, &config_state->original_start_insert,
                                             cursor, ce_dupe_string(buffer, &config_state->start_insert, cursor));
                }else if(config_state->start_insert.x < config_state->original_start_insert.x ||

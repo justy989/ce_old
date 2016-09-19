@@ -341,7 +341,7 @@ bool ce_remove_line(Buffer* buffer, int64_t line)
      int64_t new_line_count = buffer->line_count - 1;
      char** new_lines = malloc(new_line_count * sizeof(char*));
      if(!new_lines){
-          ce_message("%s() failed to malloc new lines: %ld", __FUNCTION__, new_line_count);
+          ce_message("%s() failed to malloc new lines: %lld", __FUNCTION__, new_line_count);
           return -1;
      }
 

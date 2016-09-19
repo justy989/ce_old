@@ -388,7 +388,7 @@ bool ce_find_match(Buffer* buffer, const Point* location, Point* delta)
           }
 
           do i++;
-          while(!(line_str = buffer->lines[line += d]) && ++i < n_lines);
+          while(!(line_str = buffer->lines[line += d]) && i < n_lines);
           iter_char = (d == CE_UP) ? &line_str[strlen(line_str) - 1] : line_str;
      }
 

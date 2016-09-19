@@ -27,7 +27,7 @@ typedef struct{
 } BufferState;
 
 bool initialize_buffer(Buffer* buffer){
-     BufferState* buffer_state = malloc(sizeof(*buffer_state));
+     BufferState* buffer_state = calloc(1, sizeof(*buffer_state));
      if(!buffer_state){
           ce_message("failed to allocate buffer state.");
           return false;
@@ -87,7 +87,7 @@ BufferNode* new_buffer_from_string(BufferNode* head, const char* name, const cha
 
 BufferNode* new_buffer_from_file(BufferNode* head, const char* filename)
 {
-     Buffer* buffer = malloc(sizeof(*buffer));
+     Buffer* buffer = calloc(1, sizeof(*buffer));
      if(!buffer){
           ce_message("failed to allocate buffer");
           return NULL;

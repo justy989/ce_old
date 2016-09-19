@@ -100,7 +100,7 @@ typedef struct{
 } ConfigState;
 
 typedef struct{
-     BufferChangeNode* changes_tail;
+     BufferCommitNode* commit_tail;
 } BufferState;
 
 bool initialize_buffer(Buffer* buffer){
@@ -109,6 +109,16 @@ bool initialize_buffer(Buffer* buffer){
           ce_message("failed to allocate buffer state.");
           return false;
      }
+
+     BufferCommitNode* tail = calloc(1, sizeof(*tail));
+     if(!tail){
+          ce_message("failed to allocate commit history for buffer");
+          free(buffer_state);
+          return false;
+     }
+
+     buffer_state->commit_tail = tail;
+
      buffer->user_data = buffer_state;
      return true;
 }
@@ -288,6 +298,7 @@ void enter_insert_mode(ConfigState* config_state, Point* cursor)
 {
      config_state->insert = true;
      config_state->start_insert = *cursor;
+     config_state->original_start_insert = *cursor;
 }
 
 bool should_handle_command(ConfigState* config_state, char key)
@@ -325,34 +336,21 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                   config_state->start_insert.y == config_state->original_start_insert.y){
                     // TODO: assert cursor is after start_insert
                     // exclusively inserts
-                    BufferChange change;
-                    change.type = BCT_INSERT_STRING;
-                    change.start = config_state->start_insert;
-                    change.cursor = config_state->start_insert;
-                    change.str = ce_dupe_string(buffer, &config_state->start_insert, cursor);
-                    ce_buffer_change(&buffer_state->changes_tail, &change);
+                    ce_commit_insert_string(&buffer_state->commit_tail, &config_state->start_insert, cursor,
+                                            ce_dupe_string(buffer, &config_state->start_insert, cursor));
                }else if(config_state->start_insert.x < config_state->original_start_insert.x ||
                         config_state->start_insert.y < config_state->original_start_insert.y){
                     if(cursor->x == config_state->start_insert.x &&
                        cursor->y == config_state->start_insert.y){
                          // exclusively backspaces!
-                         BufferChange change;
-                         change.type = BCT_REMOVE_STRING;
-                         change.start = *cursor;
-                         change.cursor = config_state->start_insert;
-                         change.str = backspace_get_string(config_state->backspace_head);
-                         ce_buffer_change(&buffer_state->changes_tail, &change);
+                         ce_commit_remove_string(&buffer_state->commit_tail, cursor, &config_state->start_insert,
+                                                 backspace_get_string(config_state->backspace_head));
                          backspace_free(&config_state->backspace_head, &config_state->backspace_tail);
                     }else{
                          // mixture of inserts and backspaces
-                         BufferChange change;
-                         change.type = BCT_CHANGE_STRING;
-                         change.start = config_state->start_insert;
-                         change.cursor = *cursor;
-                         // TODO: get multi line to insert
-                         change.str = ce_dupe_string(buffer, &config_state->start_insert, cursor);
-                         change.changed_str = backspace_get_string(config_state->backspace_head);
-                         ce_buffer_change(&buffer_state->changes_tail, &change);
+                         ce_commit_change_string(&buffer_state->commit_tail, &config_state->start_insert, cursor,
+                                                 ce_dupe_string(buffer, &config_state->start_insert, cursor),
+                                                 backspace_get_string(config_state->backspace_head));
                          backspace_free(&config_state->backspace_head, &config_state->backspace_tail);
                     }
                }
@@ -447,11 +445,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                ce_move_cursor(buffer, cursor, &delta);
           } break;
           case 'i':
-#if 0
-               config_state->insert = true;
-               config_state->start_insert = *cursor;
-               config_state->original_start_insert = *cursor;
-#endif
                enter_insert_mode(config_state, cursor);
                break;
           case 'I':
@@ -649,9 +642,25 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }
                break;
           case 'u':
-               if(buffer_state->changes_tail && buffer_state->changes_tail->change.type != BCT_NONE){
-                    Point new_cursor = buffer_state->changes_tail->change.cursor;
-                    if(ce_buffer_undo(buffer, &buffer_state->changes_tail)){
+               if(buffer_state->commit_tail && buffer_state->commit_tail->change.type != BCT_NONE){
+                    // set the cursor based on the type of change we made
+                    Point new_cursor = buffer_state->commit_tail->change.start;
+                    switch(buffer_state->commit_tail->change.type){
+                    default:
+                         break;
+                    case BCT_REMOVE_CHAR:
+                    case BCT_REMOVE_STRING:
+                         new_cursor = buffer_state->commit_tail->change.start;
+                         ce_advance_cursor(buffer, &new_cursor, strlen(buffer_state->commit_tail->change.str)); // TODO: get the string length without '\n'
+                         break;
+                    case BCT_CHANGE_CHAR:
+                    case BCT_CHANGE_STRING:
+                         new_cursor = buffer_state->commit_tail->change.start;
+                         ce_advance_cursor(buffer, &new_cursor, strlen(buffer_state->commit_tail->change.prev_str)); // TODO: get the string length without '\n'
+                         break;
+                    }
+
+                    if(ce_commit_undo(buffer, &buffer_state->commit_tail)){
                          *cursor = new_cursor;
                     }
                }
@@ -660,19 +669,14 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           {
                char c;
                if(ce_get_char(buffer, cursor, &c) && ce_remove_char(buffer, cursor)){
-                    BufferChange change;
-                    change.type = BCT_REMOVE_CHAR;
-                    change.start = *cursor;
-                    change.cursor = *cursor;
-                    change.c = c;
-                    ce_buffer_change(&buffer_state->changes_tail, &change);
+                    ce_commit_remove_char(&buffer_state->commit_tail, cursor, cursor, c);
                }
           }
           break;
           case 18:
-          if(buffer_state->changes_tail && buffer_state->changes_tail->next){
-               Point new_cursor = buffer_state->changes_tail->next->change.start;
-               if(ce_buffer_redo(buffer, &buffer_state->changes_tail)){
+          if(buffer_state->commit_tail && buffer_state->commit_tail->next){
+               Point new_cursor = buffer_state->commit_tail->next->change.end;
+               if(ce_commit_redo(buffer, &buffer_state->commit_tail)){
                     *cursor = new_cursor;
                }
           }

@@ -953,6 +953,55 @@ bool ce_move_cursor(const Buffer* buffer, Point* cursor, const Point* delta)
      return true;
 }
 
+bool ce_advance_cursor(const Buffer* buffer, Point* cursor, int64_t delta)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(cursor);
+
+     if(!ce_point_on_buffer(buffer, cursor)) return false;
+
+     int64_t line_len = strlen(buffer->lines[cursor->y]);
+     int64_t line_len_left = line_len - cursor->y;
+
+     // if the movement fits on this line, go for it
+     if(delta < line_len_left){
+          cursor->x += delta;
+          return true;
+     }
+
+     cursor->y++;
+     cursor->x = 0;
+     delta -= line_len_left;
+
+     while(delta > line_len_left){
+          if(buffer->line_count <= cursor->y) return ce_move_cursor_to_end_of_file(buffer, cursor);
+          line_len = strlen(buffer->lines[cursor->y]);
+          line_len_left = line_len - cursor->y;
+          cursor->y++;
+          cursor->x = 0;
+          delta -= line_len_left;
+     }
+
+     cursor->x += delta;
+     return true;
+}
+
+bool ce_move_cursor_to_end_of_file(const Buffer* buffer, Point* cursor)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(cursor);
+
+     if(!buffer->line_count) return false;
+
+     int64_t last_line = buffer->line_count - 1;
+     int64_t len = strlen(buffer->lines[last_line]);
+
+     cursor->x = len - 1;
+     cursor->y = last_line;
+
+     return true;
+}
+
 // TODO: Threshold for top, left, bottom and right before scrolling happens
 bool ce_follow_cursor(const Point* cursor, int64_t* top_row, int64_t* left_collumn, int64_t view_height, int64_t view_width)
 {
@@ -983,12 +1032,108 @@ bool ce_follow_cursor(const Point* cursor, int64_t* top_row, int64_t* left_collu
      return true;
 }
 
-bool ce_buffer_change(BufferChangeNode** tail, const BufferChange* change)
+bool ce_commit_insert_char(BufferCommitNode** tail, const Point* start, const Point* end, char c)
+{
+     CE_CHECK_PTR_ARG(tail);
+     CE_CHECK_PTR_ARG(start);
+     CE_CHECK_PTR_ARG(end);
+
+     BufferCommit change;
+     change.type = BCT_INSERT_CHAR;
+     change.start = *start;
+     change.end = *end;
+     change.c = c;
+
+     return ce_commit_change(tail, &change);
+}
+
+bool ce_commit_insert_string(BufferCommitNode** tail, const Point* start, const Point* end,  char* string)
+{
+     CE_CHECK_PTR_ARG(tail);
+     CE_CHECK_PTR_ARG(start);
+     CE_CHECK_PTR_ARG(end);
+     CE_CHECK_PTR_ARG(string);
+
+     BufferCommit change;
+     change.type = BCT_INSERT_STRING;
+     change.start = *start;
+     change.end = *end;
+     change.str = string;
+
+     return ce_commit_change(tail, &change);
+}
+
+bool ce_commit_remove_char(BufferCommitNode** tail, const Point* start, const Point* end, char c)
+{
+     CE_CHECK_PTR_ARG(tail);
+     CE_CHECK_PTR_ARG(start);
+     CE_CHECK_PTR_ARG(end);
+
+     BufferCommit change;
+     change.type = BCT_REMOVE_CHAR;
+     change.start = *start;
+     change.end = *end;
+     change.c = c;
+
+     return ce_commit_change(tail, &change);
+}
+
+bool ce_commit_remove_string(BufferCommitNode** tail, const Point* start, const Point* end,  char* string)
+{
+     CE_CHECK_PTR_ARG(tail);
+     CE_CHECK_PTR_ARG(start);
+     CE_CHECK_PTR_ARG(end);
+     CE_CHECK_PTR_ARG(string);
+
+     BufferCommit change;
+     change.type = BCT_REMOVE_STRING;
+     change.start = *start;
+     change.end = *end;
+     change.str = string;
+
+     return ce_commit_change(tail, &change);
+}
+
+bool ce_commit_change_char(BufferCommitNode** tail, const Point* start, const Point* end, char c, char prev_c)
+{
+     CE_CHECK_PTR_ARG(tail);
+     CE_CHECK_PTR_ARG(start);
+     CE_CHECK_PTR_ARG(end);
+
+     BufferCommit change;
+     change.type = BCT_CHANGE_CHAR;
+     change.start = *start;
+     change.end = *end;
+     change.c = c;
+     change.prev_c = prev_c;
+
+     return ce_commit_change(tail, &change);
+}
+
+bool ce_commit_change_string(BufferCommitNode** tail, const Point* start, const Point* end,  char* new_string,  char* prev_string)
+{
+     CE_CHECK_PTR_ARG(tail);
+     CE_CHECK_PTR_ARG(start);
+     CE_CHECK_PTR_ARG(end);
+     CE_CHECK_PTR_ARG(new_string);
+     CE_CHECK_PTR_ARG(prev_string);
+
+     BufferCommit change;
+     change.type = BCT_CHANGE_STRING;
+     change.start = *start;
+     change.end = *end;
+     change.str = new_string;
+     change.prev_str = prev_string;
+
+     return ce_commit_change(tail, &change);
+}
+
+bool ce_commit_change(BufferCommitNode** tail, const BufferCommit* change)
 {
      CE_CHECK_PTR_ARG(tail);
      CE_CHECK_PTR_ARG(change);
 
-     BufferChangeNode* new_change = malloc(sizeof(*new_change));
+     BufferCommitNode* new_change = malloc(sizeof(*new_change));
      if(!new_change){
           ce_message("%s() failed to allocate new change", __FUNCTION__);
           return false;
@@ -1001,17 +1146,17 @@ bool ce_buffer_change(BufferChangeNode** tail, const BufferChange* change)
      // TODO: rather than branching, just free rest of the redo list on this change
      if(*tail){
           if((*tail)->next){
-               BufferChangeNode* itr = (*tail)->next;
+               BufferCommitNode* itr = (*tail)->next;
 
                while(itr){
-                    BufferChangeNode* tmp = itr;
+                    BufferCommitNode* tmp = itr;
                     itr = itr->next;
                     if(tmp->change.type == BCT_INSERT_STRING ||
                        tmp->change.type == BCT_REMOVE_STRING){
                          if(tmp->change.str) free(tmp->change.str);
                     }else if(tmp->change.type == BCT_CHANGE_STRING){
                          if(tmp->change.str) free(tmp->change.str);
-                         if(tmp->change.changed_str) free(tmp->change.changed_str);
+                         if(tmp->change.prev_str) free(tmp->change.prev_str);
                     }
                     free(tmp);
                }
@@ -1026,7 +1171,7 @@ bool ce_buffer_change(BufferChangeNode** tail, const BufferChange* change)
      return true;
 }
 
-bool ce_buffer_undo(Buffer* buffer, BufferChangeNode** tail)
+bool ce_commit_undo(Buffer* buffer, BufferCommitNode** tail)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(tail);
@@ -1036,12 +1181,12 @@ bool ce_buffer_undo(Buffer* buffer, BufferChangeNode** tail)
           return false;
      }
 
-     BufferChangeNode* undo_change = *tail;
-     BufferChange* change = &undo_change->change;
+     BufferCommitNode* undo_change = *tail;
+     BufferCommit* change = &undo_change->change;
 
      switch(change->type){
      default:
-          ce_message("unsupported BufferChangeType: %d", change->type);
+          ce_message("unsupported BufferCommitType: %d", change->type);
           return false;
      case BCT_NONE:
           ce_message("%s() empty undo history", __FUNCTION__);
@@ -1059,11 +1204,12 @@ bool ce_buffer_undo(Buffer* buffer, BufferChangeNode** tail)
           ce_insert_string(buffer, &change->start, change->str);
           break;
      case BCT_CHANGE_CHAR:
-          ce_set_char(buffer, &change->start, change->c);
+          ce_remove_char(buffer, &change->start);
+          ce_set_char(buffer, &change->start, change->prev_c);
           break;
      case BCT_CHANGE_STRING:
           ce_remove_string(buffer, &change->start, strlen(change->str));
-          ce_insert_string(buffer, &change->start, change->changed_str);
+          ce_insert_string(buffer, &change->start, change->prev_str);
           break;
      }
 
@@ -1072,7 +1218,7 @@ bool ce_buffer_undo(Buffer* buffer, BufferChangeNode** tail)
      return true;
 }
 
-bool ce_buffer_redo(Buffer* buffer, BufferChangeNode** tail)
+bool ce_commit_redo(Buffer* buffer, BufferCommitNode** tail)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(tail);
@@ -1089,12 +1235,12 @@ bool ce_buffer_redo(Buffer* buffer, BufferChangeNode** tail)
 
      *tail = (*tail)->next;
 
-     BufferChangeNode* undo_change = *tail;
-     BufferChange* change = &undo_change->change;
+     BufferCommitNode* undo_change = *tail;
+     BufferCommit* change = &undo_change->change;
 
      switch(change->type){
      default:
-          ce_message("unsupported BufferChangeType: %d", change->type);
+          ce_message("unsupported BufferCommitType: %d", change->type);
           return false;
      case BCT_INSERT_CHAR:
           ce_insert_char(buffer, &change->start, change->c);
@@ -1109,10 +1255,11 @@ bool ce_buffer_redo(Buffer* buffer, BufferChangeNode** tail)
           ce_remove_string(buffer, &change->start, strlen(change->str));
           break;
      case BCT_CHANGE_CHAR:
-          ce_set_char(buffer, &change->start, change->changed_c);
+          ce_remove_char(buffer, &change->start);
+          ce_set_char(buffer, &change->start, change->c);
           break;
      case BCT_CHANGE_STRING:
-          ce_remove_string(buffer, &change->start, strlen(change->changed_str));
+          ce_remove_string(buffer, &change->start, strlen(change->prev_str));
           ce_insert_string(buffer, &change->start, change->str);
           break;
      }

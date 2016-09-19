@@ -61,27 +61,27 @@ typedef enum {
      BCT_REMOVE_STRING,
      BCT_CHANGE_CHAR,
      BCT_CHANGE_STRING,
-} BufferChangeType;
+} BufferCommitType;
 
-typedef struct BufferChange {
-     BufferChangeType type;
+typedef struct {
+     BufferCommitType type;
      Point start;
-     Point cursor;
+     Point end;
      union {
           char c;
           char* str;
      };
      union {
-          char changed_c;
-          char* changed_str;
+          char prev_c;
+          char* prev_str;
      };
-} BufferChange;
+} BufferCommit;
 
-typedef struct BufferChangeNode {
-     BufferChange change;
-     struct BufferChangeNode* prev;
-     struct BufferChangeNode* next;
-} BufferChangeNode;
+typedef struct BufferCommitNode {
+     BufferCommit change;
+     struct BufferCommitNode* prev;
+     struct BufferCommitNode* next;
+} BufferCommitNode;
 
 // horizontal split []|[]
 
@@ -146,10 +146,18 @@ bool ce_remove_buffer_from_list(BufferNode* head, BufferNode** node);
 
 bool ce_move_cursor(const Buffer* buffer, Point* cursor, const Point* delta);
 bool ce_follow_cursor(const Point* cursor, int64_t* top_row, int64_t* left_collumn, int64_t view_height, int64_t view_width);
+bool ce_advance_cursor(const Buffer* buffer, Point* cursor, int64_t delta);
+bool ce_move_cursor_to_end_of_file(const Buffer* buffer, Point* cursor);
 
-bool ce_buffer_change(BufferChangeNode** tail, const BufferChange* change);
-bool ce_buffer_undo(Buffer* buffer, BufferChangeNode** tail);
-bool ce_buffer_redo(Buffer* buffer, BufferChangeNode** tail);
+bool ce_commit_insert_char(BufferCommitNode** tail, const Point* start, const Point* end, char c);
+bool ce_commit_insert_string(BufferCommitNode** tail, const Point* start, const Point* end,  char* string);
+bool ce_commit_remove_char(BufferCommitNode** tail, const Point* start, const Point* end, char c);
+bool ce_commit_remove_string(BufferCommitNode** tail, const Point* start, const Point* end,  char* string);
+bool ce_commit_change_char(BufferCommitNode** tail, const Point* start, const Point* end, char c, char prev_c);
+bool ce_commit_change_string(BufferCommitNode** tail, const Point* start, const Point* end, char* new_string, char* prev_string);
+bool ce_commit_change(BufferCommitNode** tail, const BufferCommit* change);
+bool ce_commit_undo(Buffer* buffer, BufferCommitNode** tail);
+bool ce_commit_redo(Buffer* buffer, BufferCommitNode** tail);
 
 BufferView* ce_split_view(BufferView* view, BufferNode* buffer_node, bool horizontal);
 bool ce_remove_view(BufferView* head, BufferView* view);

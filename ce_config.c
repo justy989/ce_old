@@ -197,6 +197,20 @@ BufferNode* new_buffer_from_file(BufferNode* head, const char* filename)
      return new_buffer_node;
 }
 
+int64_t strlen_ignore_newlines(const char* str)
+{
+     int64_t count = 0;
+
+     while(*str){
+          if(*str != NEWLINE) count++;
+          str++;
+     }
+
+     ce_message("%s() '%s' is %ld", __FUNCTION__, str, count);
+
+     return count;
+}
+
 bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** argv, void** user_data)
 {
      // NOTE: need to set these in this module
@@ -365,8 +379,12 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                if(buffer->line_count){
                     if(cursor->x == 0 && cursor->y != 0){
                          int64_t line_len = 0;
-                         if(buffer->lines[cursor->y - 1]) line_len = strlen(buffer->lines[cursor->y - 1]);
-                         ce_append_string(buffer, cursor->y - 1, buffer->lines[cursor->y]);
+                         if(buffer->lines[cursor->y - 1]){
+                              line_len = strlen(buffer->lines[cursor->y - 1]);
+                              ce_append_string(buffer, cursor->y - 1, buffer->lines[cursor->y]);
+                         }else{
+                              buffer->lines[cursor->y - 1] = strdup(buffer->lines[cursor->y]);
+                         }
                          ce_remove_line(buffer, cursor->y);
                          Point delta = {0, -1};
                          ce_move_cursor(buffer, cursor, &delta);
@@ -645,23 +663,29 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                if(buffer_state->commit_tail && buffer_state->commit_tail->change.type != BCT_NONE){
                     // set the cursor based on the type of change we made
                     Point new_cursor = buffer_state->commit_tail->change.start;
+
+                    int64_t offset = 0;
+
                     switch(buffer_state->commit_tail->change.type){
                     default:
                          break;
                     case BCT_REMOVE_CHAR:
                     case BCT_REMOVE_STRING:
-                         new_cursor = buffer_state->commit_tail->change.start;
-                         ce_advance_cursor(buffer, &new_cursor, strlen(buffer_state->commit_tail->change.str)); // TODO: get the string length without '\n'
+                         offset = strlen_ignore_newlines(buffer_state->commit_tail->change.str);
                          break;
                     case BCT_CHANGE_CHAR:
                     case BCT_CHANGE_STRING:
-                         new_cursor = buffer_state->commit_tail->change.start;
-                         ce_advance_cursor(buffer, &new_cursor, strlen(buffer_state->commit_tail->change.prev_str)); // TODO: get the string length without '\n'
+                         offset = strlen_ignore_newlines(buffer_state->commit_tail->change.prev_str);
                          break;
                     }
 
                     if(ce_commit_undo(buffer, &buffer_state->commit_tail)){
                          *cursor = new_cursor;
+
+                         if(offset){
+                              ce_message("advance %ld", offset);
+                              ce_advance_cursor(buffer, cursor, offset);
+                         }
                     }
                }
                break;

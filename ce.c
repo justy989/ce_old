@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include "ce.h"
+#include <assert.h>
 #include <ctype.h>
 #include <string.h>
 #include <inttypes.h>
@@ -316,6 +317,89 @@ int64_t ce_find_char_backward_in_line(Buffer* buffer, const Point* location, cha
      const char* found_char = ce_memrchr(line, c, cur_char - line);
      if(!found_char) return -1;
      return cur_char - found_char;
+}
+
+typedef enum{
+     CE_UP = -1,
+     CE_DOWN = 1
+} Direction;
+// returns the delta to the matching character; return success
+bool ce_find_match(Buffer* buffer, const Point* location, Point* delta)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+     CE_CHECK_PTR_ARG(delta);
+
+     const char* cur_char = &buffer->lines[location->y][location->x];
+     Direction d;
+     char match;
+     switch(*cur_char){
+     case '{':
+          d = CE_DOWN;
+          match = '}';
+          break;
+     case '}':
+          d = CE_UP;
+          match = '{';
+          break;
+     case '(':
+          d = CE_DOWN;
+          match = ')';
+          break;
+     case ')':
+          d = CE_UP;
+          match = '(';
+          break;
+     case '[':
+          d = CE_DOWN;
+          match = ']';
+          break;
+     case ']':
+          d = CE_UP;
+          match = '[';
+          break;
+     case '<':
+          d = CE_DOWN;
+          match = '>';
+          break;
+     case '>':
+          d = CE_UP;
+          match = '<';
+          break;
+     default:
+          return false;
+     }
+
+     int64_t n_lines = (d == CE_UP) ? location->y : buffer->line_count - location->y;
+     uint64_t counter = 1;
+     int64_t line = location->y;
+     assert(d == -1 || d == 1);
+     const char* iter_char = cur_char + d;
+     for(int64_t i = 0; counter && i < n_lines; i++){
+          const char* line_str = buffer->lines[line];
+          if(line_str){
+               if(!iter_char){
+                    iter_char = (d == CE_UP) ? &line_str[strlen(line_str) - 1] : line_str;
+               }
+               while(*iter_char != '\0'){
+                    // loop over line
+                    if(*iter_char == match){
+                         if(--counter == 0) break;
+                    } else if(*iter_char == *cur_char){
+                         counter++;
+                    }
+                    iter_char += d;
+               }
+          }
+          if(counter){
+               line += d;
+               iter_char = NULL;
+          }
+     }
+
+     delta->x = (iter_char - buffer->lines[line]) - location->x;
+     delta->y = line - location->y;
+     return !counter;
 }
 
 bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor)

@@ -475,17 +475,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'v':
                config_state->split = !config_state->split;
                break;
-          case 'g':
-               if(should_handle_command(config_state, key)){
-                    if(key == 't'){
-                         config_state->current_buffer_node = config_state->current_buffer_node->next;
-                         if(!config_state->current_buffer_node){
-                              config_state->current_buffer_node = head;
-                         }
-                    }
-                    config_state->command_key = '\0';
-               }
-               break;
           case 'u':
                if(buffer_state->changes_tail){
                     Point new_cursor = buffer_state->changes_tail->change.cursor;
@@ -589,6 +578,39 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     }
                     // TODO: devise a better way to clear command_key following a movement
                     config_state->command_key = '\0';
+               }
+          } break;
+          case 'G':
+          {
+               Point delta = {0, buffer->line_count - cursor->y};
+               ce_move_cursor(buffer, cursor, &delta);
+          } break;
+          case 'g':
+          {
+               if(should_handle_command(config_state, key)){
+                    switch(key){
+                    case 'g':
+                    {
+                         Point delta = {0, -cursor->y};
+                         ce_move_cursor(buffer, cursor, &delta);
+                    } break;
+                    case 't':
+                    {
+                         config_state->current_buffer_node = config_state->current_buffer_node->next;
+                         if(!config_state->current_buffer_node){
+                              config_state->current_buffer_node = head;
+                         }
+                    } break;
+                    }
+                    // TODO: devise a better way to clear command_key following a movement
+                    config_state->command_key = '\0';
+               }
+          } break;
+          case '%':
+          {
+               Point delta;
+               if(ce_find_match(buffer, cursor, &delta)){
+                    ce_move_cursor(buffer, cursor, &delta);
                }
           } break;
           case 21: // Ctrl + d

@@ -326,7 +326,7 @@ void default_view_drawer(const BufferNode* head, void* user_data)
      char line_info[g_terminal_dimensions->x];
      attron(A_REVERSE);
      mvprintw(g_terminal_dimensions->y - 1, 0, "%s %d lines", buffer->filename, buffer->line_count);
-     snprintf(line_info, g_terminal_dimensions->x, "DEFAULT_CONFIG key: %d, term: %ld, %ld cursor: %ld, %ld",
+     snprintf(line_info, g_terminal_dimensions->x, "DEFAULT_CONFIG key: %d, term: %lld, %lld cursor: %lld, %lld",
               config_state->last_key, g_terminal_dimensions->x, g_terminal_dimensions->y, config_state->cursor.x, config_state->cursor.y);
      mvaddstr(g_terminal_dimensions->y - 1, g_terminal_dimensions->x - strlen(line_info), line_info);
      attroff(A_REVERSE);

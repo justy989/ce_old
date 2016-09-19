@@ -8,13 +8,13 @@ bool ce_alloc_lines(Buffer* buffer, int64_t line_count)
      CE_CHECK_PTR_ARG(buffer);
 
      if(line_count <= 0){
-          ce_message("%s() tried to allocate %ld lines for a buffer, but we can only allocated > 0 lines", line_count);
+          ce_message("%s() tried to allocate %lld lines for a buffer, but we can only allocated > 0 lines", line_count);
           return false;
      }
 
      buffer->lines = malloc(line_count * sizeof(char*));
      if(!buffer->lines){
-          ce_message("%s() failed to allocate %ld lines for buffer", line_count);
+          ce_message("%s() failed to allocate %lld lines for buffer", line_count);
           return false;
      }
 
@@ -120,12 +120,12 @@ void ce_free_buffer(Buffer* buffer)
 bool ce_point_on_buffer(const Buffer* buffer, const Point* location)
 {
      if(location->y < 0 || location->x < 0){
-          ce_message("%s() %ld, %ld not in buffer", __FUNCTION__, location->x, location->y);
+          ce_message("%s() %lld, %lld not in buffer", __FUNCTION__, location->x, location->y);
           return false;
      }
 
      if(location->y >= buffer->line_count){
-          ce_message("%s() %ld, %ld not in buffer with %ld lines",
+          ce_message("%s() %lld, %lld not in buffer with %lld lines",
                      __FUNCTION__, location->x, location->y, buffer->line_count);
           return false;
      }
@@ -136,7 +136,7 @@ bool ce_point_on_buffer(const Buffer* buffer, const Point* location)
      if(line) line_len = strlen(line);
 
      if(location->x > line_len){
-          ce_message("%s() %ld, %ld not in buffer with line %ld only %ld characters long",
+          ce_message("%s() %lld, %lld not in buffer with line %lld only %lld characters long",
                      __FUNCTION__, location->x, location->y, buffer->line_count, line_len);
           return false;
      }
@@ -165,7 +165,7 @@ bool ce_insert_char(Buffer* buffer, const Point* location, char c)
           int64_t new_len = line_len + 2;
           new_line = malloc(new_len);
           if(!new_line){
-               ce_message("%s() failed to allocate line with %ld characters", __FUNCTION__, new_len);
+               ce_message("%s() failed to allocate line with %lld characters", __FUNCTION__, new_len);
                return false;
           }
 
@@ -341,7 +341,7 @@ bool ce_remove_line(Buffer* buffer, int64_t line)
      int64_t new_line_count = buffer->line_count - 1;
      char** new_lines = malloc(new_line_count * sizeof(char*));
      if(!new_lines){
-          ce_message("%s() failed to malloc new lines: %ld", __FUNCTION__, new_line_count);
+          ce_message("%s() failed to malloc new lines: %lld", __FUNCTION__, new_line_count);
           return -1;
      }
 
@@ -363,7 +363,7 @@ bool ce_set_line(Buffer* buffer, int64_t line, const char* string)
      CE_CHECK_PTR_ARG(buffer);
 
      if(line < 0 || line >= buffer->line_count){
-          ce_message("%s() line %ld outside buffer with %ld lines", __FUNCTION__, line, buffer->line_count);
+          ce_message("%s() line %lld outside buffer with %lld lines", __FUNCTION__, line, buffer->line_count);
           return false;
      }
 

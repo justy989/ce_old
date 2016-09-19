@@ -456,6 +456,25 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                                    n_deletes--;
                               }
                          } break;
+                         case '%':
+                         {
+                              Point delta;
+                              if(!ce_find_match(buffer, cursor, &delta)) break;
+                              // TODO: delete across line boundaries
+                              assert(delta.y == 0);
+                              if(delta.x > 0){
+                                   for(int64_t i = 0; i < delta.x + 1; i++){
+                                        ce_remove_char(buffer, cursor);
+                                   }
+                              }
+                              else{
+                                   for(int64_t i = 0; i < -delta.x + 1; i++){
+                                        ce_remove_char(buffer, cursor);
+                                        cursor->x--;
+                                   }
+                                   cursor->x++;
+                              }
+                         } break;
                          default:
                               handled_key = false;
                          }

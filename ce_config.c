@@ -634,11 +634,11 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     new_view->left_collumn = config_state->view_current->left_collumn;
                }
           } break;
-          case '':
+          case 14: // Ctrl + n
           {
                Point save_cursor = config_state->view_current->cursor;
                config_state->view_current->buffer_node->buffer->cursor = config_state->view_current->cursor;
-               ce_remove_view(config_state->view_head, config_state->view_current);
+               ce_remove_view(&config_state->view_head, config_state->view_current);
                BufferView* new_view = ce_find_view_at_point(config_state->view_head, &save_cursor);
                if(new_view){
                     config_state->view_current = new_view;

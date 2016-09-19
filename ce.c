@@ -1364,12 +1364,34 @@ BufferView* find_connecting_view(BufferView* start, BufferView* match)
      return NULL;
 }
 
-bool ce_remove_view(BufferView* head, BufferView* view)
+bool ce_remove_view(BufferView** head, BufferView* view)
 {
      CE_CHECK_PTR_ARG(head);
      CE_CHECK_PTR_ARG(view);
 
-     BufferView* itr = find_connecting_view(head, view);
+     BufferView* itr = *head;
+
+     if(view == *head){
+          if(itr->next_horizontal && !itr->next_vertical){
+               *head = itr->next_horizontal;
+               free(itr);
+          }else if(!itr->next_horizontal && itr->next_vertical){
+               *head = itr->next_vertical;
+               free(itr);
+          }else if(itr->next_horizontal &&
+                   itr->next_vertical){
+               *head = itr->next_vertical;
+               BufferView* tmp = *head;
+               while(tmp->next_horizontal) tmp = tmp->next_horizontal;
+               tmp->next_horizontal = itr->next_horizontal;
+               free(itr);
+          }else{
+               ce_message("%s() cannot remove the only existing view", __FUNCTION__);
+          }
+          return true;
+     }
+
+     itr = find_connecting_view(*head, view);
      if(!itr){
           ce_message("%s() failed to remove unconnected view", __FUNCTION__);
           return false;
@@ -1383,9 +1405,9 @@ bool ce_remove_view(BufferView* head, BufferView* view)
                //       let's us not lose track of windows
                // bandage up the windows !
                if(view->next_vertical){
-                    BufferView* itr = view->next_horizontal;
-                    while(itr->next_vertical) itr = itr->next_vertical;
-                    itr->next_vertical = view->next_vertical;
+                    BufferView* tmp = view->next_horizontal;
+                    while(tmp->next_vertical) tmp = tmp->next_vertical;
+                    tmp->next_vertical = view->next_vertical;
                }
           }else if(view->next_vertical){
                itr->next_vertical = view->next_vertical;
@@ -1542,8 +1564,16 @@ bool draw_horizontal_views(const BufferView* view, bool first_drawn)
                ce_draw_buffer(itr->buffer_node->buffer, &itr->top_left, &itr->bottom_right, &buffer_top_left);
           }
 
+          // draw previous divider
+          if(itr != view){
+               for(int64_t i = itr->top_left.y; i <= itr->bottom_right.y; ++i){
+                    move(i, itr->top_left.x - 1);
+                    addch('|'); // TODO: make configurable
+               }
+          }
+
+          // draw next divider
           if(itr->next_horizontal){
-               //int64_t min = itr->top_left.y;
                for(int64_t i = itr->top_left.y; i <= itr->bottom_right.y; ++i){
                     move(i, itr->bottom_right.x);
                     addch('|'); // TODO: make configurable

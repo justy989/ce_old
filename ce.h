@@ -162,7 +162,7 @@ bool ce_commit_redo(Buffer* buffer, BufferCommitNode** tail, Point* cursor);
 bool ce_commits_free(BufferCommitNode** tail);
 
 BufferView* ce_split_view(BufferView* view, BufferNode* buffer_node, bool horizontal);
-bool ce_remove_view(BufferView* head, BufferView* view);
+bool ce_remove_view(BufferView** head, BufferView* view);
 bool ce_calc_views(BufferView* head);
 bool ce_draw_views(const BufferView* head);
 bool ce_free_views(BufferView** view);

@@ -1,4 +1,9 @@
 #include "ce.h"
+#include "assert.h"
+
+#include <assert.h>
+#include <ctype.h>
+#include <unistd.h>
 
 typedef struct BackspaceNode{
      char c;
@@ -80,6 +85,12 @@ void backspace_free(BackspaceNode** head, BackspaceNode** tail)
 typedef struct{
      bool insert;
      int last_key;
+     char command_key; // TODO: make a command string for multi-character commands
+     struct {
+          // state for fF and tT
+          char command_key;
+          char find_char;
+     } find_command;
      Point start_insert;
      Point original_start_insert;
      BackspaceNode* backspace_head;
@@ -92,67 +103,126 @@ typedef struct{
      BufferChangeNode* changes_tail;
 } BufferState;
 
+bool initialize_buffer(Buffer* buffer){
+     BufferState* buffer_state = calloc(1, sizeof(*buffer_state));
+     if(!buffer_state){
+          ce_message("failed to allocate buffer state.");
+          return false;
+     }
+     buffer->user_data = buffer_state;
+     return true;
+}
+
+// NOTE: need to free the allocated str
+char* str_from_file_stream(FILE* file){
+     fseek(file, 0, SEEK_END);
+     size_t file_size = ftell(file);
+     fseek(file, 0, SEEK_SET);
+
+     char* str = malloc(file_size + 1);
+     fread(str, file_size, 1, file);
+     str[file_size] = 0;
+     return str;
+}
+
+BufferNode* new_buffer_from_string(BufferNode* head, const char* name, const char* str){
+     Buffer* buffer = calloc(1, sizeof(*buffer));
+     if(!buffer){
+          ce_message("failed to allocate buffer");
+          return NULL;
+     }
+
+     buffer->name = strdup(name);
+     if(!buffer->name){
+          ce_message("failed to allocate buffer name");
+          free(buffer);
+          return NULL;
+     }
+
+     if(!initialize_buffer(buffer)){
+          free(buffer->name);
+          free(buffer);
+          return NULL;
+     }
+
+     ce_load_string(buffer, str);
+
+     BufferNode* new_buffer_node = ce_append_buffer_to_list(head, buffer);
+     if(!new_buffer_node){
+          free(buffer->name);
+          free(buffer->user_data);
+          free(buffer);
+          return NULL;
+     }
+
+     return new_buffer_node;
+}
+
+BufferNode* new_buffer_from_file(BufferNode* head, const char* filename)
+{
+     Buffer* buffer = calloc(1, sizeof(*buffer));
+     if(!buffer){
+          ce_message("failed to allocate buffer");
+          return NULL;
+     }
+
+     if(!ce_load_file(buffer, filename)){
+          free(buffer);
+          return NULL;
+     }
+
+     if(!initialize_buffer(buffer)){
+          free(buffer->filename);
+          free(buffer);
+     }
+
+     BufferNode* new_buffer_node = ce_append_buffer_to_list(head, buffer);
+     if(!new_buffer_node){
+          free(buffer->filename);
+          free(buffer->user_data);
+          free(buffer);
+          return NULL;
+     }
+
+     return new_buffer_node;
+}
+
 bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** argv, void** user_data)
 {
      // NOTE: need to set these in this module
      g_message_buffer = head->buffer;
      g_terminal_dimensions = terminal_dimensions;
 
-     for(int i = 0; i < argc; ++i){
-          Buffer* buffer = malloc(sizeof(*buffer));
-          if(!buffer){
-               ce_message("failed to allocate buffer");
-               return false;
-          }
-
-          memset(buffer, 0, sizeof(*buffer));
-
-          if(!ce_load_file(buffer, argv[i])){
-               free(buffer);
-               continue;
-          }
-
-          if(!ce_append_buffer_to_list(head, buffer)){
-               free(buffer);
-          }
-     }
-
      // setup the config's state
-     ConfigState* config_state = malloc(sizeof(*config_state));
-     if(!config_state) return false;
-
-     config_state->insert = false;
-     config_state->last_key = 0;
-     config_state->backspace_head = NULL;
-     config_state->backspace_tail = NULL;
-     config_state->view_head = malloc(sizeof(*config_state->view_head));
-     if(!config_state->view_head){
-          ce_message("failed to allocate buffer view.");
+     ConfigState* config_state = calloc(1, sizeof(*config_state));
+     if(!config_state){
+          ce_message("failed to allocate config state");
           return false;
      }
 
-     memset(config_state->view_head, 0, sizeof(*config_state->view_head));
-     config_state->view_head->bottom_right = *g_terminal_dimensions;
-     config_state->view_head->buffer_node = head ? head->next : head;
-
-     config_state->view_current = config_state->view_head;
+     config_state->view_head = calloc(1, sizeof(*config_state->view_head));
+     if(!config_state->view_head){
+          ce_message("failed to allocate buffer view");
+          return false;
+     }
 
      *user_data = config_state;
 
+     BufferNode* itr = head;
+
      // setup state for each buffer
-     while(head){
-          BufferState* buffer_state = malloc(sizeof(*buffer_state));
-          if(!buffer_state){
-               ce_message("failed to allocate buffer state.");
-               return false;
-          }
-          buffer_state->changes_tail = malloc(sizeof(*buffer_state->changes_tail));
-          buffer_state->changes_tail->change.type = BCT_NONE;
-          buffer_state->changes_tail->next = NULL;
-          buffer_state->changes_tail->prev = NULL;
-          head->buffer->user_data = buffer_state;
-          head = head->next;
+     while(itr){
+          initialize_buffer(itr->buffer);
+          itr = itr->next;
      }
+
+     for(int i = 0; i < argc; ++i){
+          if(!new_buffer_from_file(head, argv[i])) continue;
+     }
+
+     //config_state->view_head->bottom_right = *g_terminal_dimensions; // NOTE: do we need this?
+     config_state->view_head->buffer_node = (head && head->next) ? head->next : head;
+     config_state->view_current = config_state->view_head;
 
      return true;
 }
@@ -175,6 +245,60 @@ bool destroyer(BufferNode* head, void* user_data)
      return true;
 }
 
+void find_command(int command_key, int find_char, Buffer* buffer, Point* cursor)
+{
+     switch(command_key){
+     case 'f':
+     {
+          int64_t x_delta = ce_find_char_forward_in_line(buffer, cursor, find_char);
+          if(x_delta == -1) break;
+          Point delta = {x_delta, 0};
+          ce_move_cursor(buffer, cursor, &delta);
+     } break;
+     case 't':
+     {
+          Point search_point = {cursor->x + 1, cursor->y};
+          int64_t x_delta = ce_find_char_forward_in_line(buffer, &search_point, find_char);
+          if(x_delta <= 0) break;
+          Point delta = {x_delta, 0};
+          ce_move_cursor(buffer, cursor, &delta);
+     } break;
+     case 'F':
+     {
+          int64_t x_delta = ce_find_char_backward_in_line(buffer, cursor, find_char);
+          if(x_delta == -1) break;
+          Point delta = {-x_delta, 0};
+          ce_move_cursor(buffer, cursor, &delta);
+     } break;
+     case 'T':
+     {
+          Point search_point = {cursor->x - 1, cursor->y};
+          int64_t x_delta = ce_find_char_backward_in_line(buffer, &search_point, find_char);
+          if(x_delta <= 0) break;
+          Point delta = {-x_delta, 0};
+          ce_move_cursor(buffer, cursor, &delta);
+     } break;
+     default:
+          assert(0);
+          break;
+     }
+}
+
+void enter_insert_mode(ConfigState* config_state, Point* cursor)
+{
+     config_state->insert = true;
+     config_state->start_insert = *cursor;
+}
+
+bool should_handle_command(ConfigState* config_state, char key)
+{
+     if(config_state->command_key == '\0'){
+          config_state->command_key = key;
+          return false;
+     }
+     return true;
+}
+
 bool key_handler(int key, BufferNode* head, void* user_data)
 {
      ConfigState* config_state = user_data;
@@ -184,7 +308,15 @@ bool key_handler(int key, BufferNode* head, void* user_data)
 
      config_state->last_key = key;
 
+     // command keys are followed by a movement key which clears the command key
+     if(config_state->command_key != '\0' && key == 27){
+          // escape cancels a movement
+          config_state->command_key = '\0';
+          return true;
+     }
+
      if(config_state->insert){
+          assert(config_state->command_key == '\0');
           // TODO: should be a switch
           if(key == 27){ // escape
                config_state->insert = false;
@@ -279,7 +411,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                if(ce_insert_char(buffer, cursor, key)) cursor->x++;
           }
      }else{
-          switch(key){
+          switch((config_state->command_key != '\0') ? config_state->command_key : key){
           default:
                break;
           case 'q':
@@ -294,6 +426,16 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                Point delta = {0, -1};
                ce_move_cursor(buffer, cursor, &delta);
           } break;
+          case 'b':
+          case 'B':
+          {
+               cursor->x -= ce_find_beginning_of_word(buffer, cursor, key == 'b');
+          } break;
+          case 'e':
+          case 'E':
+          {
+               cursor->x += ce_find_end_of_word(buffer, cursor, key == 'e');
+          } break;
           case 'h':
           {
                Point delta = {-1, 0};
@@ -305,29 +447,153 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                ce_move_cursor(buffer, cursor, &delta);
           } break;
           case 'i':
+#if 0
                config_state->insert = true;
                config_state->start_insert = *cursor;
                config_state->original_start_insert = *cursor;
+#endif
+               enter_insert_mode(config_state, cursor);
                break;
+          case 'I':
+          {
+               ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
+               enter_insert_mode(config_state, cursor);
+          } break;
+          case 'O':
+          case 'o':
+          {
+               if(!buffer->line_count){
+                    ce_alloc_lines(buffer, 1);
+               }
+               if(ce_insert_newline(buffer, cursor->y + (key == 'o'))){
+                    cursor->y += (key == 'o');
+                    cursor->x = 0;
+               }
+               enter_insert_mode(config_state, cursor);
+          } break;
+          case '^':
+          {
+               ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
+          } break;
+          case '0':
+               cursor->x = 0;
+               break;
+          case '$':
+               cursor->x += ce_find_end_of_line(buffer, cursor);
+               break;
+          case 'A':
+          {
+               cursor->x += ce_find_end_of_line(buffer, cursor) + 1;
+               enter_insert_mode(config_state, cursor);
+          } break;
+          case 'm':
+          {
+               FILE* pfile = popen("echo justin stinkkkks", "r");
+               char* pstr = str_from_file_stream(pfile);
+               config_state->view_current->buffer_node = new_buffer_from_string(head, "test_buffer", pstr);
+               free(pstr);
+               pclose(pfile);
+               break;
+          }
           case 'a':
           {
                Point delta = {1, 0};
                ce_move_cursor(buffer, cursor, &delta);
-               config_state->insert = true;
-               config_state->start_insert = *cursor;
-               config_state->original_start_insert = *cursor;
+               enter_insert_mode(config_state, cursor);
           } break;
+          case 'C':
+          case 'D':
+          {
+               int64_t n_deletes = ce_find_end_of_line(buffer, cursor) + 1;
+               while(n_deletes){
+                    ce_remove_char(buffer, cursor);
+                    n_deletes--;
+               }
+               if(key == 'C') enter_insert_mode(config_state, cursor);
+          } break;
+          case 'S':
+          {
+               // TODO: unify with cc
+               ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
+               int64_t n_deletes = ce_find_end_of_line(buffer, cursor) + 1;
+               while(n_deletes){
+                    ce_remove_char(buffer, cursor);
+                    n_deletes--;
+               }
+               enter_insert_mode(config_state, cursor);
+          } break;
+          case 'c':
           case 'd':
-               // delete line
-               if(buffer->line_count){
-                    if(ce_remove_line(buffer, cursor->y)){
-                         if(cursor->y >= buffer->line_count){
-                              cursor->y = buffer->line_count - 1;
+               if(should_handle_command(config_state, key)){
+                    bool handled_key = true;
+                    if(key == config_state->command_key){ // cc or dd
+                         if(key == 'c'){
+                              // TODO: unify with 'S'
+                              ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
+                              int64_t n_deletes = ce_find_end_of_line(buffer, cursor) + 1;
+                              while(n_deletes){
+                                   ce_remove_char(buffer, cursor);
+                                   n_deletes--;
+                              }
+                              enter_insert_mode(config_state, cursor);
+                         }
+                         else{
+                              // delete line
+                              if(buffer->line_count){
+                                   if(ce_remove_line(buffer, cursor->y)){
+                                        // TODO more explicit method to put cursor on the line
+                                        Point delta = {0, 0};
+                                        ce_move_cursor(buffer, cursor, &delta);
+                                   }
+                              }
                          }
                     }
+                    else{
+                         // TODO: provide a vim movement function which gives you
+                         // the appropriate delta for the movement key sequence and
+                         // use that everywhere?
+                         switch(key){
+                         case 'e':
+                         case 'E':
+                         {
+                              int64_t n_deletes = ce_find_end_of_word(buffer, cursor, key == 'e') + 1;
+                              while(n_deletes){
+                                   ce_remove_char(buffer, cursor);
+                                   n_deletes--;
+                              }
+                         } break;
+                         case 'b':
+                         case 'B':
+                         {
+                              int64_t n_deletes = ce_find_beginning_of_word(buffer, cursor, key == 'b');
+                              while(n_deletes){
+                                   cursor->x--;
+                                   ce_remove_char(buffer, cursor);
+                                   n_deletes--;
+                              }
+                         } break;
+                         case '$':
+                         {
+                              int64_t n_deletes = ce_find_end_of_line(buffer, cursor) + 1;
+                              while(n_deletes){
+                                   ce_remove_char(buffer, cursor);
+                                   n_deletes--;
+                              }
+                         } break;
+                         default:
+                              handled_key = false;
+                         }
+                    }
+
+                    if(handled_key && config_state->command_key == 'c') enter_insert_mode(config_state, cursor);
+                    config_state->command_key = '\0';
                }
                break;
           case 's':
+               ce_remove_char(buffer, cursor);
+               enter_insert_mode(config_state, cursor);
+               break;
+          case '':
                ce_save_buffer(buffer, buffer->filename);
                break;
           case 'v':
@@ -339,7 +605,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     new_view->left_collumn = config_state->view_current->left_collumn;
                }
           } break;
-          case 'c':
+          case '':
           {
                BufferView* new_view = ce_split_view(config_state->view_current, config_state->view_current->buffer_node, false);
                if(new_view){
@@ -348,7 +614,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     new_view->left_collumn = config_state->view_current->left_collumn;
                }
           } break;
-          case 'm':
+          case '':
           {
                Point save_cursor = config_state->view_current->cursor;
                config_state->view_current->buffer_node->buffer->cursor = config_state->view_current->cursor;
@@ -360,7 +626,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     config_state->view_current = config_state->view_head;
                }
           } break;
-          case 'b':
+          case '':
           {
                // save cursor in buffer
                config_state->view_current->buffer_node->buffer->cursor = config_state->view_current->cursor;
@@ -374,6 +640,14 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                // load the cursor from the buffer
                config_state->view_current->cursor = config_state->view_current->buffer_node->buffer->cursor;
           } break;
+          case 'g':
+               if(should_handle_command(config_state, key)){
+                    // TODO: we will want to creating multiple BufferView* workspaces and switch between those using "gt"
+                    if(key == 't'){
+                    }
+                    config_state->command_key = '\0';
+               }
+               break;
           case 'u':
                if(buffer_state->changes_tail && buffer_state->changes_tail->change.type != BCT_NONE){
                     Point new_cursor = buffer_state->changes_tail->change.cursor;
@@ -403,6 +677,42 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }
           }
           break;
+          case ';':
+          {
+               if(config_state->find_command.command_key == '\0') break;
+               find_command(config_state->find_command.command_key,
+                            config_state->find_command.find_char, buffer, cursor);
+          } break;
+          case ',':
+          {
+               if(config_state->find_command.command_key == '\0') break;
+               char command_key = config_state->find_command.command_key;
+               if(isupper(command_key)) command_key = tolower(command_key);
+               else command_key = toupper(command_key);
+
+               find_command(command_key, config_state->find_command.find_char, buffer, cursor);
+          } break;
+          case 'f':
+          case 't':
+          case 'F':
+          case 'T':
+          {
+               if(should_handle_command(config_state, key)){
+                    config_state->find_command.command_key = config_state->command_key;
+                    config_state->find_command.find_char = key;
+                    find_command(config_state->command_key, key, buffer, cursor);
+                    // TODO: devise a better way to clear command_key following a movement
+                    config_state->command_key = '\0';
+               }
+          } break;
+          case 'r':
+          {
+               if(should_handle_command(config_state, key)){
+                    ce_set_char(buffer, cursor, key);
+                    // TODO: devise a better way to clear command_key following a movement
+                    config_state->command_key = '\0';
+               }
+          } break;
           case 21: // Ctrl + d
           {
                Point delta = {0, -g_terminal_dimensions->y / 2};
@@ -491,10 +801,10 @@ void view_drawer(const BufferNode* head, void* user_data)
      }
 
      attron(A_REVERSE);
-     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s %d lines, k %d, c %ld, %ld, b: %ld, %ld, bo: %ld, %ld t: %ld, %ld",
+     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s %d lines, k %d, c %ld, %ld, b: %ld, %ld, bo: %ld, %ld -> %ld, %ld t: %ld, %ld",
               config_state->insert ? "INSERT" : "NORMAL", buffer->filename, buffer->line_count, config_state->last_key,
               cursor->x, cursor->y, buffer_view->top_row, buffer_view->left_collumn, buffer_view->top_left.x, buffer_view->top_left.y,
-              g_terminal_dimensions->x, g_terminal_dimensions->y);
+              buffer_view->bottom_right.x, buffer_view->bottom_right.y, g_terminal_dimensions->x, g_terminal_dimensions->y);
      attroff(A_REVERSE);
 
      // reset the cursor

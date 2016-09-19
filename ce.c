@@ -313,7 +313,7 @@ int64_t ce_find_char_backward_in_line(Buffer* buffer, const Point* location, cha
      const char* cur_char = &buffer->lines[location->y][location->x];
      const char* line = buffer->lines[location->y];
      if(!line) return -1; // TODO is this possible?
-     const char* found_char = memrchr(line, c, cur_char - line);
+     const char* found_char = ce_memrchr(line, c, cur_char - line);
      if(!found_char) return -1;
      return cur_char - found_char;
 }
@@ -771,4 +771,14 @@ bool ce_buffer_undo(Buffer* buffer, BufferChangeNode** tail)
 
      free(undo_change);
      return true;
+}
+
+void* ce_memrchr(const void* s, int c, size_t n)
+{
+     char* rev_search = (void*)s + n;
+     while((uintptr_t)rev_search >= (uintptr_t)s){
+          if(*rev_search == c) return rev_search;
+	  rev_search--;
+     }
+     return NULL;
 }

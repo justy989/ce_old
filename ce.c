@@ -1585,6 +1585,23 @@ bool ce_calc_views(BufferView* view)
      return calc_horizontal_views(view, &top_left, &bottom_right, false);
 }
 
+void draw_view_bottom_right_borders(const BufferView* view, const char* separators)
+{
+     // draw right border
+     if(view->bottom_right.x < (g_terminal_dimensions->x - 1)){
+          for(int64_t i = view->top_left.y; i <= view->bottom_right.y; ++i){
+               move(i, view->bottom_right.x);
+               addch('|'); // TODO: make configurable
+          }
+     }
+
+     // draw bottom border
+     if(view->bottom_right.y < (g_terminal_dimensions->y - 1)){
+          move(view->bottom_right.y, view->top_left.x);
+          addstr(separators);
+     }
+}
+
 bool draw_vertical_views(const BufferView* view, bool first_drawn);
 
 bool draw_horizontal_views(const BufferView* view, bool first_drawn)
@@ -1606,20 +1623,7 @@ bool draw_horizontal_views(const BufferView* view, bool first_drawn)
                ce_draw_buffer(itr->buffer_node->buffer, &itr->top_left, &itr->bottom_right, &buffer_top_left);
           }
 
-          // TODO: consolidate with draw_vertical_views
-          // draw right border
-          if(itr->bottom_right.x < (g_terminal_dimensions->x - 1)){
-               for(int64_t i = itr->top_left.y; i <= itr->bottom_right.y; ++i){
-                    move(i, itr->bottom_right.x);
-                    addch('|'); // TODO: make configurable
-               }
-          }
-
-          // draw bottom border
-          if(itr->bottom_right.y < (g_terminal_dimensions->y - 1)){
-               move(itr->bottom_right.y, itr->top_left.x);
-               addstr(separators);
-          }
+          draw_view_bottom_right_borders(itr, separators);
 
           itr = itr->next_horizontal;
      }
@@ -1646,19 +1650,7 @@ bool draw_vertical_views(const BufferView* view, bool first_drawn)
                ce_draw_buffer(itr->buffer_node->buffer, &itr->top_left, &itr->bottom_right, &buffer_top_left);
           }
 
-          // draw right border
-          if(itr->bottom_right.x < (g_terminal_dimensions->x - 1)){
-               for(int64_t i = itr->top_left.y; i <= itr->bottom_right.y; ++i){
-                    move(i, itr->bottom_right.x);
-                    addch('|'); // TODO: make configurable
-               }
-          }
-
-          // draw bottom border
-          if(itr->bottom_right.y < (g_terminal_dimensions->y - 1)){
-               move(itr->bottom_right.y, itr->top_left.x);
-               addstr(separators);
-          }
+          draw_view_bottom_right_borders(itr, separators);
 
           itr = itr->next_vertical;
      }

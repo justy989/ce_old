@@ -154,6 +154,13 @@ bool destroyer(BufferNode* head, void* user_data)
      return true;
 }
 
+// location is {left_column, top_line} for the view
+void scroll_view_to_location(BufferState* buffer_state, const Point* location){
+     buffer_state->left_column = (location->x >= 0) ? location->x : 0;
+     buffer_state->start_line = (location->y >= 0) ? location->y : 0;
+}
+
+
 void find_command(int command_key, int find_char, Buffer* buffer, Point* cursor)
 {
      switch(command_key){
@@ -523,6 +530,23 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'z':
           {
                if(should_handle_command(config_state, key)){
+                    switch(key){
+                    case 't':
+                    {
+                         Point location = {0, cursor->y};
+                         scroll_view_to_location(buffer_state, &location);
+                    } break;
+                    case 'z':
+                    {
+                         Point location = {0, cursor->y - (g_terminal_dimensions->y/2)};
+                         scroll_view_to_location(buffer_state, &location);
+                    } break;
+                    case 'b':
+                    {
+                         Point location = {0, cursor->y - g_terminal_dimensions->y};
+                         scroll_view_to_location(buffer_state, &location);
+                    } break;
+                    }
                     // TODO: devise a better way to clear command_key following a movement
                     config_state->command_key = '\0';
                }

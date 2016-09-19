@@ -93,14 +93,14 @@ typedef struct{
      } find_command;
      Point start_insert;
      Point original_start_insert;
-     BackspaceNode* backspace_head;
-     BackspaceNode* backspace_tail;
      BufferView* view_head;
      BufferView* view_current;
 } ConfigState;
 
 typedef struct{
      BufferCommitNode* commit_tail;
+     BackspaceNode* backspace_head;
+     BackspaceNode* backspace_tail;
 } BufferState;
 
 bool initialize_buffer(Buffer* buffer){
@@ -206,8 +206,6 @@ int64_t strlen_ignore_newlines(const char* str)
           str++;
      }
 
-     ce_message("%s() '%s' is %ld", __FUNCTION__, str, count);
-
      return count;
 }
 
@@ -274,7 +272,7 @@ void find_command(int command_key, int find_char, Buffer* buffer, Point* cursor)
      switch(command_key){
      case 'f':
      {
-          int64_t x_delta = ce_find_char_forward_in_line(buffer, cursor, find_char);
+          int64_t x_delta = ce_find_delta_to_char_forward_in_line(buffer, cursor, find_char);
           if(x_delta == -1) break;
           Point delta = {x_delta, 0};
           ce_move_cursor(buffer, cursor, &delta);
@@ -282,14 +280,14 @@ void find_command(int command_key, int find_char, Buffer* buffer, Point* cursor)
      case 't':
      {
           Point search_point = {cursor->x + 1, cursor->y};
-          int64_t x_delta = ce_find_char_forward_in_line(buffer, &search_point, find_char);
+          int64_t x_delta = ce_find_delta_to_char_forward_in_line(buffer, &search_point, find_char);
           if(x_delta <= 0) break;
           Point delta = {x_delta, 0};
           ce_move_cursor(buffer, cursor, &delta);
      } break;
      case 'F':
      {
-          int64_t x_delta = ce_find_char_backward_in_line(buffer, cursor, find_char);
+          int64_t x_delta = ce_find_delta_to_char_backward_in_line(buffer, cursor, find_char);
           if(x_delta == -1) break;
           Point delta = {-x_delta, 0};
           ce_move_cursor(buffer, cursor, &delta);
@@ -297,7 +295,7 @@ void find_command(int command_key, int find_char, Buffer* buffer, Point* cursor)
      case 'T':
      {
           Point search_point = {cursor->x - 1, cursor->y};
-          int64_t x_delta = ce_find_char_backward_in_line(buffer, &search_point, find_char);
+          int64_t x_delta = ce_find_delta_to_char_backward_in_line(buffer, &search_point, find_char);
           if(x_delta <= 0) break;
           Point delta = {-x_delta, 0};
           ce_move_cursor(buffer, cursor, &delta);
@@ -330,7 +328,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
      Buffer* buffer = config_state->view_current->buffer_node->buffer;
      BufferState* buffer_state = buffer->user_data;
      Point* cursor = &config_state->view_current->cursor;
-
      config_state->last_key = key;
 
      // command keys are followed by a movement key which clears the command key
@@ -343,13 +340,16 @@ bool key_handler(int key, BufferNode* head, void* user_data)
      if(config_state->insert){
           assert(config_state->command_key == '\0');
           // TODO: should be a switch
-          if(key == 27){ // escape
+          switch(key){
+          case 27: // escape
+          {
                config_state->insert = false;
                // TODO: handle newlines for saving state
                if(config_state->start_insert.x == config_state->original_start_insert.x &&
                   config_state->start_insert.y == config_state->original_start_insert.y){
                     // TODO: assert cursor is after start_insert
                     // exclusively inserts
+                    ce_message("killin it");
                     ce_commit_insert_string(&buffer_state->commit_tail, &config_state->start_insert, cursor,
                                             ce_dupe_string(buffer, &config_state->start_insert, cursor));
                }else if(config_state->start_insert.x < config_state->original_start_insert.x ||
@@ -358,14 +358,14 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                        cursor->y == config_state->start_insert.y){
                          // exclusively backspaces!
                          ce_commit_remove_string(&buffer_state->commit_tail, cursor, &config_state->start_insert,
-                                                 backspace_get_string(config_state->backspace_head));
-                         backspace_free(&config_state->backspace_head, &config_state->backspace_tail);
+                                                 backspace_get_string(buffer_state->backspace_head));
+                         backspace_free(&buffer_state->backspace_head, &buffer_state->backspace_tail);
                     }else{
                          // mixture of inserts and backspaces
                          ce_commit_change_string(&buffer_state->commit_tail, &config_state->start_insert, cursor,
                                                  ce_dupe_string(buffer, &config_state->start_insert, cursor),
-                                                 backspace_get_string(config_state->backspace_head));
-                         backspace_free(&config_state->backspace_head, &config_state->backspace_tail);
+                                                 backspace_get_string(buffer_state->backspace_head));
+                         backspace_free(&buffer_state->backspace_head, &buffer_state->backspace_tail);
                     }
                }
 
@@ -375,7 +375,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          cursor->x--;
                     }
                }
-          }else if(key == 127){ // backspace
+          } break;
+          case 127: // backspace
                if(buffer->line_count){
                     if(cursor->x == 0 && cursor->y != 0){
                          int64_t line_len = 0;
@@ -389,7 +390,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          Point delta = {0, -1};
                          ce_move_cursor(buffer, cursor, &delta);
                          cursor->x = line_len;
-                         backspace_append(&config_state->backspace_tail, &config_state->backspace_head, '\n');
+                         backspace_append(&buffer_state->backspace_tail, &buffer_state->backspace_head, '\n');
                          config_state->start_insert = *cursor;
                     }else{
                          Point previous = *cursor;
@@ -398,7 +399,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          if(ce_get_char(buffer, &previous, &c)){
                               if(ce_remove_char(buffer, &previous)){
                                    if(cursor->x <= config_state->start_insert.x){
-                                        backspace_append(&config_state->backspace_tail, &config_state->backspace_head, c);
+                                        backspace_append(&buffer_state->backspace_tail, &buffer_state->backspace_head, c);
                                         config_state->start_insert.x--;
                                    }
                                    Point delta = {-1, 0};
@@ -407,12 +408,14 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          }
                     }
                }
-          }else if(key == 126){ // delete ?
-               ce_remove_char(buffer, cursor);
-          }else if(key == 10){ // add empty line
+          case 126: // delete ?
+               //ce_remove_char(buffer, cursor);
+               break;
+          case 10: // return
                if(!buffer->line_count){
                     ce_alloc_lines(buffer, 1);
                }
+
                if(buffer->lines[cursor->y] && cursor->x < (int64_t)(strlen(buffer->lines[cursor->y]))){
                     char* start = buffer->lines[cursor->y] + cursor->x;
                     int64_t to_end_of_line_len = strlen(start);
@@ -422,9 +425,10 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          cursor->x = 0;
                     }
                }
-          }else{ // insert
-               // TODO: handle newlines when inserting individual chars
+               break;
+          default:
                if(ce_insert_char(buffer, cursor, key)) cursor->x++;
+               break;
           }
      }else{
           switch((config_state->command_key != '\0') ? config_state->command_key : key){
@@ -445,12 +449,12 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'b':
           case 'B':
           {
-               cursor->x -= ce_find_beginning_of_word(buffer, cursor, key == 'b');
+               cursor->x -= ce_find_delta_to_beginning_of_word(buffer, cursor, key == 'b');
           } break;
           case 'e':
           case 'E':
           {
-               cursor->x += ce_find_end_of_word(buffer, cursor, key == 'e');
+               cursor->x += ce_find_delta_to_end_of_word(buffer, cursor, key == 'e');
           } break;
           case 'h':
           {
@@ -490,11 +494,11 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                cursor->x = 0;
                break;
           case '$':
-               cursor->x += ce_find_end_of_line(buffer, cursor);
+               cursor->x += ce_find_delta_to_end_of_line(buffer, cursor);
                break;
           case 'A':
           {
-               cursor->x += ce_find_end_of_line(buffer, cursor) + 1;
+               cursor->x += ce_find_delta_to_end_of_line(buffer, cursor) + 1;
                enter_insert_mode(config_state, cursor);
           } break;
           case 'm':
@@ -515,10 +519,14 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'C':
           case 'D':
           {
-               int64_t n_deletes = ce_find_end_of_line(buffer, cursor) + 1;
-               while(n_deletes){
-                    ce_remove_char(buffer, cursor);
-                    n_deletes--;
+               int64_t n_deletes = ce_find_delta_to_end_of_line(buffer, cursor) + 1;
+               if(n_deletes){
+                    Point end = *cursor;
+                    end.x += n_deletes;
+                    char* save_string = ce_dupe_string(buffer, cursor, &end);
+                    if(ce_remove_string(buffer, cursor, n_deletes)){
+                         ce_commit_remove_string(&buffer_state->commit_tail, cursor, cursor, save_string);
+                    }
                }
                if(key == 'C') enter_insert_mode(config_state, cursor);
           } break;
@@ -526,7 +534,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           {
                // TODO: unify with cc
                ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
-               int64_t n_deletes = ce_find_end_of_line(buffer, cursor) + 1;
+               int64_t n_deletes = ce_find_delta_to_end_of_line(buffer, cursor) + 1;
                while(n_deletes){
                     ce_remove_char(buffer, cursor);
                     n_deletes--;
@@ -541,7 +549,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          if(key == 'c'){
                               // TODO: unify with 'S'
                               ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
-                              int64_t n_deletes = ce_find_end_of_line(buffer, cursor) + 1;
+                              int64_t n_deletes = ce_find_delta_to_end_of_line(buffer, cursor) + 1;
                               while(n_deletes){
                                    ce_remove_char(buffer, cursor);
                                    n_deletes--;
@@ -567,7 +575,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          case 'e':
                          case 'E':
                          {
-                              int64_t n_deletes = ce_find_end_of_word(buffer, cursor, key == 'e') + 1;
+                              int64_t n_deletes = ce_find_delta_to_end_of_word(buffer, cursor, key == 'e') + 1;
                               while(n_deletes){
                                    ce_remove_char(buffer, cursor);
                                    n_deletes--;
@@ -576,7 +584,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          case 'b':
                          case 'B':
                          {
-                              int64_t n_deletes = ce_find_beginning_of_word(buffer, cursor, key == 'b');
+                              int64_t n_deletes = ce_find_delta_to_beginning_of_word(buffer, cursor, key == 'b');
                               while(n_deletes){
                                    cursor->x--;
                                    ce_remove_char(buffer, cursor);
@@ -585,7 +593,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          } break;
                          case '$':
                          {
-                              int64_t n_deletes = ce_find_end_of_line(buffer, cursor) + 1;
+                              int64_t n_deletes = ce_find_delta_to_end_of_line(buffer, cursor) + 1;
                               while(n_deletes){
                                    ce_remove_char(buffer, cursor);
                                    n_deletes--;
@@ -753,6 +761,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case 8: // Ctrl + h
           {
+               // TODO: consolidate into function for use with other window movement keys, and for use in insert mode?
                Point point = {config_state->view_current->top_left.x - 2, // account for window separator
                               cursor->y - config_state->view_current->top_row + config_state->view_current->top_left.y};
                if(point.x < 0) point.x += g_terminal_dimensions->x - 1;

@@ -105,12 +105,16 @@ int main(int argc, char** argv)
      int opt = 0;
      int parsed_args = 1;
      bool done_parsing = false;
+     bool save_messages_on_exit = false;
 
      // TODO: create config parser
      // TODO: pass unhandled main arguments to the config's arg parser?
-	while((opt = getopt(argc, argv, "c:h")) != -1 && !done_parsing){
+	while((opt = getopt(argc, argv, "c:sh")) != -1 && !done_parsing){
           parsed_args++;
           switch(opt){
+          case 's':
+               save_messages_on_exit = true;
+               break;
           case 'c':
                config = optarg;
                parsed_args++;
@@ -235,7 +239,7 @@ int main(int argc, char** argv)
      // cleanup ncurses
      endwin();
 
-     ce_save_buffer(g_message_buffer, g_message_buffer->filename);
+     if(save_messages_on_exit) ce_save_buffer(g_message_buffer, g_message_buffer->filename);
 
      if(current_config.so_handle != stable_config.so_handle)
           config_close(&current_config, buffer_list_head, user_data);

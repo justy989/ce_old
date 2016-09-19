@@ -461,7 +461,7 @@ char* ce_dupe_line(Buffer* buffer, int64_t line)
 }
 
 // return x delta between location and the located character 'c' if found. return -1 if not found
-int64_t ce_find_char_forward_in_line(Buffer* buffer, const Point* location, char c)
+int64_t ce_find_delta_to_char_forward_in_line(Buffer* buffer, const Point* location, char c)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -475,7 +475,7 @@ int64_t ce_find_char_forward_in_line(Buffer* buffer, const Point* location, char
 }
 
 // return -x delta between location and the located character 'c' if found. return -1 if not found
-int64_t ce_find_char_backward_in_line(Buffer* buffer, const Point* location, char c)
+int64_t ce_find_delta_to_char_backward_in_line(Buffer* buffer, const Point* location, char c)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -503,7 +503,7 @@ bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor)
 }
 
 // return -1 on failure, delta to move left to the beginning of the word on success
-int64_t ce_find_beginning_of_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
+int64_t ce_find_delta_to_beginning_of_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -530,7 +530,7 @@ int64_t ce_find_beginning_of_word(Buffer* buffer, const Point* location, bool pu
 }
 
 // return -1 on failure, delta to move left to the beginning of the word on success
-int64_t ce_find_end_of_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
+int64_t ce_find_delta_to_end_of_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -913,7 +913,7 @@ bool ce_remove_buffer_from_list(BufferNode* head, BufferNode** node)
 }
 
 // return x delta to the last character in the line, -1 on error
-int64_t ce_find_end_of_line(const Buffer* buffer, Point* cursor)
+int64_t ce_find_delta_to_end_of_line(const Buffer* buffer, Point* cursor)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);

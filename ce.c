@@ -297,9 +297,9 @@ bool ce_insert_line(Buffer* buffer, int64_t line, const char* string)
      char** new_lines = malloc(new_line_count * sizeof(char*));
      if(!new_lines){
           if(buffer == g_message_buffer){
-               printf("%s() failed to malloc new lines: %ld\n", __FUNCTION__, new_line_count);
+               printf("%s() failed to malloc new lines: %lld\n", __FUNCTION__, new_line_count);
           }else{
-               ce_message("%s() failed to malloc new lines: %ld", __FUNCTION__, new_line_count);
+               ce_message("%s() failed to malloc new lines: %lld", __FUNCTION__, new_line_count);
           }
           return false;
      }

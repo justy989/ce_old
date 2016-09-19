@@ -253,6 +253,7 @@ bool destroyer(BufferNode* head, void* user_data)
 {
      while(head){
           BufferState* buffer_state = head->buffer->user_data;
+          ce_commits_free(&buffer_state->commit_tail);
           free(buffer_state);
           head->buffer->user_data = NULL;
           head = head->next;
@@ -263,7 +264,7 @@ bool destroyer(BufferNode* head, void* user_data)
           ce_free_views(&config_state->view_head);
           config_state->view_current = NULL;
      }
-     free(user_data);
+     free(config_state);
      return true;
 }
 
@@ -349,21 +350,20 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                   config_state->start_insert.y == config_state->original_start_insert.y){
                     // TODO: assert cursor is after start_insert
                     // exclusively inserts
-                    ce_message("killin it");
-                    ce_commit_insert_string(&buffer_state->commit_tail, &config_state->start_insert, cursor,
-                                            ce_dupe_string(buffer, &config_state->start_insert, cursor));
+                    ce_commit_insert_string(&buffer_state->commit_tail, &config_state->start_insert, &config_state->original_start_insert,
+                                            cursor, ce_dupe_string(buffer, &config_state->start_insert, cursor));
                }else if(config_state->start_insert.x < config_state->original_start_insert.x ||
                         config_state->start_insert.y < config_state->original_start_insert.y){
                     if(cursor->x == config_state->start_insert.x &&
                        cursor->y == config_state->start_insert.y){
                          // exclusively backspaces!
-                         ce_commit_remove_string(&buffer_state->commit_tail, cursor, &config_state->start_insert,
-                                                 backspace_get_string(buffer_state->backspace_head));
+                         ce_commit_remove_string(&buffer_state->commit_tail, cursor, &config_state->original_start_insert,
+                                                 cursor, backspace_get_string(buffer_state->backspace_head));
                          backspace_free(&buffer_state->backspace_head, &buffer_state->backspace_tail);
                     }else{
                          // mixture of inserts and backspaces
-                         ce_commit_change_string(&buffer_state->commit_tail, &config_state->start_insert, cursor,
-                                                 ce_dupe_string(buffer, &config_state->start_insert, cursor),
+                         ce_commit_change_string(&buffer_state->commit_tail, &config_state->start_insert, &config_state->original_start_insert,
+                                                 cursor, ce_dupe_string(buffer, &config_state->start_insert, cursor),
                                                  backspace_get_string(buffer_state->backspace_head));
                          backspace_free(&buffer_state->backspace_head, &buffer_state->backspace_tail);
                     }
@@ -525,7 +525,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     end.x += n_deletes;
                     char* save_string = ce_dupe_string(buffer, cursor, &end);
                     if(ce_remove_string(buffer, cursor, n_deletes)){
-                         ce_commit_remove_string(&buffer_state->commit_tail, cursor, cursor, save_string);
+                         ce_commit_remove_string(&buffer_state->commit_tail, cursor, cursor, cursor, save_string);
                     }
                }
                if(key == 'C') enter_insert_mode(config_state, cursor);
@@ -668,49 +668,21 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }
                break;
           case 'u':
-               if(buffer_state->commit_tail && buffer_state->commit_tail->change.type != BCT_NONE){
-                    // set the cursor based on the type of change we made
-                    Point new_cursor = buffer_state->commit_tail->change.start;
-
-                    int64_t offset = 0;
-
-                    switch(buffer_state->commit_tail->change.type){
-                    default:
-                         break;
-                    case BCT_REMOVE_CHAR:
-                    case BCT_REMOVE_STRING:
-                         offset = strlen_ignore_newlines(buffer_state->commit_tail->change.str);
-                         break;
-                    case BCT_CHANGE_CHAR:
-                    case BCT_CHANGE_STRING:
-                         offset = strlen_ignore_newlines(buffer_state->commit_tail->change.prev_str);
-                         break;
-                    }
-
-                    if(ce_commit_undo(buffer, &buffer_state->commit_tail)){
-                         *cursor = new_cursor;
-
-                         if(offset){
-                              ce_message("advance %ld", offset);
-                              ce_advance_cursor(buffer, cursor, offset);
-                         }
-                    }
+               if(buffer_state->commit_tail && buffer_state->commit_tail->commit.type != BCT_NONE){
+                    ce_commit_undo(buffer, &buffer_state->commit_tail, cursor);
                }
                break;
           case 'x':
           {
                char c;
                if(ce_get_char(buffer, cursor, &c) && ce_remove_char(buffer, cursor)){
-                    ce_commit_remove_char(&buffer_state->commit_tail, cursor, cursor, c);
+                    ce_commit_remove_char(&buffer_state->commit_tail, cursor, cursor, cursor, c);
                }
           }
           break;
           case 18:
           if(buffer_state->commit_tail && buffer_state->commit_tail->next){
-               Point new_cursor = buffer_state->commit_tail->next->change.end;
-               if(ce_commit_redo(buffer, &buffer_state->commit_tail)){
-                    *cursor = new_cursor;
-               }
+               ce_commit_redo(buffer, &buffer_state->commit_tail, cursor);
           }
           break;
           case ';':

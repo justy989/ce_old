@@ -669,7 +669,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                char* search_str = alloca(word_len+1);
                strncpy(search_str, &buffer->lines[cursor->y][cursor->x], word_len);
                search_str[word_len] = '\0';
-               ce_message("searching %s", search_str);
 
                Point delta;
                if(ce_find_str(buffer, cursor, search_str, &delta)){

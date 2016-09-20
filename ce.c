@@ -1254,9 +1254,14 @@ bool ce_commits_free(BufferCommitNode** tail)
 {
      CE_CHECK_PTR_ARG(tail);
 
+     // make sure we find the real end
+     while((*tail)->next){
+          *tail = (*tail)->next;
+     }
+
      while(*tail){
           BufferCommitNode* tmp = *tail;
-          *tail = (*tail)->next;
+          *tail = (*tail)->prev;
           free_commit(tmp);
      }
 

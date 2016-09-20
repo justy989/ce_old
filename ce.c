@@ -726,9 +726,7 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
      if(!ce_point_on_buffer(buffer, location)) return false;
 
      char* current_line = buffer->lines[location->y];
-     int64_t current_line_len = 0;
-
-     current_line_len = strlen(current_line);
+     int64_t current_line_len = strlen(current_line);
      int64_t rest_of_the_line_len = (current_line_len - location->x);
 
      if(length <= rest_of_the_line_len){
@@ -755,14 +753,12 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
           length -= rest_of_the_line_len;
           line_index++;
      }else{
-          // removing has to be counted as 1 in length due to 'newline' character's being used
-          // to insert strings. They need to be symmetrical
           ce_remove_line(buffer, location->y);
      }
 
-     length--; // account for line newline at the end of lines that doesn't physically exist
-
      while(length > 0){
+          length--; // account for newlines
+
           if(line_index >= buffer->line_count) break;
 
           char* next_line = buffer->lines[line_index];
@@ -772,11 +768,10 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
                // remove any lines that we have the length to remove completely
                ce_remove_line(buffer, line_index);
                length -= next_line_len;
-               length--; // account for line newline at the end of lines that doesn't physically exist
           }else{
                int64_t next_line_part_len = next_line_len - length;
                int64_t new_line_len = location->x + next_line_part_len;
-               char* new_line = malloc(new_line_len + 1);
+               char* new_line = calloc(1, new_line_len + 1);
                if(!new_line){
                     ce_message("%s() failed to malloc new line", __FUNCTION__);
                     return false;
@@ -785,9 +780,9 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
                strncpy(new_line, current_line, location->x);
                strncpy(new_line + location->x, next_line + length, next_line_part_len);
                new_line[new_line_len] = 0;
+               free(current_line);
                buffer->lines[location->y] = new_line;
                ce_remove_line(buffer, line_index);
-               if(next_line) free(next_line);
                length = -1;
           }
      }

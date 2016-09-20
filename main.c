@@ -55,7 +55,8 @@ typedef struct Config{
 
 const Config config_defaults = {NULL, NULL, default_initializer, default_destroyer, default_key_handler, default_view_drawer};
 
-bool config_open_and_init(Config* config, const char* path, BufferNode* head, int argc, char** argv, void** user_data){
+bool config_open_and_init(Config* config, const char* path, BufferNode* head, int argc, char** argv, void** user_data)
+{
      // try to load the config shared object
      *config = config_defaults;
      config->so_handle = dlopen(path, RTLD_LAZY); // TODO: investigate why my laptop fails when we use RTLD_NOW
@@ -81,7 +82,8 @@ bool config_open_and_init(Config* config, const char* path, BufferNode* head, in
      return true;
 }
 
-void config_close(Config* config, BufferNode* head, void* user_data){
+void config_close(Config* config, BufferNode* head, void* user_data)
+{
      if(!config->so_handle) return;
      free(config->path);
      if(config->destroyer) config->destroyer(head, user_data);
@@ -89,7 +91,8 @@ void config_close(Config* config, BufferNode* head, void* user_data){
 }
 
 sigjmp_buf segv_ctxt;
-void segv_handler(int signo){
+void segv_handler(int signo)
+{
      (void)signo;
      struct sigaction sa;
      sa.sa_handler = segv_handler;

@@ -351,15 +351,31 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                   config_state->start_insert.y == config_state->original_start_insert.y){
                     // TODO: assert cursor is after start_insert
                     // exclusively inserts
+                    char* duped = ce_dupe_string(buffer, &config_state->start_insert, cursor);
+                    char* tmp = strdup(duped);
+                    char* itr = tmp;
+                    while(*itr){
+                         if(*itr == NEWLINE) *itr = '|';
+                         itr++;
+                    }
+                    ce_message("c: '%s'", tmp);
                     ce_commit_insert_string(&buffer_state->commit_tail, &config_state->start_insert, &config_state->original_start_insert,
-                                            cursor, ce_dupe_string(buffer, &config_state->start_insert, cursor));
+                                            cursor, duped);
                }else if(config_state->start_insert.x < config_state->original_start_insert.x ||
                         config_state->start_insert.y < config_state->original_start_insert.y){
                     if(cursor->x == config_state->start_insert.x &&
                        cursor->y == config_state->start_insert.y){
                          // exclusively backspaces!
+                         char* duped = backspace_get_string(buffer_state->backspace_head);
+                         char* tmp = strdup(duped);
+                         char* itr = tmp;
+                         while(*itr){
+                              if(*itr == NEWLINE) *itr = '|';
+                              itr++;
+                         }
+                         ce_message("d: '%s'", tmp);
                          ce_commit_remove_string(&buffer_state->commit_tail, cursor, &config_state->original_start_insert,
-                                                 cursor, backspace_get_string(buffer_state->backspace_head));
+                                                 cursor, duped);
                          backspace_free(&buffer_state->backspace_head, &buffer_state->backspace_tail);
                     }else{
                          // mixture of inserts and backspaces
@@ -383,7 +399,9 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          int64_t line_len = 0;
                          if(buffer->lines[cursor->y - 1]){
                               line_len = strlen(buffer->lines[cursor->y - 1]);
-                              ce_append_string(buffer, cursor->y - 1, buffer->lines[cursor->y]);
+                              if(buffer->lines[cursor->y]){
+                                   ce_append_string(buffer, cursor->y - 1, buffer->lines[cursor->y]);
+                              }
                          }else{
                               if(buffer->lines[cursor->y]){
                                    buffer->lines[cursor->y - 1] = strdup(buffer->lines[cursor->y]);
@@ -828,10 +846,10 @@ void view_drawer(const BufferNode* head, void* user_data)
      }
 
      attron(A_REVERSE);
-     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s %"PRId64" lines, k %d, c %"PRId64", %"PRId64,
+     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s %lld lines, k %lld, c %lld, %lld, v %lld, %lld -> %lld, %lld t: %lld, %lld",
               config_state->insert ? "INSERT" : "NORMAL", buffer->filename, buffer->line_count, config_state->last_key,
-              cursor->x, cursor->y, buffer_view->top_row, buffer_view->left_collumn, buffer_view->top_left.x, buffer_view->top_left.y,
-              buffer_view->bottom_right.x, buffer_view->bottom_right.y, g_terminal_dimensions->x, g_terminal_dimensions->y);
+              cursor->x, cursor->y, buffer_view->top_left.x, buffer_view->top_left.y, buffer_view->bottom_right.x,
+              buffer_view->bottom_right.y, g_terminal_dimensions->x, g_terminal_dimensions->y);
      attroff(A_REVERSE);
 
      // reset the cursor

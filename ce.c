@@ -1505,31 +1505,30 @@ bool calc_horizontal_views(BufferView* view, const Point* top_left, const Point*
           view_count++;
      }
 
-     int64_t shift = (bottom_right->x - top_left->x) / view_count;
+     int64_t shift = ((bottom_right->x - top_left->x) + 1) / view_count;
      Point new_top_left = *top_left;
      Point new_bottom_right = *bottom_right;
-     new_bottom_right.x = new_top_left.x + shift;
-     if(new_bottom_right.x >= g_terminal_dimensions->x) new_bottom_right.x = g_terminal_dimensions->x - 1;
+     new_bottom_right.x = new_top_left.x + (shift - 1);
 
      itr = view;
      while(itr){
-          itr->top_left = new_top_left;
-          itr->bottom_right = new_bottom_right;
           if(!first_calc && itr == view && itr->next_vertical){
                calc_vertical_views(itr, &new_top_left, &new_bottom_right, true);
           }else if(itr != view && itr->next_vertical){
                calc_vertical_views(itr, &new_top_left, &new_bottom_right, true);
+          }else{
+               itr->top_left = new_top_left;
+               itr->bottom_right = new_bottom_right;
           }
 
           new_top_left.x += shift;
-          new_bottom_right.x = new_top_left.x + shift;
 
-          // account for border
           if(itr->next_horizontal){
-               new_top_left.x++;
+               new_bottom_right.x = new_top_left.x + (shift - 1);
+          }else{
+               itr->bottom_right.x = bottom_right->x;
           }
 
-          if(new_bottom_right.x >= g_terminal_dimensions->x) new_bottom_right.x = g_terminal_dimensions->x - 1;
           itr = itr->next_horizontal;
      }
 
@@ -1545,31 +1544,30 @@ bool calc_vertical_views(BufferView* view, const Point* top_left, const Point* b
           view_count++;
      }
 
-     int64_t shift = (bottom_right->y - top_left->y) / view_count;
+     int64_t shift = ((bottom_right->y - top_left->y) + 1) / view_count;
      Point new_top_left = *top_left;
      Point new_bottom_right = *bottom_right;
-     new_bottom_right.y = new_top_left.y + shift;
-     if(new_bottom_right.y >= g_terminal_dimensions->y) new_bottom_right.y = g_terminal_dimensions->y - 1;
+     new_bottom_right.y = new_top_left.y + (shift - 1);
 
      itr = view;
      while(itr){
-          itr->top_left = new_top_left;
-          itr->bottom_right = new_bottom_right;
           if(!first_calc && itr == view && itr->next_horizontal){
                calc_horizontal_views(itr, &new_top_left, &new_bottom_right, true);
           }else if(itr != view && itr->next_horizontal){
                calc_horizontal_views(itr, &new_top_left, &new_bottom_right, true);
+          }else{
+               itr->top_left = new_top_left;
+               itr->bottom_right = new_bottom_right;
           }
 
           new_top_left.y += shift;
-          new_bottom_right.y = new_top_left.y + shift;
 
-          // account for border
           if(itr->next_vertical){
-               new_top_left.y++;
+               new_bottom_right.y = new_top_left.y + (shift - 1);
+          }else{
+               itr->bottom_right.y = bottom_right->y;
           }
 
-          if(new_bottom_right.y >= g_terminal_dimensions->y) new_bottom_right.y = g_terminal_dimensions->y - 1;
           itr = itr->next_vertical;
      }
 

@@ -117,6 +117,10 @@ BufferNode* new_buffer_from_file(BufferNode* head, const char* filename)
 
      return new_buffer_node;
 }
+#ifndef FTW_STOP
+#define FTW_STOP 1
+#define FTW_CONTINUE 0
+#endif
 
 BufferNode* open_file_buffer(BufferNode* head, const char* filename)
 {

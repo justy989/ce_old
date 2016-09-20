@@ -109,8 +109,9 @@ typedef void ce_view_drawer(const BufferNode*, void*);
 extern Buffer* g_message_buffer;
 extern Point* g_terminal_dimensions;
 
+int64_t ce_count_string_lines(const char* string);
 bool ce_alloc_lines(Buffer* buffer, int64_t line_count);
-bool ce_load_string(Buffer* buffer, const char* str);
+bool ce_load_string(Buffer* buffer, const char* string);
 bool ce_load_file(Buffer* buffer, const char* filename);
 bool ce_save_buffer(const Buffer* buffer, const char* filename);
 void ce_free_buffer(Buffer* buffer);

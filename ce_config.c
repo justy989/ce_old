@@ -346,7 +346,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 27: // escape
           {
                config_state->insert = false;
-               // TODO: handle newlines for saving state
                if(config_state->start_insert.x == config_state->original_start_insert.x &&
                   config_state->start_insert.y == config_state->original_start_insert.y){
                     // TODO: assert cursor is after start_insert
@@ -370,6 +369,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     }
                }
 
+               // when we exit insert mode, do not move the cursor back unless we are at the end of the line
                if(buffer->lines[cursor->y]){
                     int64_t line_len = strlen(buffer->lines[cursor->y]);
                     if(cursor->x == line_len){
@@ -381,23 +381,15 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                if(buffer->line_count){
                     if(cursor->x <= 0){
                          if(cursor->y){
-                              int64_t line_len = 0;
-                              if(buffer->lines[cursor->y - 1]){
-                                   line_len = strlen(buffer->lines[cursor->y - 1]);
-                                   if(buffer->lines[cursor->y]){
-                                        ce_append_string(buffer, cursor->y - 1, buffer->lines[cursor->y]);
-                                   }
-                              }else{
-                                   if(buffer->lines[cursor->y]){
-                                        buffer->lines[cursor->y - 1] = strdup(buffer->lines[cursor->y]);
-                                   }
+                              int64_t line_len = strlen(buffer->lines[cursor->y - 1]);
+                              ce_append_string(buffer, cursor->y - 1, buffer->lines[cursor->y]);
+
+                              if(ce_remove_line(buffer, cursor->y)){
+                                   backspace_append(&buffer_state->backspace_tail, &buffer_state->backspace_head, '\n');
+                                   cursor->y--;
+                                   cursor->x = line_len;
+                                   config_state->start_insert = *cursor;
                               }
-                              ce_remove_line(buffer, cursor->y);
-                              Point delta = {0, -1};
-                              ce_move_cursor(buffer, cursor, &delta);
-                              cursor->x = line_len;
-                              backspace_append(&buffer_state->backspace_tail, &buffer_state->backspace_head, '\n');
-                              config_state->start_insert = *cursor;
                          }
                     }else{
                          Point previous = *cursor;
@@ -419,26 +411,18 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                //ce_remove_char(buffer, cursor);
                break;
           case 10: // return
-               if(!buffer->line_count){
-                    ce_alloc_lines(buffer, 1);
-               }
+          {
+               char* start = buffer->lines[cursor->y] + cursor->x;
+               int64_t to_end_of_line_len = strlen(start);
 
-               if(buffer->lines[cursor->y]){
-                    if(cursor->x <= (int64_t)(strlen(buffer->lines[cursor->y]))){
-                         char* start = buffer->lines[cursor->y] + cursor->x;
-                         int64_t to_end_of_line_len = strlen(start);
-                         if(ce_insert_line(buffer, cursor->y + 1, start)){
-                              ce_remove_string(buffer, cursor, to_end_of_line_len);
-                              cursor->y++;
-                              cursor->x = 0;
-                         }
+               if(ce_insert_line(buffer, cursor->y + 1, start)){
+                    if(to_end_of_line_len){
+                         ce_remove_string(buffer, cursor, to_end_of_line_len);
                     }
-               }else{
-                    ce_insert_line(buffer, cursor->y, NULL);
-                    Point delta = {0, 1};
-                    ce_move_cursor(buffer, cursor, &delta);
+                    cursor->y++;
+                    cursor->x = 0;
                }
-               break;
+          } break;
           default:
                if(ce_insert_char(buffer, cursor, key)) cursor->x++;
                break;
@@ -498,7 +482,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'o':
           {
                Point end_of_line = *cursor;
-               if(buffer->lines[cursor->y]) end_of_line.x = strlen(buffer->lines[cursor->y]);
+               end_of_line.x = strlen(buffer->lines[cursor->y]);
 
                if(ce_insert_char(buffer, &end_of_line, '\n')){
                     cursor->y++;

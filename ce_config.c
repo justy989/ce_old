@@ -115,6 +115,17 @@ BufferNode* new_buffer_from_file(BufferNode* head, const char* filename)
      return new_buffer_node;
 }
 
+BufferNode* open_file_buffer(BufferNode* head, const char* filename)
+{
+     BufferNode* itr = head;
+     while(itr){
+          if(!strcmp(itr->buffer->name, filename)) break; // already open
+          itr = itr->next;
+     }
+     if(!itr) return new_buffer_from_file(head, filename);
+     return itr;
+}
+
 bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** argv, void** user_data)
 {
      // NOTE: need to set these in this module
@@ -620,6 +631,24 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                               config_state->current_buffer_node = head;
                          }
                     } break;
+                    case 'f':
+                    {
+                         if(!buffer->lines[cursor->y]) break;
+                         // TODO: get word under the cursor and unify with '*' impl
+                         int64_t word_len = ce_find_end_of_word(buffer, cursor, true)+1;
+                         if(buffer->lines[cursor->y][cursor->x+word_len] == '.'){
+                              Point ext_start = {cursor->x+word_len, cursor->y};
+                              int64_t extension_len = ce_find_end_of_word(buffer, &ext_start, true);
+                              if(extension_len != -1) word_len += extension_len+1;
+                         }
+                         char* filename = alloca(word_len+1);
+                         strncpy(filename, &buffer->lines[cursor->y][cursor->x], word_len);
+                         filename[word_len] = '\0';
+
+                         BufferNode* file_buffer = open_file_buffer(head, filename);
+                         if(file_buffer) config_state->current_buffer_node = file_buffer;
+                         else ce_message("file %s not found", filename);
+                    } break;
                     }
                     // TODO: devise a better way to clear command_key following a movement
                     config_state->command_key = '\0';
@@ -636,10 +665,11 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           {
                if(!buffer->lines[cursor->y]) break;
                // TODO: search for the word under the cursor
-               int64_t word_len = ce_find_end_of_word(buffer, cursor, true);
+               int64_t word_len = ce_find_end_of_word(buffer, cursor, true)+1;
                char* search_str = alloca(word_len+1);
-               strncpy(search_str, &buffer->lines[cursor->y][cursor->x], sizeof(word_len));
+               strncpy(search_str, &buffer->lines[cursor->y][cursor->x], word_len);
                search_str[word_len] = '\0';
+               ce_message("searching %s", search_str);
 
                Point delta;
                if(ce_find_str(buffer, cursor, search_str, &delta)){

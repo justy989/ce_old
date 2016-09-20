@@ -351,31 +351,15 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                   config_state->start_insert.y == config_state->original_start_insert.y){
                     // TODO: assert cursor is after start_insert
                     // exclusively inserts
-                    char* duped = ce_dupe_string(buffer, &config_state->start_insert, cursor);
-                    char* tmp = strdup(duped);
-                    char* itr = tmp;
-                    while(*itr){
-                         if(*itr == NEWLINE) *itr = '|';
-                         itr++;
-                    }
-                    ce_message("c: '%s'", tmp);
                     ce_commit_insert_string(&buffer_state->commit_tail, &config_state->start_insert, &config_state->original_start_insert,
-                                            cursor, duped);
+                                            cursor, ce_dupe_string(buffer, &config_state->start_insert, cursor));
                }else if(config_state->start_insert.x < config_state->original_start_insert.x ||
                         config_state->start_insert.y < config_state->original_start_insert.y){
                     if(cursor->x == config_state->start_insert.x &&
                        cursor->y == config_state->start_insert.y){
                          // exclusively backspaces!
-                         char* duped = backspace_get_string(buffer_state->backspace_head);
-                         char* tmp = strdup(duped);
-                         char* itr = tmp;
-                         while(*itr){
-                              if(*itr == NEWLINE) *itr = '|';
-                              itr++;
-                         }
-                         ce_message("d: '%s'", tmp);
                          ce_commit_remove_string(&buffer_state->commit_tail, cursor, &config_state->original_start_insert,
-                                                 cursor, duped);
+                                                 cursor, backspace_get_string(buffer_state->backspace_head));
                          backspace_free(&buffer_state->backspace_head, &buffer_state->backspace_tail);
                     }else{
                          // mixture of inserts and backspaces
@@ -395,24 +379,26 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case 127: // backspace
                if(buffer->line_count){
-                    if(cursor->x <= 0 && cursor->y != 0){
-                         int64_t line_len = 0;
-                         if(buffer->lines[cursor->y - 1]){
-                              line_len = strlen(buffer->lines[cursor->y - 1]);
-                              if(buffer->lines[cursor->y]){
-                                   ce_append_string(buffer, cursor->y - 1, buffer->lines[cursor->y]);
+                    if(cursor->x <= 0){
+                         if(cursor->y){
+                              int64_t line_len = 0;
+                              if(buffer->lines[cursor->y - 1]){
+                                   line_len = strlen(buffer->lines[cursor->y - 1]);
+                                   if(buffer->lines[cursor->y]){
+                                        ce_append_string(buffer, cursor->y - 1, buffer->lines[cursor->y]);
+                                   }
+                              }else{
+                                   if(buffer->lines[cursor->y]){
+                                        buffer->lines[cursor->y - 1] = strdup(buffer->lines[cursor->y]);
+                                   }
                               }
-                         }else{
-                              if(buffer->lines[cursor->y]){
-                                   buffer->lines[cursor->y - 1] = strdup(buffer->lines[cursor->y]);
-                              }
+                              ce_remove_line(buffer, cursor->y);
+                              Point delta = {0, -1};
+                              ce_move_cursor(buffer, cursor, &delta);
+                              cursor->x = line_len;
+                              backspace_append(&buffer_state->backspace_tail, &buffer_state->backspace_head, '\n');
+                              config_state->start_insert = *cursor;
                          }
-                         ce_remove_line(buffer, cursor->y);
-                         Point delta = {0, -1};
-                         ce_move_cursor(buffer, cursor, &delta);
-                         cursor->x = line_len;
-                         backspace_append(&buffer_state->backspace_tail, &buffer_state->backspace_head, '\n');
-                         config_state->start_insert = *cursor;
                     }else{
                          Point previous = *cursor;
                          previous.x--;

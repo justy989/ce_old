@@ -139,10 +139,12 @@ int main(int argc, char** argv)
      initscr();
      cbreak();
      noecho();
+#if 0
      if(has_colors() == FALSE){
           printf("terminal doesn't support colors\n");
           return -1;
      }
+#endif
 
      // init message buffer
      g_message_buffer = malloc(sizeof(*g_message_buffer));
@@ -171,12 +173,14 @@ int main(int argc, char** argv)
 
      void* user_data = NULL;
 
+#if 0
      start_color();
      use_default_colors();
 
      // NOTE: just messing with colors
      int color_id = 1;
      init_pair(color_id, COLOR_RED, COLOR_BACKGROUND);
+#endif
 
      bool done = false;
 

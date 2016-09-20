@@ -1,10 +1,13 @@
 #include "ce.h"
-#include "assert.h"
 
 #include <assert.h>
 #include <ctype.h>
-#include <unistd.h>
+#define _XOPEN_SOURCE 500
+#define __USE_XOPEN_EXTENDED
+#define __USE_GNU
+#include <ftw.h>
 #include <inttypes.h>
+#include <unistd.h>
 
 typedef struct{
      bool insert;
@@ -122,7 +125,17 @@ BufferNode* open_file_buffer(BufferNode* head, const char* filename)
           if(!strcmp(itr->buffer->name, filename)) break; // already open
           itr = itr->next;
      }
-     if(!itr) return new_buffer_from_file(head, filename);
+     int nftw_find_file(const char* fpath, const struct stat *sb, int typeflag, struct FTW *ftwbuf)
+     {
+          (void)sb;
+          if((typeflag == FTW_F || typeflag == FTW_SL) && !strcmp(&fpath[ftwbuf->base], filename)){
+               itr = new_buffer_from_file(head, filename);
+               return FTW_STOP;
+          }
+          return FTW_CONTINUE;
+     }
+
+     if(!itr) nftw(".", nftw_find_file, 20, FTW_CHDIR);
      return itr;
 }
 

@@ -509,15 +509,11 @@ int64_t ce_find_next_word(Buffer* buffer, const Point* location, bool punctuatio
      const char* line = buffer->lines[location->y];
      int line_len = strlen(line);
      int cur_x = location->x + delta;
-     if(cur_x + 1 < line_len){
+     if(cur_x + 1 <= line_len){ // if at eol, the null character is considered the next word
           do{
                // churn through all whitespace following end of word
                cur_x++;
           } while(isblank(line[cur_x]) && (cur_x+1 < line_len));
-     }
-     else if(cur_x + 1 == line_len){
-          // if at eol, the null character is considered the next word
-          cur_x++;
      }
      return cur_x - location->x;
 }

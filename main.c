@@ -111,7 +111,7 @@ int main(int argc, char** argv)
 
      // TODO: create config parser
      // TODO: pass unhandled main arguments to the config's arg parser?
-	while((opt = getopt(argc, argv, "c:sh")) != -1 && !done_parsing){
+     while((opt = getopt(argc, argv, "c:sh")) != -1 && !done_parsing){
           parsed_args++;
           switch(opt){
           case 's':

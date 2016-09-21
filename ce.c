@@ -904,7 +904,7 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
      for(int64_t i = buffer_top_left->y; i <= last_line; ++i) {
           move(term_top_left->y + (i - buffer_top_left->y), term_top_left->x);
 
-          if(!buffer->lines[i]) continue;
+          if(!buffer->lines[i][0]) continue;
           const char* buffer_line = buffer->lines[i];
           int64_t line_length = strlen(buffer_line);
 
@@ -1065,13 +1065,14 @@ bool ce_move_cursor_to_end_of_file(const Buffer* buffer, Point* cursor)
 }
 
 // TODO: Threshold for top, left, bottom and right before scrolling happens
-bool ce_follow_cursor(const Point* cursor, int64_t* top_row, int64_t* left_collumn, int64_t view_height, int64_t view_width)
+bool ce_follow_cursor(const Point* cursor, int64_t* left_collumn, int64_t* top_row, int64_t view_width, int64_t view_height,
+                      bool at_terminal_width_edge, bool at_terminal_height_edge)
 {
      CE_CHECK_PTR_ARG(cursor);
      CE_CHECK_PTR_ARG(top_row);
 
-     view_height--;
-     view_width--;
+     if(!at_terminal_width_edge) view_width--;
+     if(!at_terminal_height_edge) view_height--;
 
      int64_t bottom_row = *top_row + view_height;
 
@@ -1601,13 +1602,11 @@ bool calc_vertical_views(BufferView* view, const Point* top_left, const Point* b
      return true;
 }
 
-bool ce_calc_views(BufferView* view)
+bool ce_calc_views(BufferView* view, const Point *top_left, const Point* bottom_right)
 {
      CE_CHECK_PTR_ARG(view);
 
-     Point top_left = {0, 0};
-     Point bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 1};
-     return calc_horizontal_views(view, &top_left, &bottom_right, false);
+     return calc_horizontal_views(view, top_left, bottom_right, false);
 }
 
 void draw_view_bottom_right_borders(const BufferView* view, const char* separators)
@@ -1621,7 +1620,9 @@ void draw_view_bottom_right_borders(const BufferView* view, const char* separato
      }
 
      // draw bottom border
-     if(view->bottom_right.y < (g_terminal_dimensions->y - 1)){
+     // NOTE: accounting for the status bar with -2 here is not what we want going forward.
+     //       we need a better way of determining when the view is at the edge of the terminal
+     if(view->bottom_right.y < (g_terminal_dimensions->y - 2)){
           move(view->bottom_right.y, view->top_left.x);
           addstr(separators);
      }

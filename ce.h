@@ -147,7 +147,8 @@ BufferNode* ce_append_buffer_to_list(BufferNode* head, Buffer* buffer);
 bool ce_remove_buffer_from_list(BufferNode* head, BufferNode** node);
 
 bool ce_move_cursor(const Buffer* buffer, Point* cursor, const Point* delta);
-bool ce_follow_cursor(const Point* cursor, int64_t* top_row, int64_t* left_collumn, int64_t view_height, int64_t view_width);
+bool ce_follow_cursor(const Point* cursor, int64_t* left_collumn, int64_t* top_left, int64_t view_width, int64_t view_height,
+                      bool at_terminal_width_edge, bool at_terminal_height_edge);
 bool ce_advance_cursor(const Buffer* buffer, Point* cursor, int64_t delta);
 bool ce_move_cursor_to_end_of_file(const Buffer* buffer, Point* cursor);
 
@@ -164,7 +165,7 @@ bool ce_commits_free(BufferCommitNode** tail);
 
 BufferView* ce_split_view(BufferView* view, BufferNode* buffer_node, bool horizontal);
 bool ce_remove_view(BufferView** head, BufferView* view);
-bool ce_calc_views(BufferView* head);
+bool ce_calc_views(BufferView* head, const Point* top_left, const Point* top_right);
 bool ce_draw_views(const BufferView* head);
 bool ce_free_views(BufferView** view);
 BufferView* ce_find_view_at_point(BufferView* head, const Point* point);

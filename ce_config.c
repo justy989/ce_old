@@ -624,7 +624,9 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           {
                BufferView* new_view = ce_split_view(config_state->view_current, config_state->view_current->buffer_node, true);
                if(new_view){
-                    ce_calc_views(config_state->view_head);
+                    Point top_left = {0, 0};
+                    Point bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 2}; // account for statusbar
+                    ce_calc_views(config_state->view_head, &top_left, &bottom_right);
                     new_view->cursor = config_state->view_current->cursor;
                     new_view->top_row = config_state->view_current->top_row;
                     new_view->left_collumn = config_state->view_current->left_collumn;
@@ -634,6 +636,9 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           {
                BufferView* new_view = ce_split_view(config_state->view_current, config_state->view_current->buffer_node, false);
                if(new_view){
+                    Point top_left = {0, 0};
+                    Point bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 2}; // account for statusbar
+                    ce_calc_views(config_state->view_head, &top_left, &bottom_right);
                     new_view->cursor = config_state->view_current->cursor;
                     new_view->top_row = config_state->view_current->top_row;
                     new_view->left_collumn = config_state->view_current->left_collumn;
@@ -803,10 +808,14 @@ void view_drawer(const BufferNode* head, void* user_data)
      BufferView* buffer_view = config_state->view_current;
      Point* cursor = &config_state->view_current->cursor;
 
-     ce_calc_views(config_state->view_head);
-     ce_follow_cursor(cursor, &buffer_view->top_row, &buffer_view->left_collumn,
+     Point top_left = {0, 0};
+     Point bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 2}; // account for statusbar
+     ce_calc_views(config_state->view_head, &top_left, &bottom_right);
+     ce_follow_cursor(cursor, &buffer_view->left_collumn, &buffer_view->top_row,
+                      buffer_view->bottom_right.x - buffer_view->top_left.x,
                       buffer_view->bottom_right.y - buffer_view->top_left.y,
-                      buffer_view->bottom_right.x - buffer_view->top_left.x);
+                      buffer_view->bottom_right.x == (g_terminal_dimensions->x - 1),
+                      buffer_view->bottom_right.y == (g_terminal_dimensions->y - 2));
 
      // print the range of lines we want to show
      if(buffer->line_count){
@@ -816,6 +825,11 @@ void view_drawer(const BufferNode* head, void* user_data)
      }
 
      attron(A_REVERSE);
+     // draw all blanks at the bottom
+     move(g_terminal_dimensions->y - 1, 0);
+     for(int i = 0; i < g_terminal_dimensions->x; ++i) addch(' ');
+
+     // draw the status line
      mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s %lld lines, k %lld, c %lld, %lld, v %lld, %lld -> %lld, %lld t: %lld, %lld",
               config_state->insert ? "INSERT" : "NORMAL", buffer->filename, buffer->line_count, config_state->last_key,
               cursor->x, cursor->y, buffer_view->top_left.x, buffer_view->top_left.y, buffer_view->bottom_right.x,

@@ -16,7 +16,7 @@ int64_t ce_count_string_lines(const char* string)
      }
 
      // one line files usually contain newlines at the end
-     if(string[string_length-1] == NEWLINE){
+     if(line_count == 2 && string[string_length-1] == NEWLINE){
           line_count--;
      }
 

@@ -124,6 +124,7 @@ int main(int argc, char** argv)
           case 'h':
                printf("usage: %s [options]\n", argv[0]);
                printf(" -c [config] shared object config\n");
+               printf(" -s save message buffer to file\n");
                printf(" -h see this message for help");
                return 0;
           default:

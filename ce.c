@@ -1539,9 +1539,9 @@ bool calc_horizontal_views(BufferView* view, const Point* top_left, const Point*
 
      itr = view;
      while(itr){
-          if(!first_calc && itr == view && itr->next_vertical){
-               calc_vertical_views(itr, &new_top_left, &new_bottom_right, true);
-          }else if(itr != view && itr->next_vertical){
+          if((!first_calc && itr == view && itr->next_vertical) ||
+             (itr != view && itr->next_vertical)){
+               if(!itr->next_horizontal) new_bottom_right.x = bottom_right->x;
                calc_vertical_views(itr, &new_top_left, &new_bottom_right, true);
           }else{
                itr->top_left = new_top_left;
@@ -1578,9 +1578,9 @@ bool calc_vertical_views(BufferView* view, const Point* top_left, const Point* b
 
      itr = view;
      while(itr){
-          if(!first_calc && itr == view && itr->next_horizontal){
-               calc_horizontal_views(itr, &new_top_left, &new_bottom_right, true);
-          }else if(itr != view && itr->next_horizontal){
+          if((!first_calc && itr == view && itr->next_horizontal) ||
+             (itr != view && itr->next_horizontal)){
+               if(!itr->next_vertical) new_bottom_right.y = bottom_right->y;
                calc_horizontal_views(itr, &new_top_left, &new_bottom_right, true);
           }else{
                itr->top_left = new_top_left;

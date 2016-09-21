@@ -897,8 +897,8 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
 
      char line_to_print[g_terminal_dimensions->x];
 
-     int64_t max_width = term_bottom_right->x - term_top_left->x;
-     int64_t last_line = buffer_top_left->y + (term_bottom_right->y - term_top_left->y) - 1;
+     int64_t max_width = (term_bottom_right->x - term_top_left->x) + 1;
+     int64_t last_line = buffer_top_left->y + (term_bottom_right->y - term_top_left->y);
      if(last_line >= buffer->line_count) last_line = buffer->line_count - 1;
 
      for(int64_t i = buffer_top_left->y; i <= last_line; ++i) {

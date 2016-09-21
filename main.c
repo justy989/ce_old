@@ -166,7 +166,7 @@ int main(int argc, char** argv)
      buffer_list_head->buffer = g_message_buffer;
      buffer_list_head->next = NULL;
 
-     Point terminal_dimensions = {0, 0};
+     Point terminal_dimensions = {};
      getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);
      g_terminal_dimensions = &terminal_dimensions;
 
@@ -187,7 +187,7 @@ int main(int argc, char** argv)
      config_open_and_init(&stable_config, config, buffer_list_head, argc - parsed_args, argv + parsed_args, &user_data);
      Config current_config = stable_config;
 
-     struct sigaction sa = {0};
+     struct sigaction sa = {};
      sa.sa_handler = segv_handler;
      sigemptyset(&sa.sa_mask);
      if(sigaction(SIGSEGV, &sa, NULL) == -1){
@@ -217,10 +217,10 @@ int main(int argc, char** argv)
           getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);
 
           // clear all lines
-          for(int64_t i = 0; i < terminal_dimensions.y; ++i){
-               move(i, 0);
-               clrtoeol();
-          }
+          erase();
+
+          // send the clear buffer to the terminal (necessary for tmux)
+          refresh();
 
           // user-defined or default draw_view()
           current_config.view_drawer(buffer_list_head, user_data);

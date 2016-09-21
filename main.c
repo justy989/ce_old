@@ -219,9 +219,6 @@ int main(int argc, char** argv)
           // clear all lines
           erase();
 
-          // send the clear buffer to the terminal (necessary for tmux)
-          refresh();
-
           // user-defined or default draw_view()
           current_config.view_drawer(buffer_list_head, user_data);
 

@@ -1,8 +1,10 @@
-CC=gcc
+CC=clang
 CFLAGS=-Wall -Werror -Wextra -std=gnu11 -ggdb3
 LINK=-lncurses
 
-ce: main.c ce.o ce_config.so
+all: ce ce_config.so
+
+ce: main.c ce.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LINK) -ldl -Wl,-rpath,.
 
 ce.o: ce.c

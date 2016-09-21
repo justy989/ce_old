@@ -23,12 +23,42 @@ typedef struct{
      Point start_insert;
 } ConfigState;
 
+typedef struct MarkNode{
+     char reg_char;
+     Point location;
+     struct MarkNode* next;
+}MarkNode;
+
 typedef struct{
      Point cursor;
      int64_t start_line;
      int64_t left_column;
      BufferChangeNode* changes_tail;
+     struct MarkNode* mark_head;
 } BufferState;
+
+Point* find_mark(BufferState* buffer, char mark_char)
+{
+     MarkNode* itr = buffer->mark_head;
+     while(itr != NULL){
+          if(itr->reg_char == mark_char) return &itr->location;
+          itr = itr->next;
+     }
+     return NULL;
+}
+
+void add_mark(BufferState* buffer, char mark_char, const Point* location)
+{
+     Point* mark_location = find_mark(buffer, mark_char);
+     if(!mark_location){
+          MarkNode* new_mark = malloc(sizeof(*buffer->mark_head));
+          new_mark->reg_char = mark_char;
+          new_mark->next = buffer->mark_head;
+          buffer->mark_head = new_mark;
+          mark_location = &new_mark->location;
+     }
+     *mark_location = *location;
+}
 
 bool initialize_buffer(Buffer* buffer){
      BufferState* buffer_state = calloc(1, sizeof(*buffer_state));
@@ -383,13 +413,19 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case 'm':
           {
-               FILE* pfile = popen("echo justin stinkkkks", "r");
-               char* pstr = str_from_file_stream(pfile);
-               config_state->current_buffer_node = new_buffer_from_string(head, "test_buffer", pstr);
-               free(pstr);
-               pclose(pfile);
-               break;
-          }
+               if(should_handle_command(config_state, key)){
+                    add_mark(buffer_state, key, cursor);
+                    config_state->command_key = '\0';
+               }
+          } break;
+          case '\'':
+          {
+               if(should_handle_command(config_state, key)){
+                    Point* marked_location = find_mark(buffer_state, key);
+                    cursor->y = marked_location->y;
+                    config_state->command_key = '\0';
+               }
+          } break;
           case 'a':
                if(buffer->lines[cursor->y]){
                     cursor->x++;
@@ -702,6 +738,14 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                Point delta = {0, g_terminal_dimensions->y / 2};
                ce_move_cursor(buffer, cursor, &delta);
           } break;
+#if 0
+               /* TODO: execute arbitrary shell command */
+               FILE* pfile = popen("echo justin stinkkkks", "r");
+               char* pstr = str_from_file_stream(pfile);
+               config_state->current_buffer_node = new_buffer_from_string(head, "test_buffer", pstr);
+               free(pstr);
+               pclose(pfile);
+#endif
           }
      }
 

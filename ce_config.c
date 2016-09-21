@@ -152,6 +152,23 @@ BufferNode* new_buffer_from_file(BufferNode* head, const char* filename)
 #define FTW_CONTINUE 0
 #endif
 
+typedef struct {
+     const char* search_filename;
+     BufferNode* head;
+     BufferNode* new_node;
+} NftwState;
+__thread NftwState nftw_state;
+
+int nftw_find_file(const char* fpath, const struct stat *sb, int typeflag, struct FTW *ftwbuf)
+{
+     (void)sb;
+     if((typeflag == FTW_F || typeflag == FTW_SL) && !strcmp(&fpath[ftwbuf->base], nftw_state.search_filename)){
+          nftw_state.new_node = new_buffer_from_file(nftw_state.head, nftw_state.search_filename);
+          return FTW_STOP;
+     }
+     return FTW_CONTINUE;
+}
+
 BufferNode* open_file_buffer(BufferNode* head, const char* filename)
 {
      BufferNode* itr = head;
@@ -159,17 +176,15 @@ BufferNode* open_file_buffer(BufferNode* head, const char* filename)
           if(!strcmp(itr->buffer->name, filename)) break; // already open
           itr = itr->next;
      }
-     int nftw_find_file(const char* fpath, const struct stat *sb, int typeflag, struct FTW *ftwbuf)
-     {
-          (void)sb;
-          if((typeflag == FTW_F || typeflag == FTW_SL) && !strcmp(&fpath[ftwbuf->base], filename)){
-               itr = new_buffer_from_file(head, filename);
-               return FTW_STOP;
-          }
-          return FTW_CONTINUE;
-     }
 
-     if(!itr) nftw(".", nftw_find_file, 20, FTW_CHDIR);
+     if(!itr){
+          // clang doesn't support nested functions so we need to deal with global state
+          nftw_state.search_filename = filename;
+          nftw_state.head = head;
+          nftw_state.new_node = NULL;
+          nftw(".", nftw_find_file, 20, FTW_CHDIR);
+          return nftw_state.new_node;
+     }
      return itr;
 }
 

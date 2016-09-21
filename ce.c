@@ -32,7 +32,7 @@ bool ce_alloc_lines(Buffer* buffer, int64_t line_count)
           return false;
      }
 
-     buffer->lines = calloc(1, line_count * sizeof(char*));
+     buffer->lines = malloc(line_count * sizeof(char*));
      if(!buffer->lines){
           ce_message("%s() failed to allocate %"PRId64" lines for buffer", line_count);
           return false;
@@ -42,7 +42,7 @@ bool ce_alloc_lines(Buffer* buffer, int64_t line_count)
 
      // clear the lines
      for(int64_t i = 0; i < line_count; ++i){
-          buffer->lines[i] = calloc(1, 1);
+          buffer->lines[i] = calloc(1, sizeof(buffer->lines[i]));
           if(!buffer->lines[i]){
                ce_message("failed to calloc() new line %lld", i);
                return false;
@@ -162,16 +162,13 @@ bool ce_insert_char(Buffer* buffer, const Point* location, char c)
           }
 
           // kill the rest of the current line
-          char* new_line = malloc(location->x + 1);
+          char* new_line = realloc(line, location->x + 1);
           if(!new_line){
                ce_message("%s() failed to alloc new line after split", __FUNCTION__);
                return false;
           }
-
-          strncpy(new_line, line, location->x);
           new_line[location->x] = 0;
           buffer->lines[location->y] = new_line;
-          free(line);
           return true;
      }
 
@@ -180,21 +177,18 @@ bool ce_insert_char(Buffer* buffer, const Point* location, char c)
      // allocate new line with length + 1 + NULL terminator
      int64_t line_len = strlen(line);
      int64_t new_len = line_len + 2;
-     new_line = calloc(1, new_len);
+     new_line = realloc(line, new_len);
      if(!new_line){
           ce_message("%s() failed to allocate line with %"PRId64" characters", __FUNCTION__, new_len);
           return false;
      }
 
      // copy before the insert, add the new char, copy after the insert
-     for(int64_t i = 0; i < location->x; ++i){new_line[i] = line[i];}
+     memmove(new_line + location->x + 1, new_line + location->x, line_len - location->x);
      new_line[location->x] = c;
-     for(int64_t i = location->x; i < line_len; ++i){new_line[i+1] = line[i];}
 
      // NULL terminate the newline, and free the old line
      new_line[new_len - 1] = 0;
-     free(line);
-
      buffer->lines[location->y] = new_line;
      return true;
 }
@@ -229,14 +223,14 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
                if(new_string[i] != NEWLINE && new_string[i] != 0) continue;
 
                int64_t length = (i - 1) - last_newline;
-               char* new_line = calloc(1, length + 1);
+               char* new_line = realloc(buffer->lines[line], length + 1);
                if(!new_line){
                     ce_message("%s() failed to alloc line %d", __FUNCTION__, line);
                     return false;
                }
-               strncpy(new_line, new_string + last_newline + 1, length);
+
+               memcpy(new_line, new_string + last_newline + 1, length);
                new_line[length] = 0;
-               free(buffer->lines[line]);
                buffer->lines[line] = new_line;
 
                last_newline = i;
@@ -246,6 +240,7 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
           return true;
      }
 
+#if 0
      // if the line we want to insert at is empty
      if(!buffer->lines[location->y]){
 		int64_t line_count = ce_count_string_lines(new_string);
@@ -288,6 +283,7 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
 
           return true;
      }
+#endif
 
      char* current_line = buffer->lines[location->y];
      int64_t current_line_length = strlen(current_line);

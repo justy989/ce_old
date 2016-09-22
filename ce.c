@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <string.h>
 #include <inttypes.h>
+#include <assert.h>
 
 Buffer* g_message_buffer = NULL;
 Point* g_terminal_dimensions = NULL;
@@ -791,10 +792,7 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
 
-     if(length == 0){
-          ce_message("%s() cannot remove string of length 0", __FUNCTION__);
-          return false;
-     }
+     if(length == 0) return true;
 
      // TODO: should this return false and not do anything if we try to remove
      //       a string longer than the size of the rest of the buffer?
@@ -807,19 +805,17 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
 
      if(length <= rest_of_the_line_len){
           int64_t new_line_len = current_line_len - length;
-          char* new_line = malloc(new_line_len + 1);
+          char* new_line = realloc(current_line, new_line_len + 1);
           if(!new_line){
-               ce_message("%s() failed to malloc new line", __FUNCTION__);
+               ce_message("%s() failed to realloc new line", __FUNCTION__);
                return false;
           }
 
-          strncpy(new_line, current_line, location->x);
-          strncpy(new_line + location->x, current_line + location->x + length,
+          memmove(new_line + location->x, current_line + location->x + length,
                   current_line_len - (location->x + length));
           new_line[new_line_len] = 0;
 
           buffer->lines[location->y] = new_line;
-          free(current_line);
           return true;
      }
 
@@ -835,11 +831,11 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
      while(length > 0){
           length--; // account for newlines
 
+          assert(line_index <= buffer->line_count);
           if(line_index >= buffer->line_count) break;
 
           char* next_line = buffer->lines[line_index];
-          int64_t next_line_len = 0;
-          next_line_len = strlen(next_line);
+          int64_t next_line_len = strlen(next_line);
           if(length >= next_line_len){
                // remove any lines that we have the length to remove completely
                ce_remove_line(buffer, line_index);
@@ -847,16 +843,14 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
           }else{
                int64_t next_line_part_len = next_line_len - length;
                int64_t new_line_len = location->x + next_line_part_len;
-               char* new_line = calloc(1, new_line_len + 1);
+               char* new_line = realloc(current_line, new_line_len + 1);
                if(!new_line){
                     ce_message("%s() failed to malloc new line", __FUNCTION__);
                     return false;
                }
 
-               strncpy(new_line, current_line, location->x);
-               strncpy(new_line + location->x, next_line + length, next_line_part_len);
+               memcpy(new_line + location->x, next_line + length, next_line_part_len);
                new_line[new_line_len] = 0;
-               free(current_line);
                buffer->lines[location->y] = new_line;
                ce_remove_line(buffer, line_index);
                length = -1;

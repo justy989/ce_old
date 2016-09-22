@@ -57,7 +57,7 @@ bool config_open_and_init(Config* config, const char* path, BufferNode* head, in
 {
      // try to load the config shared object
      *config = config_defaults;
-     config->so_handle = dlopen(path, RTLD_LAZY); // TODO: investigate why my laptop fails when we use RTLD_NOW
+     config->so_handle = dlopen(path, RTLD_NOW);
      if(!config->so_handle){
           ce_message("missing config '%s': '%s', using defaults", path, strerror(errno));
           return false;

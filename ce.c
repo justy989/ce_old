@@ -240,51 +240,6 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
           return true;
      }
 
-#if 0
-     // if the line we want to insert at is empty
-     if(!buffer->lines[location->y]){
-		int64_t line_count = ce_count_string_lines(new_string);
-
-          // re-alloc lines so we can insert N lines
-          int64_t new_line_count = line_count + buffer->line_count;
-
-          // copy in the newlines
-          if(new_line_count){
-               char** new_lines = calloc(1, new_line_count * sizeof(char*));
-               if(!new_lines){
-                    ce_message("%s() failed to calloc new lines", __FUNCTION__);
-                    return false;
-               }
-
-               // copy old lines into new lines
-               for(int64_t i = 0; i < location->y; ++i) new_lines[i] = buffer->lines[i];
-               for(int64_t i = location->y + line_count; i < new_line_count; ++i) new_lines[i] = buffer->lines[i - line_count];
-
-               // start copying each line
-               int64_t last_newline = -1;
-               for(int64_t i = 0, l = location->y; i <= new_string_length; ++i){
-                    if(new_string[i] != NEWLINE && new_string[i] != 0) continue;
-
-                    int64_t length = (i - 1) - last_newline;
-                    char* new_line = malloc(length + 1);
-                    strncpy(new_line, new_string + last_newline + 1, length);
-                    new_line[length] = 0;
-                    new_lines[l] = new_line;
-
-                    last_newline = i;
-                    l++;
-               }
-
-               if(buffer->lines) free(buffer->lines);
-
-               buffer->lines = new_lines;
-               buffer->line_count = new_line_count;
-          }
-
-          return true;
-     }
-#endif
-
      char* current_line = buffer->lines[location->y];
      int64_t current_line_length = strlen(current_line);
      const char* first_part = current_line;
@@ -629,7 +584,7 @@ bool ce_insert_line(Buffer* buffer, int64_t line, const char* string)
      CE_CHECK_PTR_ARG(buffer);
 
      int64_t new_line_count = buffer->line_count + 1;
-     char** new_lines = calloc(1, new_line_count * sizeof(char*));
+     char** new_lines = realloc(buffer->lines, new_line_count * sizeof(char*));
      if(!new_lines){
           if(buffer == g_message_buffer){
                printf("%s() failed to malloc new lines: %"PRId64"\n", __FUNCTION__, new_line_count);
@@ -639,8 +594,7 @@ bool ce_insert_line(Buffer* buffer, int64_t line, const char* string)
           return false;
      }
 
-     // copy up to new empty line, add empty line, copy the rest in the buffer
-     for(int64_t i = 0; i < line; ++i) new_lines[i] = buffer->lines[i];
+     memmove(new_lines + line + 1, new_lines + line, (buffer->line_count - line) * sizeof(*new_lines));
 
      if(string){
           new_lines[line] = strdup(string);
@@ -648,10 +602,6 @@ bool ce_insert_line(Buffer* buffer, int64_t line, const char* string)
           new_lines[line] = strdup("");
      }
 
-     for(int64_t i = line; i < buffer->line_count; ++i) new_lines[i + 1] = buffer->lines[i];
-
-     // free and update the buffer ptr
-     free(buffer->lines);
      buffer->lines = new_lines;
      buffer->line_count = new_line_count;
 
@@ -681,17 +631,18 @@ bool ce_remove_line(Buffer* buffer, int64_t line)
      }
 
      int64_t new_line_count = buffer->line_count - 1;
-     char** new_lines = malloc(new_line_count * sizeof(char*));
+     char** new_lines = malloc(new_line_count * sizeof(*new_lines));
      if(!new_lines){
           ce_message("%s() failed to malloc new lines: %"PRId64"", __FUNCTION__, new_line_count);
           return -1;
      }
 
      // copy up to deleted line, copy the rest in the buffer
-     for(int64_t i = 0; i < line; ++i) new_lines[i] = buffer->lines[i];
-     for(int64_t i = line; i < new_line_count; ++i) new_lines[i] = buffer->lines[i + 1];
+     memcpy(new_lines, buffer->lines, line * sizeof(*new_lines));
+     memcpy(new_lines + line, buffer->lines + line + 1, (new_line_count - line) * sizeof(*new_lines));
 
      // free and update the buffer ptr
+     free(buffer->lines[line]);
      free(buffer->lines);
      buffer->lines = new_lines;
      buffer->line_count = new_line_count;
@@ -703,6 +654,11 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
+
+     if(length == 0){
+          ce_message("%s() cannot remove string of length 0", __FUNCTION__);
+          return false;
+     }
 
      // TODO: should this return false and not do anything if we try to remove
      //       a string longer than the size of the rest of the buffer?
@@ -1688,7 +1644,7 @@ BufferView* find_view_at_point(BufferView* view, const Point* point)
           result = find_view_at_point(view->next_horizontal, point);
      }
 
-     if(!result &&view->next_vertical){
+     if(!result && view->next_vertical){
           result = find_view_at_point(view->next_vertical, point);
      }
 

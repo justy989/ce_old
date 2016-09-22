@@ -222,7 +222,7 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
           if(!new_buffer_from_file(head, argv[i])) continue;
      }
 
-     //config_state->view_head->bottom_right = *g_terminal_dimensions; // NOTE: do we need this?
+     // if we loaded a file, set the view to point at the file, otherwise default to looking at the message buffer
      config_state->view_head->buffer_node = (head && head->next) ? head->next : head;
      config_state->view_current = config_state->view_head;
 

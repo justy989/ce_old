@@ -455,7 +455,7 @@ char* ce_dupe_line(Buffer* buffer, int64_t line)
           return NULL;
      }
 
-     size_t len = strlen(buffer->lines[line]) + 1;
+     size_t len = strlen(buffer->lines[line]) + 2;
      char* duped_line = malloc(len);
      duped_line[len - 2] = '\n';
      duped_line[len - 1] = 0;

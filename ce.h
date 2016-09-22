@@ -122,6 +122,7 @@ bool ce_append_string(Buffer* buffer, int64_t line, const char* string);
 bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length);
 bool ce_remove_char(Buffer* buffer, const Point* location);
 char* ce_dupe_string(Buffer* buffer, const Point* start, const Point* end);
+char* ce_dupe_line(Buffer* buffer, int64_t line);
 bool ce_get_char(Buffer* buffer, const Point* location, char* c);
 bool ce_set_char(Buffer* buffer, const Point* location, char c);
 int64_t ce_find_delta_to_end_of_line(const Buffer* buffer, Point* cursor);

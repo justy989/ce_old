@@ -658,12 +658,9 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          }
                          else{
                               // delete line
-                              if(buffer->line_count){
-                                   if(ce_remove_line(buffer, cursor->y)){
-                                        // TODO more explicit method to put cursor on the line
-                                        Point delta = {0, 0};
-                                        ce_move_cursor(buffer, cursor, &delta);
-                                   }
+                              char* save_string = ce_dupe_line(buffer, cursor->y);
+                              if(ce_remove_line(buffer, cursor->y)){
+                                   ce_commit_remove_string(&buffer_state->commit_tail, cursor, cursor, cursor, save_string);
                               }
                          }
                     }

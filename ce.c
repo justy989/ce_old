@@ -455,7 +455,11 @@ char* ce_dupe_line(Buffer* buffer, int64_t line)
           return NULL;
      }
 
-     return strdup(buffer->lines[line]);
+     size_t len = strlen(buffer->lines[line]) + 1;
+     char* duped_line = malloc(len);
+     duped_line[len - 2] = '\n';
+     duped_line[len - 1] = 0;
+     return memcpy(duped_line, buffer->lines[line], len - 2);
 }
 
 // return x delta between location and the located character 'c' if found. return -1 if not found

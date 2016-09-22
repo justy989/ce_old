@@ -9,6 +9,8 @@
 #include <inttypes.h>
 #include <unistd.h>
 
+#define TAB_STRING "     "
+
 typedef struct BackspaceNode{
      char c;
      struct BackspaceNode* next;
@@ -478,7 +480,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                break;
           case '\t':
           {
-               ce_insert_string(buffer, cursor, "     ");
+               ce_insert_string(buffer, cursor, TAB_STRING);
                Point delta = {5, 0};
                ce_move_cursor(buffer, cursor, &delta);
           } break;
@@ -894,6 +896,17 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           {
                Point delta = {0, buffer->line_count - cursor->y};
                ce_move_cursor(buffer, cursor, &delta);
+          } break;
+          case '>':
+          {
+               if(should_handle_command(config_state, key)){
+                    if(key == '>'){
+                         Point loc = {0, cursor->y};
+                         ce_insert_string(buffer, &loc, TAB_STRING);
+                         ce_commit_insert_string(&buffer_state->commit_tail, &loc, cursor, cursor, strdup(TAB_STRING));
+                    }
+                    config_state->command_key = '\0';
+               }
           } break;
           case 'g':
           {

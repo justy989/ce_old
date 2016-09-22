@@ -452,7 +452,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }
 
                // when we exit insert mode, do not move the cursor back unless we are at the end of the line
-               if(buffer->lines[cursor->y]){
+               if(buffer->lines[cursor->y][0]){
                     int64_t line_len = strlen(buffer->lines[cursor->y]);
                     if(cursor->x == line_len){
                          cursor->x--;
@@ -753,7 +753,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                break;
           case 'v':
           {
-               BufferView* new_view = ce_split_view(config_state->view_current, config_state->view_current->buffer_node, true);
+               BufferView* new_view = ce_split_view(config_state->view_current, config_state->view_current->buffer_node, false);
                if(new_view){
                     Point top_left = {0, 0};
                     Point bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 2}; // account for statusbar
@@ -765,7 +765,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case '':
           {
-               BufferView* new_view = ce_split_view(config_state->view_current, config_state->view_current->buffer_node, false);
+               BufferView* new_view = ce_split_view(config_state->view_current, config_state->view_current->buffer_node, true);
                if(new_view){
                     Point top_left = {0, 0};
                     Point bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 2}; // account for statusbar

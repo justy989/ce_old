@@ -1094,6 +1094,34 @@ int64_t ce_find_delta_to_end_of_line(const Buffer* buffer, Point* cursor)
      return (strlen(line) - 1) - cursor->x;
 }
 
+bool ce_set_cursor(const Buffer* buffer, Point* cursor, const Point* location)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(cursor);
+     CE_CHECK_PTR_ARG(location);
+
+     Point dst = *location;
+
+     if(dst.x < 0) dst.x = 0;
+     if(dst.y < 0) dst.y = 0;
+
+     if(dst.y >= buffer->line_count) dst.y = buffer->line_count - 1;
+
+     if(buffer->lines[dst.y]){
+          int64_t line_len = strlen(buffer->lines[dst.y]);
+          if(!line_len){
+               dst.x = 0;
+          }else if(dst.x >= line_len){
+               dst.x = line_len - 1;
+          }
+     }else{
+          dst.x = 0;
+     }
+
+     *cursor = dst;
+
+     return true;
+}
 bool ce_move_cursor(const Buffer* buffer, Point* cursor, const Point* delta)
 {
      CE_CHECK_PTR_ARG(buffer);

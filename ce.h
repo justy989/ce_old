@@ -151,6 +151,7 @@ BufferNode* ce_append_buffer_to_list(BufferNode* head, Buffer* buffer);
 bool ce_remove_buffer_from_list(BufferNode* head, BufferNode** node);
 
 bool ce_move_cursor(const Buffer* buffer, Point* cursor, const Point* delta);
+bool ce_set_cursor(const Buffer* buffer, Point* cursor, const Point* location);
 bool ce_follow_cursor(const Point* cursor, int64_t* left_column, int64_t* top_left, int64_t view_width, int64_t view_height,
                       bool at_terminal_width_edge, bool at_terminal_height_edge);
 bool ce_advance_cursor(const Buffer* buffer, Point* cursor, int64_t delta);

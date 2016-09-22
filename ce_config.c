@@ -674,20 +674,22 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          case 'E':
                          {
                               int64_t n_deletes = ce_find_delta_to_end_of_word(buffer, cursor, key == 'e') + 1;
-                              while(n_deletes){
-                                   ce_remove_char(buffer, cursor);
-                                   n_deletes--;
+                              Point delete_end = {cursor->x + n_deletes, cursor->y};
+                              char* save_string = ce_dupe_string(buffer, cursor, &delete_end);
+                              if(ce_remove_string(buffer, cursor, n_deletes)){
+                                   ce_commit_remove_string(&buffer_state->commit_tail, cursor, cursor, cursor, save_string);
                               }
                          } break;
                          case 'b':
                          case 'B':
                          {
                               int64_t n_deletes = ce_find_delta_to_beginning_of_word(buffer, cursor, key == 'b');
-                              while(n_deletes){
-                                   cursor->x--;
-                                   ce_remove_char(buffer, cursor);
-                                   n_deletes--;
+                              Point delete_begin = {cursor->x - n_deletes, cursor->y};
+                              char* save_string = ce_dupe_string(buffer, &delete_begin, cursor );
+                              if(ce_remove_string(buffer, &delete_begin, n_deletes)){
+                                   ce_commit_remove_string(&buffer_state->commit_tail, &delete_begin, cursor, &delete_begin, save_string);
                               }
+                              ce_set_cursor(buffer, cursor, &delete_begin);
                          } break;
                          case 'w':
                          case 'W':

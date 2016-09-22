@@ -325,26 +325,31 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 27: // escape
           {
                config_state->insert = false;
-               if(config_state->start_insert.x == config_state->original_start_insert.x &&
-                  config_state->start_insert.y == config_state->original_start_insert.y){
-                    // TODO: assert cursor is after start_insert
-                    // exclusively inserts
-                    ce_commit_insert_string(&buffer_state->commit_tail, &config_state->start_insert, &config_state->original_start_insert,
-                                            cursor, ce_dupe_string(buffer, &config_state->start_insert, cursor));
-               }else if(config_state->start_insert.x < config_state->original_start_insert.x ||
-                        config_state->start_insert.y < config_state->original_start_insert.y){
-                    if(cursor->x == config_state->start_insert.x &&
-                       cursor->y == config_state->start_insert.y){
-                         // exclusively backspaces!
-                         ce_commit_remove_string(&buffer_state->commit_tail, cursor, &config_state->original_start_insert,
-                                                 cursor, backspace_get_string(buffer_state->backspace_head));
-                         backspace_free(&buffer_state->backspace_head);
-                    }else{
-                         // mixture of inserts and backspaces
-                         ce_commit_change_string(&buffer_state->commit_tail, &config_state->start_insert, &config_state->original_start_insert,
-                                                 cursor, ce_dupe_string(buffer, &config_state->start_insert, cursor),
-                                                 backspace_get_string(buffer_state->backspace_head));
-                         backspace_free(&buffer_state->backspace_head);
+               if(config_state->start_insert.x == cursor->x &&
+                  config_state->start_insert.y == cursor->y){
+                  // pass
+               }else{
+                    if(config_state->start_insert.x == config_state->original_start_insert.x &&
+                       config_state->start_insert.y == config_state->original_start_insert.y){
+                         // TODO: assert cursor is after start_insert
+                         // exclusively inserts
+                         ce_commit_insert_string(&buffer_state->commit_tail, &config_state->start_insert, &config_state->original_start_insert,
+                                                 cursor, ce_dupe_string(buffer, &config_state->start_insert, cursor));
+                    }else if(config_state->start_insert.x < config_state->original_start_insert.x ||
+                             config_state->start_insert.y < config_state->original_start_insert.y){
+                         if(cursor->x == config_state->start_insert.x &&
+                            cursor->y == config_state->start_insert.y){
+                              // exclusively backspaces!
+                              ce_commit_remove_string(&buffer_state->commit_tail, cursor, &config_state->original_start_insert,
+                                                      cursor, backspace_get_string(buffer_state->backspace_head));
+                              backspace_free(&buffer_state->backspace_head);
+                         }else{
+                              // mixture of inserts and backspaces
+                              ce_commit_change_string(&buffer_state->commit_tail, &config_state->start_insert, &config_state->original_start_insert,
+                                                      cursor, ce_dupe_string(buffer, &config_state->start_insert, cursor),
+                                                      backspace_get_string(buffer_state->backspace_head));
+                              backspace_free(&buffer_state->backspace_head);
+                         }
                     }
                }
 
@@ -389,6 +394,12 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 126: // delete ?
                //ce_remove_char(buffer, cursor);
                break;
+          case '\t':
+          {
+               ce_insert_string(buffer, cursor, "     ");
+               Point delta = {5, 0};
+               ce_move_cursor(buffer, cursor, &delta);
+          } break;
           case 10: // return
           {
                char* start = buffer->lines[cursor->y] + cursor->x;

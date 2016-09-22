@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <string.h>
 #include <inttypes.h>
+#include <assert.h>
 
 Buffer* g_message_buffer = NULL;
 Point* g_terminal_dimensions = NULL;
@@ -674,7 +675,7 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
                return false;
           }
 
-          memcpy(new_line + location->x, current_line + location->x + length,
+          memmove(new_line + location->x, current_line + location->x + length,
                   current_line_len - (location->x + length));
           new_line[new_line_len] = 0;
 
@@ -694,11 +695,11 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
      while(length > 0){
           length--; // account for newlines
 
+          assert(line_index <= buffer->line_count);
           if(line_index >= buffer->line_count) break;
 
           char* next_line = buffer->lines[line_index];
-          int64_t next_line_len = 0;
-          next_line_len = strlen(next_line);
+          int64_t next_line_len = strlen(next_line);
           if(length >= next_line_len){
                // remove any lines that we have the length to remove completely
                ce_remove_line(buffer, line_index);

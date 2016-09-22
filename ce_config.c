@@ -633,9 +633,10 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                // TODO: unify with cc
                ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
                int64_t n_deletes = ce_find_delta_to_end_of_line(buffer, cursor) + 1;
-               while(n_deletes){
-                    ce_remove_char(buffer, cursor);
-                    n_deletes--;
+               Point delete_end = {cursor->x + n_deletes, cursor->y};
+               char* save_string = ce_dupe_string(buffer, cursor, &delete_end);
+               if(ce_remove_string(buffer, cursor, n_deletes)){
+                    ce_commit_remove_string(&buffer_state->commit_tail, cursor, cursor, cursor, save_string);
                }
                enter_insert_mode(config_state, cursor);
           } break;
@@ -648,9 +649,10 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                               // TODO: unify with 'S'
                               ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
                               int64_t n_deletes = ce_find_delta_to_end_of_line(buffer, cursor) + 1;
-                              while(n_deletes){
-                                   ce_remove_char(buffer, cursor);
-                                   n_deletes--;
+                              Point delete_end = {cursor->x + n_deletes, cursor->y};
+                              char* save_string = ce_dupe_string(buffer, cursor, &delete_end);
+                              if(ce_remove_string(buffer, cursor, n_deletes)){
+                                   ce_commit_remove_string(&buffer_state->commit_tail, cursor, cursor, cursor, save_string);
                               }
                               enter_insert_mode(config_state, cursor);
                          }
@@ -688,24 +690,26 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                               char* save_string = ce_dupe_string(buffer, &delete_begin, cursor );
                               if(ce_remove_string(buffer, &delete_begin, n_deletes)){
                                    ce_commit_remove_string(&buffer_state->commit_tail, &delete_begin, cursor, &delete_begin, save_string);
+                                   ce_set_cursor(buffer, cursor, &delete_begin);
                               }
-                              ce_set_cursor(buffer, cursor, &delete_begin);
                          } break;
                          case 'w':
                          case 'W':
                          {
                               int64_t n_deletes = ce_find_next_word(buffer, cursor, key == 'w');
-                              while(n_deletes){
-                                   ce_remove_char(buffer, cursor);
-                                   n_deletes--;
+                              Point delete_end = {cursor->x + n_deletes, cursor->y};
+                              char* save_string = ce_dupe_string(buffer, cursor, &delete_end);
+                              if(ce_remove_string(buffer, cursor, n_deletes)){
+                                   ce_commit_remove_string(&buffer_state->commit_tail, cursor, cursor, cursor, save_string);
                               }
                          } break;
                          case '$':
                          {
                               int64_t n_deletes = ce_find_delta_to_end_of_line(buffer, cursor) + 1;
-                              while(n_deletes){
-                                   ce_remove_char(buffer, cursor);
-                                   n_deletes--;
+                              Point delete_end = {cursor->x + n_deletes, cursor->y};
+                              char* save_string = ce_dupe_string(buffer, cursor, &delete_end);
+                              if(ce_remove_string(buffer, cursor, n_deletes)){
+                                   ce_commit_remove_string(&buffer_state->commit_tail, cursor, cursor, cursor, save_string);
                               }
                          } break;
                          case '%':
@@ -737,9 +741,13 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }
                break;
           case 's':
-               ce_remove_char(buffer, cursor);
+          {
+               char c;
+               if(ce_get_char(buffer, cursor, &c) && ce_remove_char(buffer, cursor)){
+                    ce_commit_remove_char(&buffer_state->commit_tail, cursor, cursor, cursor, c);
+               }
                enter_insert_mode(config_state, cursor);
-               break;
+          } break;
           case '':
                ce_save_buffer(buffer, buffer->filename);
                break;

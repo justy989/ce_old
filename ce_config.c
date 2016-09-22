@@ -13,7 +13,10 @@ typedef struct{
      bool insert;
      bool split;
      int last_key;
-     char command_key; // TODO: make a command string for multi-character commands
+     uint64_t command_multiplier;
+     char command_key;
+     uint64_t movement_multiplier;
+     char movement_keys[2];
      struct {
           // state for fF and tT
           char command_key;
@@ -281,17 +284,110 @@ void enter_insert_mode(ConfigState* config_state, Point* cursor)
      config_state->start_insert = *cursor;
 }
 
-bool should_handle_command(ConfigState* config_state, char key)
+void clear_keys(ConfigState* config_state)
 {
-     if(config_state->command_key == '\0'){
-          config_state->command_key = key;
-          return false;
+     config_state->command_multiplier = 0;
+     config_state->command_key = '\0';
+     config_state->movement_multiplier = 0;
+     memset(config_state->movement_keys, 0, sizeof config_state->movement_keys);
+}
+
+// returns true if key may be interpretted as a multiplier given the current mulitplier state
+bool key_is_multiplier(uint64_t multiplier, char key)
+{
+     return (key >='1' && key <= '9') || (key == '0' && multiplier > 0);
+}
+
+typedef enum{
+     CE_MOVEMENT_COMPLETE,
+     CE_MOVEMENT_CONTINUE = '\0',
+     CE_MOVEMENT_INVALID
+} movement_state_t;
+
+// return false invalid/incomplete movement in config state, otherwise returns true + moves cursor + movement_end
+movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer, Point* cursor, Point* movement_end)
+{
+     *movement_end = *cursor;
+
+     char key0 = config_state->movement_keys[0];
+     char key1 = config_state->movement_keys[1];
+     uint64_t multi = config_state->movement_multiplier;
+
+     switch(key0){
+     case 'i':
+          switch(key1){
+#if 0
+          case 'w':
+               cursor->x -= ce_find_beginning_of_word(buffer, movement_start, true);
+               for(size_t i=0; i<config_state->movement_multiplier; i++){
+                    movement_end->x += ce_find_end_of_word(buffer, movement_end, true);
+               }
+               break;
+#endif
+          case '\0':
+               return CE_MOVEMENT_CONTINUE;
+          default:
+               return CE_MOVEMENT_INVALID;
+          }
+          break;
+     case 'e':
+     case 'E':
+          for(size_t mm=0; mm < multi; mm++)
+               movement_end->x += ce_find_end_of_word(buffer, movement_end, key0 == 'e') + 1;
+          break;
+     case 'b':
+     case 'B':
+          for(size_t mm=0; mm < multi; mm++)
+               cursor->x -= ce_find_beginning_of_word(buffer, cursor, key0 == 'b');
+          break;
+     case 'w':
+     case 'W':
+          for(size_t mm=0; mm < multi; mm++)
+               movement_end->x += ce_find_next_word(buffer, movement_end, key0 == 'w');
+          break;
+     case '$':
+          for(size_t mm=0; mm < multi; mm++)
+               movement_end->x += ce_find_end_of_line(buffer, movement_end) + 1;
+          break;
+#if 0
+     // RDA disabling for now
+     case '%':
+     {
+          Point delta;
+          if(!ce_find_match(buffer, cursor, &delta)) break;
+          // TODO: delete across line boundaries
+          assert(delta.y == 0);
+          if(delta.x > 0){
+               for(int64_t i = 0; i < delta.x + 1; i++){
+                    ce_remove_char(buffer, cursor);
+               }
+          }
+          else{
+               for(int64_t i = 0; i < -delta.x + 1; i++){
+                    ce_remove_char(buffer, cursor);
+                    cursor->x--;
+               }
+               cursor->x++;
+          }
+     } break;
+#endif
+     default:
+          return CE_MOVEMENT_INVALID;
      }
-     return true;
+
+     return CE_MOVEMENT_COMPLETE;
+}
+
+bool is_movement_buffer_full(ConfigState* config_state)
+{
+     size_t max_movement_keys = sizeof config_state->movement_keys;
+     size_t n_movement_keys = strnlen(config_state->movement_keys, max_movement_keys);
+     return n_movement_keys == max_movement_keys;
 }
 
 bool key_handler(int key, BufferNode* head, void* user_data)
 {
+     (void) head; //RDA
      ConfigState* config_state = user_data;
      Buffer* buffer = config_state->current_buffer_node->buffer;
      BufferState* buffer_state = buffer->user_data;
@@ -299,17 +395,10 @@ bool key_handler(int key, BufferNode* head, void* user_data)
 
      config_state->last_key = key;
 
-     // command keys are followed by a movement key which clears the command key
-     if(config_state->command_key != '\0' && key == 27){
-          // escape cancels a movement
-          config_state->command_key = '\0';
-          return true;
-     }
-
      if(config_state->insert){
           assert(config_state->command_key == '\0');
-          // TODO: should be a switch
-          if(key == 27){ // escape
+          switch(key){
+          case 27: // escape
                config_state->insert = false;
                // TODO: handle newlines for saving state
                if(config_state->start_insert.x < cursor->x){
@@ -327,7 +416,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          cursor->x--;
                     }
                }
-          }else if(key == 127){ // backspace
+               break;
+          case 127: // backspace
                if(buffer->line_count){
                     if(cursor->x == 0){
                          if(cursor->y != 0){
@@ -339,7 +429,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          }
                     }
                }
-          }else if(key == 10){ // add empty line
+               break;
+          case 10: // add empty line
                if(!buffer->line_count){
                     ce_alloc_lines(buffer, 1);
                }
@@ -347,12 +438,86 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     cursor->y++;
                     cursor->x = 0;
                }
-          }else{ // insert
+               break;
+          default:
                if(ce_insert_char(buffer, cursor, key)) cursor->x++;
+               break;
           }
      }else{
-          switch((config_state->command_key != '\0') ? config_state->command_key : key){
+          Point movement_end;
+
+          if(config_state->command_key == '\0' && config_state->command_multiplier == 0){
+               // this is the first key entered
+
+               if(key >='1' && key <= '9'){
+                    // this key is part of a command multiplier
+                    config_state->command_multiplier *= 10;
+                    config_state->command_multiplier += key - '0';
+                    return true;
+               }
+               else{
+                    // this key is a command
+                    config_state->command_key = key;
+                    config_state->command_multiplier = 1;
+               }
+          }
+          else if(config_state->command_key == '\0'){
+               // the previous key was part of a command multiplier
+
+               if(key >='0' && key <= '9'){
+                    // this key is part of a command multiplier
+                    config_state->command_multiplier *= 10;
+                    config_state->command_multiplier += key - '0';
+                    return true;
+               }
+               else {
+                    // this key is a command
+                    config_state->command_key = key;
+               }
+          }
+          else if(config_state->movement_keys[0] == '\0' && config_state->movement_multiplier == 0){
+               // this is the first key entered after the command
+
+               if(key >='1' && key <= '9'){
+                    // this key is part of a movement multiplier
+                    config_state->movement_multiplier *= 10;
+                    config_state->movement_multiplier += key - '0';
+                    return true;
+               }
+               else{
+                    // this key is a part of a movement
+                    config_state->movement_keys[0] = key;
+                    config_state->movement_multiplier = 1;
+               }
+          }
+          else if(config_state->movement_keys[0] == '\0'){
+               // the previous key was part of a movement multiplier
+
+               if(key >='0' && key <= '9'){
+                    // this key is part of a movement multiplier
+                    config_state->movement_multiplier *= 10;
+                    config_state->movement_multiplier += key - '0';
+                    return true;
+               }
+               else {
+                    // this key is part of a movement
+                    config_state->movement_keys[0] = key;
+               }
+          }
+          else {
+               // the previous key was part of a movement
+               // this key is part of a movement
+               assert(!is_movement_buffer_full(config_state));
+               config_state->movement_keys[strlen(config_state->movement_keys)] = key;
+          }
+
+          assert(config_state->command_key != '\0');
+
+          switch(config_state->command_key){
+          case 27:
           default:
+               // escape and invalid movements cancel a command
+               clear_keys(config_state);
                break;
           case 'q':
                return false; // exit !
@@ -360,44 +525,54 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           {
                Point delta = {0, 1};
                ce_move_cursor(buffer, cursor, &delta);
+               clear_keys(config_state);
           } break;
           case 'k':
           {
                Point delta = {0, -1};
                ce_move_cursor(buffer, cursor, &delta);
+               clear_keys(config_state);
           } break;
           case 'b':
           case 'B':
           {
                cursor->x -= ce_find_beginning_of_word(buffer, cursor, key == 'b');
+               clear_keys(config_state);
           } break;
           case 'e':
           case 'E':
           {
                cursor->x += ce_find_end_of_word(buffer, cursor, key == 'e');
+               clear_keys(config_state);
           } break;
           case 'w':
           case 'W':
           {
                cursor->x += ce_find_next_word(buffer, cursor, key == 'w');
+               clear_keys(config_state);
           } break;
           case 'h':
           {
                Point delta = {-1, 0};
                ce_move_cursor(buffer, cursor, &delta);
+               clear_keys(config_state);
           } break;
           case 'l':
           {
                Point delta = {1, 0};
                ce_move_cursor(buffer, cursor, &delta);
+               clear_keys(config_state);
           } break;
           case 'i':
                enter_insert_mode(config_state, cursor);
+               clear_keys(config_state);
+               clear_keys(config_state);
                break;
           case 'I':
           {
                ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
                enter_insert_mode(config_state, cursor);
+               clear_keys(config_state);
           } break;
           case 'O':
           case 'o':
@@ -410,35 +585,42 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     cursor->x = 0;
                }
                enter_insert_mode(config_state, cursor);
+               clear_keys(config_state);
           } break;
           case '^':
           {
                ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
+               clear_keys(config_state);
           } break;
           case '0':
                cursor->x = 0;
+               clear_keys(config_state);
                break;
           case '$':
                cursor->x += ce_find_end_of_line(buffer, cursor);
+               clear_keys(config_state);
                break;
           case 'A':
           {
                cursor->x += ce_find_end_of_line(buffer, cursor) + 1;
                enter_insert_mode(config_state, cursor);
+               clear_keys(config_state);
           } break;
           case 'm':
           {
-               if(should_handle_command(config_state, key)){
-                    add_mark(buffer_state, key, cursor);
-                    config_state->command_key = '\0';
+               char mark = config_state->movement_keys[0];
+               if(mark != '\0'){
+                    add_mark(buffer_state, mark, cursor);
+                    clear_keys(config_state);
                }
           } break;
           case '\'':
           {
-               if(should_handle_command(config_state, key)){
+               char mark = config_state->movement_keys[0];
+               if(mark != '\0'){
                     Point* marked_location = find_mark(buffer_state, key);
                     cursor->y = marked_location->y;
-                    config_state->command_key = '\0';
+                    clear_keys(config_state);
                }
           } break;
           case 'a':
@@ -446,6 +628,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     cursor->x++;
                }
                enter_insert_mode(config_state, cursor);
+               clear_keys(config_state);
                break;
           case 'C':
           case 'D':
@@ -456,6 +639,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     n_deletes--;
                }
                if(key == 'C') enter_insert_mode(config_state, cursor);
+               clear_keys(config_state);
           } break;
           case 'S':
           {
@@ -467,111 +651,82 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     n_deletes--;
                }
                enter_insert_mode(config_state, cursor);
+               clear_keys(config_state);
           } break;
           case 'c':
-          case 'd':
-               if(should_handle_command(config_state, key)){
-                    bool handled_key = true;
-                    if(key == config_state->command_key){ // cc or dd
-                         if(key == 'c'){
-                              // TODO: unify with 'S'
-                              ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
-                              int64_t n_deletes = ce_find_end_of_line(buffer, cursor) + 1;
-                              while(n_deletes){
-                                   ce_remove_char(buffer, cursor);
-                                   n_deletes--;
-                              }
-                              enter_insert_mode(config_state, cursor);
-                         }
-                         else{
-                              // delete line
-                              if(buffer->line_count){
-                                   if(ce_remove_line(buffer, cursor->y)){
-                                        // TODO more explicit method to put cursor on the line
-                                        Point delta = {0, 0};
-                                        ce_move_cursor(buffer, cursor, &delta);
-                                   }
-                              }
-                         }
-                    }
-                    else{
-                         // TODO: provide a vim movement function which gives you
-                         // the appropriate delta for the movement key sequence and
-                         // use that everywhere?
-                         switch(key){
-                         case 'e':
-                         case 'E':
-                         {
-                              int64_t n_deletes = ce_find_end_of_word(buffer, cursor, key == 'e') + 1;
-                              while(n_deletes){
-                                   ce_remove_char(buffer, cursor);
-                                   n_deletes--;
-                              }
-                         } break;
-                         case 'b':
-                         case 'B':
-                         {
-                              int64_t n_deletes = ce_find_beginning_of_word(buffer, cursor, key == 'b');
-                              while(n_deletes){
-                                   cursor->x--;
-                                   ce_remove_char(buffer, cursor);
-                                   n_deletes--;
-                              }
-                         } break;
-                         case 'w':
-                         case 'W':
-                         {
-                              int64_t n_deletes = ce_find_next_word(buffer, cursor, key == 'w');
-                              while(n_deletes){
-                                   ce_remove_char(buffer, cursor);
-                                   n_deletes--;
-                              }
-                         } break;
-                         case '$':
-                         {
-                              int64_t n_deletes = ce_find_end_of_line(buffer, cursor) + 1;
-                              while(n_deletes){
-                                   ce_remove_char(buffer, cursor);
-                                   n_deletes--;
-                              }
-                         } break;
-                         case '%':
-                         {
-                              Point delta;
-                              if(!ce_find_match(buffer, cursor, &delta)) break;
-                              // TODO: delete across line boundaries
-                              assert(delta.y == 0);
-                              if(delta.x > 0){
-                                   for(int64_t i = 0; i < delta.x + 1; i++){
-                                        ce_remove_char(buffer, cursor);
-                                   }
-                              }
-                              else{
-                                   for(int64_t i = 0; i < -delta.x + 1; i++){
-                                        ce_remove_char(buffer, cursor);
-                                        cursor->x--;
-                                   }
-                                   cursor->x++;
-                              }
-                         } break;
-                         default:
-                              handled_key = false;
-                         }
-                    }
+          {
+               for(size_t cm=0; cm<config_state->command_multiplier; cm++){
+                    if(try_generic_movement(config_state, buffer, cursor, &movement_end)){
+                         // this is a generic movement
+                         assert(movement_end.x >= cursor->x);
+                         size_t n_deletes = movement_end.x - cursor->x;
 
-                    if(handled_key && config_state->command_key == 'c') enter_insert_mode(config_state, cursor);
-                    config_state->command_key = '\0';
+                         for(size_t i=0; i < n_deletes; i++){
+                              ce_remove_char(buffer, cursor);
+                         }
+                         enter_insert_mode(config_state, cursor);
+                    }
+                    else if(config_state->movement_keys[0] == 'c'){
+                         // custom movement: delete line
+                         if(buffer->line_count){
+                              if(ce_remove_line(buffer, cursor->y)){
+                                   // TODO more explicit method to put cursor on the line
+                                   Point delta = {0, 0};
+                                   ce_move_cursor(buffer, cursor, &delta);
+                              }
+                         }
+                         enter_insert_mode(config_state, cursor);
+                    }
+                    else if(is_movement_buffer_full(config_state)){
+                         // not a valid movement
+                         clear_keys(config_state);
+                         return true;
+                    }
                }
-               break;
+          } break;
+          case 'd':
+          {
+               for(size_t cm = 0; cm < config_state->command_multiplier; cm++){
+                    movement_state_t m_state = try_generic_movement(config_state, buffer, cursor, &movement_end);
+                    if(m_state == CE_MOVEMENT_CONTINUE) return true;
+
+                    if(m_state == CE_MOVEMENT_INVALID){
+                         switch(config_state->movement_keys[0]){
+                              case 'd':
+                              {
+                                   // TODO: fill out movement_start and movement_end
+                                   Point delta = {-cursor->x, 0};
+                                   ce_move_cursor(buffer, cursor, &delta);
+                              } break;
+                              default:
+                                   // not a valid movement
+                                   clear_keys(config_state);
+                                   return true;
+                         }
+                    }
+                    // this is a generic movement
+                    assert(movement_end.x >= cursor->x);
+                    size_t n_deletes = movement_end.x - cursor->x;
+
+                    for(size_t i=0; i < n_deletes ; i++){
+                         ce_remove_char(buffer, cursor);
+                    }
+               }
+
+               clear_keys(config_state);
+          } break;
           case 's':
                ce_remove_char(buffer, cursor);
                enter_insert_mode(config_state, cursor);
+               clear_keys(config_state);
                break;
           case '':
                ce_save_buffer(buffer, buffer->filename);
+               clear_keys(config_state);
                break;
           case 'v':
                config_state->split = !config_state->split;
+               clear_keys(config_state);
                break;
           case 'u':
                if(buffer_state->changes_tail){
@@ -580,6 +735,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          *cursor = new_cursor;
                     }
                }
+               clear_keys(config_state);
                break;
           case 'x':
           {
@@ -592,6 +748,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     change.c = c;
                     ce_buffer_change(&buffer_state->changes_tail, &change);
                }
+               clear_keys(config_state);
           }
           break;
           case ';':
@@ -599,6 +756,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                if(config_state->find_command.command_key == '\0') break;
                find_command(config_state->find_command.command_key,
                             config_state->find_command.find_char, buffer, cursor);
+               clear_keys(config_state);
           } break;
           case ',':
           {
@@ -608,7 +766,10 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                else command_key = toupper(command_key);
 
                find_command(command_key, config_state->find_command.find_char, buffer, cursor);
+               clear_keys(config_state);
           } break;
+#if 0
+// RDA
           case 'f':
           case 't':
           case 'F':
@@ -630,12 +791,14 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     config_state->command_key = '\0';
                }
           } break;
+#endif
           case 'H':
           {
                // move cursor to top line of view
                // TODO: sometimes it would be nicer to work in absolutes instead of in deltas
                Point delta = {0, buffer_state->start_line - cursor->y};
                ce_move_cursor(buffer, cursor, &delta);
+               clear_keys(config_state);
           } break;
           case 'M':
           {
@@ -644,6 +807,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                Point delta = {0, (buffer_state->start_line + (g_terminal_dimensions->y - 1) / 2)
                     - cursor->y};
                ce_move_cursor(buffer, cursor, &delta);
+               clear_keys(config_state);
           } break;
           case 'L':
           {
@@ -651,7 +815,10 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                Point delta = {0, (buffer_state->start_line + g_terminal_dimensions->y - 1)
                     - (cursor->y + 1)};
                ce_move_cursor(buffer, cursor, &delta);
+               clear_keys(config_state);
           } break;
+#if 0
+// RDA
           case 'z':
           {
                if(should_handle_command(config_state, key)){
@@ -678,48 +845,52 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     config_state->command_key = '\0';
                }
           } break;
+#endif
           case 'G':
           {
                Point delta = {0, buffer->line_count - cursor->y};
                ce_move_cursor(buffer, cursor, &delta);
+               clear_keys(config_state);
           } break;
+//RDA
           case 'g':
           {
-               if(should_handle_command(config_state, key)){
-                    switch(key){
-                    case 'g':
-                    {
-                         Point delta = {0, -cursor->y};
-                         ce_move_cursor(buffer, cursor, &delta);
-                    } break;
-                    case 't':
-                    {
-                         config_state->current_buffer_node = config_state->current_buffer_node->next;
-                         if(!config_state->current_buffer_node){
-                              config_state->current_buffer_node = head;
-                         }
-                    } break;
-                    case 'f':
-                    {
-                         if(!buffer->lines[cursor->y]) break;
-                         // TODO: get word under the cursor and unify with '*' impl
-                         int64_t word_len = ce_find_end_of_word(buffer, cursor, true)+1;
-                         if(buffer->lines[cursor->y][cursor->x+word_len] == '.'){
-                              Point ext_start = {cursor->x+word_len, cursor->y};
-                              int64_t extension_len = ce_find_end_of_word(buffer, &ext_start, true);
-                              if(extension_len != -1) word_len += extension_len+1;
-                         }
-                         char* filename = alloca(word_len+1);
-                         strncpy(filename, &buffer->lines[cursor->y][cursor->x], word_len);
-                         filename[word_len] = '\0';
-
-                         BufferNode* file_buffer = open_file_buffer(head, filename);
-                         if(file_buffer) config_state->current_buffer_node = file_buffer;
-                         else ce_message("file %s not found", filename);
-                    } break;
+               switch(config_state->movement_keys[0]){
+               case 'g':
+               {
+                    Point delta = {0, -cursor->y};
+                    ce_move_cursor(buffer, cursor, &delta);
+               } break;
+               case 't':
+               {
+                    config_state->current_buffer_node = config_state->current_buffer_node->next;
+                    if(!config_state->current_buffer_node){
+                         config_state->current_buffer_node = head;
                     }
-                    // TODO: devise a better way to clear command_key following a movement
-                    config_state->command_key = '\0';
+               } break;
+               case 'f':
+               {
+                    if(!buffer->lines[cursor->y]) break;
+                    // TODO: get word under the cursor and unify with '*' impl
+                    int64_t word_len = ce_find_end_of_word(buffer, cursor, true)+1;
+                    if(buffer->lines[cursor->y][cursor->x+word_len] == '.'){
+                         Point ext_start = {cursor->x+word_len, cursor->y};
+                         int64_t extension_len = ce_find_end_of_word(buffer, &ext_start, true);
+                         if(extension_len != -1) word_len += extension_len+1;
+                    }
+                    char* filename = alloca(word_len+1);
+                    strncpy(filename, &buffer->lines[cursor->y][cursor->x], word_len);
+                    filename[word_len] = '\0';
+
+                    BufferNode* file_buffer = open_file_buffer(head, filename);
+                    if(file_buffer) config_state->current_buffer_node = file_buffer;
+                    else ce_message("file %s not found", filename);
+               } break;
+               case CE_MOVEMENT_CONTINUE:
+                    return true;
+               default:
+                    // invalid command key
+                    clear_keys(config_state);
                }
           } break;
           case '%':
@@ -728,6 +899,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                if(ce_find_match(buffer, cursor, &delta)){
                     ce_move_cursor(buffer, cursor, &delta);
                }
+               clear_keys(config_state);
           } break;
           case '*':
           {
@@ -742,16 +914,19 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                if(ce_find_str(buffer, cursor, search_str, &delta)){
                     ce_move_cursor(buffer, cursor, &delta);
                }
+               clear_keys(config_state);
           } break;
           case 21: // Ctrl + d
           {
                Point delta = {0, -g_terminal_dimensions->y / 2};
                ce_move_cursor(buffer, cursor, &delta);
+               clear_keys(config_state);
           } break;
           case 4: // Ctrl + u
           {
                Point delta = {0, g_terminal_dimensions->y / 2};
                ce_move_cursor(buffer, cursor, &delta);
+               clear_keys(config_state);
           } break;
 #if 0
                /* TODO: execute arbitrary shell command */

@@ -1,10 +1,13 @@
 #include "ce.h"
-#include "assert.h"
 
 #include <assert.h>
 #include <ctype.h>
-#include <unistd.h>
+#define _XOPEN_SOURCE 500
+#define __USE_XOPEN_EXTENDED
+#define __USE_GNU
+#include <ftw.h>
 #include <inttypes.h>
+#include <unistd.h>
 
 typedef struct BackspaceNode{
      char c;
@@ -98,11 +101,41 @@ typedef struct{
      BufferView* view_current;
 } ConfigState;
 
+typedef struct MarkNode{
+     char reg_char;
+     Point location;
+     struct MarkNode* next;
+}MarkNode;
+
 typedef struct{
      BufferCommitNode* commit_tail;
      BackspaceNode* backspace_head;
      BackspaceNode* backspace_tail;
+     struct MarkNode* mark_head;
 } BufferState;
+
+Point* find_mark(BufferState* buffer, char mark_char)
+{
+     MarkNode* itr = buffer->mark_head;
+     while(itr != NULL){
+          if(itr->reg_char == mark_char) return &itr->location;
+          itr = itr->next;
+     }
+     return NULL;
+}
+
+void add_mark(BufferState* buffer, char mark_char, const Point* location)
+{
+     Point* mark_location = find_mark(buffer, mark_char);
+     if(!mark_location){
+          MarkNode* new_mark = malloc(sizeof(*buffer->mark_head));
+          new_mark->reg_char = mark_char;
+          new_mark->next = buffer->mark_head;
+          buffer->mark_head = new_mark;
+          mark_location = &new_mark->location;
+     }
+     *mark_location = *location;
+}
 
 bool initialize_buffer(Buffer* buffer){
      BufferState* buffer_state = calloc(1, sizeof(*buffer_state));
@@ -197,6 +230,46 @@ BufferNode* new_buffer_from_file(BufferNode* head, const char* filename)
 
      return new_buffer_node;
 }
+#ifndef FTW_STOP
+#define FTW_STOP 1
+#define FTW_CONTINUE 0
+#endif
+
+typedef struct {
+     const char* search_filename;
+     BufferNode* head;
+     BufferNode* new_node;
+} NftwState;
+__thread NftwState nftw_state;
+
+int nftw_find_file(const char* fpath, const struct stat *sb, int typeflag, struct FTW *ftwbuf)
+{
+     (void)sb;
+     if((typeflag == FTW_F || typeflag == FTW_SL) && !strcmp(&fpath[ftwbuf->base], nftw_state.search_filename)){
+          nftw_state.new_node = new_buffer_from_file(nftw_state.head, nftw_state.search_filename);
+          return FTW_STOP;
+     }
+     return FTW_CONTINUE;
+}
+
+BufferNode* open_file_buffer(BufferNode* head, const char* filename)
+{
+     BufferNode* itr = head;
+     while(itr){
+          if(!strcmp(itr->buffer->name, filename)) break; // already open
+          itr = itr->next;
+     }
+
+     if(!itr){
+          // clang doesn't support nested functions so we need to deal with global state
+          nftw_state.search_filename = filename;
+          nftw_state.head = head;
+          nftw_state.new_node = NULL;
+          nftw(".", nftw_find_file, 20, FTW_CHDIR);
+          return nftw_state.new_node;
+     }
+     return itr;
+}
 
 int64_t strlen_ignore_newlines(const char* str)
 {
@@ -269,6 +342,14 @@ bool destroyer(BufferNode* head, void* user_data)
      return true;
 }
 
+// location is {left_column, top_line} for the view
+void scroll_view_to_location(BufferView* buffer_view, const Point* location){
+     // TODO: we should be able to scroll the view above our first line
+     buffer_view->left_column = (location->x >= 0) ? location->x : 0;
+     buffer_view->top_row = (location->y >= 0) ? location->y : 0;
+}
+
+
 void find_command(int command_key, int find_char, Buffer* buffer, Point* cursor)
 {
      switch(command_key){
@@ -329,6 +410,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
      ConfigState* config_state = user_data;
      Buffer* buffer = config_state->view_current->buffer_node->buffer;
      BufferState* buffer_state = buffer->user_data;
+     BufferView* buffer_view = config_state->view_current;
      Point* cursor = &config_state->view_current->cursor;
      config_state->last_key = key;
 
@@ -453,6 +535,11 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           {
                cursor->x += ce_find_delta_to_end_of_word(buffer, cursor, key == 'e');
           } break;
+          case 'w':
+          case 'W':
+          {
+               cursor->x += ce_find_next_word(buffer, cursor, key == 'w');
+          } break;
           case 'h':
           {
                Point delta = {-1, 0};
@@ -507,13 +594,19 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case 'm':
           {
-               FILE* pfile = popen("echo justin stinkkkks", "r");
-               char* pstr = str_from_file_stream(pfile);
-               config_state->view_current->buffer_node = new_buffer_from_string(head, "test_buffer", pstr);
-               free(pstr);
-               pclose(pfile);
-               break;
-          }
+               if(should_handle_command(config_state, key)){
+                    add_mark(buffer_state, key, cursor);
+                    config_state->command_key = '\0';
+               }
+          } break;
+          case '\'':
+          {
+               if(should_handle_command(config_state, key)){
+                    Point* marked_location = find_mark(buffer_state, key);
+                    cursor->y = marked_location->y;
+                    config_state->command_key = '\0';
+               }
+          } break;
           case 'a':
           {
                if(buffer->lines[cursor->y] && cursor->x < (int64_t)(strlen(buffer->lines[cursor->y]))){
@@ -596,12 +689,40 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                                    n_deletes--;
                               }
                          } break;
+                         case 'w':
+                         case 'W':
+                         {
+                              int64_t n_deletes = ce_find_next_word(buffer, cursor, key == 'w');
+                              while(n_deletes){
+                                   ce_remove_char(buffer, cursor);
+                                   n_deletes--;
+                              }
+                         } break;
                          case '$':
                          {
                               int64_t n_deletes = ce_find_delta_to_end_of_line(buffer, cursor) + 1;
                               while(n_deletes){
                                    ce_remove_char(buffer, cursor);
                                    n_deletes--;
+                              }
+                         } break;
+                         case '%':
+                         {
+                              Point delta;
+                              if(!ce_find_match(buffer, cursor, &delta)) break;
+                              // TODO: delete across line boundaries
+                              assert(delta.y == 0);
+                              if(delta.x > 0){
+                                   for(int64_t i = 0; i < delta.x + 1; i++){
+                                        ce_remove_char(buffer, cursor);
+                                   }
+                              }
+                              else{
+                                   for(int64_t i = 0; i < -delta.x + 1; i++){
+                                        ce_remove_char(buffer, cursor);
+                                        cursor->x--;
+                                   }
+                                   cursor->x++;
                               }
                          } break;
                          default:
@@ -629,7 +750,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     ce_calc_views(config_state->view_head, &top_left, &bottom_right);
                     new_view->cursor = config_state->view_current->cursor;
                     new_view->top_row = config_state->view_current->top_row;
-                    new_view->left_collumn = config_state->view_current->left_collumn;
+                    new_view->left_column = config_state->view_current->left_column;
                }
           } break;
           case '':
@@ -641,7 +762,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     ce_calc_views(config_state->view_head, &top_left, &bottom_right);
                     new_view->cursor = config_state->view_current->cursor;
                     new_view->top_row = config_state->view_current->top_row;
-                    new_view->left_collumn = config_state->view_current->left_collumn;
+                    new_view->left_column = config_state->view_current->left_column;
                }
           } break;
           case 14: // Ctrl + n
@@ -670,14 +791,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                // load the cursor from the buffer
                config_state->view_current->cursor = config_state->view_current->buffer_node->buffer->cursor;
           } break;
-          case 'g':
-               if(should_handle_command(config_state, key)){
-                    // TODO: we will want to creating multiple BufferView* workspaces and switch between those using "gt"
-                    if(key == 't'){
-                    }
-                    config_state->command_key = '\0';
-               }
-               break;
           case 'u':
                if(buffer_state->commit_tail && buffer_state->commit_tail->commit.type != BCT_NONE){
                     ce_commit_undo(buffer, &buffer_state->commit_tail, cursor);
@@ -732,6 +845,122 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     config_state->command_key = '\0';
                }
           } break;
+          case 'H':
+          {
+               // move cursor to top line of view
+               // TODO: sometimes it would be nicer to work in absolutes instead of in deltas
+               Point delta = {0, buffer_view->top_row - cursor->y};
+               ce_move_cursor(buffer, cursor, &delta);
+          } break;
+          case 'M':
+          {
+               // move cursor to middle line of view
+               // TODO: sometimes it would be nicer to work in absolutes instead of in deltas
+               Point delta = {0, (buffer_view->top_row + (g_terminal_dimensions->y - 1) / 2)
+                    - cursor->y};
+               ce_move_cursor(buffer, cursor, &delta);
+          } break;
+          case 'L':
+          {
+               // move cursor to bottom line of view
+               Point delta = {0, (buffer_view->top_row + g_terminal_dimensions->y - 1)
+                    - (cursor->y + 1)};
+               ce_move_cursor(buffer, cursor, &delta);
+          } break;
+          case 'z':
+          {
+               if(should_handle_command(config_state, key)){
+                    switch(key){
+                    case 't':
+                    {
+                         Point location = {0, cursor->y};
+                         scroll_view_to_location(config_state->view_current, &location);
+                    } break;
+                    case 'z':
+                    {
+                         // center view on cursor
+                         Point location = {0, cursor->y - (g_terminal_dimensions->y/2)};
+                         scroll_view_to_location(config_state->view_current, &location);
+                    } break;
+                    case 'b':
+                    {
+                         // move current line to bottom of view
+                         Point location = {0, cursor->y - g_terminal_dimensions->y};
+                         scroll_view_to_location(config_state->view_current, &location);
+                    } break;
+                    }
+                    // TODO: devise a better way to clear command_key following a movement
+                    config_state->command_key = '\0';
+               }
+          } break;
+          case 'G':
+          {
+               Point delta = {0, buffer->line_count - cursor->y};
+               ce_move_cursor(buffer, cursor, &delta);
+          } break;
+          case 'g':
+          {
+               if(should_handle_command(config_state, key)){
+                    switch(key){
+                    case 'g':
+                    {
+                         Point delta = {0, -cursor->y};
+                         ce_move_cursor(buffer, cursor, &delta);
+                    } break;
+#if 0
+                    case 't':
+                    {
+                    // TODO: we will want to creating multiple BufferView* workspaces and switch between those using "gt"
+                         config_state->current_buffer_node = config_state->current_buffer_node->next;
+                         if(!config_state->current_buffer_node){
+                              config_state->current_buffer_node = head;
+                         }
+                    } break;
+#endif
+                    case 'f':
+                    {
+                         if(!buffer->lines[cursor->y]) break;
+                         // TODO: get word under the cursor and unify with '*' impl
+                         int64_t word_len = ce_find_delta_to_end_of_word(buffer, cursor, true)+1;
+                         if(buffer->lines[cursor->y][cursor->x+word_len] == '.'){
+                              Point ext_start = {cursor->x+word_len, cursor->y};
+                              int64_t extension_len = ce_find_delta_to_end_of_word(buffer, &ext_start, true);
+                              if(extension_len != -1) word_len += extension_len+1;
+                         }
+                         char* filename = alloca(word_len+1);
+                         strncpy(filename, &buffer->lines[cursor->y][cursor->x], word_len);
+                         filename[word_len] = '\0';
+
+                         BufferNode* file_buffer = open_file_buffer(head, filename);
+                         if(file_buffer) buffer_view->buffer_node = file_buffer;
+                         else ce_message("file %s not found", filename);
+                    } break;
+                    }
+                    // TODO: devise a better way to clear command_key following a movement
+                    config_state->command_key = '\0';
+               }
+          } break;
+          case '%':
+          {
+               Point delta;
+               if(ce_find_match(buffer, cursor, &delta)){
+                    ce_move_cursor(buffer, cursor, &delta);
+               }
+          } break;
+          case '*':
+          {
+               if(!buffer->lines[cursor->y]) break;
+               // TODO: search for the word under the cursor
+               int64_t word_len = ce_find_delta_to_end_of_word(buffer, cursor, true)+1;
+               char* search_str = alloca(word_len+1);
+               strncpy(search_str, &buffer->lines[cursor->y][cursor->x], word_len);
+               search_str[word_len] = '\0';
+
+               Point delta;
+               if(ce_find_str(buffer, cursor, search_str, &delta)){
+                    ce_move_cursor(buffer, cursor, &delta);
+               }
+          } break;
           case 21: // Ctrl + d
           {
                Point delta = {0, -g_terminal_dimensions->y / 2};
@@ -758,7 +987,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           break;
           case 10: // Ctrl + j
           {
-               Point point = {cursor->x - config_state->view_current->left_collumn + config_state->view_current->top_left.x,
+               Point point = {cursor->x - config_state->view_current->left_column + config_state->view_current->top_left.x,
                               config_state->view_current->bottom_right.y + 2}; // account for window separator
                if(point.y >= g_terminal_dimensions->y - 1) point.y = 0;
                BufferView* next_view = ce_find_view_at_point(config_state->view_head, &point);
@@ -771,7 +1000,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           break;
           case 11: // Ctrl + k
           {
-               Point point = {cursor->x - config_state->view_current->left_collumn + config_state->view_current->top_left.x,
+               Point point = {cursor->x - config_state->view_current->left_column + config_state->view_current->top_left.x,
                               config_state->view_current->top_left.y - 2}; // account for window separator
                BufferView* next_view = ce_find_view_at_point(config_state->view_head, &point);
                if(next_view){
@@ -794,6 +1023,14 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }
           }
           break;
+#if 0
+               /* TODO: execute arbitrary shell command */
+               FILE* pfile = popen("echo justin stinkkkks", "r");
+               char* pstr = str_from_file_stream(pfile);
+               config_state->current_buffer_node = new_buffer_from_string(head, "test_buffer", pstr);
+               free(pstr);
+               pclose(pfile);
+#endif
           }
      }
 
@@ -811,7 +1048,7 @@ void view_drawer(const BufferNode* head, void* user_data)
      Point top_left = {0, 0};
      Point bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 2}; // account for statusbar
      ce_calc_views(config_state->view_head, &top_left, &bottom_right);
-     ce_follow_cursor(cursor, &buffer_view->left_collumn, &buffer_view->top_row,
+     ce_follow_cursor(cursor, &buffer_view->left_column, &buffer_view->top_row,
                       buffer_view->bottom_right.x - buffer_view->top_left.x,
                       buffer_view->bottom_right.y - buffer_view->top_left.y,
                       buffer_view->bottom_right.x == (g_terminal_dimensions->x - 1),
@@ -838,5 +1075,5 @@ void view_drawer(const BufferNode* head, void* user_data)
 
      // reset the cursor
      move(cursor->y - buffer_view->top_row + buffer_view->top_left.y,
-          cursor->x - buffer_view->left_collumn + buffer_view->top_left.x);
+          cursor->x - buffer_view->left_column + buffer_view->top_left.x);
 }

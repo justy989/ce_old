@@ -304,18 +304,15 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
      if(*end_of_line == 0){
           // we are only adding a single line, so include all the pieces
           int64_t new_line_length = new_string_length + first_length + second_length;
-          char* new_line = malloc(new_line_length + 1);
+          char* new_line = realloc(current_line, new_line_length + 1);
           if(!new_line){
                ce_message("%s() failed to allocate new string", __FUNCTION__);
                return false;
           }
 
-          if(first_part) strncpy(new_line, first_part, first_length);
-          strncpy(new_line + first_length, new_string, new_string_length);
-          if(second_part) strncpy(new_line + first_length + new_string_length, second_part, second_length);
-
+          if(second_part) memmove(new_line + first_length + new_string_length, second_part, second_length);
+          memcpy(new_line + first_length, new_string, new_string_length);
           new_line[new_line_length] = 0;
-
           buffer->lines[location->y] = new_line;
      }else{
           // include the first part and the string up to the newline
@@ -323,6 +320,7 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
           int64_t first_new_line_length = end_of_line - itr;
           int64_t new_line_length = first_new_line_length + first_length;
 
+          // NOTE: mallocing because we want to break up the current line
           char* new_line = malloc(new_line_length + 1);
           if(!new_line){
                ce_message("%s() failed to allocate new string", __FUNCTION__);
@@ -347,7 +345,7 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
                     new_line_length = next_line_length + second_length;
                     new_line = malloc(new_line_length + 1);
                     strncpy(new_line, itr, next_line_length);
-                    if(second_part) strncpy(new_line + next_line_length, second_part, second_length);
+                    if(second_part) memcpy(new_line + next_line_length, second_part, second_length);
                     new_line[new_line_length] = 0;
                     ce_insert_line(buffer, location->y + lines_added, new_line);
                     free(new_line);
@@ -364,9 +362,9 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
 
                lines_added++;
           }
+          free(current_line);
      }
 
-     free(current_line);
      return true;
 }
 
@@ -389,7 +387,7 @@ bool ce_remove_char(Buffer* buffer, const Point* location)
 
      // remove the line from the list if it is empty
      if(line_len == 0){
-          char** new_lines = calloc(1, (buffer->line_count - 1) * sizeof(char*));
+          char** new_lines = malloc((buffer->line_count - 1) * sizeof(char*));
           if(!new_lines){
                ce_message("%s() failed alloc lines", __FUNCTION__);
                return false;
@@ -448,7 +446,7 @@ char* ce_dupe_string(Buffer* buffer, const Point* start, const Point* end)
                ce_message("%s() failed to alloc string", __FUNCTION__);
                return NULL;
           }
-          strncpy(new_str, buffer->lines[start->y] + start->x, len);
+          memcpy(new_str, buffer->lines[start->y] + start->x, len);
           new_str[len] = 0;
 
           return new_str;
@@ -457,44 +455,34 @@ char* ce_dupe_string(Buffer* buffer, const Point* start, const Point* end)
      // multi line allocation
 
      // count total length
-     int64_t len = strlen(buffer->lines[start->y] + start->x) + 1; // account for newline
+     int64_t total_len = strlen(buffer->lines[start->y] + start->x) + 1; // account for newline
      for(int64_t i = start->y + 1; i < end->y; ++i){
-          len += strlen(buffer->lines[i]) + 1; // account for newline
+          total_len += strlen(buffer->lines[i]) + 1; // account for newline
      }
-     len += end->x; // do not account for newline
+     total_len += end->x; // do not account for newline
 
      // build string
-     char* new_str = malloc(len + 1);
+     char* new_str = malloc(total_len + 1);
      if(!new_str){
           ce_message("%s() failed to alloc string", __FUNCTION__);
           return NULL;
      }
 
      char* itr = new_str;
-     if(buffer->lines[start->y]){
-          int64_t len = strlen(buffer->lines[start->y] + start->x);
-          strncpy(itr, buffer->lines[start->y] + start->x, len);
-          itr[len] = '\n'; // add newline
-          itr += len + 1;
-     }else{
-          *itr = '\n'; // add newline
-          itr++;
-     }
+     int64_t len = strlen(buffer->lines[start->y] + start->x);
+     if(len) memcpy(itr, buffer->lines[start->y] + start->x, len);
+     itr[len] = '\n'; // add newline
+     itr += len + 1;
 
      for(int64_t i = start->y + 1; i < end->y; ++i){
-          if(buffer->lines[i]){
-               int64_t len = strlen(buffer->lines[i]);
-               strncpy(itr, buffer->lines[i], len);
-               itr[len] = '\n';
-               itr += len + 1;
-          }else{
-               *itr = '\n'; // add newline
-               itr++;
-          }
+          len = strlen(buffer->lines[i]);
+          memcpy(itr, buffer->lines[i], len);
+          itr[len] = '\n';
+          itr += len + 1;
      }
 
-     strncpy(itr, buffer->lines[end->y], end->x);
-     new_str[len] = 0;
+     memcpy(itr, buffer->lines[end->y], end->x);
+     new_str[total_len] = 0;
 
      return new_str;
 }

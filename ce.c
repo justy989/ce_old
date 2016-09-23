@@ -1164,7 +1164,7 @@ bool ce_commit_change(BufferCommitNode** tail, const BufferCommit* commit)
 
      // TODO: rather than branching, just free rest of the redo list on this change
      if(*tail){
-          ce_commits_free((*tail)->next);
+          if((*tail)->next) ce_commits_free((*tail)->next);
           (*tail)->next = new_node;
      }
 
@@ -1348,6 +1348,7 @@ bool ce_remove_view(BufferView** head, BufferView* view)
      BufferView* itr = *head;
 
      if(view == *head){
+          // patch up view pointers
           if(itr->next_horizontal && !itr->next_vertical){
                *head = itr->next_horizontal;
                free(itr);
@@ -1356,9 +1357,12 @@ bool ce_remove_view(BufferView** head, BufferView* view)
                free(itr);
           }else if(itr->next_horizontal &&
                    itr->next_vertical){
+               // we have to choose which becomes head, so we choose vertical
                *head = itr->next_vertical;
                BufferView* tmp = *head;
+               // loop to the end of vertical's horizontal
                while(tmp->next_horizontal) tmp = tmp->next_horizontal;
+               // tack on old head's next_horizontal to the end of new head's last horizontal
                tmp->next_horizontal = itr->next_horizontal;
                free(itr);
           }else{
@@ -1375,6 +1379,7 @@ bool ce_remove_view(BufferView** head, BufferView* view)
 
      if(itr->next_vertical == view){
           if(view->next_horizontal){
+               // patch up view pointers
                itr->next_vertical = view->next_horizontal;
                // NOTE: This is totally not what we want going forward, however,
                //       until we implement a more complicated window system, this
@@ -1382,7 +1387,9 @@ bool ce_remove_view(BufferView** head, BufferView* view)
                // bandage up the windows !
                if(view->next_vertical){
                     BufferView* tmp = view->next_horizontal;
+                    // find the last vertical in new node
                     while(tmp->next_vertical) tmp = tmp->next_vertical;
+                    // tack on the current view's next vertical to the end of the new node's verticals
                     tmp->next_vertical = view->next_vertical;
                }
           }else if(view->next_vertical){
@@ -1393,12 +1400,15 @@ bool ce_remove_view(BufferView** head, BufferView* view)
 
           free(view);
      }else{
-          // TODO: assert(itr->next_horizontal == view)
+          assert(itr->next_horizontal == view);
           if(view->next_vertical){
+               // patch up view pointers
                itr->next_horizontal = view->next_vertical;
                if(view->next_horizontal){
                     BufferView* itr = view->next_vertical;
+                    // find the last vertical in new node
                     while(itr->next_horizontal) itr = itr->next_horizontal;
+                    // tack on the current view's next vertical to the end of the new node's verticals
                     itr->next_horizontal = view->next_horizontal;
                }
           }else if(view->next_horizontal){
@@ -1438,9 +1448,9 @@ bool ce_free_views(BufferView** head)
      return true;
 }
 
-bool calc_vertical_views(BufferView* view, const Point* top_left, const Point* bottom_right, bool first_calc);
+bool calc_vertical_views(BufferView* view, const Point* top_left, const Point* bottom_right, bool already_calculated);
 
-bool calc_horizontal_views(BufferView* view, const Point* top_left, const Point* bottom_right, bool first_calc)
+bool calc_horizontal_views(BufferView* view, const Point* top_left, const Point* bottom_right, bool already_calculated)
 {
      int64_t view_count = 0;
      BufferView* itr = view;
@@ -1456,8 +1466,10 @@ bool calc_horizontal_views(BufferView* view, const Point* top_left, const Point*
 
      itr = view;
      while(itr){
-          if((!first_calc && itr == view && itr->next_vertical) ||
-             (itr != view && itr->next_vertical)){
+          // if this is the first view and we haven't already calculated the dimensions for it
+          // or if this is any view other than the first view
+          // and we have a vertical view below us, then calculate the vertical views
+          if(((!already_calculated && itr == view) || (itr != view)) && itr->next_vertical){
                if(!itr->next_horizontal) new_bottom_right.x = bottom_right->x;
                calc_vertical_views(itr, &new_top_left, &new_bottom_right, true);
           }else{
@@ -1479,7 +1491,7 @@ bool calc_horizontal_views(BufferView* view, const Point* top_left, const Point*
      return true;
 }
 
-bool calc_vertical_views(BufferView* view, const Point* top_left, const Point* bottom_right, bool first_calc)
+bool calc_vertical_views(BufferView* view, const Point* top_left, const Point* bottom_right, bool already_calculated)
 {
      int64_t view_count = 0;
      BufferView* itr = view;
@@ -1495,8 +1507,10 @@ bool calc_vertical_views(BufferView* view, const Point* top_left, const Point* b
 
      itr = view;
      while(itr){
-          if((!first_calc && itr == view && itr->next_horizontal) ||
-             (itr != view && itr->next_horizontal)){
+          // if this is the first view and we haven't already calculated the dimensions for it
+          // or if this is any view other than the first view
+          // and we have a horizontal view below us, then calculate the horizontal views
+          if(((!already_calculated && itr == view) || (itr != view)) && itr->next_horizontal){
                if(!itr->next_vertical) new_bottom_right.y = bottom_right->y;
                calc_horizontal_views(itr, &new_top_left, &new_bottom_right, true);
           }else{
@@ -1544,9 +1558,9 @@ void draw_view_bottom_right_borders(const BufferView* view, const char* separato
      }
 }
 
-bool draw_vertical_views(const BufferView* view, bool first_drawn);
+bool draw_vertical_views(const BufferView* view, bool already_drawn);
 
-bool draw_horizontal_views(const BufferView* view, bool first_drawn)
+bool draw_horizontal_views(const BufferView* view, bool already_drawn)
 {
      int64_t width = view->bottom_right.x - view->top_left.x;
 
@@ -1556,9 +1570,10 @@ bool draw_horizontal_views(const BufferView* view, bool first_drawn)
 
      const BufferView* itr = view;
      while(itr){
-          if(!first_drawn && itr == view && itr->next_vertical){
-               draw_vertical_views(itr, true);
-          }else if(itr != view && itr->next_vertical){
+          // if this is the first view and we haven't already drawn it
+          // or if this is any view other than the first view
+          // and we have a horizontal view below us, then draw the horizontal views
+          if(((!already_drawn && itr == view) || (itr != view)) && itr->next_vertical){
                draw_vertical_views(itr, true);
           }else{
                Point buffer_top_left = {itr->left_collumn, itr->top_row};
@@ -1573,7 +1588,7 @@ bool draw_horizontal_views(const BufferView* view, bool first_drawn)
      return true;
 }
 
-bool draw_vertical_views(const BufferView* view, bool first_drawn)
+bool draw_vertical_views(const BufferView* view, bool already_drawn)
 {
      int64_t width = view->bottom_right.x - view->top_left.x;
 
@@ -1583,9 +1598,10 @@ bool draw_vertical_views(const BufferView* view, bool first_drawn)
 
      const BufferView* itr = view;
      while(itr){
-          if(!first_drawn && itr == view && itr->next_horizontal){
-               draw_horizontal_views(itr, true);
-          }else if(itr != view && itr->next_horizontal){
+          // if this is the first view and we haven't already drawn it
+          // or if this is any view other than the first view
+          // and we have a vertical view below us, then draw the vertical views
+          if(((!already_drawn && itr == view) || (itr != view)) && itr->next_horizontal){
                draw_horizontal_views(itr, true);
           }else{
                Point buffer_top_left = {itr->left_collumn, itr->top_row};

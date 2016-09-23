@@ -616,7 +616,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                break;
           case 'v':
           {
-               BufferView* new_view = ce_split_view(config_state->view_current, config_state->view_current->buffer_node, false);
+               BufferView* new_view = ce_split_view(config_state->view_current, config_state->view_current->buffer_node, true);
                if(new_view){
                     Point top_left = {0, 0};
                     Point bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 2}; // account for statusbar
@@ -628,7 +628,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case '':
           {
-               BufferView* new_view = ce_split_view(config_state->view_current, config_state->view_current->buffer_node, true);
+               BufferView* new_view = ce_split_view(config_state->view_current, config_state->view_current->buffer_node, false);
                if(new_view){
                     Point top_left = {0, 0};
                     Point bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 2}; // account for statusbar

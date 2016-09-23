@@ -511,6 +511,14 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                break;
           case 'q':
                return false; // exit !
+          case 'J':
+          {
+               Point join_loc = {strlen(buffer->lines[cursor->y]), cursor->y};
+               if(ce_join_line(buffer, cursor->y)){
+                    ce_commit_change_char(&buffer_state->commit_tail,
+                                          &join_loc, cursor, cursor, ' ', '\n');
+               }
+          } break;
           case 'j':
           {
                Point delta = {0, 1};

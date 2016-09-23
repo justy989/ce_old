@@ -140,6 +140,7 @@ bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor);
 bool ce_insert_line(Buffer* buffer, int64_t line, const char* string);
 bool ce_append_line(Buffer* buffer, const char* string);
 bool ce_insert_newline(Buffer* buffer, int64_t line);
+bool ce_join_line(Buffer* buffer, int64_t line);
 bool ce_remove_line(Buffer* buffer, int64_t line);
 bool ce_set_line(Buffer* buffer, int64_t line, const char* string);
 

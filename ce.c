@@ -358,6 +358,11 @@ bool ce_remove_char(Buffer* buffer, const Point* location)
           return true;
      }
 
+     if(location->x == line_len){
+          // removing the newline at the end of the line
+          return ce_join_line(buffer, location->y);
+     }
+
      // NOTE: mallocing a new line because I'm thinking about overall memory usage here
      //       if you trim the a ton of lines, then you would be using a lot more memory then the file requires
      char* new_line = malloc(line_len);
@@ -710,6 +715,8 @@ bool ce_set_char(Buffer* buffer, const Point* location, char c)
 
      if(!ce_point_on_buffer(buffer, location)) return false;
 
+     if(c == NEWLINE) return ce_insert_string(buffer, location, "\n");
+
      buffer->lines[location->y][location->x] = c;
 
      return true;
@@ -758,12 +765,33 @@ bool ce_insert_newline(Buffer* buffer, int64_t line)
      return ce_insert_line(buffer, line, NULL);
 }
 
+// appends line + 1 to line
+bool ce_join_line(Buffer* buffer, int64_t line){
+     CE_CHECK_PTR_ARG(buffer);
+
+     if(line >= buffer->line_count || line < 0){
+          ce_message("%s() specified line %lld ouside of buffer, which has %lld lines", line, buffer->line_count);
+          return false;
+     }
+
+     if(line == buffer->line_count - 1) return true; // nothing to do
+     char* l1 = buffer->lines[line];
+     size_t l1_len = strlen(l1);
+     char* l2 = buffer->lines[line+1];
+     size_t l2_len = strlen(l2);
+     buffer->lines[line] = l1 = realloc(l1, l1_len + l2_len + 2); //space and null
+     if(!buffer->lines[line]) return false; // TODO: ENOMEM
+     l1[l1_len] = ' ';
+     memcpy(&l1[l1_len+1], l2, l2_len+1);
+     return ce_remove_line(buffer, line+1);
+}
+
 bool ce_remove_line(Buffer* buffer, int64_t line)
 {
      CE_CHECK_PTR_ARG(buffer);
 
-     if(line >= buffer->line_count){
-          ce_message("%s() specified line %d ouside of buffer, which has %d lines", line, buffer->line_count);
+     if(line >= buffer->line_count || line <= 0){
+          ce_message("%s() specified line %lld ouside of buffer, which has %lld lines", line, buffer->line_count);
           return false;
      }
 
@@ -771,7 +799,7 @@ bool ce_remove_line(Buffer* buffer, int64_t line)
      char** new_lines = malloc(new_line_count * sizeof(*new_lines));
      if(!new_lines){
           ce_message("%s() failed to malloc new lines: %"PRId64"", __FUNCTION__, new_line_count);
-          return -1;
+          return false;
      }
 
      // copy up to deleted line, copy the rest in the buffer

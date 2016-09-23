@@ -10,6 +10,7 @@ TODO:
 -UNDO DURING MACROS!
 -EDITABLE MACROS
 -STEP THROUGH MACROS
+-Make . work with visual mode
 
 WANTS:
 -realloc() rather than malloc() ?

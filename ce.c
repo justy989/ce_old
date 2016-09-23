@@ -785,7 +785,7 @@ bool ce_remove_line(Buffer* buffer, int64_t line)
 {
      CE_CHECK_PTR_ARG(buffer);
 
-     if(line >= buffer->line_count || line <= 0){
+     if(line >= buffer->line_count || line < 0){
           ce_message("%s() specified line %lld ouside of buffer, which has %lld lines", __FUNCTION__, line, buffer->line_count);
           return false;
      }

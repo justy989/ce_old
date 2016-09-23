@@ -1058,6 +1058,18 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case '=':
           {
                if(should_handle_command(config_state, key)){
+                    int64_t begin_format_line;
+                    int64_t end_format_line;
+                    switch(key){
+                    case '=':
+                         begin_format_line = cursor->y;
+                         end_format_line = cursor->y;
+                         break;
+                    case 'G':
+                         begin_format_line = cursor->y;
+                         end_format_line = buffer->line_count-1;
+                         break;
+                    }
                     int in_fds[2]; // 0 = child stdin
                     int out_fds[2]; // 1 = child stdout
                     if(pipe(in_fds) == -1 || pipe(out_fds) == -1){
@@ -1086,7 +1098,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          asprintf(&cursor_arg, "-cursor=%"PRId64, cursor_position);
 
                          char* line_arg;
-                         asprintf(&line_arg, "-lines=%"PRId64":%"PRId64, cursor->y+1, cursor->y+1);
+                         asprintf(&line_arg, "-lines=%"PRId64":%"PRId64, begin_format_line+1, end_format_line+1);
 
                          int ret = execlp("clang-format", "clang-format", line_arg, cursor_arg, (char *)NULL);
                          assert(ret != -1);
@@ -1120,7 +1132,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     sscanf(formatted_line_buf, "{ \"Cursor\": %d", &cursor_position);
 
                     // blow away all lines in the file
-                    for(int64_t i = buffer->line_count - 1; i > 0; i--){
+                    for(int64_t i = buffer->line_count - 1; i >= 0; i--){
                          ce_remove_line(buffer, i);
                     }
 

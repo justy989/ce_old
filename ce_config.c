@@ -671,9 +671,10 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          }
                          else{
                               // delete line
+                              Point delete_begin = {0, cursor->y};
                               char* save_string = ce_dupe_line(buffer, cursor->y);
                               if(ce_remove_line(buffer, cursor->y)){
-                                   ce_commit_remove_string(&buffer_state->commit_tail, cursor, cursor, cursor, save_string);
+                                   ce_commit_remove_string(&buffer_state->commit_tail, &delete_begin, cursor, cursor, save_string);
                               }
                               ce_clamp_cursor(buffer, cursor);
                          }

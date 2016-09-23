@@ -1076,6 +1076,12 @@ bool ce_set_cursor(const Buffer* buffer, Point* cursor, const Point* location)
 
      return true;
 }
+
+bool ce_clamp_cursor(const Buffer* buffer, Point* cursor){
+     Point clamp = {0, 0};
+     return ce_move_cursor(buffer, cursor, &clamp);
+}
+
 bool ce_move_cursor(const Buffer* buffer, Point* cursor, const Point* delta)
 {
      CE_CHECK_PTR_ARG(buffer);

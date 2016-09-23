@@ -654,6 +654,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                               if(ce_remove_line(buffer, cursor->y)){
                                    ce_commit_remove_string(&buffer_state->commit_tail, cursor, cursor, cursor, save_string);
                               }
+                              ce_clamp_cursor(buffer, cursor);
                          }
                     }
                     else{

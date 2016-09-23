@@ -233,7 +233,9 @@ bool destroyer(BufferNode* head, void* user_data)
 {
      while(head){
           BufferState* buffer_state = head->buffer->user_data;
-          ce_commits_free(&buffer_state->commit_tail);
+          BufferCommitNode* itr = buffer_state->commit_tail;
+          while(itr->prev) itr = itr->prev;
+          ce_commits_free(itr);
           free(buffer_state);
           head->buffer->user_data = NULL;
           head = head->next;
@@ -326,7 +328,9 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           {
                config_state->insert = false;
                if(config_state->start_insert.x == cursor->x &&
-                  config_state->start_insert.y == cursor->y){
+                  config_state->start_insert.y == cursor->y &&
+                  config_state->original_start_insert.x == cursor->x &&
+                  config_state->original_start_insert.y == cursor->y){
                   // pass
                }else{
                     if(config_state->start_insert.x == config_state->original_start_insert.x &&

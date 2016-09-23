@@ -161,7 +161,7 @@ bool ce_commit_change_string(BufferCommitNode** tail, const Point* start, const 
 bool ce_commit_change(BufferCommitNode** tail, const BufferCommit* change);
 bool ce_commit_undo(Buffer* buffer, BufferCommitNode** tail, Point* cursor);
 bool ce_commit_redo(Buffer* buffer, BufferCommitNode** tail, Point* cursor);
-bool ce_commits_free(BufferCommitNode** tail);
+bool ce_commits_free(BufferCommitNode* tail);
 
 BufferView* ce_split_view(BufferView* view, BufferNode* buffer_node, bool horizontal);
 bool ce_remove_view(BufferView** head, BufferView* view);

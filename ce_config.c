@@ -1,12 +1,10 @@
 #include "ce.h"
-
 #include <assert.h>
 #include <ctype.h>
-#define _XOPEN_SOURCE 500
-#define __USE_XOPEN_EXTENDED
-#define __USE_GNU
 #include <ftw.h>
 #include <inttypes.h>
+#include <stdio.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #define TAB_STRING "     "
@@ -1057,14 +1055,136 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }
           }
           break;
+          case '=':
+          {
+               if(should_handle_command(config_state, key)){
+                    int in_fds[2]; // 0 = child stdin
+                    int out_fds[2]; // 1 = child stdout
+                    if(pipe(in_fds) == -1 || pipe(out_fds) == -1){
+                         ce_message("pipe failed %s", strerror(errno));
+                         return true;
+                    }
+                    pid_t pid = fork();
+                    if(pid == -1){
+                         ce_message("fork failed %s", strerror(errno));
+                         return true;
+                    }
+                    if(pid == 0){
+                         // child process
+                         close(in_fds[1]); // close parent fds
+                         close(out_fds[0]);
+
+                         close(0); // close stdin
+                         close(1); // close stdout
+                         dup(in_fds[0]); // new stdin
+                         dup(out_fds[1]); // new stdout
+                         int64_t cursor_position = cursor->x+1;
+                         for(int64_t y_itr = 0; y_itr < cursor->y; y_itr++){
+                              cursor_position += strlen(buffer->lines[y_itr]);
+                         }
+                         char* cursor_arg;
+                         asprintf(&cursor_arg, "-cursor=%"PRId64, cursor_position);
+
+                         char* line_arg;
+                         asprintf(&line_arg, "-lines=%"PRId64":%"PRId64, cursor->y+1, cursor->y+1);
+
+                         int ret = execlp("clang-format", "clang-format", line_arg, cursor_arg, (char *)NULL);
+                         assert(ret != -1);
+                         exit(1); // we should never reach here
+                    }
+
+                    // parent process
+                    close(in_fds[0]); // close child fds
+                    close(out_fds[1]);
+
+                    FILE* child_stdin = fdopen(in_fds[1], "w");
+                    FILE* child_stdout = fdopen(out_fds[0], "r");
+                    assert(child_stdin);
+                    assert(child_stdout);
+
+                    for(int i = 0; i < buffer->line_count; i++){
+                         if(fputs(buffer->lines[i], child_stdin) == EOF || fputc('\n', child_stdin) == EOF){
+                              ce_message("issue with fputs");
+                              return true;
+                         }
+                    }
+                    fclose(child_stdin);
+                    close(in_fds[1]);
+
+                    char formatted_line_buf[BUFSIZ];
+                    formatted_line_buf[0] = 0;
+
+                    // read cursor position
+                    fgets(formatted_line_buf, BUFSIZ, child_stdout);
+                    int cursor_position = -1;
+                    sscanf(formatted_line_buf, "{ \"Cursor\": %d", &cursor_position);
+
+                    // blow away all lines in the file
+                    for(int64_t i = buffer->line_count - 1; i > 0; i--){
+                         ce_remove_line(buffer, i);
+                    }
+
+                    for(int64_t i = 0; ; i++){
+                         if(fgets(formatted_line_buf, BUFSIZ, child_stdout) == NULL) break;
+                         size_t new_line_len = strlen(formatted_line_buf) - 1;
+                         assert(formatted_line_buf[new_line_len] == '\n');
+                         formatted_line_buf[new_line_len] = 0;
+                         ce_insert_line(buffer, i, formatted_line_buf);
 #if 0
-               /* TODO: execute arbitrary shell command */
-               FILE* pfile = popen("echo justin stinkkkks", "r");
-               char* pstr = str_from_file_stream(pfile);
-               config_state->current_buffer_node = new_buffer_from_string(head, "test_buffer", pstr);
-               free(pstr);
-               pclose(pfile);
+                         if(cursor_position > 0){
+                              cursor_position -= new_line_len+1;
+                              if(cursor_position <= 0){
+                                   Point new_cursor_location = {-cursor_position, i};
+                                   ce_message("moving cursor to %ld", -cursor_position);
+                                   ce_set_cursor(buffer, cursor, &new_cursor_location);
+                              }
+                         }
 #endif
+                    }
+                    cursor->x = 0;
+                    cursor->y = 0;
+                    if(!ce_advance_cursor(buffer, cursor, cursor_position-1))
+                         ce_message("failed to advance cursor");
+
+#if 0
+                    // TODO: use -output-replacements-xml to support undo
+                    char* formatted_line = strdup(formatted_line_buf);
+                    // save the current line in undo history
+                    Point delete_begin = {0, cursor->y};
+                    char* save_string = ce_dupe_line(buffer, cursor->y);
+                    if(!ce_remove_line(buffer, cursor->y)){
+                         ce_message("ce_remove_string failed");
+                         return true;
+                    }
+                    ce_insert_string(buffer, &delete_begin, formatted_line);
+                    ce_commit_change_string(&buffer_state->commit_tail, &delete_begin, cursor, cursor, formatted_line, save_string);
+#endif
+
+                    fclose(child_stdout);
+                    close(in_fds[0]);
+
+                    // wait for the child process to complete
+                    int wstatus;
+                    do {
+                         pid_t w = waitpid(pid, &wstatus, WUNTRACED | WCONTINUED);
+                         if (w == -1) {
+                              perror("waitpid");
+                              exit(EXIT_FAILURE);
+                         }
+
+                         if (WIFEXITED(wstatus) && WEXITSTATUS(wstatus) != 0) {
+                              ce_message("clang-format process exited, status=%d\n", WEXITSTATUS(wstatus));
+                         } else if (WIFSIGNALED(wstatus)) {
+                              ce_message("clang-format process killed by signal %d\n", WTERMSIG(wstatus));
+                         } else if (WIFSTOPPED(wstatus)) {
+                              ce_message("clang-format process stopped by signal %d\n", WSTOPSIG(wstatus));
+                         } else if (WIFCONTINUED(wstatus)) {
+                              ce_message("clang-format process continued\n");
+                         }
+                    } while (!WIFEXITED(wstatus) && !WIFSIGNALED(wstatus));
+                    config_state->command_key = '\0';
+               }
+          } break;
           }
      }
 

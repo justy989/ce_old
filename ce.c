@@ -242,15 +242,11 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
      }
 
      char* current_line = buffer->lines[location->y];
-     int64_t current_line_length = strlen(current_line);
      const char* first_part = current_line;
      const char* second_part = current_line + location->x;
 
-     if(location->x == 0) first_part = NULL;
-     if(location->x >= current_line_length) second_part = NULL;
-
      int64_t first_length = location->x;
-     int64_t second_length = second_part ? strlen(second_part) : 0;
+     int64_t second_length = strlen(second_part);
 
      // find the first line range
      const char* end_of_line = new_string;
@@ -266,7 +262,7 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
                return false;
           }
 
-          if(second_part) memmove(new_line + first_length + new_string_length, second_part, second_length);
+          memmove(new_line + first_length + new_string_length, new_line + location->x, second_length);
           memcpy(new_line + first_length, new_string, new_string_length);
           new_line[new_line_length] = 0;
           buffer->lines[location->y] = new_line;
@@ -283,7 +279,7 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
                return false;
           }
 
-          if(first_part) strncpy(new_line, first_part, first_length);
+          strncpy(new_line, first_part, first_length);
           strncpy(new_line + first_length, new_string, first_new_line_length);
           new_line[new_line_length] = 0;
 
@@ -301,7 +297,7 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
                     new_line_length = next_line_length + second_length;
                     new_line = malloc(new_line_length + 1);
                     strncpy(new_line, itr, next_line_length);
-                    if(second_part) memcpy(new_line + next_line_length, second_part, second_length);
+                    memcpy(new_line + next_line_length, second_part, second_length);
                     new_line[new_line_length] = 0;
                     ce_insert_line(buffer, location->y + lines_added, new_line);
                     free(new_line);
@@ -1073,7 +1069,8 @@ int64_t ce_find_delta_to_end_of_line(const Buffer* buffer, Point* cursor)
      if(!ce_point_on_buffer(buffer, cursor)) return -1;
 
      const char* line = buffer->lines[cursor->y];
-     return (strlen(line) - 1) - cursor->x;
+     size_t len = strlen(line);
+     return len ? (len - 1) - cursor->x : 0;
 }
 
 bool ce_set_cursor(const Buffer* buffer, Point* cursor, const Point* location)
@@ -1105,9 +1102,11 @@ bool ce_set_cursor(const Buffer* buffer, Point* cursor, const Point* location)
      return true;
 }
 
-bool ce_clamp_cursor(const Buffer* buffer, Point* cursor){
+// modifies cursor and also returns a pointer to cursor for convience
+Point* ce_clamp_cursor(const Buffer* buffer, Point* cursor){
      Point clamp = {0, 0};
-     return ce_move_cursor(buffer, cursor, &clamp);
+     ce_move_cursor(buffer, cursor, &clamp);
+     return cursor;
 }
 
 bool ce_move_cursor(const Buffer* buffer, Point* cursor, const Point* delta)
@@ -1372,8 +1371,6 @@ bool ce_commit_change(BufferCommitNode** tail, const BufferCommit* commit)
 
 bool ce_commits_free(BufferCommitNode* head)
 {
-     CE_CHECK_PTR_ARG(head);
-
      while(head){
           BufferCommitNode* tmp = head;
           head = head->next;
@@ -1426,7 +1423,7 @@ bool ce_commit_undo(Buffer* buffer, BufferCommitNode** tail, Point* cursor)
           break;
      }
 
-     *cursor = (*tail)->commit.undo_cursor;
+     *cursor = *ce_clamp_cursor(buffer, &(*tail)->commit.undo_cursor);
      *tail = (*tail)->prev;
 
      return true;

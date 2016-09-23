@@ -12,6 +12,10 @@ TODO:
 -STEP THROUGH MACROS
 -Make . work with visual mode
 
+BUGS:
+-double free corruption (something to do with calling ce_remove_char on an empty line)
+reproduce by: 1) 'O' 2) escape, 3) undo, 4) redo, 5) undo, 7) q I'm seeing a double free on quit
+
 WANTS:
 -realloc() rather than malloc() ?
 -be able to yank from man pages

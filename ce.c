@@ -105,9 +105,7 @@ void ce_free_buffer(Buffer* buffer)
 
      if(buffer->lines){
           for(int64_t i = 0; i < buffer->line_count; ++i){
-               if(buffer->lines[i]){
-                    free(buffer->lines[i]);
-               }
+               free(buffer->lines[i]);
           }
 
           free(buffer->lines);
@@ -338,7 +336,7 @@ bool ce_remove_char(Buffer* buffer, const Point* location)
 
      // remove the line from the list if it is empty
      if(line_len == 0){
-          char** new_lines = malloc((buffer->line_count - 1) * sizeof(char*));
+          char** new_lines = calloc((buffer->line_count - 1), sizeof(char*));
           if(!new_lines){
                ce_message("%s() failed alloc lines", __FUNCTION__);
                return false;

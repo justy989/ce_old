@@ -194,7 +194,7 @@ BufferNode* new_buffer_from_file(BufferNode* head, const char* filename)
           return NULL;
      }
 
-     if(!initialize_buffer(buffer)){
+     if(!initialize_buffer(buffer)){    
           free(buffer->filename);
           free(buffer);
      }
@@ -571,8 +571,9 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case 'O':
           {
-               Point end_of_line = {0, cursor->y};
-               if(ce_insert_char(buffer, &end_of_line, '\n')){
+               Point begin_line = {0, cursor->y};
+               if(ce_insert_char(buffer, &begin_line, '\n')){
+                    ce_commit_insert_char(&buffer_state->commit_tail, &begin_line, cursor, &begin_line, '\n');
                     cursor->x = 0;
                     enter_insert_mode(config_state, cursor);
                }
@@ -583,8 +584,9 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                end_of_line.x = strlen(buffer->lines[cursor->y]);
 
                if(ce_insert_char(buffer, &end_of_line, '\n')){
-                    cursor->y++;
-                    cursor->x = 0;
+                    Point next_cursor = {0, cursor->y+1};
+                    ce_commit_insert_char(&buffer_state->commit_tail, &end_of_line, cursor, &next_cursor, '\n');
+                    *cursor = next_cursor;
                     enter_insert_mode(config_state, cursor);
                }
           } break;
@@ -758,6 +760,15 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }
                enter_insert_mode(config_state, cursor);
           } break;
+          case 'Z':
+               if(should_handle_command(config_state, key)){
+                    switch(key){
+                    case 'Z':
+                         ce_save_buffer(buffer, buffer->filename);
+                         return false; // quit
+                    }
+                    config_state->command_key = '\0';
+               }
           case '':
                ce_save_buffer(buffer, buffer->filename);
                break;

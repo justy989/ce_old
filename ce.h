@@ -35,9 +35,12 @@ typedef struct {
      int64_t y;
 } Point;
 
+// TODO: ce_offset_point(Point* p, int64_t dx, int64_t dy);
+
 typedef struct {
      char** lines; // '\0' terminated, does not contain newlines, NULL if empty
      int64_t line_count;
+     Point cursor;
      union {
           char* filename;
           char* name;
@@ -50,20 +53,53 @@ typedef struct BufferNode {
      struct BufferNode* next;
 } BufferNode;
 
-typedef struct BufferChange {
-     bool insertion; // insertion or deletion
-     Point start;
-     Point cursor;
-     union{
-          int64_t length; // insertion
-          char c; // deletion
-     };
-} BufferChange;
+typedef enum {
+     BCT_NONE,
+     BCT_INSERT_CHAR,
+     BCT_INSERT_STRING,
+     BCT_REMOVE_CHAR,
+     BCT_REMOVE_STRING,
+     BCT_CHANGE_CHAR,
+     BCT_CHANGE_STRING,
+} BufferCommitType;
 
-typedef struct BufferChangeNode {
-     BufferChange change;
-     struct BufferChangeNode* prev;
-} BufferChangeNode;
+typedef struct {
+     BufferCommitType type;
+     Point start;
+     Point undo_cursor;
+     Point redo_cursor;
+     union {
+          char c;
+          char* str;
+     };
+     union {
+          char prev_c;
+          char* prev_str;
+     };
+} BufferCommit;
+
+typedef struct BufferCommitNode {
+     BufferCommit commit;
+     struct BufferCommitNode* prev;
+     struct BufferCommitNode* next;
+} BufferCommitNode;
+
+// horizontal split []|[]
+
+// vertical split
+// []
+// --
+// []
+typedef struct BufferView {
+     Point cursor;
+     Point top_left;
+     Point bottom_right;
+     int64_t top_row;
+     int64_t left_collumn;
+     BufferNode* buffer_node;
+     struct BufferView* next_horizontal;
+     struct BufferView* next_vertical;
+} BufferView;
 
 typedef bool ce_initializer(BufferNode*, Point*, int, char**, void**);
 typedef void ce_destroyer(BufferNode*, void*);
@@ -73,22 +109,26 @@ typedef void ce_view_drawer(const BufferNode*, void*);
 extern Buffer* g_message_buffer;
 extern Point* g_terminal_dimensions;
 
+int64_t ce_count_string_lines(const char* string);
 bool ce_alloc_lines(Buffer* buffer, int64_t line_count);
-void ce_load_string(Buffer* buffer, const char* str);
+bool ce_load_string(Buffer* buffer, const char* string);
 bool ce_load_file(Buffer* buffer, const char* filename);
 bool ce_save_buffer(const Buffer* buffer, const char* filename);
 void ce_free_buffer(Buffer* buffer);
 bool ce_point_on_buffer(const Buffer* buffer, const Point* location);
 bool ce_insert_char(Buffer* buffer, const Point* location, char c);
 bool ce_insert_string(Buffer* buffer, const Point* location, const char* string);
+bool ce_append_string(Buffer* buffer, int64_t line, const char* string);
+bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length);
 bool ce_remove_char(Buffer* buffer, const Point* location);
+char* ce_dupe_string(Buffer* buffer, const Point* start, const Point* end);
 bool ce_get_char(Buffer* buffer, const Point* location, char* c);
 bool ce_set_char(Buffer* buffer, const Point* location, char c);
-int64_t ce_find_end_of_line(const Buffer* buffer, Point* cursor);
-int64_t ce_find_char_forward_in_line(Buffer* buffer, const Point* location, char c);
-int64_t ce_find_char_backward_in_line(Buffer* buffer, const Point* location, char c);
-int64_t ce_find_beginning_of_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
-int64_t ce_find_end_of_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
+int64_t ce_find_delta_to_end_of_line(const Buffer* buffer, Point* cursor);
+int64_t ce_find_delta_to_char_forward_in_line(Buffer* buffer, const Point* location, char c);
+int64_t ce_find_delta_to_char_backward_in_line(Buffer* buffer, const Point* location, char c);
+int64_t ce_find_delta_to_beginning_of_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
+int64_t ce_find_delta_to_end_of_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
 bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor);
 
 // NOTE: passing NULL to string causes an empty line to be inserted
@@ -107,10 +147,28 @@ BufferNode* ce_append_buffer_to_list(BufferNode* head, Buffer* buffer);
 bool ce_remove_buffer_from_list(BufferNode* head, BufferNode** node);
 
 bool ce_move_cursor(const Buffer* buffer, Point* cursor, const Point* delta);
-bool ce_follow_cursor(const Point* cursor, int64_t* top_line, int64_t* left_collumn, int64_t view_height, int64_t view_width);
+bool ce_follow_cursor(const Point* cursor, int64_t* left_collumn, int64_t* top_left, int64_t view_width, int64_t view_height,
+                      bool at_terminal_width_edge, bool at_terminal_height_edge);
+bool ce_advance_cursor(const Buffer* buffer, Point* cursor, int64_t delta);
+bool ce_move_cursor_to_end_of_file(const Buffer* buffer, Point* cursor);
 
-bool ce_buffer_change(BufferChangeNode** tail, const BufferChange* change);
-bool ce_buffer_undo(Buffer* buffer, BufferChangeNode** tail);
+bool ce_commit_insert_char(BufferCommitNode** tail, const Point* start, const Point* undo_cursor, const Point* redo_cursor, char c);
+bool ce_commit_insert_string(BufferCommitNode** tail, const Point* start, const Point* undo_cursor, const Point* redo_cursor, char* string);
+bool ce_commit_remove_char(BufferCommitNode** tail, const Point* start, const Point* undo_cursor, const Point* redo_cursor, char c);
+bool ce_commit_remove_string(BufferCommitNode** tail, const Point* start, const Point* undo_cursor, const Point* redo_cursor, char* string);
+bool ce_commit_change_char(BufferCommitNode** tail, const Point* start, const Point* undo_cursor, const Point* redo_cursor, char c, char prev_c);
+bool ce_commit_change_string(BufferCommitNode** tail, const Point* start, const Point* undo_cursor, const Point* redo_cursor, char* new_string, char* prev_string);
+bool ce_commit_change(BufferCommitNode** tail, const BufferCommit* change);
+bool ce_commit_undo(Buffer* buffer, BufferCommitNode** tail, Point* cursor);
+bool ce_commit_redo(Buffer* buffer, BufferCommitNode** tail, Point* cursor);
+bool ce_commits_free(BufferCommitNode* tail);
+
+BufferView* ce_split_view(BufferView* view, BufferNode* buffer_node, bool horizontal);
+bool ce_remove_view(BufferView** head, BufferView* view);
+bool ce_calc_views(BufferView* head, const Point* top_left, const Point* top_right);
+bool ce_draw_views(const BufferView* head);
+bool ce_free_views(BufferView** view);
+BufferView* ce_find_view_at_point(BufferView* head, const Point* point);
 
 void* ce_memrchr(const void* s, int c, size_t n);
 

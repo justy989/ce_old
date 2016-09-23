@@ -853,7 +853,7 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
                new_line[new_line_len] = 0;
                buffer->lines[location->y] = new_line;
                ce_remove_line(buffer, line_index);
-               length = -1;
+               break;
           }
      }
 
@@ -1120,8 +1120,7 @@ bool ce_advance_cursor(const Buffer* buffer, Point* cursor, int64_t delta)
 
      if(!ce_point_on_buffer(buffer, cursor)) return false;
 
-     int64_t line_len = 0;
-     if(buffer->lines[cursor->y]) line_len = strlen(buffer->lines[cursor->y]);
+     int64_t line_len = strlen(buffer->lines[cursor->y]);
      int64_t line_len_left = line_len - cursor->x;
 
      // if the movement fits on this line, go for it
@@ -1135,10 +1134,9 @@ bool ce_advance_cursor(const Buffer* buffer, Point* cursor, int64_t delta)
      cursor->x = 0;
 
      while(true){
-          if(buffer->line_count <= cursor->y) return ce_move_cursor_to_end_of_file(buffer, cursor);
+          if(cursor->y >= buffer->line_count) return ce_move_cursor_to_end_of_file(buffer, cursor);
 
-          line_len = 0;
-          if(buffer->lines[cursor->y]) line_len = strlen(buffer->lines[cursor->y]);
+          line_len = strlen(buffer->lines[cursor->y]);
 
           if(delta < line_len){
                cursor->x = delta;
@@ -1311,10 +1309,10 @@ void free_commit(BufferCommitNode* node)
 {
      if(node->commit.type == BCT_INSERT_STRING ||
         node->commit.type == BCT_REMOVE_STRING){
-          if(node->commit.str) free(node->commit.str);
+          free(node->commit.str);
      }else if(node->commit.type == BCT_CHANGE_STRING){
-          if(node->commit.str) free(node->commit.str);
-          if(node->commit.prev_str) free(node->commit.prev_str);
+          free(node->commit.str);
+          free(node->commit.prev_str);
      }
 
      free(node);
@@ -1336,18 +1334,7 @@ bool ce_commit_change(BufferCommitNode** tail, const BufferCommit* commit)
 
      // TODO: rather than branching, just free rest of the redo list on this change
      if(*tail){
-          if((*tail)->next){
-               BufferCommitNode* itr = (*tail)->next;
-
-               while(itr){
-                    BufferCommitNode* tmp = itr;
-                    itr = itr->next;
-                    free_commit(tmp);
-               }
-
-               (*tail)->next = NULL;
-          }
-
+          ce_commits_free((*tail)->next);
           (*tail)->next = new_node;
      }
 
@@ -1355,18 +1342,13 @@ bool ce_commit_change(BufferCommitNode** tail, const BufferCommit* commit)
      return true;
 }
 
-bool ce_commits_free(BufferCommitNode** tail)
+bool ce_commits_free(BufferCommitNode* head)
 {
-     CE_CHECK_PTR_ARG(tail);
+     CE_CHECK_PTR_ARG(head);
 
-     // make sure we find the real end
-     while((*tail)->next){
-          *tail = (*tail)->next;
-     }
-
-     while(*tail){
-          BufferCommitNode* tmp = *tail;
-          *tail = (*tail)->prev;
+     while(head){
+          BufferCommitNode* tmp = head;
+          head = head->next;
           free_commit(tmp);
      }
 

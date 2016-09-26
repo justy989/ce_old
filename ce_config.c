@@ -88,13 +88,52 @@ typedef struct MarkNode{
      char reg_char;
      Point location;
      struct MarkNode* next;
-}MarkNode;
+} MarkNode;
+
+typedef enum{
+     YANK_NORMAL,
+     YANK_LINE,
+} YankMode;
+typedef struct YankNode{
+     char reg_char;
+     const char* text;
+     YankMode mode;
+     struct YankNode* next;
+} YankNode;
 
 typedef struct{
      BufferCommitNode* commit_tail;
      BackspaceNode* backspace_head;
      struct MarkNode* mark_head;
+     struct YankNode* yank_head;
 } BufferState;
+
+YankNode* find_yank(BufferState* buffer, char reg_char){
+     YankNode* itr = buffer->yank_head;
+     while(itr != NULL){
+          if(itr->reg_char == reg_char) return itr;
+          itr = itr->next;
+     }
+     return NULL;
+}
+
+// for now the yanked string is user allocated. eventually will probably
+// want to change this interface so that everything is hidden
+void add_yank(BufferState* buffer, char reg_char, const char* yank_text, YankMode mode){
+     YankNode* node = find_yank(buffer, reg_char);
+     if(node != NULL){
+          free((void*)node->text);
+     }
+     else{
+          YankNode* new_yank = malloc(sizeof(*buffer->yank_head));
+          new_yank->reg_char = reg_char;
+          new_yank->next = buffer->yank_head;
+          new_yank->mode = mode;
+          node = new_yank;
+          buffer->yank_head = new_yank;
+     }
+     node->text = yank_text;
+}
 
 Point* find_mark(BufferState* buffer, char mark_char)
 {
@@ -197,7 +236,7 @@ BufferNode* new_buffer_from_file(BufferNode* head, const char* filename)
           return NULL;
      }
 
-     if(!initialize_buffer(buffer)){    
+     if(!initialize_buffer(buffer)){   
           free(buffer->filename);
           free(buffer);
      }
@@ -846,6 +885,49 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                if(key == 'C') enter_insert_mode(config_state, cursor);
                clear_keys(config_state);
           } break;
+          case 'y':
+          {
+               if(should_handle_command(config_state, key)){
+                    switch(key){
+                    case 'y':
+                         add_yank(buffer_state, '0', strdup(buffer->lines[cursor->y]), YANK_LINE);
+                         break;
+                    default:
+                         break;
+                    }
+                    config_state->command_key = '\0';
+               }
+          } break;
+          case 'p':
+          {
+               YankNode* yank = find_yank(buffer_state, '0');
+               if(yank){
+                    switch(yank->mode){
+                    case YANK_LINE:
+                    {
+                         // TODO: bring this all into a ce_commit_insert_line function
+                         Point new_line_begin = {0, cursor->y+1};
+                         Point cur_line_end = {strlen(buffer->lines[cursor->y]), cursor->y};
+                         size_t len = strlen(yank->text);
+                         char* save_str = malloc(len + 1);
+                         save_str[0] = '\n'; // prepend a new line to create a line
+                         memcpy(save_str + 1, yank->text, len);
+                         bool res = ce_insert_string(buffer, &cur_line_end, save_str);
+                         assert(res);
+                         ce_commit_insert_string(&buffer_state->commit_tail,
+                                                 &cur_line_end, cursor, &new_line_begin,
+                                                 save_str);
+                         ce_set_cursor(buffer, cursor, &new_line_begin);
+                    } break;
+                    case YANK_NORMAL:
+                         ce_insert_string(buffer, cursor, yank->text);
+                         ce_commit_insert_string(&buffer_state->commit_tail,
+                                                 cursor, cursor, cursor,
+                                                 strdup(yank->text));
+                         break;
+                    }
+               }
+          } break;
           case 'S':
           {
                // TODO: unify with cc
@@ -1417,10 +1499,9 @@ void view_drawer(const BufferNode* head, void* user_data)
      for(int i = 0; i < g_terminal_dimensions->x; ++i) addch(' ');
 
      // draw the status line
-     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s %lld lines, k %lld, c %lld, %lld, v %lld, %lld -> %lld, %lld t: %lld, %lld",
+     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s %ld lines, k %d, c %ld, %ld, v %ld, %ld -> %ld, %ld t: %ld, %ld",
               config_state->insert ? "INSERT" : "NORMAL", buffer->filename, buffer->line_count, config_state->last_key,
-              cursor->x, cursor->y, buffer_view->top_left.x, buffer_view->top_left.y, buffer_view->bottom_right.x,
-              buffer_view->bottom_right.y, g_terminal_dimensions->x, g_terminal_dimensions->y);
+              cursor->x, cursor->y, buffer_view->top_left.x, buffer_view->top_left.y, buffer_view->bottom_right.x, buffer_view->bottom_right.y, g_terminal_dimensions->x, g_terminal_dimensions->y);
      attroff(A_REVERSE);
 
      // reset the cursor

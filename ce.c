@@ -772,8 +772,9 @@ bool ce_join_line(Buffer* buffer, int64_t line){
      size_t l1_len = strlen(l1);
      char* l2 = buffer->lines[line+1];
      size_t l2_len = strlen(l2);
-     buffer->lines[line] = l1 = realloc(l1, l1_len + l2_len + 2); //space and null
+     buffer->lines[line] = realloc(l1, l1_len + l2_len + 2); //space and null
      if(!buffer->lines[line]) return false; // TODO: ENOMEM
+     l1 = buffer->lines[line];
      l1[l1_len] = ' ';
      memcpy(&l1[l1_len+1], l2, l2_len+1);
      return ce_remove_line(buffer, line+1);

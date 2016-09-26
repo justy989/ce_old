@@ -865,7 +865,7 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
           }else{
                int64_t next_line_part_len = next_line_len - length;
                int64_t new_line_len = location->x + next_line_part_len;
-               char* new_line = realloc(current_line, new_line_len + 1);
+               char* new_line = current_line = realloc(current_line, new_line_len + 1);
                if(!new_line){
                     ce_message("%s() failed to malloc new line", __FUNCTION__);
                     return false;

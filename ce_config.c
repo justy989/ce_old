@@ -685,7 +685,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                if(should_handle_command(config_state, key)){
                     switch(key){
                     case 'y':
-                         add_yank(buffer_state, '0', ce_dupe_line(buffer, cursor->y), YANK_LINE);
+                         add_yank(buffer_state, '0', strdup(buffer->lines[cursor->y]), YANK_LINE);
                          break;
                     default:
                          break;
@@ -700,13 +700,19 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     switch(yank->mode){
                     case YANK_LINE:
                     {
-                         Point insert_loc = {0, cursor->y+1}; // TODO: does this work at the end of file
-                         bool res = ce_insert_string(buffer, &insert_loc, yank->text);
+                         // TODO: bring this all into a ce_commit_insert_line function
+                         Point new_line_begin = {0, cursor->y+1};
+                         Point cur_line_end = {strlen(buffer->lines[cursor->y]), cursor->y};
+                         size_t len = strlen(yank->text);
+                         char* save_str = malloc(len + 1);
+                         save_str[0] = '\n'; // prepend a new line to create a line
+                         memcpy(save_str + 1, yank->text, len);
+                         bool res = ce_insert_string(buffer, &cur_line_end, save_str);
                          assert(res);
                          ce_commit_insert_string(&buffer_state->commit_tail,
-                                                 &insert_loc, cursor, &insert_loc,
-                                                 strdup(yank->text));
-                         ce_set_cursor(buffer, cursor, &insert_loc);
+                                                 &cur_line_end, cursor, &new_line_begin,
+                                                 save_str);
+                         ce_set_cursor(buffer, cursor, &new_line_begin);
                     } break;
                     case YANK_NORMAL:
                          ce_insert_string(buffer, cursor, yank->text);

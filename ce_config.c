@@ -514,7 +514,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
 
      if(config_state->insert){
           assert(config_state->command_key == '\0');
-          // TODO: should be a switch
           switch(key){
           case 27: // escape
           {
@@ -704,6 +703,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                clear_keys(config_state);
                break;
           case 'q':
+               clear_keys(config_state);
                return false; // exit !
           case 'J':
           {
@@ -712,6 +712,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     ce_commit_change_char(&buffer_state->commit_tail,
                                           &join_loc, cursor, cursor, ' ', '\n');
                }
+               clear_keys(config_state);
           } break;
           case 'j':
           case 'k':
@@ -731,7 +732,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     }
 
                     // this is a generic movement
-                    *cursor = movement_end;
+                    ce_set_cursor(buffer, cursor, &movement_end);
                }
                clear_keys(config_state);
           } break;
@@ -872,6 +873,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                                    // TODO: fill out movement_start and movement_end
                                    Point delta = {-cursor->x, 0};
                                    ce_move_cursor(buffer, cursor, &delta);
+                                   movement_start = (Point) {0, cursor->y};
+                                   movement_end = (Point) {strlen(buffer->lines[cursor->y])+1, cursor->y};
                               } break;
                               default:
                                    // not a valid movement
@@ -884,13 +887,18 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     assert(movement_end.x >= movement_start.x);
                     assert(movement_start.y == movement_end.y); // TODO support deleting over line boundaries
 
+                    // generic movement behavior override
+                    if(config_state->movement_keys[0] == '%')
+                         movement_end.x++; // include matched char
+
                     // delete all chars movement_start..movement_end-1
-                    while(movement_start.x < movement_end.x){
-                         ce_remove_char(buffer, &movement_start);
-                         movement_end.x--;
+                    int64_t n_deletes = ce_compute_length(&movement_start, &movement_end);
+                    char* save_string = ce_dupe_string(buffer, &movement_start, &movement_end);
+                    if(ce_remove_string(buffer, &movement_start, n_deletes)){
+                         ce_commit_remove_string(&buffer_state->commit_tail, &movement_start, cursor, &movement_start, save_string);
                     }
 
-                    *cursor = movement_end;
+                    ce_set_cursor(buffer, cursor, &movement_start);
                }
                if(key=='c') enter_insert_mode(config_state,cursor);
 

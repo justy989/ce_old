@@ -1852,3 +1852,17 @@ void* ce_memrchr(const void* s, int c, size_t n)
      }
      return NULL;
 }
+
+int64_t ce_compute_length(Point* start, Point* end)
+{
+     // swap end and start if necessary
+     if(end->y < start->y || (end->y == start->y && end->x < start->y)){
+          Point* temp = start;
+          start = end;
+          end = temp;
+     }
+
+     assert(start->y == end->y); // TODO support multi-line
+
+     return end->x - start->x;
+}

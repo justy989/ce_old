@@ -178,5 +178,6 @@ bool ce_free_views(BufferView** view);
 BufferView* ce_find_view_at_point(BufferView* head, const Point* point);
 
 void* ce_memrchr(const void* s, int c, size_t n);
+int64_t ce_compute_length(Point* start, Point* end);
 
 #endif

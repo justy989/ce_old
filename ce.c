@@ -847,6 +847,7 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
           line_index++;
      }else{
           ce_remove_line(buffer, location->y);
+          length--;
      }
 
      while(length > 0){
@@ -857,14 +858,14 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
 
           char* next_line = buffer->lines[line_index];
           int64_t next_line_len = strlen(next_line);
-          if(length >= next_line_len){
+          if(length >= next_line_len + 1){
                // remove any lines that we have the length to remove completely
                ce_remove_line(buffer, line_index);
-               length -= next_line_len;
+               length -= next_line_len + 1;
           }else{
                int64_t next_line_part_len = next_line_len - length;
                int64_t new_line_len = location->x + next_line_part_len;
-               char* new_line = realloc(current_line, new_line_len + 1);
+               char* new_line = current_line = realloc(current_line, new_line_len + 1);
                if(!new_line){
                     ce_message("%s() failed to malloc new line", __FUNCTION__);
                     return false;
@@ -1856,7 +1857,7 @@ void* ce_memrchr(const void* s, int c, size_t n)
 int64_t ce_compute_length(Point* start, Point* end)
 {
      // swap end and start if necessary
-     if(end->y < start->y || (end->y == start->y && end->x < start->y)){
+     if(end->y < start->y || (end->y == start->y && end->x < start->x)){
           Point* temp = start;
           start = end;
           end = temp;

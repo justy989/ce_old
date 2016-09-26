@@ -868,13 +868,13 @@ bool key_handler(int key, BufferNode* head, void* user_data)
 
                     if(m_state == CE_MOVEMENT_INVALID){
                          switch(config_state->movement_keys[0]){
+                              case 'c':
                               case 'd':
                               {
-                                   // TODO: fill out movement_start and movement_end
                                    Point delta = {-cursor->x, 0};
                                    ce_move_cursor(buffer, cursor, &delta);
                                    movement_start = (Point) {0, cursor->y};
-                                   movement_end = (Point) {strlen(buffer->lines[cursor->y])+1, cursor->y};
+                                   movement_end = (Point) {strlen(buffer->lines[cursor->y])+1, cursor->y}; // TODO: causes ce_dupe_string to fail (not on buffer)
                               } break;
                               default:
                                    // not a valid movement
@@ -891,9 +891,9 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     if(config_state->movement_keys[0] == '%')
                          movement_end.x++; // include matched char
 
-                    // delete all chars movement_start..movement_end-1
+                    // delete all chars movement_start..movement_end inclusive
                     int64_t n_deletes = ce_compute_length(&movement_start, &movement_end);
-                    char* save_string = ce_dupe_string(buffer, &movement_start, &movement_end);
+                    char* save_string = ce_dupe_string(buffer, &movement_start, &movement_end); // TODO: ce_dupe_string fails when movement_end is not on the buffer! (cc, dd)
                     if(ce_remove_string(buffer, &movement_start, n_deletes)){
                          ce_commit_remove_string(&buffer_state->commit_tail, &movement_start, cursor, &movement_start, save_string);
                     }

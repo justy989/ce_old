@@ -1244,10 +1244,9 @@ void view_drawer(const BufferNode* head, void* user_data)
      for(int i = 0; i < g_terminal_dimensions->x; ++i) addch(' ');
 
      // draw the status line
-     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s %lld lines, k %lld, c %lld, %lld, v %lld, %lld -> %lld, %lld t: %lld, %lld",
+     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s %ld lines, k %d, c %ld, %ld, v %ld, %ld -> %ld, %ld t: %ld, %ld",
               config_state->insert ? "INSERT" : "NORMAL", buffer->filename, buffer->line_count, config_state->last_key,
-              cursor->x, cursor->y, buffer_view->top_left.x, buffer_view->top_left.y, buffer_view->bottom_right.x,
-              buffer_view->bottom_right.y, g_terminal_dimensions->x, g_terminal_dimensions->y);
+              cursor->x, cursor->y, buffer_view->top_left.x, buffer_view->top_left.y, buffer_view->bottom_right.x, buffer_view->bottom_right.y, g_terminal_dimensions->x, g_terminal_dimensions->y);
      attroff(A_REVERSE);
 
      // reset the cursor

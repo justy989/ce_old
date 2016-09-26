@@ -95,7 +95,7 @@ typedef struct BufferView {
      Point top_left;
      Point bottom_right;
      int64_t top_row;
-     int64_t left_collumn;
+     int64_t left_column;
      BufferNode* buffer_node;
      struct BufferView* next_horizontal;
      struct BufferView* next_vertical;
@@ -122,6 +122,7 @@ bool ce_append_string(Buffer* buffer, int64_t line, const char* string);
 bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length);
 bool ce_remove_char(Buffer* buffer, const Point* location);
 char* ce_dupe_string(Buffer* buffer, const Point* start, const Point* end);
+char* ce_dupe_line(Buffer* buffer, int64_t line);
 bool ce_get_char(Buffer* buffer, const Point* location, char* c);
 bool ce_set_char(Buffer* buffer, const Point* location, char c);
 int64_t ce_find_delta_to_end_of_line(const Buffer* buffer, Point* cursor);
@@ -129,12 +130,17 @@ int64_t ce_find_delta_to_char_forward_in_line(Buffer* buffer, const Point* locat
 int64_t ce_find_delta_to_char_backward_in_line(Buffer* buffer, const Point* location, char c);
 int64_t ce_find_delta_to_beginning_of_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
 int64_t ce_find_delta_to_end_of_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
+int64_t ce_find_end_of_line(const Buffer* buffer, Point* cursor);
+int64_t ce_find_next_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
+bool ce_find_match(Buffer* buffer, const Point* location, Point* delta);
+bool ce_find_str(Buffer* buffer, const Point* location, const char* search_str, Point* delta);
 bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor);
 
 // NOTE: passing NULL to string causes an empty line to be inserted
 bool ce_insert_line(Buffer* buffer, int64_t line, const char* string);
 bool ce_append_line(Buffer* buffer, const char* string);
 bool ce_insert_newline(Buffer* buffer, int64_t line);
+bool ce_join_line(Buffer* buffer, int64_t line);
 bool ce_remove_line(Buffer* buffer, int64_t line);
 bool ce_set_line(Buffer* buffer, int64_t line, const char* string);
 
@@ -146,8 +152,10 @@ bool ce_message(const char* format, ...);
 BufferNode* ce_append_buffer_to_list(BufferNode* head, Buffer* buffer);
 bool ce_remove_buffer_from_list(BufferNode* head, BufferNode** node);
 
+Point* ce_clamp_cursor(const Buffer* buffer, Point* cursor);
 bool ce_move_cursor(const Buffer* buffer, Point* cursor, const Point* delta);
-bool ce_follow_cursor(const Point* cursor, int64_t* left_collumn, int64_t* top_left, int64_t view_width, int64_t view_height,
+bool ce_set_cursor(const Buffer* buffer, Point* cursor, const Point* location);
+bool ce_follow_cursor(const Point* cursor, int64_t* left_column, int64_t* top_left, int64_t view_width, int64_t view_height,
                       bool at_terminal_width_edge, bool at_terminal_height_edge);
 bool ce_advance_cursor(const Buffer* buffer, Point* cursor, int64_t delta);
 bool ce_move_cursor_to_end_of_file(const Buffer* buffer, Point* cursor);

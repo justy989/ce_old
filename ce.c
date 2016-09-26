@@ -1,4 +1,3 @@
-#define _GNU_SOURCE
 #include "ce.h"
 #include <ctype.h>
 #include <string.h>
@@ -106,9 +105,7 @@ void ce_free_buffer(Buffer* buffer)
 
      if(buffer->lines){
           for(int64_t i = 0; i < buffer->line_count; ++i){
-               if(buffer->lines[i]){
-                    free(buffer->lines[i]);
-               }
+               free(buffer->lines[i]);
           }
 
           free(buffer->lines);
@@ -242,15 +239,11 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
      }
 
      char* current_line = buffer->lines[location->y];
-     int64_t current_line_length = strlen(current_line);
      const char* first_part = current_line;
      const char* second_part = current_line + location->x;
 
-     if(location->x == 0) first_part = NULL;
-     if(location->x >= current_line_length) second_part = NULL;
-
      int64_t first_length = location->x;
-     int64_t second_length = second_part ? strlen(second_part) : 0;
+     int64_t second_length = strlen(second_part);
 
      // find the first line range
      const char* end_of_line = new_string;
@@ -266,7 +259,7 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
                return false;
           }
 
-          if(second_part) memmove(new_line + first_length + new_string_length, second_part, second_length);
+          memmove(new_line + first_length + new_string_length, new_line + location->x, second_length);
           memcpy(new_line + first_length, new_string, new_string_length);
           new_line[new_line_length] = 0;
           buffer->lines[location->y] = new_line;
@@ -283,7 +276,7 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
                return false;
           }
 
-          if(first_part) strncpy(new_line, first_part, first_length);
+          strncpy(new_line, first_part, first_length);
           strncpy(new_line + first_length, new_string, first_new_line_length);
           new_line[new_line_length] = 0;
 
@@ -301,7 +294,7 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
                     new_line_length = next_line_length + second_length;
                     new_line = malloc(new_line_length + 1);
                     strncpy(new_line, itr, next_line_length);
-                    if(second_part) memcpy(new_line + next_line_length, second_part, second_length);
+                    memcpy(new_line + next_line_length, second_part, second_length);
                     new_line[new_line_length] = 0;
                     ce_insert_line(buffer, location->y + lines_added, new_line);
                     free(new_line);
@@ -343,7 +336,7 @@ bool ce_remove_char(Buffer* buffer, const Point* location)
 
      // remove the line from the list if it is empty
      if(line_len == 0){
-          char** new_lines = malloc((buffer->line_count - 1) * sizeof(char*));
+          char** new_lines = calloc((buffer->line_count - 1), sizeof(char*));
           if(!new_lines){
                ce_message("%s() failed alloc lines", __FUNCTION__);
                return false;
@@ -356,6 +349,11 @@ bool ce_remove_char(Buffer* buffer, const Point* location)
           free(buffer->lines);
           buffer->lines = new_lines;
           return true;
+     }
+
+     if(location->x == line_len){
+          // removing the newline at the end of the line
+          return ce_join_line(buffer, location->y);
      }
 
      // NOTE: mallocing a new line because I'm thinking about overall memory usage here
@@ -456,7 +454,11 @@ char* ce_dupe_line(Buffer* buffer, int64_t line)
           return NULL;
      }
 
-     return strdup(buffer->lines[line]);
+     size_t len = strlen(buffer->lines[line]) + 2;
+     char* duped_line = malloc(len);
+     duped_line[len - 2] = '\n';
+     duped_line[len - 1] = 0;
+     return memcpy(duped_line, buffer->lines[line], len - 2);
 }
 
 // return x delta between location and the located character 'c' if found. return -1 if not found
@@ -487,6 +489,113 @@ int64_t ce_find_delta_to_char_backward_in_line(Buffer* buffer, const Point* loca
      return cur_char - found_char;
 }
 
+typedef enum{
+     CE_UP = -1,
+     CE_DOWN = 1
+} Direction;
+// returns the delta to the matching character; return success
+bool ce_find_match(Buffer* buffer, const Point* location, Point* delta)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+     CE_CHECK_PTR_ARG(delta);
+
+     const char* cur_char = &buffer->lines[location->y][location->x];
+     Direction d;
+     char match;
+     switch(*cur_char){
+     case '{':
+          d = CE_DOWN;
+          match = '}';
+          break;
+     case '}':
+          d = CE_UP;
+          match = '{';
+          break;
+     case '(':
+          d = CE_DOWN;
+          match = ')';
+          break;
+     case ')':
+          d = CE_UP;
+          match = '(';
+          break;
+     case '[':
+          d = CE_DOWN;
+          match = ']';
+          break;
+     case ']':
+          d = CE_UP;
+          match = '[';
+          break;
+     case '<':
+          d = CE_DOWN;
+          match = '>';
+          break;
+     case '>':
+          d = CE_UP;
+          match = '<';
+          break;
+     default:
+          return false;
+     }
+
+     const char* iter_char = cur_char + d;
+     uint64_t counter = 1; // when counter goes to 0, we have found our match
+
+     int64_t line = location->y;
+     const char* line_str = buffer->lines[line];
+
+     int64_t n_lines = (d == CE_UP) ? location->y : buffer->line_count - location->y;
+     for(int64_t i = 0; i < n_lines;){
+          while(*iter_char != '\0'){
+               // loop over line
+               if(*iter_char == match){
+                    if(--counter == 0){
+                         delta->x = (iter_char - buffer->lines[line]) - location->x;
+                         delta->y = line - location->y;
+                         return true;
+                    }
+               }
+               else if(*iter_char == *cur_char) counter++;
+               iter_char += d;
+          }
+
+          do i++;
+          while(!(line_str = buffer->lines[line += d]) && i < n_lines);
+          iter_char = (d == CE_UP) ? &line_str[strlen(line_str) - 1] : line_str;
+     }
+     return false;
+}
+
+// returns the delta to the matching string; return success
+bool ce_find_str(Buffer* buffer, const Point* location, const char* search_str, Point* delta)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+     CE_CHECK_PTR_ARG(search_str);
+     CE_CHECK_PTR_ARG(delta);
+
+     Direction d = CE_DOWN; // TODO support reverse search
+
+     int64_t line = location->y;
+     const char* line_str = buffer->lines[location->y];
+     if(line_str) line_str = &line_str[location->x + 1];
+
+     int64_t n_lines = (d == CE_UP) ? location->y : buffer->line_count - location->y;
+     for(int64_t i = 0; i < n_lines;){
+          const char* match = strstr(line_str, search_str);
+          if(match){
+               delta->x = (match - line_str) - location->x;
+               delta->y = line - location->y;
+               return true;
+          }
+          do i++;
+          while(!(line_str = buffer->lines[line += d]) && i < n_lines);
+     }
+     return false;
+}
+
 bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor)
 {
      CE_CHECK_PTR_ARG(buffer);
@@ -498,6 +607,11 @@ bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor)
      for(i = 0; isblank(line[i]); i++);
      cursor->x = i;
      return true;
+}
+
+// underscores are not treated as punctuation for vim movement
+bool ce_ispunct(int c){
+     return c != '_' && ispunct(c);
 }
 
 // return -1 on failure, delta to move left to the beginning of the word on success
@@ -515,19 +629,19 @@ int64_t ce_find_delta_to_beginning_of_word(Buffer* buffer, const Point* location
                // we are starting at a boundary move to the beginning of the previous word
                while(isblank(line[i-1]) && i) i--;
           }
-          else if(punctuation_word_boundaries && ispunct(line[i-1])){
-               while(ispunct(line[i-1]) && i) i--;
+          else if(punctuation_word_boundaries && ce_ispunct(line[i-1])){
+               while(ce_ispunct(line[i-1]) && i) i--;
                break;
           }
           else{
-               while(!isblank(line[i-1]) && (!punctuation_word_boundaries || !ispunct(line[i-1])) && i) i--;
+               while(!isblank(line[i-1]) && (!punctuation_word_boundaries || !ce_ispunct(line[i-1])) && i) i--;
                break;
           }
      }
      return location->x - i;
 }
 
-// return -1 on failure, delta to move left to the beginning of the word on success
+// return -1 on failure, delta to move right to the end of the word on success
 int64_t ce_find_delta_to_end_of_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
 {
      CE_CHECK_PTR_ARG(buffer);
@@ -541,18 +655,38 @@ int64_t ce_find_delta_to_end_of_word(Buffer* buffer, const Point* location, bool
      while(i < line_len){
           if(isblank(line[i+1])){
                // we are starting at a boundary move to the beginning of the previous word
-               while(isblank(line[i+1]) && i+1 < line_len) i++;
+               while(isblank(line[i+1]) && (i+1 < line_len)) i++;
           }
-          else if(punctuation_word_boundaries && ispunct(line[i+1])){
-               while(ispunct(line[i+1]) && i+1 < line_len) i++;
+          else if(punctuation_word_boundaries && ce_ispunct(line[i+1])){
+               while(ce_ispunct(line[i+1]) && (i+1 < line_len)) i++;
                break;
           }
           else{
-               while(!isblank(line[i+1]) && (!punctuation_word_boundaries || !ispunct(line[i+1])) && i+1 < line_len) i++;
+               while(!isblank(line[i+1]) && (!punctuation_word_boundaries || !ce_ispunct(line[i+1])) && (i+1 < line_len)) i++;
                break;
           }
      }
      return i - location->x;
+}
+
+// return -1 on failure, delta to move right to the beginning of the next word on success
+int64_t ce_find_next_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+
+     int64_t delta = ce_find_delta_to_end_of_word(buffer, location, punctuation_word_boundaries);
+     if(delta == -1) return -1;
+     const char* line = buffer->lines[location->y];
+     int line_len = strlen(line);
+     int cur_x = location->x + delta;
+     if(cur_x + 1 <= line_len){ // if at eol, the null character is considered the next word
+          do{
+               // churn through all whitespace following end of word
+               cur_x++;
+          } while(isblank(line[cur_x]) && (cur_x+1 < line_len));
+     }
+     return cur_x - location->x;
 }
 
 bool ce_get_char(Buffer* buffer, const Point* location, char* c)
@@ -573,6 +707,8 @@ bool ce_set_char(Buffer* buffer, const Point* location, char c)
      CE_CHECK_PTR_ARG(location);
 
      if(!ce_point_on_buffer(buffer, location)) return false;
+
+     if(c == NEWLINE) return ce_insert_string(buffer, location, "\n");
 
      buffer->lines[location->y][location->x] = c;
 
@@ -622,12 +758,34 @@ bool ce_insert_newline(Buffer* buffer, int64_t line)
      return ce_insert_line(buffer, line, NULL);
 }
 
+// appends line + 1 to line
+bool ce_join_line(Buffer* buffer, int64_t line){
+     CE_CHECK_PTR_ARG(buffer);
+
+     if(line >= buffer->line_count || line < 0){
+          ce_message("%s() specified line %lld ouside of buffer, which has %lld lines", __FUNCTION__, line, buffer->line_count);
+          return false;
+     }
+
+     if(line == buffer->line_count - 1) return true; // nothing to do
+     char* l1 = buffer->lines[line];
+     size_t l1_len = strlen(l1);
+     char* l2 = buffer->lines[line+1];
+     size_t l2_len = strlen(l2);
+     buffer->lines[line] = realloc(l1, l1_len + l2_len + 2); //space and null
+     if(!buffer->lines[line]) return false; // TODO: ENOMEM
+     l1 = buffer->lines[line];
+     l1[l1_len] = ' ';
+     memcpy(&l1[l1_len+1], l2, l2_len+1);
+     return ce_remove_line(buffer, line+1);
+}
+
 bool ce_remove_line(Buffer* buffer, int64_t line)
 {
      CE_CHECK_PTR_ARG(buffer);
 
-     if(line >= buffer->line_count){
-          ce_message("%s() specified line %d ouside of buffer, which has %d lines", line, buffer->line_count);
+     if(line >= buffer->line_count || line < 0){
+          ce_message("%s() specified line %lld ouside of buffer, which has %lld lines", __FUNCTION__, line, buffer->line_count);
           return false;
      }
 
@@ -635,7 +793,7 @@ bool ce_remove_line(Buffer* buffer, int64_t line)
      char** new_lines = malloc(new_line_count * sizeof(*new_lines));
      if(!new_lines){
           ce_message("%s() failed to malloc new lines: %"PRId64"", __FUNCTION__, new_line_count);
-          return -1;
+          return false;
      }
 
      // copy up to deleted line, copy the rest in the buffer
@@ -909,7 +1067,44 @@ int64_t ce_find_delta_to_end_of_line(const Buffer* buffer, Point* cursor)
      if(!ce_point_on_buffer(buffer, cursor)) return -1;
 
      const char* line = buffer->lines[cursor->y];
-     return (strlen(line) - 1) - cursor->x;
+     size_t len = strlen(line);
+     return len ? (len - 1) - cursor->x : 0;
+}
+
+bool ce_set_cursor(const Buffer* buffer, Point* cursor, const Point* location)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(cursor);
+     CE_CHECK_PTR_ARG(location);
+
+     Point dst = *location;
+
+     if(dst.x < 0) dst.x = 0;
+     if(dst.y < 0) dst.y = 0;
+
+     if(dst.y >= buffer->line_count) dst.y = buffer->line_count - 1;
+
+     if(buffer->lines[dst.y]){
+          int64_t line_len = strlen(buffer->lines[dst.y]);
+          if(!line_len){
+               dst.x = 0;
+          }else if(dst.x >= line_len){
+               dst.x = line_len - 1;
+          }
+     }else{
+          dst.x = 0;
+     }
+
+     *cursor = dst;
+
+     return true;
+}
+
+// modifies cursor and also returns a pointer to cursor for convience
+Point* ce_clamp_cursor(const Buffer* buffer, Point* cursor){
+     Point clamp = {0, 0};
+     ce_move_cursor(buffer, cursor, &clamp);
+     return cursor;
 }
 
 bool ce_move_cursor(const Buffer* buffer, Point* cursor, const Point* delta)
@@ -997,7 +1192,7 @@ bool ce_move_cursor_to_end_of_file(const Buffer* buffer, Point* cursor)
 }
 
 // TODO: Threshold for top, left, bottom and right before scrolling happens
-bool ce_follow_cursor(const Point* cursor, int64_t* left_collumn, int64_t* top_row, int64_t view_width, int64_t view_height,
+bool ce_follow_cursor(const Point* cursor, int64_t* left_column, int64_t* top_row, int64_t view_width, int64_t view_height,
                       bool at_terminal_width_edge, bool at_terminal_height_edge)
 {
      CE_CHECK_PTR_ARG(cursor);
@@ -1015,13 +1210,13 @@ bool ce_follow_cursor(const Point* cursor, int64_t* left_collumn, int64_t* top_r
           *top_row = bottom_row - view_height;
      }
 
-     int64_t right_collumn = *left_collumn + view_width;
+     int64_t right_column = *left_column + view_width;
 
-     if(cursor->x < *left_collumn){
-          *left_collumn = cursor->x;
-     }else if(cursor->x > right_collumn){
-          right_collumn = cursor->x;
-          *left_collumn = right_collumn - view_width;
+     if(cursor->x < *left_column){
+          *left_column = cursor->x;
+     }else if(cursor->x > right_column){
+          right_column = cursor->x;
+          *left_column = right_column - view_width;
      }
 
      return true;
@@ -1174,8 +1369,6 @@ bool ce_commit_change(BufferCommitNode** tail, const BufferCommit* commit)
 
 bool ce_commits_free(BufferCommitNode* head)
 {
-     CE_CHECK_PTR_ARG(head);
-
      while(head){
           BufferCommitNode* tmp = head;
           head = head->next;
@@ -1228,7 +1421,7 @@ bool ce_commit_undo(Buffer* buffer, BufferCommitNode** tail, Point* cursor)
           break;
      }
 
-     *cursor = (*tail)->commit.undo_cursor;
+     *cursor = *ce_clamp_cursor(buffer, &(*tail)->commit.undo_cursor);
      *tail = (*tail)->prev;
 
      return true;
@@ -1576,7 +1769,7 @@ bool draw_horizontal_views(const BufferView* view, bool already_drawn)
           if(((!already_drawn && itr == view) || (itr != view)) && itr->next_vertical){
                draw_vertical_views(itr, true);
           }else{
-               Point buffer_top_left = {itr->left_collumn, itr->top_row};
+               Point buffer_top_left = {itr->left_column, itr->top_row};
                ce_draw_buffer(itr->buffer_node->buffer, &itr->top_left, &itr->bottom_right, &buffer_top_left);
           }
 
@@ -1604,7 +1797,7 @@ bool draw_vertical_views(const BufferView* view, bool already_drawn)
           if(((!already_drawn && itr == view) || (itr != view)) && itr->next_horizontal){
                draw_horizontal_views(itr, true);
           }else{
-               Point buffer_top_left = {itr->left_collumn, itr->top_row};
+               Point buffer_top_left = {itr->left_column, itr->top_row};
                ce_draw_buffer(itr->buffer_node->buffer, &itr->top_left, &itr->bottom_right, &buffer_top_left);
           }
 
@@ -1653,7 +1846,7 @@ BufferView* ce_find_view_at_point(BufferView* head, const Point* point)
 
 void* ce_memrchr(const void* s, int c, size_t n)
 {
-     char* rev_search = (void*)s + n;
+     char* rev_search = (void*)s + (n-1);
      while((uintptr_t)rev_search >= (uintptr_t)s){
           if(*rev_search == c) return rev_search;
 	  rev_search--;

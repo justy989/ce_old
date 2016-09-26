@@ -5,10 +5,16 @@ NOTES:
 
 TODO:
 -user input
--undo/redo
 -use tabs instead of spaces
--window management library
 -client/server
+-UNDO DURING MACROS!
+-EDITABLE MACROS
+-STEP THROUGH MACROS
+-Make . work with visual mode
+
+BUGS:
+-double free corruption (something to do with calling ce_remove_char on an empty line)
+reproduce by: 1) 'O' 2) escape, 3) undo, 4) redo, 5) undo, 7) q I'm seeing a double free on quit
 
 WANTS:
 -realloc() rather than malloc() ?
@@ -52,7 +58,8 @@ typedef struct Config{
 
 const Config config_defaults = {NULL, NULL, default_initializer, default_destroyer, default_key_handler, default_view_drawer};
 
-bool config_open_and_init(Config* config, const char* path, BufferNode* head, int argc, char** argv, void** user_data){
+bool config_open_and_init(Config* config, const char* path, BufferNode* head, int argc, char** argv, void** user_data)
+{
      // try to load the config shared object
      *config = config_defaults;
      config->so_handle = dlopen(path, RTLD_NOW);
@@ -78,7 +85,8 @@ bool config_open_and_init(Config* config, const char* path, BufferNode* head, in
      return true;
 }
 
-void config_close(Config* config, BufferNode* head, void* user_data){
+void config_close(Config* config, BufferNode* head, void* user_data)
+{
      if(!config->so_handle) return;
      free(config->path);
      if(config->destroyer) config->destroyer(head, user_data);
@@ -86,7 +94,8 @@ void config_close(Config* config, BufferNode* head, void* user_data){
 }
 
 sigjmp_buf segv_ctxt;
-void segv_handler(int signo){
+void segv_handler(int signo)
+{
      (void)signo;
      struct sigaction sa;
      sa.sa_handler = segv_handler;
@@ -103,12 +112,16 @@ int main(int argc, char** argv)
      int opt = 0;
      int parsed_args = 1;
      bool done_parsing = false;
+     bool save_messages_on_exit = false;
 
      // TODO: create config parser
      // TODO: pass unhandled main arguments to the config's arg parser?
-	while((opt = getopt(argc, argv, "c:h")) != -1 && !done_parsing){
+     while((opt = getopt(argc, argv, "c:sh")) != -1 && !done_parsing){
           parsed_args++;
           switch(opt){
+          case 's':
+               save_messages_on_exit = true;
+               break;
           case 'c':
                config = optarg;
                parsed_args++;
@@ -116,6 +129,7 @@ int main(int argc, char** argv)
           case 'h':
                printf("usage: %s [options]\n", argv[0]);
                printf(" -c [config] shared object config\n");
+               printf(" -s save message buffer to file\n");
                printf(" -h see this message for help");
                return 0;
           default:
@@ -129,10 +143,12 @@ int main(int argc, char** argv)
      initscr();
      cbreak();
      noecho();
+#if 0
      if(has_colors() == FALSE){
           printf("terminal doesn't support colors\n");
           return -1;
      }
+#endif
 
      // init message buffer
      g_message_buffer = malloc(sizeof(*g_message_buffer));
@@ -155,17 +171,20 @@ int main(int argc, char** argv)
      buffer_list_head->buffer = g_message_buffer;
      buffer_list_head->next = NULL;
 
-     Point terminal_dimensions = {0, 0};
+     Point terminal_dimensions = {};
+     getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);
      g_terminal_dimensions = &terminal_dimensions;
 
      void* user_data = NULL;
 
+#if 0
      start_color();
      use_default_colors();
 
      // NOTE: just messing with colors
      int color_id = 1;
      init_pair(color_id, COLOR_RED, COLOR_BACKGROUND);
+#endif
 
      bool done = false;
 
@@ -173,7 +192,7 @@ int main(int argc, char** argv)
      config_open_and_init(&stable_config, config, buffer_list_head, argc - parsed_args, argv + parsed_args, &user_data);
      Config current_config = stable_config;
 
-     struct sigaction sa;
+     struct sigaction sa = {};
      sa.sa_handler = segv_handler;
      sigemptyset(&sa.sa_mask);
      if(sigaction(SIGSEGV, &sa, NULL) == -1){
@@ -183,6 +202,7 @@ int main(int argc, char** argv)
      // handle the segfault by reverting the config
      if(sigsetjmp(segv_ctxt, 1) != 0){
           if(current_config.so_handle == stable_config.so_handle){
+               ce_message("stable config sigsegv'd");
                done = true;
           }
           else{
@@ -202,10 +222,7 @@ int main(int argc, char** argv)
           getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);
 
           // clear all lines
-          for(int64_t i = 0; i < terminal_dimensions.y; ++i){
-               move(i, 0);
-               clrtoeol();
-          }
+          erase();
 
           // user-defined or default draw_view()
           current_config.view_drawer(buffer_list_head, user_data);
@@ -214,7 +231,7 @@ int main(int argc, char** argv)
           refresh();
 
           int key = getch();
-          if(key == ''){
+          if(key == '`'){
                ce_message("reloading config '%s'", current_config.path);
                // TODO: specify the path for the test config to load here
                if(!config_open_and_init(&current_config, current_config.path, buffer_list_head,
@@ -231,7 +248,7 @@ int main(int argc, char** argv)
      // cleanup ncurses
      endwin();
 
-     ce_save_buffer(g_message_buffer, g_message_buffer->filename);
+     if(save_messages_on_exit) ce_save_buffer(g_message_buffer, g_message_buffer->filename);
 
      if(current_config.so_handle != stable_config.so_handle)
           config_close(&current_config, buffer_list_head, user_data);

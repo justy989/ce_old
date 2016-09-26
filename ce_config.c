@@ -85,13 +85,52 @@ typedef struct MarkNode{
      char reg_char;
      Point location;
      struct MarkNode* next;
-}MarkNode;
+} MarkNode;
+
+typedef enum{
+     YANK_NORMAL,
+     YANK_LINE,
+} YankMode;
+typedef struct YankNode{
+     char reg_char;
+     const char* text;
+     YankMode mode;
+     struct YankNode* next;
+} YankNode;
 
 typedef struct{
      BufferCommitNode* commit_tail;
      BackspaceNode* backspace_head;
      struct MarkNode* mark_head;
+     struct YankNode* yank_head;
 } BufferState;
+
+YankNode* find_yank(BufferState* buffer, char reg_char){
+     YankNode* itr = buffer->yank_head;
+     while(itr != NULL){
+          if(itr->reg_char == reg_char) return itr;
+          itr = itr->next;
+     }
+     return NULL;
+}
+
+// for now the yanked string is user allocated. eventually will probably
+// want to change this interface so that everything is hidden
+void add_yank(BufferState* buffer, char reg_char, const char* yank_text, YankMode mode){
+     YankNode* node = find_yank(buffer, reg_char);
+     if(node != NULL){
+          free((void*)node->text);
+     }
+     else{
+          YankNode* new_yank = malloc(sizeof(*buffer->yank_head));
+          new_yank->reg_char = reg_char;
+          new_yank->next = buffer->yank_head;
+          new_yank->mode = mode;
+          node = new_yank;
+          buffer->yank_head = new_yank;
+     }
+     node->text = yank_text;
+}
 
 Point* find_mark(BufferState* buffer, char mark_char)
 {
@@ -194,7 +233,7 @@ BufferNode* new_buffer_from_file(BufferNode* head, const char* filename)
           return NULL;
      }
 
-     if(!initialize_buffer(buffer)){    
+     if(!initialize_buffer(buffer)){   
           free(buffer->filename);
           free(buffer);
      }
@@ -640,6 +679,43 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     }
                }
                if(key == 'C') enter_insert_mode(config_state, cursor);
+          } break;
+          case 'y':
+          {
+               if(should_handle_command(config_state, key)){
+                    switch(key){
+                    case 'y':
+                         add_yank(buffer_state, '0', ce_dupe_line(buffer, cursor->y), YANK_LINE);
+                         break;
+                    default:
+                         break;
+                    }
+                    config_state->command_key = '\0';
+               }
+          } break;
+          case 'p':
+          {
+               YankNode* yank = find_yank(buffer_state, '0');
+               if(yank){
+                    switch(yank->mode){
+                    case YANK_LINE:
+                    {
+                         Point insert_loc = {0, cursor->y+1}; // TODO: does this work at the end of file
+                         bool res = ce_insert_string(buffer, &insert_loc, yank->text);
+                         assert(res);
+                         ce_commit_insert_string(&buffer_state->commit_tail,
+                                                 &insert_loc, cursor, &insert_loc,
+                                                 strdup(yank->text));
+                         ce_set_cursor(buffer, cursor, &insert_loc);
+                    } break;
+                    case YANK_NORMAL:
+                         ce_insert_string(buffer, cursor, yank->text);
+                         ce_commit_insert_string(&buffer_state->commit_tail,
+                                                 cursor, cursor, cursor,
+                                                 strdup(yank->text));
+                         break;
+                    }
+               }
           } break;
           case 'S':
           {

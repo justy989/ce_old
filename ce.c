@@ -848,6 +848,7 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
           line_index++;
      }else{
           ce_remove_line(buffer, location->y);
+          length--;
      }
 
      while(length > 0){
@@ -857,13 +858,13 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
           if(line_index >= buffer->line_count) break;
 
           char* next_line = buffer->lines[line_index];
-          int64_t next_line_len = strlen(next_line);
-          if(length >= next_line_len){
+          int64_t next_line_len_with_newline = strlen(next_line) + 1;
+          if(length >= next_line_len_with_newline){
                // remove any lines that we have the length to remove completely
                ce_remove_line(buffer, line_index);
-               length -= next_line_len;
+               length -= next_line_len_with_newline;
           }else{
-               int64_t next_line_part_len = next_line_len - length;
+               int64_t next_line_part_len = next_line_len_with_newline - length;
                int64_t new_line_len = location->x + next_line_part_len;
                char* new_line = realloc(current_line, new_line_len + 1);
                if(!new_line){
@@ -1732,13 +1733,13 @@ bool ce_calc_views(BufferView* view, const Point *top_left, const Point* bottom_
      return calc_horizontal_views(view, top_left, bottom_right, false);
 }
 
-void draw_view_bottom_right_borders(const BufferView* view, const char* separators)
+void draw_view_bottom_right_borders(const BufferView* view)
 {
      // draw right border
      if(view->bottom_right.x < (g_terminal_dimensions->x - 1)){
           for(int64_t i = view->top_left.y; i <= view->bottom_right.y; ++i){
                move(i, view->bottom_right.x);
-               addch('|'); // TODO: make configurable
+               addch(ACS_VLINE); // TODO: make configurable
           }
      }
 
@@ -1747,7 +1748,10 @@ void draw_view_bottom_right_borders(const BufferView* view, const char* separato
      //       we need a better way of determining when the view is at the edge of the terminal
      if(view->bottom_right.y < (g_terminal_dimensions->y - 2)){
           move(view->bottom_right.y, view->top_left.x);
-          addstr(separators);
+          for(int64_t i = view->top_left.x; i <= view->bottom_right.x; ++i){
+               move(view->bottom_right.y, i);
+               addch(ACS_HLINE);
+          }
      }
 }
 
@@ -1755,12 +1759,6 @@ bool draw_vertical_views(const BufferView* view, bool already_drawn);
 
 bool draw_horizontal_views(const BufferView* view, bool already_drawn)
 {
-     int64_t width = view->bottom_right.x - view->top_left.x;
-
-     char separators[width+1];
-     for(int i = 0; i < width; ++i) separators[i] = '-'; // TODO: make configurable
-     separators[width] = 0;
-
      const BufferView* itr = view;
      while(itr){
           // if this is the first view and we haven't already drawn it
@@ -1773,7 +1771,7 @@ bool draw_horizontal_views(const BufferView* view, bool already_drawn)
                ce_draw_buffer(itr->buffer_node->buffer, &itr->top_left, &itr->bottom_right, &buffer_top_left);
           }
 
-          draw_view_bottom_right_borders(itr, separators);
+          draw_view_bottom_right_borders(itr);
 
           itr = itr->next_horizontal;
      }
@@ -1783,12 +1781,6 @@ bool draw_horizontal_views(const BufferView* view, bool already_drawn)
 
 bool draw_vertical_views(const BufferView* view, bool already_drawn)
 {
-     int64_t width = view->bottom_right.x - view->top_left.x;
-
-     char separators[width+1];
-     for(int i = 0; i < width; ++i) separators[i] = '-'; // TODO: make configurable
-     separators[width] = 0;
-
      const BufferView* itr = view;
      while(itr){
           // if this is the first view and we haven't already drawn it
@@ -1801,7 +1793,7 @@ bool draw_vertical_views(const BufferView* view, bool already_drawn)
                ce_draw_buffer(itr->buffer_node->buffer, &itr->top_left, &itr->bottom_right, &buffer_top_left);
           }
 
-          draw_view_bottom_right_borders(itr, separators);
+          draw_view_bottom_right_borders(itr);
 
           itr = itr->next_vertical;
      }

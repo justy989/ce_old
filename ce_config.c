@@ -887,15 +887,13 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case 'y':
           {
-               if(should_handle_command(config_state, key)){
-                    switch(key){
-                    case 'y':
-                         add_yank(buffer_state, '0', strdup(buffer->lines[cursor->y]), YANK_LINE);
-                         break;
-                    default:
-                         break;
-                    }
-                    config_state->command_key = '\0';
+               switch(config_state->movement_keys[0]){
+               case 'y':
+                    add_yank(buffer_state, '0', strdup(buffer->lines[cursor->y]), YANK_LINE);
+               default:
+                    clear_keys(config_state);
+               case CE_MOVEMENT_CONTINUE:
+                    break;
                }
           } break;
           case 'p':
@@ -927,6 +925,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          break;
                     }
                }
+               clear_keys(config_state);
           } break;
           case 'S':
           {

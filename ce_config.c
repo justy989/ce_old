@@ -434,9 +434,9 @@ bool key_is_multiplier(uint64_t multiplier, char key)
 }
 
 typedef enum{
-     CE_MOVEMENT_CONTINUE = '\0',
-     CE_MOVEMENT_COMPLETE,
-     CE_MOVEMENT_INVALID
+     MOVEMENT_CONTINUE = '\0',
+     MOVEMENT_COMPLETE,
+     MOVEMENT_INVALID
 } movement_state_t;
 
 // return false invalid/incomplete movement in config state, otherwise returns true + moves cursor + movement_end
@@ -448,7 +448,7 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
      char key1 = config_state->movement_keys[1];
      uint64_t multiplier = config_state->movement_multiplier;
 
-     if(key0 == CE_MOVEMENT_CONTINUE) return CE_MOVEMENT_CONTINUE;
+     if(key0 == MOVEMENT_CONTINUE) return MOVEMENT_CONTINUE;
 
      for(size_t mm=0; mm < multiplier; mm++) {
           switch(key0){
@@ -478,23 +478,23 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
                {
                     char curr_char;
                     bool success = ce_get_char(buffer, movement_start, &curr_char);
-                    if(!success) return CE_MOVEMENT_INVALID;
+                    if(!success) return MOVEMENT_INVALID;
 
                     if(ce_ispunct(curr_char)){
                          success = ce_get_homogenous_adjacents(buffer, movement_start, movement_end, ce_ispunct);
-                         if(!success) return CE_MOVEMENT_INVALID;
+                         if(!success) return MOVEMENT_INVALID;
                     }else if(isblank(curr_char)){
                          success = ce_get_homogenous_adjacents(buffer, movement_start, movement_end, isblank);
-                         if(!success) return CE_MOVEMENT_INVALID;
+                         if(!success) return MOVEMENT_INVALID;
                     }else{
                          success = ce_get_homogenous_adjacents(buffer, movement_start, movement_end, ce_iswordchar);
-                         if(!success) return CE_MOVEMENT_INVALID;
+                         if(!success) return MOVEMENT_INVALID;
                     }
                } break;
-               case CE_MOVEMENT_CONTINUE:
-                    return CE_MOVEMENT_CONTINUE;
+               case MOVEMENT_CONTINUE:
+                    return MOVEMENT_CONTINUE;
                default:
-                    return CE_MOVEMENT_INVALID;
+                    return MOVEMENT_INVALID;
                }
                break;
           case 'e':
@@ -531,11 +531,11 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
                }
           } break;
           default:
-               return CE_MOVEMENT_INVALID;
+               return MOVEMENT_INVALID;
           }
      }
 
-     return CE_MOVEMENT_COMPLETE;
+     return MOVEMENT_COMPLETE;
 }
 
 bool is_movement_buffer_full(ConfigState* config_state)
@@ -774,7 +774,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
 
                for(size_t cm = 0; cm < config_state->command_multiplier; cm++){
                     movement_state_t m_state = try_generic_movement(config_state, buffer, cursor, &movement_start, &movement_end);
-                    assert(m_state == CE_MOVEMENT_COMPLETE);
+                    assert(m_state == MOVEMENT_COMPLETE);
 
                     // this is a generic movement
                     ce_set_cursor(buffer, cursor, &movement_end);
@@ -843,7 +843,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           {
                char mark = config_state->movement_keys[0];
                switch(mark){
-               case CE_MOVEMENT_CONTINUE:
+               case MOVEMENT_CONTINUE:
                     return true; // no movement yet, wait for one!
                default:
                     add_mark(buffer_state, mark, cursor);
@@ -855,7 +855,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                Point* marked_location;
                char mark = config_state->movement_keys[0];
                switch(mark){
-               case CE_MOVEMENT_CONTINUE:
+               case MOVEMENT_CONTINUE:
                     return true; // no movement yet, wait for one!
                default:
                     marked_location = find_mark(buffer_state, mark);
@@ -874,13 +874,13 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           {
                movement_state_t m_state = try_generic_movement(config_state, buffer, cursor, &movement_start, &movement_end);
                switch(m_state){
-               case CE_MOVEMENT_CONTINUE:
+               case MOVEMENT_CONTINUE:
                     return true; // no movement yet, wait for one!
-               case CE_MOVEMENT_COMPLETE:
+               case MOVEMENT_COMPLETE:
                     add_yank(buffer_state, '0', ce_dupe_string(buffer, &movement_start, &movement_end), YANK_NORMAL);
                     add_yank(buffer_state, '"', ce_dupe_string(buffer, &movement_start, &movement_end), YANK_NORMAL);
                     break;
-               case CE_MOVEMENT_INVALID:
+               case MOVEMENT_INVALID:
                     switch(config_state->movement_keys[0]){
                     case 'y':
                          add_yank(buffer_state, '0', strdup(buffer->lines[cursor->y]), YANK_LINE);
@@ -959,10 +959,10 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           {
                for(size_t cm = 0; cm < config_state->command_multiplier; cm++){
                     movement_state_t m_state = try_generic_movement(config_state, buffer, cursor, &movement_start, &movement_end);
-                    if(m_state == CE_MOVEMENT_CONTINUE) return true;
+                    if(m_state == MOVEMENT_CONTINUE) return true;
 
                     YankMode yank_mode = YANK_NORMAL;
-                    if(m_state == CE_MOVEMENT_INVALID){
+                    if(m_state == MOVEMENT_INVALID){
                          switch(config_state->movement_keys[0]){
                               case 'c':
                                    movement_start = *cursor;
@@ -1018,7 +1018,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case 'Z':
                switch(config_state->movement_keys[0]){
-               case CE_MOVEMENT_CONTINUE:
+               case MOVEMENT_CONTINUE:
                     // no movement yet, wait for one!
                     return true;
                case 'Z':
@@ -1121,18 +1121,18 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'F':
           case 'T':
           {
-               if(config_state->movement_keys[0] != '\0'){
-                    for(size_t cm = 0; cm < config_state->command_multiplier; cm++){
-                         config_state->find_command.command_key = config_state->command_key;
-                         config_state->find_command.find_char = key;
-                         find_command(config_state->command_key, key, buffer, cursor);
-                    }
+               // return if we're still waiting on a movement
+               if(config_state->movement_keys[0] == MOVEMENT_CONTINUE) return true;
+               for(size_t cm = 0; cm < config_state->command_multiplier; cm++){
+                    config_state->find_command.command_key = config_state->command_key;
+                    config_state->find_command.find_char = config_state->movement_keys[0];
+                    find_command(config_state->command_key, config_state->movement_keys[0], buffer, cursor);
                }
           } break;
           case 'r':
           {
                switch(config_state->movement_keys[0]){
-               case CE_MOVEMENT_CONTINUE:
+               case MOVEMENT_CONTINUE:
                     // no movement yet, wait for one!
                     return true;
                default:
@@ -1165,7 +1165,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           {
                Point location;
                switch(config_state->movement_keys[0]){
-               case CE_MOVEMENT_CONTINUE:
+               case MOVEMENT_CONTINUE:
                     // no movement yet, wait for one!
                     return true;
                case 't':
@@ -1192,7 +1192,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case '>':
           {
                switch(config_state->movement_keys[0]){
-               case CE_MOVEMENT_CONTINUE:
+               case MOVEMENT_CONTINUE:
                     // no movement yet, wait for one!
                     return true;
                case '>':
@@ -1206,7 +1206,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'g':
           {
                switch(config_state->movement_keys[0]){
-               case CE_MOVEMENT_CONTINUE:
+               case MOVEMENT_CONTINUE:
                     // no movement yet, wait for one!
                     return true;
                case 'g':
@@ -1329,7 +1329,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           break;
           case '=':
           {
-               if(config_state->movement_keys[0] != CE_MOVEMENT_CONTINUE){
+               if(config_state->movement_keys[0] != MOVEMENT_CONTINUE){
                     int64_t begin_format_line;
                     int64_t end_format_line;
                     switch(key){

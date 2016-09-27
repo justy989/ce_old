@@ -654,7 +654,7 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
                                    do{
                                         movement_start->x--;
                                         if(!ce_get_char(buffer, movement_end, &c)) break;
-                                   }while(ce_ispunct(c));
+                                   }while(ce_iswordchar(c));
                                    movement_start->x++; // inclusive
                               }
                          }

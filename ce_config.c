@@ -887,14 +887,25 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case 'y':
           {
-               switch(config_state->movement_keys[0]){
-               case 'y':
-                    add_yank(buffer_state, '0', strdup(buffer->lines[cursor->y]), YANK_LINE);
-               default:
+               movement_state_t m_state = try_generic_movement(config_state, buffer, cursor, &movement_start, &movement_end);
+               if(m_state == CE_MOVEMENT_CONTINUE) return true;
+               if(m_state == CE_MOVEMENT_COMPLETE){
+                    add_yank(buffer_state, '0', ce_dupe_string(buffer, &movement_start, &movement_end), YANK_NORMAL);
                     clear_keys(config_state);
-               case CE_MOVEMENT_CONTINUE:
-                    break;
+                    return true;
                }
+               else{
+                    switch(config_state->movement_keys[0]){
+                    case 'y':
+                         add_yank(buffer_state, '0', strdup(buffer->lines[cursor->y]), YANK_LINE);
+                         clear_keys(config_state);
+                         return true;
+                    default:
+                    case CE_MOVEMENT_CONTINUE:
+                         break;
+                    }
+               }
+
           } break;
           case 'p':
           {
@@ -918,6 +929,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          ce_set_cursor(buffer, cursor, &new_line_begin);
                     } break;
                     case YANK_NORMAL:
+                         cursor->x++;
                          ce_insert_string(buffer, cursor, yank->text);
                          ce_commit_insert_string(&buffer_state->commit_tail,
                                                  cursor, cursor, cursor,

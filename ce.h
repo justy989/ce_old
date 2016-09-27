@@ -134,6 +134,9 @@ int64_t ce_find_next_word(Buffer* buffer, const Point* location, bool punctuatio
 bool ce_find_match(Buffer* buffer, const Point* location, Point* delta);
 bool ce_find_str(Buffer* buffer, const Point* location, const char* search_str, Point* delta);
 bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor);
+int ce_ispunct(int c);
+int ce_iswordchar(int c);
+bool ce_get_homogenous_adjacents(Buffer* buffer, Point* start, Point* end, int (*is_homogenous)(int));
 
 // NOTE: passing NULL to string causes an empty line to be inserted
 bool ce_insert_line(Buffer* buffer, int64_t line, const char* string);

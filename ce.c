@@ -609,7 +609,8 @@ bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor)
 }
 
 // underscores are not treated as punctuation for vim movement
-bool ce_ispunct(int c){
+int ce_ispunct(int c)
+{
      return c != '_' && ispunct(c);
 }
 
@@ -1866,4 +1867,35 @@ int64_t ce_compute_length(Point* start, Point* end)
      assert(start->y == end->y); // TODO support multi-line
 
      return end->x - start->x;
+}
+
+int ce_iswordchar(int c)
+{
+     return !isblank(c) && !ce_ispunct(c);
+}
+
+// given a buffer, two points, and a function ptr, return a range of characters that match defined criteria
+// NOTE: start is inclusive, end is exclusive
+bool ce_get_homogenous_adjacents(Buffer* buffer, Point* start, Point* end, int (*is_homogenous)(int))
+{
+     assert(memcmp(start, end, sizeof *start) == 0);
+
+     char curr_char;
+     if(!ce_get_char(buffer, start, &curr_char)) return false;
+
+     do{
+          start->x--;
+          if(!ce_get_char(buffer, start, &curr_char)) break;
+     }while((*is_homogenous)(curr_char));
+
+     start->x++; // the last character wasn't homogenous
+
+     do{
+          end->x++;
+          if(!ce_get_char(buffer, end, &curr_char)) break;
+     }while((*is_homogenous)(curr_char));
+
+     // the last character wasn't homogenous, but end is exclusive
+
+     return true;
 }

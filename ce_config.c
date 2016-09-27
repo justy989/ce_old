@@ -474,14 +474,23 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
           } break;
           case 'i':
                switch(key1){
-#if 0
                case 'w':
-                    cursor->x -= ce_find_delta_to_beginning_of_word(buffer, movement_start, true);
-                    for(size_t i=0; i<config_state->movement_multiplier; i++){
-                         movement_end->x += ce_find_delta_to_end_of_word(buffer, movement_end, true);
+               {
+                    char curr_char;
+                    bool success = ce_get_char(buffer, movement_start, &curr_char);
+                    if(!success) return CE_MOVEMENT_INVALID;
+
+                    if(ce_ispunct(curr_char)){
+                         success = ce_get_homogenous_adjacents(buffer, movement_start, movement_end, ce_ispunct);
+                         if(!success) return CE_MOVEMENT_INVALID;
+                    }else if(isblank(curr_char)){
+                         success = ce_get_homogenous_adjacents(buffer, movement_start, movement_end, isblank);
+                         if(!success) return CE_MOVEMENT_INVALID;
+                    }else{
+                         success = ce_get_homogenous_adjacents(buffer, movement_start, movement_end, ce_iswordchar);
+                         if(!success) return CE_MOVEMENT_INVALID;
                     }
-                    break;
-#endif
+               } break;
                case CE_MOVEMENT_CONTINUE:
                     return CE_MOVEMENT_CONTINUE;
                default:

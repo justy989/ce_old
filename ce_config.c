@@ -128,11 +128,11 @@ void add_yank(BufferState* buffer, char reg_char, const char* yank_text, YankMod
           YankNode* new_yank = malloc(sizeof(*buffer->yank_head));
           new_yank->reg_char = reg_char;
           new_yank->next = buffer->yank_head;
-          new_yank->mode = mode;
           node = new_yank;
           buffer->yank_head = new_yank;
      }
      node->text = yank_text;
+     node->mode = mode;
 }
 
 Point* find_mark(BufferState* buffer, char mark_char)

@@ -981,7 +981,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
 
                     ce_set_cursor(buffer, cursor, &movement_start);
                }
-               if(key=='c') enter_insert_mode(config_state,cursor);
+               if(config_state->command_key=='c') enter_insert_mode(config_state,cursor);
 
                clear_keys(config_state);
           } break;

@@ -518,6 +518,154 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
                     return MOVEMENT_INVALID;
                }
                break;
+          case 'a':
+               switch(key1){
+               case 'w':
+               {
+                    char c;
+                    bool success = ce_get_char(buffer, movement_start, &c);
+                    if(!success) return MOVEMENT_INVALID;
+
+                    if(ce_iswordchar(c)){
+                         // slurp up wordchars to the right
+                         do{
+                              movement_end->x++;
+                              if(!ce_get_char(buffer, movement_end, &c)) break;
+                         }while(ce_iswordchar(c));
+
+                         if(isblank(c)){
+                              // slurp up blanks to the right
+                              do{
+                                   movement_end->x++;
+                                   if(!ce_get_char(buffer, movement_end, &c)) break;
+                              }while(isblank(c));
+
+                              // slurp up wordchars to the left
+                              do{
+                                   movement_start->x--;
+                                   if(!ce_get_char(buffer, movement_start, &c)) break;
+                              }while(ce_iswordchar(c));
+                              movement_start->x++; // inclusive
+
+                         }else if(ce_ispunct(c)){
+                              // slurp up wordchars to the left
+                              do{
+                                   movement_start->x--;
+                                   if(!ce_get_char(buffer, movement_start, &c)) break;
+                              }while(ce_iswordchar(c));
+                              movement_start->x++; // inclusive
+
+                              // slurp up blanks to the left
+                              do{
+                                   movement_start->x--;
+                                   if(!ce_get_char(buffer, movement_start, &c)) break;
+                              }while(isblank(c));
+                              movement_start->x++; // inclusive
+                         }
+                    }else if(ce_ispunct(c)){
+                         // slurp up puncts to the right
+                         do{
+                              movement_end->x++;
+                              if(!ce_get_char(buffer, movement_end, &c)) break;
+                         }while(ce_ispunct(c));
+
+                         if(isblank(c)){
+                              // slurp up blanks to the right
+                              do{
+                                   movement_end->x++;
+                                   if(!ce_get_char(buffer, movement_end, &c)) break;
+                              }while(isblank(c));
+
+                              // slurp up puncts to the left
+                              do{
+                                   movement_start->x--;
+                                   if(!ce_get_char(buffer, movement_start, &c)) break;
+                              }while(ce_ispunct(c));
+                              movement_start->x++; // inclusive
+
+                         }else if(ce_ispunct(c)){
+                              // slurp up puncts to the left
+                              do{
+                                   movement_start->x--;
+                                   if(!ce_get_char(buffer, movement_start, &c)) break;
+                              }while(ce_ispunct(c));
+                              movement_start->x++; // inclusive
+
+                              // slurp up blanks to the left
+                              do{
+                                   movement_start->x--;
+                                   if(!ce_get_char(buffer, movement_start, &c)) break;
+                              }while(isblank(c));
+                              movement_start->x++; // inclusive
+                         }
+                    }else{
+                         assert(isblank(c));
+
+                         // slurp up blanks to the right
+                         do{
+                              movement_end->x++;
+                              if(!ce_get_char(buffer, movement_end, &c)) break;
+                         }while(isblank(c));
+
+                         if(ce_ispunct(c)){
+                              // slurp up puncts to the right
+                              do{
+                                   movement_end->x++;
+                                   if(!ce_get_char(buffer, movement_end, &c)) break;
+                              }while(ce_ispunct(c));
+
+                              // slurp up blanks to the left
+                              do{
+                                   movement_start->x--;
+                                   if(!ce_get_char(buffer, movement_start, &c)) break;
+                              }while(isblank(c));
+                              movement_start->x++; // inclusive
+
+                         }else if(ce_iswordchar(c)){
+                              // slurp up wordchars to the right
+                              do{
+                                   movement_end->x++;
+                                   if(!ce_get_char(buffer, movement_end, &c)) break;
+                              }while(ce_iswordchar(c));
+
+                              // slurp up blanks to the left
+                              do{
+                                   movement_start->x--;
+                                   if(!ce_get_char(buffer, movement_start, &c)) break;
+                              }while(isblank(c));
+                              movement_start->x++; // inclusive
+                         }else{
+                              // slurp up blanks to the left
+                              do{
+                                   movement_start->x--;
+                                   if(!ce_get_char(buffer, movement_start, &c)) break;
+                              }while(isblank(c));
+                              movement_start->x++; // inclusive
+
+                              if(ce_ispunct(c)){
+                                   // slurp up puncts to the left
+                                   do{
+                                        movement_start->x--;
+                                        if(!ce_get_char(buffer, movement_end, &c)) break;
+                                   }while(ce_ispunct(c));
+                                   movement_start->x++; // inclusive
+                              }else if(ce_iswordchar(c)){
+                                   // slurp up wordchars to the left
+                                   do{
+                                        movement_start->x--;
+                                        if(!ce_get_char(buffer, movement_end, &c)) break;
+                                   }while(ce_ispunct(c));
+                                   movement_start->x++; // inclusive
+                              }
+                         }
+                    }
+               } break;
+               case MOVEMENT_CONTINUE:
+                    return MOVEMENT_CONTINUE;
+               default:
+                    return MOVEMENT_INVALID;
+               }
+               break;
           case 'e':
           case 'E':
                movement_end->x += ce_find_delta_to_end_of_word(buffer, movement_end, key0 == 'e') + 1;

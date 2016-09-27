@@ -377,8 +377,12 @@ char* ce_dupe_string(Buffer* buffer, const Point* start, const Point* end)
      CE_CHECK_PTR_ARG(start);
      CE_CHECK_PTR_ARG(end);
 
-     if(!ce_point_on_buffer(buffer, start)) return NULL;
-     if(!ce_point_on_buffer(buffer, end)) return NULL;
+     if(!ce_point_on_buffer(buffer, start) && start->x != (int64_t)strlen(buffer->lines[start->y])){
+          return NULL;
+     }
+     if(!ce_point_on_buffer(buffer, end) && end->x != (int64_t)strlen(buffer->lines[end->y])){
+          return NULL;
+     }
 
      if(start->y > end->y){
           ce_message("%s() start(%ld, %ld) needs to be below end(%ld, %ld)",
@@ -446,11 +450,6 @@ char* ce_dupe_line(Buffer* buffer, int64_t line)
      if(buffer->line_count <= line){
           ce_message("%s() specified line (%d) above buffer line count (%d)",
                      __FUNCTION__, line, buffer->line_count);
-          return false;
-     }
-
-     // TODO: should we return a duped string or NULL here?
-     if(!buffer->lines[line][0]){
           return NULL;
      }
 

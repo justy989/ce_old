@@ -917,8 +917,10 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          ce_set_cursor(buffer, cursor, &new_line_begin);
                     } break;
                     case YANK_NORMAL:
-                         if(cursor->x != (int64_t)strnlen(buffer->lines[cursor->y], 1))
-                              cursor->x++;
+                         if(strnlen(buffer->lines[cursor->y], 1)){
+                              cursor->x++; // don't increment x for blank lines
+                         } else assert(cursor->x == 0);
+
                          ce_insert_string(buffer, cursor, yank->text);
                          ce_commit_insert_string(&buffer_state->commit_tail,
                                                  cursor, cursor, cursor,

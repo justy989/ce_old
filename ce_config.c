@@ -433,6 +433,11 @@ bool key_is_multiplier(uint64_t multiplier, char key)
      return (key >='1' && key <= '9') || (key == '0' && multiplier > 0);
 }
 
+int ispunct_or_iswordchar(int c)
+{
+     return ce_ispunct(c) || ce_iswordchar(c);
+}
+
 typedef enum{
      MOVEMENT_CONTINUE = '\0',
      MOVEMENT_COMPLETE,
@@ -487,7 +492,23 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
                          success = ce_get_homogenous_adjacents(buffer, movement_start, movement_end, isblank);
                          if(!success) return MOVEMENT_INVALID;
                     }else{
+                         assert(ce_iswordchar(curr_char));
                          success = ce_get_homogenous_adjacents(buffer, movement_start, movement_end, ce_iswordchar);
+                         if(!success) return MOVEMENT_INVALID;
+                    }
+               } break;
+               case 'W':
+               {
+                    char curr_char;
+                    bool success = ce_get_char(buffer, movement_start, &curr_char);
+                    if(!success) return MOVEMENT_INVALID;
+
+                    if(isblank(curr_char)){
+                         success = ce_get_homogenous_adjacents(buffer, movement_start, movement_end, isblank);
+                         if(!success) return MOVEMENT_INVALID;
+                    }else{
+                         assert(ispunct_or_iswordchar(curr_char));
+                         success = ce_get_homogenous_adjacents(buffer, movement_start, movement_end, ispunct_or_iswordchar);
                          if(!success) return MOVEMENT_INVALID;
                     }
                } break;

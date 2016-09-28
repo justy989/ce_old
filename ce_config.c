@@ -1083,15 +1083,18 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          ce_set_cursor(buffer, cursor, &new_line_begin);
                     } break;
                     case YANK_NORMAL:
+                    {
+                         Point insert_cursor = *cursor;
                          if(strnlen(buffer->lines[cursor->y], 1)){
-                              cursor->x++; // don't increment x for blank lines
+                              insert_cursor.x++; // don't increment x for blank lines
                          } else assert(cursor->x == 0);
 
-                         ce_insert_string(buffer, cursor, yank->text);
+                         ce_insert_string(buffer, &insert_cursor, yank->text);
                          ce_commit_insert_string(&buffer_state->commit_tail,
-                                                 cursor, cursor, cursor,
+                                                 &insert_cursor, cursor, &insert_cursor,
                                                  strdup(yank->text));
-                         break;
+                         *cursor = insert_cursor;
+                    } break;
                     }
                }
           } break;

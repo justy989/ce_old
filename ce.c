@@ -377,8 +377,12 @@ char* ce_dupe_string(Buffer* buffer, const Point* start, const Point* end)
      CE_CHECK_PTR_ARG(start);
      CE_CHECK_PTR_ARG(end);
 
-     if(!ce_point_on_buffer(buffer, start)) return NULL;
-     if(!ce_point_on_buffer(buffer, end)) return NULL;
+     if(!ce_point_on_buffer(buffer, start) && start->x != (int64_t)strlen(buffer->lines[start->y])){
+          return NULL;
+     }
+     if(!ce_point_on_buffer(buffer, end) && end->x != (int64_t)strlen(buffer->lines[end->y])){
+          return NULL;
+     }
 
      if(start->y > end->y){
           ce_message("%s() start(%ld, %ld) needs to be below end(%ld, %ld)",
@@ -446,11 +450,6 @@ char* ce_dupe_line(Buffer* buffer, int64_t line)
      if(buffer->line_count <= line){
           ce_message("%s() specified line (%d) above buffer line count (%d)",
                      __FUNCTION__, line, buffer->line_count);
-          return false;
-     }
-
-     // TODO: should we return a duped string or NULL here?
-     if(!buffer->lines[line][0]){
           return NULL;
      }
 
@@ -568,30 +567,31 @@ bool ce_find_match(Buffer* buffer, const Point* location, Point* delta)
      return false;
 }
 
-// returns the delta to the matching string; return success
-bool ce_find_str(Buffer* buffer, const Point* location, const char* search_str, Point* delta)
+// returns Point at the next matching string; return success
+bool ce_find_string(Buffer* buffer, const Point* location, const char* search_str, Point* match)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
      CE_CHECK_PTR_ARG(search_str);
-     CE_CHECK_PTR_ARG(delta);
+     CE_CHECK_PTR_ARG(match);
 
      Direction d = CE_DOWN; // TODO support reverse search
 
-     int64_t line = location->y;
-     const char* line_str = buffer->lines[location->y];
-     if(line_str) line_str = &line_str[location->x + 1];
+     Point search_loc = *location;
+     ce_advance_cursor(buffer, &search_loc, 1);
+     char* line_str = &buffer->lines[search_loc.y][search_loc.x];
 
-     int64_t n_lines = (d == CE_UP) ? location->y : buffer->line_count - location->y;
+     int64_t n_lines = (d == CE_UP) ? search_loc.y : buffer->line_count - search_loc.y;
      for(int64_t i = 0; i < n_lines;){
-          const char* match = strstr(line_str, search_str);
-          if(match){
-               delta->x = (match - line_str) - location->x;
-               delta->y = line - location->y;
+          const char* match_str = strstr(line_str, search_str);
+          if(match_str){
+               int64_t line = search_loc.y + i*d;
+               match->x = match_str - buffer->lines[line];
+               match->y = line;
                return true;
           }
-          do i++;
-          while(!(line_str = buffer->lines[line += d]) && i < n_lines);
+          i++;
+          line_str = buffer->lines[search_loc.y + i*d];
      }
      return false;
 }
@@ -610,7 +610,8 @@ bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor)
 }
 
 // underscores are not treated as punctuation for vim movement
-bool ce_ispunct(int c){
+int ce_ispunct(int c)
+{
      return c != '_' && ispunct(c);
 }
 
@@ -848,6 +849,7 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
           line_index++;
      }else{
           ce_remove_line(buffer, location->y);
+          length--;
      }
 
      while(length > 0){
@@ -858,14 +860,14 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
 
           char* next_line = buffer->lines[line_index];
           int64_t next_line_len = strlen(next_line);
-          if(length >= next_line_len){
+          if(length >= next_line_len + 1){
                // remove any lines that we have the length to remove completely
                ce_remove_line(buffer, line_index);
-               length -= next_line_len;
+               length -= next_line_len + 1;
           }else{
                int64_t next_line_part_len = next_line_len - length;
                int64_t new_line_len = location->x + next_line_part_len;
-               char* new_line = realloc(current_line, new_line_len + 1);
+               char* new_line = current_line = realloc(current_line, new_line_len + 1);
                if(!new_line){
                     ce_message("%s() failed to malloc new line", __FUNCTION__);
                     return false;
@@ -1852,4 +1854,49 @@ void* ce_memrchr(const void* s, int c, size_t n)
 	  rev_search--;
      }
      return NULL;
+}
+
+int64_t ce_compute_length(Point* start, Point* end)
+{
+     // swap end and start if necessary
+     if(end->y < start->y || (end->y == start->y && end->x < start->x)){
+          Point* temp = start;
+          start = end;
+          end = temp;
+     }
+
+     assert(start->y == end->y); // TODO support multi-line
+
+     return end->x - start->x;
+}
+
+int ce_iswordchar(int c)
+{
+     return !isblank(c) && !ce_ispunct(c);
+}
+
+// given a buffer, two points, and a function ptr, return a range of characters that match defined criteria
+// NOTE: start is inclusive, end is exclusive
+bool ce_get_homogenous_adjacents(Buffer* buffer, Point* start, Point* end, int (*is_homogenous)(int))
+{
+     assert(memcmp(start, end, sizeof *start) == 0);
+
+     char curr_char;
+     if(!ce_get_char(buffer, start, &curr_char)) return false;
+
+     do{
+          start->x--;
+          if(!ce_get_char(buffer, start, &curr_char)) break;
+     }while((*is_homogenous)(curr_char));
+
+     start->x++; // the last character wasn't homogenous
+
+     do{
+          end->x++;
+          if(!ce_get_char(buffer, end, &curr_char)) break;
+     }while((*is_homogenous)(curr_char));
+
+     // the last character wasn't homogenous, but end is exclusive
+
+     return true;
 }

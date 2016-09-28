@@ -477,6 +477,16 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
                Point delta = {1, 0};
                ce_move_cursor(buffer, movement_end, &delta);
           } break;
+          case 'f':
+          case 't':
+          case 'F':
+          case 'T':
+          {
+               if(key1 == MOVEMENT_CONTINUE) return MOVEMENT_CONTINUE;
+               config_state->find_command.command_key = key0;
+               config_state->find_command.find_char = key1;
+               find_command(key0, key1, buffer, movement_end);
+          } break;
           case 'i':
                switch(key1){
                case 'w':
@@ -668,7 +678,7 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
                break;
           case 'e':
           case 'E':
-               movement_end->x += ce_find_delta_to_end_of_word(buffer, movement_end, key0 == 'e') + 1;
+               movement_end->x += ce_find_delta_to_end_of_word(buffer, movement_end, key0 == 'e');
                break;
           case 'b':
           case 'B':
@@ -679,7 +689,7 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
                movement_end->x += ce_find_next_word(buffer, movement_end, key0 == 'w');
                break;
           case '$':
-               movement_end->x += ce_find_delta_to_end_of_line(buffer, movement_end) + 1;
+               movement_end->x += ce_find_delta_to_end_of_line(buffer, movement_end);
                break;
           case '%':
           {
@@ -935,10 +945,15 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'k':
           case 'h':
           case 'l':
+          case 'w':
+          case 'W':
+          case 'e':
+          case 'E':
+          case '$':
           {
                // h,j,k,l are both commands and movements. We handle the command case here, but leverage the movement
                // logic to avoid code duplication.
-               config_state->movement_keys[0] = key;
+               config_state->movement_keys[0] = config_state->command_key;
                config_state->movement_multiplier = 1;
 
                for(size_t cm = 0; cm < config_state->command_multiplier; cm++){
@@ -949,20 +964,26 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     ce_set_cursor(buffer, cursor, &movement_end);
                }
           } break;
+          case 'f':
+          case 't':
+          case 'F':
+          case 'T':
+          {
+               // f,t,F,T are both commands and movements
+               config_state->movement_keys[0] = config_state->command_key;
+               config_state->movement_multiplier = 1;
+               movement_state_t m_state = try_generic_movement(config_state, buffer, cursor, &movement_start, &movement_end);
+               if(m_state == MOVEMENT_CONTINUE) return true;
+
+               for(size_t cm = 0; cm < config_state->command_multiplier; cm++){
+                    assert(m_state == MOVEMENT_COMPLETE);
+                    ce_set_cursor(buffer, cursor, &movement_end);
+               }
+          } break;
           case 'b':
           case 'B':
           {
                cursor->x -= ce_find_delta_to_beginning_of_word(buffer, cursor, key == 'b');
-          } break;
-          case 'e':
-          case 'E':
-          {
-               cursor->x += ce_find_delta_to_end_of_word(buffer, cursor, key == 'e');
-          } break;
-          case 'w':
-          case 'W':
-          {
-               cursor->x += ce_find_next_word(buffer, cursor, key == 'w');
           } break;
           case 'i':
                enter_insert_mode(config_state, cursor);
@@ -999,9 +1020,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case '0':
                cursor->x = 0;
-               break;
-          case '$':
-               cursor->x += ce_find_delta_to_end_of_line(buffer, cursor);
                break;
           case 'A':
           {
@@ -1156,17 +1174,21 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                                    return true;
                          }
                     }
+                    else if(strchr("$%eTtFf", config_state->movement_keys[0])){
+                         movement_end.x++; // include movement_end char
+                    }
 
                     // this is a generic movement
                     assert(movement_end.x >= movement_start.x);
                     assert(movement_start.y == movement_end.y); // TODO support deleting over line boundaries
 
-                    // generic movement behavior override
-                    if(config_state->movement_keys[0] == '%')
-                         movement_end.x++; // include matched char
-
                     // delete all chars movement_start..movement_end inclusive
                     int64_t n_deletes = ce_compute_length(&movement_start, &movement_end);
+                    if(!n_deletes){
+                         // nothing to do
+                         clear_keys(config_state);
+                         return true;
+                    }
                     char* save_string = (config_state->movement_keys[0] == 'd') ?
                          strdup(buffer->lines[movement_start.y]) :
                          ce_dupe_string(buffer, &movement_start, &movement_end);
@@ -1287,19 +1309,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                else command_key = toupper(command_key);
 
                find_command(command_key, config_state->find_command.find_char, buffer, cursor);
-          } break;
-          case 'f':
-          case 't':
-          case 'F':
-          case 'T':
-          {
-               // return if we're still waiting on a movement
-               if(config_state->movement_keys[0] == MOVEMENT_CONTINUE) return true;
-               for(size_t cm = 0; cm < config_state->command_multiplier; cm++){
-                    config_state->find_command.command_key = config_state->command_key;
-                    config_state->find_command.find_char = config_state->movement_keys[0];
-                    find_command(config_state->command_key, config_state->movement_keys[0], buffer, cursor);
-               }
           } break;
           case 'r':
           {

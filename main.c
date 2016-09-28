@@ -257,6 +257,7 @@ int main(int argc, char** argv)
      config_close(&stable_config, buffer_list_head, user_data);
 
      // free our buffers
+     // TODO: I think we want to move this into the config
      BufferNode* itr = buffer_list_head;
      BufferNode* tmp;
      while(itr){

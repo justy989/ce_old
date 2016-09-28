@@ -71,6 +71,7 @@ typedef struct{
      bool input;
      const char* input_message;
      char input_key;
+     Buffer input_buffer;
      int last_key;
      char command_key; // TODO: make a command string for multi-character commands
      struct {
@@ -310,27 +311,20 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
      }
 
      // setup input buffer
-     BufferNode* input_buffer_node = NULL;
-     {
-          Buffer* input_buffer = calloc(1, sizeof(*input_buffer));
-          if(!input_buffer){
-               ce_message("failed to allocate input buffer");
-               return false;
-          }
-
-          ce_alloc_lines(input_buffer, 1);
-
-          initialize_buffer(input_buffer);
-          input_buffer_node = ce_append_buffer_to_list(head, input_buffer);
-
-          input_buffer->name = strdup("input");
+     BufferNode* input_buffer_node = calloc(1, sizeof(*input_buffer_node));
+     if(!input_buffer_node) {
+          ce_message("failed to allocate buffer node for input");
+          return false;
      }
+
+     input_buffer_node->buffer = &config_state->input_buffer;
+     ce_alloc_lines(&config_state->input_buffer, 1);
+     initialize_buffer(&config_state->input_buffer);
+     config_state->input_buffer.name = strdup("input");
+     config_state->view_input->buffer_node = input_buffer_node;
 
      *user_data = config_state;
 
-     if(input_buffer_node){
-          config_state->view_input->buffer_node = input_buffer_node;
-     }
 
      BufferNode* itr = head;
 
@@ -371,6 +365,19 @@ bool destroyer(BufferNode* head, void* user_data)
           ce_free_views(&config_state->view_head);
           config_state->view_current = NULL;
      }
+
+     // input buffer
+     {
+          ce_free_buffer(&config_state->input_buffer);
+          BufferState* buffer_state = config_state->input_buffer.user_data;
+          BufferCommitNode* itr = buffer_state->commit_tail;
+          while(itr->prev) itr = itr->prev;
+          ce_commits_free(itr);
+
+          free(config_state->view_input->buffer_node);
+          free(config_state->view_input);
+     }
+
      free(config_state);
      return true;
 }

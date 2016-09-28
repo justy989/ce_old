@@ -33,6 +33,7 @@ WANTS:
 #include <signal.h>
 #include <stdbool.h>
 #include <inttypes.h>
+#include <time.h>
 
 #include "ce.h"
 
@@ -107,6 +108,20 @@ void segv_handler(int signo)
      siglongjmp(segv_ctxt, 1);
 }
 
+const char* random_greeting()
+{
+     srand(time(NULL));
+     switch(rand() % 6){
+     case 0:  return "Thank you for flying ce";
+     case 1:  return "There's nothing like a fresh cup of ce in the morning";
+     case 2:  return "Why do kids love the taste of C Editor?\n\nIt's the taste you can ce";
+     case 3:  return "ce is for C Editor, that's good enough for me";
+     case 4:  return "I missed you.";
+     case 5:  return "Hope you're having a great day! -ce";
+     default: return "You're a special person -- or robot. I don't judge.";
+     }
+}
+
 int main(int argc, char** argv)
 {
      const char* config = CE_CONFIG;
@@ -179,7 +194,7 @@ int main(int argc, char** argv)
      buffer_list_head->buffer = g_message_buffer;
      buffer_list_head->next = NULL;
 
-     ce_message("Thank you for flying ce");
+     ce_message(random_greeting());
 
      Point terminal_dimensions = {};
      getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);

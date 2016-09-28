@@ -567,18 +567,18 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     cursor->x = 0;
                }
           } break;
+#if 0
           case 8: // Ctrl + h
           {
                Point delta = {-1, 0};
                ce_move_cursor(buffer, cursor, &delta);
           } break;
-#if 0 // NOTE: NOOOOO Ctrl + j == Ctrl + m == Return... WHY IS EVERYTHING SO TERRIBLE!
+          // NOTE: NOOOOO Ctrl + j == Ctrl + m == Return... WHY IS EVERYTHING SO TERRIBLE!
           case 10: // Ctrl + j
           {
                Point delta = {0, 1};
                ce_move_cursor(buffer, cursor, &delta);
           } break;
-#endif
           case 11: // Ctrl + k
           {
                Point delta = {0, -1};
@@ -589,6 +589,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                Point delta = {1, 0};
                ce_move_cursor(buffer, cursor, &delta);
           } break;
+#endif
           default:
                if(ce_insert_char(buffer, cursor, key)) cursor->x++;
                break;

@@ -599,8 +599,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           default:
                break;
           case 'q':
-               // NOTE: temporary so we don't try to free the filename on close
-               config_state->view_input->buffer_node->buffer->name = NULL;
                return false; // exit !
           case 'J':
           {

@@ -1862,10 +1862,7 @@ bool ce_draw_views(const BufferView* view)
 {
      CE_CHECK_PTR_ARG(view);
 
-     bool draw_result = draw_horizontal_views(view, false);
-     bool connect_result = connect_borders(view);
-
-     return draw_result && connect_result;
+     return draw_horizontal_views(view, false) && connect_borders(view);
 }
 
 BufferView* find_view_at_point(BufferView* view, const Point* point)

@@ -121,6 +121,7 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* string)
 bool ce_append_string(Buffer* buffer, int64_t line, const char* string);
 bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length);
 bool ce_remove_char(Buffer* buffer, const Point* location);
+void ce_clear_lines(Buffer* buffer);
 char* ce_dupe_string(Buffer* buffer, const Point* start, const Point* end);
 char* ce_dupe_line(Buffer* buffer, int64_t line);
 bool ce_get_char(Buffer* buffer, const Point* location, char* c);
@@ -149,6 +150,7 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
 
 bool ce_message(const char* format, ...);
 
+// NOTE: we may want to consider taking tail rather than head
 BufferNode* ce_append_buffer_to_list(BufferNode* head, Buffer* buffer);
 bool ce_remove_buffer_from_list(BufferNode* head, BufferNode** node);
 

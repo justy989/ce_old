@@ -68,6 +68,8 @@ void backspace_free(BackspaceNode** head)
 
 typedef struct{
      bool insert;
+     bool input;
+     const char* input_message;
      int last_key;
      char command_key; // TODO: make a command string for multi-character commands
      struct {
@@ -79,6 +81,8 @@ typedef struct{
      Point original_start_insert;
      BufferView* view_head;
      BufferView* view_current;
+     BufferView* view_input;
+     BufferView* view_save;
 } ConfigState;
 
 typedef struct MarkNode{
@@ -194,7 +198,7 @@ BufferNode* new_buffer_from_file(BufferNode* head, const char* filename)
           return NULL;
      }
 
-     if(!initialize_buffer(buffer)){    
+     if(!initialize_buffer(buffer)){
           free(buffer->filename);
           free(buffer);
      }
@@ -281,7 +285,34 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
           return false;
      }
 
+     config_state->view_input = calloc(1, sizeof(*config_state->view_input));
+     if(!config_state->view_input){
+          ce_message("failed to allocate buffer view for input");
+          return false;
+     }
+
+     // setup input buffer
+     BufferNode* input_buffer_node = NULL;
+     {
+          Buffer* input_buffer = calloc(1, sizeof(*input_buffer));
+          if(!input_buffer){
+               ce_message("failed to allocate input buffer");
+               return false;
+          }
+
+          ce_alloc_lines(input_buffer, 1);
+
+          initialize_buffer(input_buffer);
+          input_buffer_node = ce_append_buffer_to_list(head, input_buffer);
+
+          input_buffer->name = strdup("input");
+     }
+
      *user_data = config_state;
+
+     if(input_buffer_node){
+          config_state->view_input->buffer_node = input_buffer_node;
+     }
 
      BufferNode* itr = head;
 
@@ -291,13 +322,16 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
           itr = itr->next;
      }
 
+     config_state->view_head->buffer_node = head;
+     config_state->view_current = config_state->view_head;
+
      for(int i = 0; i < argc; ++i){
-          if(!new_buffer_from_file(head, argv[i])) continue;
+          BufferNode* node = new_buffer_from_file(head, argv[i]);
+
+          // if we loaded a file, set the view to point at the file
+          if(i == 0 && node) config_state->view_current->buffer_node = node;
      }
 
-     // if we loaded a file, set the view to point at the file, otherwise default to looking at the message buffer
-     config_state->view_head->buffer_node = (head && head->next) ? head->next : head;
-     config_state->view_current = config_state->view_head;
 
      return true;
 }
@@ -508,6 +542,28 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     cursor->x = 0;
                }
           } break;
+          case 8: // Ctrl + h
+          {
+               Point delta = {-1, 0};
+               ce_move_cursor(buffer, cursor, &delta);
+          } break;
+#if 0 // NOTE: NOOOOO Ctrl + j == Ctrl + m == Return... WHY IS EVERYTHING SO TERRIBLE!
+          case 10: // Ctrl + j
+          {
+               Point delta = {0, 1};
+               ce_move_cursor(buffer, cursor, &delta);
+          } break;
+#endif
+          case 11: // Ctrl + k
+          {
+               Point delta = {0, -1};
+               ce_move_cursor(buffer, cursor, &delta);
+          } break;
+          case 12: // Ctrl + l
+          {
+               Point delta = {1, 0};
+               ce_move_cursor(buffer, cursor, &delta);
+          } break;
           default:
                if(ce_insert_char(buffer, cursor, key)) cursor->x++;
                break;
@@ -517,6 +573,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           default:
                break;
           case 'q':
+               // NOTE: temporary so we don't try to free the filename on close
+               config_state->view_input->buffer_node->buffer->name = NULL;
                return false; // exit !
           case 'J':
           {
@@ -888,15 +946,13 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           {
                // move cursor to middle line of view
                // TODO: sometimes it would be nicer to work in absolutes instead of in deltas
-               Point delta = {0, (buffer_view->top_row + (g_terminal_dimensions->y - 1) / 2)
-                    - cursor->y};
+               Point delta = {0, (buffer_view->top_row + (g_terminal_dimensions->y - 1) / 2) - cursor->y};
                ce_move_cursor(buffer, cursor, &delta);
           } break;
           case 'L':
           {
                // move cursor to bottom line of view
-               Point delta = {0, (buffer_view->top_row + g_terminal_dimensions->y - 1)
-                    - (cursor->y + 1)};
+               Point delta = {0, (buffer_view->top_row + g_terminal_dimensions->y - 1) - (cursor->y + 1)};
                ce_move_cursor(buffer, cursor, &delta);
           } break;
           case 'z':
@@ -1016,6 +1072,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case 8: // Ctrl + h
           {
+               if(config_state->input) break;
                // TODO: consolidate into function for use with other window movement keys, and for use in insert mode?
                Point point = {config_state->view_current->top_left.x - 2, // account for window separator
                               cursor->y - config_state->view_current->top_row + config_state->view_current->top_left.y};
@@ -1030,6 +1087,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           break;
           case 10: // Ctrl + j
           {
+               if(config_state->input) break;
                Point point = {cursor->x - config_state->view_current->left_column + config_state->view_current->top_left.x,
                               config_state->view_current->bottom_right.y + 2}; // account for window separator
                if(point.y >= g_terminal_dimensions->y - 1) point.y = 0;
@@ -1043,6 +1101,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           break;
           case 11: // Ctrl + k
           {
+               if(config_state->input) break;
                Point point = {cursor->x - config_state->view_current->left_column + config_state->view_current->top_left.x,
                               config_state->view_current->top_left.y - 2}; // account for window separator
                BufferView* next_view = ce_find_view_at_point(config_state->view_head, &point);
@@ -1055,6 +1114,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           break;
           case 12: // Ctrl + l
           {
+               if(config_state->input) break;
                Point point = {config_state->view_current->bottom_right.x + 2, // account for window separator
                               cursor->y - config_state->view_current->top_row + config_state->view_current->top_left.y};
                if(point.x >= g_terminal_dimensions->x - 1) point.x = 0;
@@ -1063,6 +1123,28 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     // save cursor
                     config_state->view_current->buffer_node->buffer->cursor = config_state->view_current->cursor;
                     config_state->view_current = next_view;
+               }
+          }
+          break;
+          case ':':
+          {
+               config_state->input = !config_state->input;
+               if(config_state->input){
+                    ce_clear_lines(config_state->view_input->buffer_node->buffer);
+                    config_state->input_message = "Load File";
+                    config_state->view_input->cursor = (Point){0, 0};
+                    config_state->view_save = config_state->view_current;
+                    config_state->view_current = config_state->view_input;
+                    config_state->insert = true; // NOTE: should we go into insert mode automatically? I think so!
+               }else{
+                    config_state->view_current = config_state->view_save;
+                    if(config_state->view_input->buffer_node->buffer->line_count){
+                         // just grab the first line and load it as a file
+                         BufferNode* new_node = new_buffer_from_file(head, config_state->view_input->buffer_node->buffer->lines[0]);
+                         if(new_node){
+                              config_state->view_current->buffer_node = new_node;
+                         }
+                    }
                }
           }
           break;
@@ -1224,18 +1306,37 @@ void view_drawer(const BufferNode* head, void* user_data)
 
      Point top_left = {0, 0};
      Point bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 2}; // account for statusbar
+     int64_t input_view_height = config_state->view_input->buffer_node->buffer->line_count;
+     if(input_view_height) input_view_height--;
+     Point input_top_left = {0, (g_terminal_dimensions->y - 2) - input_view_height};
+     if(input_top_left.y < 1) input_top_left.y = 1; // clamp to growing to 1, account for input message
+     Point input_bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 2}; // account for statusbar
      ce_calc_views(config_state->view_head, &top_left, &bottom_right);
+     if(config_state->input){
+          ce_calc_views(config_state->view_input, &input_top_left, &input_bottom_right);
+     }
      ce_follow_cursor(cursor, &buffer_view->left_column, &buffer_view->top_row,
                       buffer_view->bottom_right.x - buffer_view->top_left.x,
                       buffer_view->bottom_right.y - buffer_view->top_left.y,
                       buffer_view->bottom_right.x == (g_terminal_dimensions->x - 1),
                       buffer_view->bottom_right.y == (g_terminal_dimensions->y - 2));
 
-     // print the range of lines we want to show
-     if(buffer->line_count){
-          standend();
-          // NOTE: always draw from the head
-          ce_draw_views(config_state->view_head);
+     standend();
+     // NOTE: always draw from the head
+     ce_draw_views(config_state->view_head);
+
+     if(config_state->input){
+          attron(A_REVERSE);
+          move(input_top_left.y - 1, 0);
+          for(int i = 0; i < g_terminal_dimensions->x; ++i) addch(' ');
+          move(input_top_left.y - 1, 0);
+          addstr(config_state->input_message);
+          attroff(A_REVERSE);
+          for(int y = input_top_left.y; y <= input_bottom_right.y; ++y){
+               move(y, 0);
+               clrtoeol();
+          }
+          ce_draw_views(config_state->view_input);
      }
 
      attron(A_REVERSE);

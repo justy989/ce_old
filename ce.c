@@ -567,30 +567,31 @@ bool ce_find_match(Buffer* buffer, const Point* location, Point* delta)
      return false;
 }
 
-// returns the delta to the matching string; return success
-bool ce_find_str(Buffer* buffer, const Point* location, const char* search_str, Point* delta)
+// returns Point at the next matching string; return success
+bool ce_find_string(Buffer* buffer, const Point* location, const char* search_str, Point* match)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
      CE_CHECK_PTR_ARG(search_str);
-     CE_CHECK_PTR_ARG(delta);
+     CE_CHECK_PTR_ARG(match);
 
      Direction d = CE_DOWN; // TODO support reverse search
 
-     int64_t line = location->y;
-     const char* line_str = buffer->lines[location->y];
-     if(line_str) line_str = &line_str[location->x + 1];
+     Point search_loc = *location;
+     ce_advance_cursor(buffer, &search_loc, 1);
+     char* line_str = &buffer->lines[search_loc.y][search_loc.x];
 
-     int64_t n_lines = (d == CE_UP) ? location->y : buffer->line_count - location->y;
+     int64_t n_lines = (d == CE_UP) ? search_loc.y : buffer->line_count - search_loc.y;
      for(int64_t i = 0; i < n_lines;){
-          const char* match = strstr(line_str, search_str);
-          if(match){
-               delta->x = (match - line_str) - location->x;
-               delta->y = line - location->y;
+          const char* match_str = strstr(line_str, search_str);
+          if(match_str){
+               int64_t line = search_loc.y + i*d;
+               match->x = match_str - buffer->lines[line];
+               match->y = line;
                return true;
           }
-          do i++;
-          while(!(line_str = buffer->lines[line += d]) && i < n_lines);
+          i++;
+          line_str = buffer->lines[search_loc.y + i*d];
      }
      return false;
 }

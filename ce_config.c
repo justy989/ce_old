@@ -1379,9 +1379,9 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                strncpy(search_str, &buffer->lines[cursor->y][cursor->x], word_len);
                search_str[word_len] = '\0';
 
-               Point delta;
-               if(ce_find_str(buffer, cursor, search_str, &delta)){
-                    ce_move_cursor(buffer, cursor, &delta);
+               Point match;
+               if(ce_find_string(buffer, cursor, search_str, &match)){
+                    ce_set_cursor(buffer, cursor, &match);
                }
           } break;
           case 21: // Ctrl + d

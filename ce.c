@@ -103,6 +103,11 @@ void ce_free_buffer(Buffer* buffer)
 
      free(buffer->filename);
 
+     ce_clear_lines(buffer);
+}
+
+void ce_clear_lines(Buffer* buffer)
+{
      if(buffer->lines){
           for(int64_t i = 0; i < buffer->line_count; ++i){
                free(buffer->lines[i]);
@@ -569,7 +574,7 @@ bool ce_find_match(Buffer* buffer, const Point* location, Point* delta)
 }
 
 // returns the delta to the matching string; return success
-bool ce_find_str(Buffer* buffer, const Point* location, const char* search_str, Point* delta)
+bool ce_find_string(Buffer* buffer, const Point* location, const char* search_str, Point* delta)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -848,6 +853,7 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
           line_index++;
      }else{
           ce_remove_line(buffer, location->y);
+          length--;
      }
 
      while(length > 0){
@@ -857,13 +863,13 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
           if(line_index >= buffer->line_count) break;
 
           char* next_line = buffer->lines[line_index];
-          int64_t next_line_len = strlen(next_line);
-          if(length >= next_line_len){
+          int64_t next_line_len_with_newline = strlen(next_line) + 1;
+          if(length >= next_line_len_with_newline){
                // remove any lines that we have the length to remove completely
                ce_remove_line(buffer, line_index);
-               length -= next_line_len;
+               length -= next_line_len_with_newline;
           }else{
-               int64_t next_line_part_len = next_line_len - length;
+               int64_t next_line_part_len = next_line_len_with_newline - length;
                int64_t new_line_len = location->x + next_line_part_len;
                char* new_line = realloc(current_line, new_line_len + 1);
                if(!new_line){
@@ -953,13 +959,13 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
           return false;
      }
 
-     if(term_top_left->x >= term_bottom_right->x){
+     if(term_top_left->x > term_bottom_right->x){
           ce_message("%s() top_left's x (%"PRId64") must be lower than bottom_right's x(%"PRId64")", __FUNCTION__,
                      term_top_left->x, term_bottom_right->x);
           return false;
      }
 
-     if(term_top_left->y >= term_bottom_right->y){
+     if(term_top_left->y > term_bottom_right->y){
           ce_message("%s() top_left's y (%"PRId64") must be lower than bottom_right's y(%"PRId64")", __FUNCTION__,
                      term_top_left->y, term_bottom_right->y);
           return false;
@@ -1732,13 +1738,13 @@ bool ce_calc_views(BufferView* view, const Point *top_left, const Point* bottom_
      return calc_horizontal_views(view, top_left, bottom_right, false);
 }
 
-void draw_view_bottom_right_borders(const BufferView* view, const char* separators)
+void draw_view_bottom_right_borders(const BufferView* view)
 {
      // draw right border
      if(view->bottom_right.x < (g_terminal_dimensions->x - 1)){
           for(int64_t i = view->top_left.y; i <= view->bottom_right.y; ++i){
                move(i, view->bottom_right.x);
-               addch('|'); // TODO: make configurable
+               addch(ACS_VLINE);
           }
      }
 
@@ -1747,7 +1753,10 @@ void draw_view_bottom_right_borders(const BufferView* view, const char* separato
      //       we need a better way of determining when the view is at the edge of the terminal
      if(view->bottom_right.y < (g_terminal_dimensions->y - 2)){
           move(view->bottom_right.y, view->top_left.x);
-          addstr(separators);
+          for(int64_t i = view->top_left.x; i <= view->bottom_right.x; ++i){
+               move(view->bottom_right.y, i);
+               addch(ACS_HLINE);
+          }
      }
 }
 
@@ -1755,12 +1764,6 @@ bool draw_vertical_views(const BufferView* view, bool already_drawn);
 
 bool draw_horizontal_views(const BufferView* view, bool already_drawn)
 {
-     int64_t width = view->bottom_right.x - view->top_left.x;
-
-     char separators[width+1];
-     for(int i = 0; i < width; ++i) separators[i] = '-'; // TODO: make configurable
-     separators[width] = 0;
-
      const BufferView* itr = view;
      while(itr){
           // if this is the first view and we haven't already drawn it
@@ -1771,9 +1774,8 @@ bool draw_horizontal_views(const BufferView* view, bool already_drawn)
           }else{
                Point buffer_top_left = {itr->left_column, itr->top_row};
                ce_draw_buffer(itr->buffer_node->buffer, &itr->top_left, &itr->bottom_right, &buffer_top_left);
+               draw_view_bottom_right_borders(itr);
           }
-
-          draw_view_bottom_right_borders(itr, separators);
 
           itr = itr->next_horizontal;
      }
@@ -1783,12 +1785,6 @@ bool draw_horizontal_views(const BufferView* view, bool already_drawn)
 
 bool draw_vertical_views(const BufferView* view, bool already_drawn)
 {
-     int64_t width = view->bottom_right.x - view->top_left.x;
-
-     char separators[width+1];
-     for(int i = 0; i < width; ++i) separators[i] = '-'; // TODO: make configurable
-     separators[width] = 0;
-
      const BufferView* itr = view;
      while(itr){
           // if this is the first view and we haven't already drawn it
@@ -1799,9 +1795,8 @@ bool draw_vertical_views(const BufferView* view, bool already_drawn)
           }else{
                Point buffer_top_left = {itr->left_column, itr->top_row};
                ce_draw_buffer(itr->buffer_node->buffer, &itr->top_left, &itr->bottom_right, &buffer_top_left);
+               draw_view_bottom_right_borders(itr);
           }
-
-          draw_view_bottom_right_borders(itr, separators);
 
           itr = itr->next_vertical;
      }
@@ -1809,11 +1804,65 @@ bool draw_vertical_views(const BufferView* view, bool already_drawn)
      return true;
 }
 
+bool connect_at_point(const Point* location)
+{
+     CE_CHECK_PTR_ARG(location);
+
+     // connect the bottom and right borders based on ruleset
+     chtype left = mvinch(location->y, location->x - 1);
+     chtype right = mvinch(location->y, location->x + 1);
+     chtype top = mvinch(location->y - 1, location->x);
+     chtype bottom = mvinch(location->y + 1, location->x);
+
+     if(left == ACS_HLINE && right == ACS_HLINE && top == ACS_VLINE){
+          move(location->y, location->x);
+          addch(ACS_BTEE);
+     }
+
+     if(left == ACS_HLINE && right == ACS_HLINE && bottom == ACS_VLINE){
+          move(location->y, location->x);
+          addch(ACS_TTEE);
+     }
+
+     if(top == ACS_VLINE && bottom == ACS_VLINE && left == ACS_HLINE){
+          move(location->y, location->x);
+          addch(ACS_RTEE);
+     }
+
+     if(top == ACS_VLINE && bottom == ACS_VLINE && right == ACS_HLINE){
+          move(location->y, location->x);
+          addch(ACS_LTEE);
+     }
+
+     if(top == ACS_VLINE && bottom == ACS_VLINE && right == ACS_HLINE && left == ACS_HLINE){
+          move(location->y, location->x);
+          addch(ACS_PLUS);
+     }
+
+     return true;
+}
+
+bool connect_borders(const BufferView* view)
+{
+     CE_CHECK_PTR_ARG(view);
+
+     if(view->next_horizontal) connect_borders(view->next_horizontal);
+     if(view->next_vertical) connect_borders(view->next_vertical);
+
+     Point top_left = {view->top_left.x - 1, view->top_left.y - 1};
+     Point top_right = {view->bottom_right.x, view->top_left.y - 1};
+     Point bottom_right = {view->bottom_right.x, view->bottom_right.y};
+     Point bottom_left = {view->top_left.x, view->bottom_right.y};
+
+     return connect_at_point(&top_left) && connect_at_point(&top_right) &&
+            connect_at_point(&bottom_right) && connect_at_point(&bottom_left);
+}
+
 bool ce_draw_views(const BufferView* view)
 {
      CE_CHECK_PTR_ARG(view);
 
-     return draw_horizontal_views(view, false);
+     return draw_horizontal_views(view, false) && connect_borders(view);
 }
 
 BufferView* find_view_at_point(BufferView* view, const Point* point)

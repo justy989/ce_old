@@ -144,12 +144,19 @@ int main(int argc, char** argv)
      initscr();
      cbreak();
      noecho();
-#if 0
-     if(has_colors() == FALSE){
-          printf("terminal doesn't support colors\n");
-          return -1;
+
+     if(has_colors() == TRUE){
+          start_color();
+          use_default_colors();
+
+          // NOTE: just messing with setting up colors
+          int color_id = 1;
+          init_pair(color_id, COLOR_BLUE, COLOR_BACKGROUND);
+          color_id = 2;
+          init_pair(color_id, COLOR_GREEN, COLOR_BACKGROUND);
+          color_id = 3;
+          init_pair(color_id, COLOR_RED, COLOR_BACKGROUND);
      }
-#endif
 
      // init message buffer
      g_message_buffer = malloc(sizeof(*g_message_buffer));
@@ -172,20 +179,13 @@ int main(int argc, char** argv)
      buffer_list_head->buffer = g_message_buffer;
      buffer_list_head->next = NULL;
 
+     ce_message("Thank you for flying ce");
+
      Point terminal_dimensions = {};
      getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);
      g_terminal_dimensions = &terminal_dimensions;
 
      void* user_data = NULL;
-
-#if 0
-     start_color();
-     use_default_colors();
-
-     // NOTE: just messing with colors
-     int color_id = 1;
-     init_pair(color_id, COLOR_RED, COLOR_BACKGROUND);
-#endif
 
      bool done = false;
 
@@ -256,6 +256,7 @@ int main(int argc, char** argv)
      config_close(&stable_config, buffer_list_head, user_data);
 
      // free our buffers
+     // TODO: I think we want to move this into the config
      BufferNode* itr = buffer_list_head;
      BufferNode* tmp;
      while(itr){

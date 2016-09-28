@@ -999,6 +999,35 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
      int64_t last_line = buffer_top_left->y + (term_bottom_right->y - term_top_left->y);
      if(last_line >= buffer->line_count) last_line = buffer->line_count - 1;
 
+     static const char* keywords [] = {
+          "if",
+          "else",
+          "for",
+          "return",
+          "continue",
+          "break",
+          "enum",
+          "while",
+          "char",
+          "int",
+          "bool",
+          "const",
+          "void",
+          "NULL",
+          "case",
+          "typedef",
+          "default",
+          "struct",
+          "static",
+          "inline",
+          "volatile",
+          "extern",
+          "__thread",
+     };
+
+     static int keyword_count = sizeof(keywords) / sizeof(keywords[0]);
+     bool inside_multiline_comment = false;
+
      for(int64_t i = buffer_top_left->y; i <= last_line; ++i) {
           move(term_top_left->y + (i - buffer_top_left->y), term_top_left->x);
 
@@ -1014,9 +1043,74 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
           int64_t min = max_width < line_length ? max_width : line_length;
           memset(line_to_print, 0, min + 1);
           strncpy(line_to_print, buffer_line, min);
-          addstr(line_to_print); // NOTE: use addstr() rather than printw() because it could contain format specifiers
+
+          if(inside_multiline_comment) attron(COLOR_PAIR(2));
+
+          bool inside_string = false;
+
+          int64_t highlighting_left = 0;
+          for(int64_t c = 0; c < min; ++c){
+               // syntax highlighting
+               {
+                    if(highlighting_left == 0){
+                         if(!inside_string){
+                              for(int64_t k = 0; k < keyword_count; ++k){
+                                   int64_t keyword_len = strlen(keywords[k]);
+                                   if(strncmp(line_to_print + c, keywords[k], keyword_len) == 0){
+                                        char pre_char = 0;
+                                        char post_char = line_to_print[c + keyword_len];
+                                        if(c > 0) pre_char = line_to_print[c - 1];
+
+                                        if(!isalnum(pre_char) && pre_char != '_' &&
+                                           !isalnum(post_char) && post_char != '_'){
+                                             highlighting_left = keyword_len;
+                                             attron(COLOR_PAIR(1));
+                                             break;
+                                        }
+                                   }
+                              }
+                         }
+
+                         if(line_to_print[c] == '/'){
+                              if(line_to_print[c + 1] == '/'){
+                                   attron(COLOR_PAIR(2));
+                                   highlighting_left = min;
+                              }else if(line_to_print[c + 1] == '*'){
+                                   inside_multiline_comment = true;
+                                   attron(COLOR_PAIR(2));
+                                   highlighting_left = min;
+                              }
+                         }else if(inside_multiline_comment && line_to_print[c] == '*' && line_to_print[c + 1] == '/'){
+                              ce_message("%d, %d, %d", inside_multiline_comment, c, i);
+                              inside_multiline_comment = false;
+                              highlighting_left = 2;
+                         }else if(!inside_multiline_comment && (line_to_print[c] == '"' || line_to_print[c] == '\'')){
+                              // NOTE: obviously this doesn't work if a " or ' is inside a string
+                              inside_string = !inside_string;
+                              if(inside_string){
+                                   attron(COLOR_PAIR(3));
+                              }else{
+                                   highlighting_left = 1;
+                              }
+                         }
+                    }else{
+                         highlighting_left--;
+                         if(highlighting_left == 0){
+                              attroff(COLOR_PAIR(1));
+                              attroff(COLOR_PAIR(2));
+                              attroff(COLOR_PAIR(3));
+                         }
+                    }
+               }
+
+               // print the character
+               addch(line_to_print[c]);
+          }
+
+          standend();
      }
 
+     standend();
      return true;
 }
 

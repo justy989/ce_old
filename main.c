@@ -179,14 +179,16 @@ int main(int argc, char** argv)
 
      void* user_data = NULL;
 
-#if 0
      start_color();
      use_default_colors();
 
      // NOTE: just messing with colors
      int color_id = 1;
+     init_pair(color_id, COLOR_BLUE, COLOR_BACKGROUND);
+     color_id = 2;
+     init_pair(color_id, COLOR_GREEN, COLOR_BACKGROUND);
+     color_id = 3;
      init_pair(color_id, COLOR_RED, COLOR_BACKGROUND);
-#endif
 
      bool done = false;
 

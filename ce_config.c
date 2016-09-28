@@ -66,6 +66,18 @@ void backspace_free(BackspaceNode** head)
      }
 }
 
+typedef enum{
+     YANK_NORMAL,
+     YANK_LINE,
+} YankMode;
+
+typedef struct YankNode{
+     char reg_char;
+     const char* text;
+     YankMode mode;
+     struct YankNode* next;
+} YankNode;
+
 typedef struct{
      bool insert;
      int last_key;
@@ -80,6 +92,7 @@ typedef struct{
      } find_command;
      Point start_insert;
      Point original_start_insert;
+     struct YankNode* yank_head;
      BufferView* view_head;
      BufferView* view_current;
 } ConfigState;
@@ -90,26 +103,14 @@ typedef struct MarkNode{
      struct MarkNode* next;
 } MarkNode;
 
-typedef enum{
-     YANK_NORMAL,
-     YANK_LINE,
-} YankMode;
-typedef struct YankNode{
-     char reg_char;
-     const char* text;
-     YankMode mode;
-     struct YankNode* next;
-} YankNode;
-
 typedef struct{
      BufferCommitNode* commit_tail;
      BackspaceNode* backspace_head;
      struct MarkNode* mark_head;
-     struct YankNode* yank_head;
 } BufferState;
 
-YankNode* find_yank(BufferState* buffer, char reg_char){
-     YankNode* itr = buffer->yank_head;
+YankNode* find_yank(ConfigState* config, char reg_char){
+     YankNode* itr = config->yank_head;
      while(itr != NULL){
           if(itr->reg_char == reg_char) return itr;
           itr = itr->next;
@@ -119,17 +120,17 @@ YankNode* find_yank(BufferState* buffer, char reg_char){
 
 // for now the yanked string is user allocated. eventually will probably
 // want to change this interface so that everything is hidden
-void add_yank(BufferState* buffer, char reg_char, const char* yank_text, YankMode mode){
-     YankNode* node = find_yank(buffer, reg_char);
+void add_yank(ConfigState* config, char reg_char, const char* yank_text, YankMode mode){
+     YankNode* node = find_yank(config, reg_char);
      if(node != NULL){
           free((void*)node->text);
      }
      else{
-          YankNode* new_yank = malloc(sizeof(*buffer->yank_head));
+          YankNode* new_yank = malloc(sizeof(*config->yank_head));
           new_yank->reg_char = reg_char;
-          new_yank->next = buffer->yank_head;
+          new_yank->next = config->yank_head;
           node = new_yank;
-          buffer->yank_head = new_yank;
+          config->yank_head = new_yank;
      }
      node->text = yank_text;
      node->mode = mode;
@@ -1001,14 +1002,14 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                case MOVEMENT_CONTINUE:
                     return true; // no movement yet, wait for one!
                case MOVEMENT_COMPLETE:
-                    add_yank(buffer_state, '0', ce_dupe_string(buffer, &movement_start, &movement_end), YANK_NORMAL);
-                    add_yank(buffer_state, '"', ce_dupe_string(buffer, &movement_start, &movement_end), YANK_NORMAL);
+                    add_yank(config_state, '0', ce_dupe_string(buffer, &movement_start, &movement_end), YANK_NORMAL);
+                    add_yank(config_state, '"', ce_dupe_string(buffer, &movement_start, &movement_end), YANK_NORMAL);
                     break;
                case MOVEMENT_INVALID:
                     switch(config_state->movement_keys[0]){
                     case 'y':
-                         add_yank(buffer_state, '0', strdup(buffer->lines[cursor->y]), YANK_LINE);
-                         add_yank(buffer_state, '"', strdup(buffer->lines[cursor->y]), YANK_LINE);
+                         add_yank(config_state, '0', strdup(buffer->lines[cursor->y]), YANK_LINE);
+                         add_yank(config_state, '"', strdup(buffer->lines[cursor->y]), YANK_LINE);
                          break;
                     default:
                          break;
@@ -1018,7 +1019,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case 'p':
           {
-               YankNode* yank = find_yank(buffer_state, '"');
+               YankNode* yank = find_yank(config_state, '"');
                if(yank){
                     switch(yank->mode){
                     case YANK_LINE:
@@ -1062,7 +1063,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                char* save_string = ce_dupe_string(buffer, cursor, &delete_end);
                if(ce_remove_string(buffer, cursor, n_deletes)){
                     ce_commit_remove_string(&buffer_state->commit_tail, cursor, cursor, cursor, save_string);
-                    add_yank(buffer_state, '"', strdup(save_string), YANK_NORMAL);
+                    add_yank(config_state, '"', strdup(save_string), YANK_NORMAL);
                }
                enter_insert_mode(config_state, cursor);
           } break;
@@ -1076,7 +1077,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     char* save_string = ce_dupe_string(buffer, cursor, &end);
                     if(ce_remove_string(buffer, cursor, n_deletes)){
                          ce_commit_remove_string(&buffer_state->commit_tail, cursor, cursor, cursor, save_string);
-                         add_yank(buffer_state, '"', strdup(save_string), YANK_NORMAL);
+                         add_yank(config_state, '"', strdup(save_string), YANK_NORMAL);
                     }
                }
                if(key == 'C') enter_insert_mode(config_state, cursor);
@@ -1131,7 +1132,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          ce_dupe_string(buffer, &movement_start, &movement_end);
                     if(ce_remove_string(buffer, &movement_start, n_deletes)){
                          ce_commit_remove_string(&buffer_state->commit_tail, &movement_start, cursor, &movement_start, save_string);
-                         add_yank(buffer_state, '"', strdup(save_string), yank_mode);
+                         add_yank(config_state, '"', strdup(save_string), yank_mode);
                     }
 
                     ce_set_cursor(buffer, cursor, &movement_start);

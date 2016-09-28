@@ -1576,7 +1576,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           break;
           case '=':
           {
-               if(config_state->movement_keys[0] != MOVEMENT_CONTINUE){
+               if(config_state->movement_keys[0] == MOVEMENT_CONTINUE) return true;
+               else{
                     int64_t begin_format_line;
                     int64_t end_format_line;
                     switch(key){

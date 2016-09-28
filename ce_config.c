@@ -477,6 +477,17 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
                Point delta = {1, 0};
                ce_move_cursor(buffer, movement_end, &delta);
           } break;
+          case '0':
+          {
+               movement_start->x = 0;
+          } break;
+          case '^':
+          {
+               Point begin_line_cursor = *cursor;
+               ce_move_cursor_to_soft_beginning_of_line(buffer, &begin_line_cursor);
+               if(cursor->x < begin_line_cursor.x) *movement_end = begin_line_cursor;
+               else *movement_start = begin_line_cursor;
+          } break;
           case 'f':
           case 't':
           case 'F':
@@ -627,7 +638,7 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
                break;
           case 'b':
           case 'B':
-               cursor->x -= ce_find_delta_to_beginning_of_word(buffer, cursor, key0 == 'b');
+               movement_start->x -= ce_find_delta_to_beginning_of_word(buffer, cursor, key0 == 'b');
                break;
           case 'w':
           case 'W':
@@ -892,43 +903,31 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'l':
           case 'w':
           case 'W':
+          case '$':
+          case 'b':
+          case 'B':
           case 'e':
           case 'E':
-          case '$':
-          {
-               // h,j,k,l are both commands and movements. We handle the command case here, but leverage the movement
-               // logic to avoid code duplication.
-               config_state->movement_keys[0] = config_state->command_key;
-               config_state->movement_multiplier = 1;
-
-               for(size_t cm = 0; cm < config_state->command_multiplier; cm++){
-                    movement_state_t m_state = try_generic_movement(config_state, buffer, cursor, &movement_start, &movement_end);
-                    assert(m_state == MOVEMENT_COMPLETE);
-
-                    // this is a generic movement
-                    ce_set_cursor(buffer, cursor, &movement_end);
-               }
-          } break;
+          case '0':
+          case '^':
           case 'f':
           case 't':
           case 'F':
           case 'T':
           {
-               // f,t,F,T are both commands and movements
                config_state->movement_keys[0] = config_state->command_key;
                config_state->movement_multiplier = 1;
-               movement_state_t m_state = try_generic_movement(config_state, buffer, cursor, &movement_start, &movement_end);
-               if(m_state == MOVEMENT_CONTINUE) return true;
 
                for(size_t cm = 0; cm < config_state->command_multiplier; cm++){
-                    assert(m_state == MOVEMENT_COMPLETE);
-                    ce_set_cursor(buffer, cursor, &movement_end);
+                    movement_state_t m_state = try_generic_movement(config_state, buffer, cursor, &movement_start, &movement_end);
+                    if(m_state == MOVEMENT_CONTINUE) return true;
+
+                    // this is a generic movement
+                    if(movement_end.x == cursor->x && movement_end.y == cursor->y)
+                         ce_set_cursor(buffer, cursor, &movement_start);
+                    else
+                         ce_set_cursor(buffer, cursor, &movement_end);
                }
-          } break;
-          case 'b':
-          case 'B':
-          {
-               cursor->x -= ce_find_delta_to_beginning_of_word(buffer, cursor, key == 'b');
           } break;
           case 'i':
                enter_insert_mode(config_state, cursor);
@@ -959,13 +958,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     enter_insert_mode(config_state, cursor);
                }
           } break;
-          case '^':
-          {
-               ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
-          } break;
-          case '0':
-               cursor->x = 0;
-               break;
           case 'A':
           {
                cursor->x += ce_find_delta_to_end_of_line(buffer, cursor) + 1;

@@ -144,12 +144,19 @@ int main(int argc, char** argv)
      initscr();
      cbreak();
      noecho();
-#if 0
-     if(has_colors() == FALSE){
-          printf("terminal doesn't support colors\n");
-          return -1;
+
+     if(has_colors() == TRUE){
+          start_color();
+          use_default_colors();
+
+          // NOTE: just messing with setting up colors
+          int color_id = 1;
+          init_pair(color_id, COLOR_BLUE, COLOR_BACKGROUND);
+          color_id = 2;
+          init_pair(color_id, COLOR_GREEN, COLOR_BACKGROUND);
+          color_id = 3;
+          init_pair(color_id, COLOR_RED, COLOR_BACKGROUND);
      }
-#endif
 
      // init message buffer
      g_message_buffer = malloc(sizeof(*g_message_buffer));
@@ -179,17 +186,6 @@ int main(int argc, char** argv)
      g_terminal_dimensions = &terminal_dimensions;
 
      void* user_data = NULL;
-
-     start_color();
-     use_default_colors();
-
-     // NOTE: just messing with colors
-     int color_id = 1;
-     init_pair(color_id, COLOR_BLUE, COLOR_BACKGROUND);
-     color_id = 2;
-     init_pair(color_id, COLOR_GREEN, COLOR_BACKGROUND);
-     color_id = 3;
-     init_pair(color_id, COLOR_RED, COLOR_BACKGROUND);
 
      bool done = false;
 

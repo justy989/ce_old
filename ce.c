@@ -1006,6 +1006,7 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
           "for",
           "return",
           "continue",
+          "switch",
           "break",
           "enum",
           "while",
@@ -1023,6 +1024,10 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
           "inline",
           "volatile",
           "extern",
+          "union",
+          "sizeof",
+          "typeof",
+          "do",
           "__thread",
      };
 
@@ -1048,66 +1053,73 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
           if(inside_multiline_comment) attron(COLOR_PAIR(2));
 
           bool inside_string = false;
-
           int64_t highlighting_left = 0;
-          for(int64_t c = 0; c < min; ++c){
-               // syntax highlighting
-               {
-                    if(highlighting_left == 0){
-                         if(!inside_string){
-                              for(int64_t k = 0; k < keyword_count; ++k){
-                                   int64_t keyword_len = strlen(keywords[k]);
-                                   if(strncmp(line_to_print + c, keywords[k], keyword_len) == 0){
-                                        char pre_char = 0;
-                                        char post_char = line_to_print[c + keyword_len];
-                                        if(c > 0) pre_char = line_to_print[c - 1];
 
-                                        if(!isalnum(pre_char) && pre_char != '_' &&
-                                           !isalnum(post_char) && post_char != '_'){
-                                             highlighting_left = keyword_len;
-                                             attron(COLOR_PAIR(1));
-                                             break;
+          if(has_colors() == TRUE){
+               for(int64_t c = 0; c < min; ++c){
+                    // syntax highlighting
+                    {
+                         if(highlighting_left == 0){
+                              if(!inside_string && !inside_multiline_comment){
+                                   for(int64_t k = 0; k < keyword_count; ++k){
+                                        int64_t keyword_len = strlen(keywords[k]);
+                                        if(strncmp(line_to_print + c, keywords[k], keyword_len) == 0){
+                                             char pre_char = 0;
+                                             char post_char = line_to_print[c + keyword_len];
+                                             if(c > 0) pre_char = line_to_print[c - 1];
+
+                                             if(!isalnum(pre_char) && pre_char != '_' &&
+                                                !isalnum(post_char) && post_char != '_'){
+                                                  highlighting_left = keyword_len;
+                                                  attron(COLOR_PAIR(1));
+                                                  break;
+                                             }
                                         }
                                    }
                               }
-                         }
 
-                         if(line_to_print[c] == '/'){
-                              if(line_to_print[c + 1] == '/'){
-                                   attron(COLOR_PAIR(2));
-                                   highlighting_left = min;
-                              }else if(line_to_print[c + 1] == '*'){
-                                   inside_multiline_comment = true;
-                                   attron(COLOR_PAIR(2));
-                                   highlighting_left = min;
+                              if(line_to_print[c] == '/'){
+                                   if(line_to_print[c + 1] == '/'){
+                                        attron(COLOR_PAIR(2));
+                                        highlighting_left = min;
+                                   }else if(line_to_print[c + 1] == '*'){
+                                        inside_multiline_comment = true;
+                                        attron(COLOR_PAIR(2));
+                                        highlighting_left = min;
+                                   }
+                              }else if(inside_multiline_comment && line_to_print[c] == '*' && line_to_print[c + 1] == '/'){
+                                   inside_multiline_comment = false;
+                                   highlighting_left = 2;
+                              }else if(!inside_multiline_comment && (line_to_print[c] == '"' || line_to_print[c] == '\'')){
+                                   // NOTE: obviously this doesn't work if a " or ' is inside a string
+                                   inside_string = !inside_string;
+                                   if(inside_string){
+                                        attron(COLOR_PAIR(3));
+                                   }else{
+                                        highlighting_left = 1;
+                                   }
                               }
-                         }else if(inside_multiline_comment && line_to_print[c] == '*' && line_to_print[c + 1] == '/'){
-                              inside_multiline_comment = false;
-                              highlighting_left = 2;
-                         }else if(!inside_multiline_comment && (line_to_print[c] == '"' || line_to_print[c] == '\'')){
-                              // NOTE: obviously this doesn't work if a " or ' is inside a string
-                              inside_string = !inside_string;
-                              if(inside_string){
-                                   attron(COLOR_PAIR(3));
-                              }else{
-                                   highlighting_left = 1;
+                         }else{
+                              highlighting_left--;
+                              if(highlighting_left == 0){
+                                   attroff(COLOR_PAIR(1));
+                                   attroff(COLOR_PAIR(2));
+                                   attroff(COLOR_PAIR(3));
                               }
-                         }
-                    }else{
-                         highlighting_left--;
-                         if(highlighting_left == 0){
-                              attroff(COLOR_PAIR(1));
-                              attroff(COLOR_PAIR(2));
-                              attroff(COLOR_PAIR(3));
                          }
                     }
+
+                    // print the character
+                    addch(line_to_print[c]);
                }
 
-               // print the character
-               addch(line_to_print[c]);
+               standend();
+          }else{
+               for(int64_t c = 0; c < min; ++c){
+                    // print the character
+                    addch(line_to_print[c]);
+               }
           }
-
-          standend();
      }
 
      standend();

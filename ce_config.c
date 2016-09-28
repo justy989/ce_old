@@ -262,6 +262,7 @@ BufferNode* new_buffer_from_file(BufferNode* head, const char* filename)
 void input_start(ConfigState* config_state, const char* input_message, char input_key)
 {
      ce_clear_lines(config_state->view_input->buffer_node->buffer);
+     ce_alloc_lines(config_state->view_input->buffer_node->buffer, 1);
      config_state->view_input->cursor = (Point){0, 0};
      config_state->input_message = input_message;
      config_state->input_key = input_key;
@@ -1257,10 +1258,10 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                if(new_view){
                     Point top_left = {0, 0};
                     Point bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 2}; // account for statusbar
-                    ce_calc_views(config_state->view_head, &top_left, &bottom_right);
                     new_view->cursor = config_state->view_current->cursor;
                     new_view->top_row = config_state->view_current->top_row;
                     new_view->left_column = config_state->view_current->left_column;
+                    ce_calc_views(config_state->view_head, &top_left, &bottom_right);
                }
           } break;
           case '':
@@ -1269,10 +1270,10 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                if(new_view){
                     Point top_left = {0, 0};
                     Point bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 2}; // account for statusbar
-                    ce_calc_views(config_state->view_head, &top_left, &bottom_right);
                     new_view->cursor = config_state->view_current->cursor;
                     new_view->top_row = config_state->view_current->top_row;
                     new_view->left_column = config_state->view_current->left_column;
+                    ce_calc_views(config_state->view_head, &top_left, &bottom_right);
                }
           } break;
           case 14: // Ctrl + n
@@ -1544,12 +1545,11 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     input_start(config_state, "Load File", key);
                }else{
                     input_end(config_state);
-                    if(config_state->view_input->buffer_node->buffer->line_count){
-                         // just grab the first line and load it as a file
-                         BufferNode* new_node = new_buffer_from_file(head, config_state->view_input->buffer_node->buffer->lines[0]);
-                         if(new_node){
-                              config_state->view_current->buffer_node = new_node;
-                         }
+                    // just grab the first line and load it as a file
+                    BufferNode* new_node = open_file_buffer(head, config_state->view_input->buffer_node->buffer->lines[0]);
+                    if(new_node){
+                         config_state->view_current->buffer_node = new_node;
+                         config_state->view_current->cursor = (Point){0, 0};
                     }
                }
           }

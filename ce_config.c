@@ -70,6 +70,7 @@ typedef struct{
      bool insert;
      bool input;
      const char* input_message;
+     char input_key;
      int last_key;
      char command_key; // TODO: make a command string for multi-character commands
      struct {
@@ -213,6 +214,23 @@ BufferNode* new_buffer_from_file(BufferNode* head, const char* filename)
 
      return new_buffer_node;
 }
+
+void input_start(ConfigState* config_state, const char* input_message, char input_key)
+{
+     ce_clear_lines(config_state->view_input->buffer_node->buffer);
+     config_state->view_input->cursor = (Point){0, 0};
+     config_state->input_message = input_message;
+     config_state->input_key = input_key;
+     config_state->view_save = config_state->view_current;
+     config_state->view_current = config_state->view_input;
+     config_state->insert = true; // NOTE: should we go into insert mode automatically? I think so!
+}
+
+void input_end(ConfigState* config_state)
+{
+     config_state->view_current = config_state->view_save;
+}
+
 #ifndef FTW_STOP
 #define FTW_STOP 1
 #define FTW_CONTINUE 0
@@ -1056,7 +1074,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                search_str[word_len] = '\0';
 
                Point delta;
-               if(ce_find_str(buffer, cursor, search_str, &delta)){
+               if(ce_find_string(buffer, cursor, search_str, &delta)){
                     ce_move_cursor(buffer, cursor, &delta);
                }
           } break;
@@ -1128,21 +1146,37 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           break;
           case ':':
           {
+               if(config_state->input && key != config_state->input_key) break;
                config_state->input = !config_state->input;
                if(config_state->input){
-                    ce_clear_lines(config_state->view_input->buffer_node->buffer);
-                    config_state->input_message = "Load File";
-                    config_state->view_input->cursor = (Point){0, 0};
-                    config_state->view_save = config_state->view_current;
-                    config_state->view_current = config_state->view_input;
-                    config_state->insert = true; // NOTE: should we go into insert mode automatically? I think so!
+                    input_start(config_state, "Load File", key);
                }else{
-                    config_state->view_current = config_state->view_save;
+                    input_end(config_state);
                     if(config_state->view_input->buffer_node->buffer->line_count){
                          // just grab the first line and load it as a file
                          BufferNode* new_node = new_buffer_from_file(head, config_state->view_input->buffer_node->buffer->lines[0]);
                          if(new_node){
                               config_state->view_current->buffer_node = new_node;
+                         }
+                    }
+               }
+          }
+          break;
+          case '/':
+          {
+               if(config_state->input && key != config_state->input_key) break;
+               config_state->input = !config_state->input;
+               if(config_state->input){
+                    input_start(config_state, "Search", key);
+               }else{
+                    input_end(config_state);
+                    if(config_state->view_input->buffer_node->buffer->line_count){
+                         Point delta;
+                         if(ce_find_string(config_state->view_current->buffer_node->buffer,
+                                           &config_state->view_current->cursor,
+                                           config_state->view_input->buffer_node->buffer->lines[0], &delta)){
+                              ce_move_cursor(config_state->view_current->buffer_node->buffer,
+                                             &config_state->view_current->cursor, &delta);
                          }
                     }
                }

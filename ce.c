@@ -574,7 +574,7 @@ bool ce_find_match(Buffer* buffer, const Point* location, Point* delta)
 }
 
 // returns the delta to the matching string; return success
-bool ce_find_str(Buffer* buffer, const Point* location, const char* search_str, Point* delta)
+bool ce_find_string(Buffer* buffer, const Point* location, const char* search_str, Point* delta)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);

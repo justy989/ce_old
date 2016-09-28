@@ -445,7 +445,13 @@ typedef enum{
      MOVEMENT_INVALID
 } movement_state_t;
 
-// return false invalid/incomplete movement in config state, otherwise returns true + moves cursor + movement_end
+// given the current config state, buffer, and cursor: determines whether or not a generic movement has been provided
+//      return values:
+//              - MOVEMENT_COMPLETE: a generic movement has been provided and movement_start + movement_end now point to
+//                                   start and end of the movement (inclusive)
+//              - MOVEMENT_CONTINUE: a portion of a generic movement has been provided, and this function should be
+//                                   called again once another key is available
+//              - MOVEMENT_INVALID:  the movement provided by the user is not a generic movement
 movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer, Point* cursor, Point* movement_start, Point* movement_end)
 {
      *movement_start = *movement_end = *cursor;

@@ -131,11 +131,13 @@ int64_t ce_find_delta_to_char_forward_in_line(Buffer* buffer, const Point* locat
 int64_t ce_find_delta_to_char_backward_in_line(Buffer* buffer, const Point* location, char c);
 int64_t ce_find_delta_to_beginning_of_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
 int64_t ce_find_delta_to_end_of_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
-int64_t ce_find_end_of_line(const Buffer* buffer, Point* cursor);
 int64_t ce_find_next_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
 bool ce_find_match(Buffer* buffer, const Point* location, Point* delta);
-bool ce_find_string(Buffer* buffer, const Point* location, const char* search_str, Point* delta);
+bool ce_find_string(Buffer* buffer, const Point* location, const char* search_str, Point* match);
 bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor);
+int ce_ispunct(int c);
+int ce_iswordchar(int c);
+bool ce_get_homogenous_adjacents(Buffer* buffer, Point* start, Point* end, int (*is_homogenous)(int));
 
 // NOTE: passing NULL to string causes an empty line to be inserted
 bool ce_insert_line(Buffer* buffer, int64_t line, const char* string);
@@ -181,5 +183,6 @@ bool ce_free_views(BufferView** view);
 BufferView* ce_find_view_at_point(BufferView* head, const Point* point);
 
 void* ce_memrchr(const void* s, int c, size_t n);
+int64_t ce_compute_length(Point* start, Point* end);
 
 #endif

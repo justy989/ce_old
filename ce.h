@@ -137,6 +137,7 @@ bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor);
 int ce_ispunct(int c);
 int ce_iswordchar(int c);
 bool ce_get_homogenous_adjacents(Buffer* buffer, Point* start, Point* end, int (*is_homogenous)(int));
+bool ce_get_word_at_location(Buffer* buffer, const Point* location, Point* word_start, Point* word_end);
 
 // NOTE: passing NULL to string causes an empty line to be inserted
 bool ce_insert_line(Buffer* buffer, int64_t line, const char* string);

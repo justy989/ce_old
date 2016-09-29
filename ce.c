@@ -1048,8 +1048,6 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
           return false;
      }
 
-     char line_to_print[g_terminal_dimensions->x];
-
      int64_t max_width = (term_bottom_right->x - term_top_left->x) + 1;
      int64_t last_line = buffer_top_left->y + (term_bottom_right->y - term_top_left->y);
      if(last_line >= buffer->line_count) last_line = buffer->line_count - 1;
@@ -1092,8 +1090,7 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
           line_length = strlen(buffer_line + buffer_top_left->x);
 
           int64_t min = max_width < line_length ? max_width : line_length;
-          memset(line_to_print, 0, min + 1);
-          strncpy(line_to_print, buffer_line + buffer_top_left->x, min);
+          const char* line_to_print = buffer_line + buffer_top_left->x;
 
           bool inside_double_quote_string = false;
           bool inside_single_quote_string = false;

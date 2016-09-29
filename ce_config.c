@@ -369,7 +369,6 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
 
      *user_data = config_state;
 
-
      BufferNode* itr = head;
 
      // setup state for each buffer
@@ -974,9 +973,12 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           Point movement_start, movement_end;
 
           switch(config_state->command_key){
-          case 27: // ESC
           default:
                break;
+          case 27: // ESC
+          {
+               if(config_state->input) input_end(config_state); 
+          } break; 
           case 'q':
                return false; // exit !
           case 'J':
@@ -1546,10 +1548,12 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }else{
                     input_end(config_state);
                     // just grab the first line and load it as a file
-                    BufferNode* new_node = open_file_buffer(head, config_state->view_input->buffer_node->buffer->lines[0]);
-                    if(new_node){
-                         config_state->view_current->buffer_node = new_node;
-                         config_state->view_current->cursor = (Point){0, 0};
+                    for(int64_t i = 0; i < config_state->view_input->buffer_node->buffer->line_count; ++i){
+                         BufferNode* new_node = open_file_buffer(head, config_state->view_input->buffer_node->buffer->lines[i]);
+                         if(i == 0 && new_node){
+                              config_state->view_current->buffer_node = new_node;
+                              config_state->view_current->cursor = (Point){0, 0};
+                         }
                     }
                }
           }
@@ -1563,12 +1567,12 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }else{
                     input_end(config_state);
                     if(config_state->view_input->buffer_node->buffer->line_count){
-                         Point delta;
+                         Point location;
                          if(ce_find_string(config_state->view_current->buffer_node->buffer,
                                            &config_state->view_current->cursor,
-                                           config_state->view_input->buffer_node->buffer->lines[0], &delta)){
+                                           config_state->view_input->buffer_node->buffer->lines[0], &location)){
                               ce_set_cursor(config_state->view_current->buffer_node->buffer,
-                                             &config_state->view_current->cursor, &delta);
+                                             &config_state->view_current->cursor, &location);
                          }
                     }
                }

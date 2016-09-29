@@ -121,6 +121,10 @@ const char* random_greeting()
           "I missed you... in a creepy way.",
           "I'm a potato",
           "At least this isn't emacs? Am I right!",
+          "TACOCAT is the best palindrome",
+          "Found a bug? It's a feature.",
+          "Yo.",
+          "Slurp'n up whitespace since 2016",
      };
 
      srand(time(NULL));

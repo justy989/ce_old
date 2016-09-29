@@ -793,7 +793,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                                                  &config_state->start_insert,
                                                  &config_state->original_start_insert,
                                                  &end_cursor,
-                                                 ce_dupe_string(buffer, &config_state->start_insert, cursor));
+                                                 ce_dupe_string(buffer, config_state->start_insert, *cursor));
                     }else if(config_state->start_insert.x < config_state->original_start_insert.x ||
                              config_state->start_insert.y < config_state->original_start_insert.y){
                          if(cursor->x == config_state->start_insert.x &&
@@ -812,8 +812,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                                                       &config_state->original_start_insert,
                                                       &end_cursor,
                                                       ce_dupe_string(buffer,
-                                                                     &config_state->start_insert,
-                                                                     cursor),
+                                                                     config_state->start_insert,
+                                                                     *cursor),
                                                       backspace_get_string(buffer_state->backspace_head));
                               backspace_free(&buffer_state->backspace_head);
                          }
@@ -1106,8 +1106,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                case MOVEMENT_CONTINUE:
                     return true; // no movement yet, wait for one!
                case MOVEMENT_COMPLETE:
-                    add_yank(config_state, '0', ce_dupe_string(buffer, &movement_start, &movement_end), YANK_NORMAL);
-                    add_yank(config_state, '"', ce_dupe_string(buffer, &movement_start, &movement_end), YANK_NORMAL);
+                    add_yank(config_state, '0', ce_dupe_string(buffer, movement_start, movement_end), YANK_NORMAL);
+                    add_yank(config_state, '"', ce_dupe_string(buffer, movement_start, movement_end), YANK_NORMAL);
                     break;
                case MOVEMENT_INVALID:
                     switch(config_state->movement_keys[0]){
@@ -1164,7 +1164,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
                int64_t n_deletes = ce_find_delta_to_end_of_line(buffer, cursor) + 1;
                Point delete_end = {cursor->x + n_deletes, cursor->y};
-               char* save_string = ce_dupe_string(buffer, cursor, &delete_end);
+               char* save_string = ce_dupe_string(buffer, *cursor, delete_end);
                if(ce_remove_string(buffer, cursor, n_deletes)){
                     ce_commit_remove_string(&buffer_state->commit_tail, cursor, cursor, cursor, save_string);
                     add_yank(config_state, '"', strdup(save_string), YANK_NORMAL);
@@ -1178,7 +1178,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                if(n_deletes){
                     Point end = *cursor;
                     end.x += n_deletes;
-                    char* save_string = ce_dupe_string(buffer, cursor, &end);
+                    char* save_string = ce_dupe_string(buffer, *cursor, end);
                     if(ce_remove_string(buffer, cursor, n_deletes)){
                          ce_commit_remove_string(&buffer_state->commit_tail, cursor, cursor, cursor, save_string);
                          add_yank(config_state, '"', strdup(save_string), YANK_NORMAL);
@@ -1221,11 +1221,9 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     }
 
                     // this is a generic movement
-                    assert(movement_end.x >= movement_start.x);
-                    assert(movement_start.y == movement_end.y); // TODO support deleting over line boundaries
 
                     // delete all chars movement_start..movement_end inclusive
-                    int64_t n_deletes = ce_compute_length(&movement_start, &movement_end);
+                    int64_t n_deletes = ce_compute_length(buffer, movement_start, movement_end);
                     if(!n_deletes){
                          // nothing to do
                          clear_keys(config_state);
@@ -1233,7 +1231,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     }
                     char* save_string = (config_state->movement_keys[0] == 'd') ?
                          strdup(buffer->lines[movement_start.y]) :
-                         ce_dupe_string(buffer, &movement_start, &movement_end);
+                         ce_dupe_string(buffer, movement_start, movement_end);
                     if(ce_remove_string(buffer, &movement_start, n_deletes)){
                          ce_commit_remove_string(&buffer_state->commit_tail, &movement_start, cursor, &movement_start, save_string);
                          add_yank(config_state, '"', strdup(save_string), yank_mode);

@@ -376,53 +376,26 @@ bool ce_remove_char(Buffer* buffer, const Point* location)
      return true;
 }
 
-char* ce_dupe_string(Buffer* buffer, const Point* start, const Point* end)
+char* ce_dupe_string(Buffer* buffer, Point start, Point end)
 {
      CE_CHECK_PTR_ARG(buffer);
-     CE_CHECK_PTR_ARG(start);
-     CE_CHECK_PTR_ARG(end);
 
-     if(!ce_point_on_buffer(buffer, start) && start->x != (int64_t)strlen(buffer->lines[start->y])){
-          return NULL;
-     }
-     if(!ce_point_on_buffer(buffer, end) && end->x != (int64_t)strlen(buffer->lines[end->y])){
-          return NULL;
-     }
+     int64_t total_len = ce_compute_length(buffer, start, end);
 
-     if(start->y > end->y){
-          ce_message("%s() start(%ld, %ld) needs to be below end(%ld, %ld)",
-                     __FUNCTION__, start->x, start->y, end->x, end->y);
-          return NULL;
-     }
-
-     if(start->y == end->y){
-          if(start->x >= end->x){
-               ce_message("%s() start(%ld, %ld) needs to be below end(%ld, %ld)",
-                          __FUNCTION__, start->x, start->y, end->x, end->y);
-               return NULL;
-          }
-
+     if(start.y == end.y){
           // single line allocation
-          int64_t len = end->x - start->x;
-          char* new_str = malloc(len + 1);
+          char* new_str = malloc(total_len + 1);
           if(!new_str){
                ce_message("%s() failed to alloc string", __FUNCTION__);
                return NULL;
           }
-          memcpy(new_str, buffer->lines[start->y] + start->x, len);
-          new_str[len] = 0;
+          memcpy(new_str, buffer->lines[start.y] + start.x, total_len);
+          new_str[total_len] = 0;
 
           return new_str;
      }
 
      // multi line allocation
-
-     // count total length
-     int64_t total_len = strlen(buffer->lines[start->y] + start->x) + 1; // account for newline
-     for(int64_t i = start->y + 1; i < end->y; ++i){
-          total_len += strlen(buffer->lines[i]) + 1; // account for newline
-     }
-     total_len += end->x; // do not account for newline
 
      // build string
      char* new_str = malloc(total_len + 1);
@@ -432,19 +405,19 @@ char* ce_dupe_string(Buffer* buffer, const Point* start, const Point* end)
      }
 
      char* itr = new_str;
-     int64_t len = strlen(buffer->lines[start->y] + start->x);
-     if(len) memcpy(itr, buffer->lines[start->y] + start->x, len);
+     int64_t len = strlen(buffer->lines[start.y] + start.x);
+     if(len) memcpy(itr, buffer->lines[start.y] + start.x, len);
      itr[len] = '\n'; // add newline
      itr += len + 1;
 
-     for(int64_t i = start->y + 1; i < end->y; ++i){
+     for(int64_t i = start.y + 1; i < end.y; ++i){
           len = strlen(buffer->lines[i]);
           memcpy(itr, buffer->lines[i], len);
           itr[len] = '\n';
           itr += len + 1;
      }
 
-     memcpy(itr, buffer->lines[end->y], end->x);
+     memcpy(itr, buffer->lines[end.y], end.x);
      new_str[total_len] = 0;
 
      return new_str;
@@ -861,6 +834,7 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
      int64_t current_line_len = strlen(current_line);
      int64_t rest_of_the_line_len = (current_line_len - location->x);
 
+     // easy case: string is on a single line
      if(length <= rest_of_the_line_len){
           int64_t new_line_len = current_line_len - length;
           char* new_line = realloc(current_line, new_line_len + 1);
@@ -877,19 +851,19 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
           return true;
      }
 
+     // hard case: string spans multiple lines
      int64_t line_index = location->y;
 
      if(current_line_len){
-          length -= rest_of_the_line_len;
+          // don't delete the rest of the first line yet, we'll do this when we mash the first and last lines
+          length -= rest_of_the_line_len + 1; // account for newline
           line_index++;
      }else{
           ce_remove_line(buffer, location->y);
           length--;
      }
 
-     while(length > 0){
-          length--; // account for newlines
-
+     while(length >= 0){
           assert(line_index <= buffer->line_count);
           if(line_index >= buffer->line_count) break;
 
@@ -900,6 +874,7 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
                ce_remove_line(buffer, line_index);
                length -= next_line_len + 1;
           }else{
+               // slurp up end of first line and beginning of last line
                int64_t next_line_part_len = next_line_len - length;
                int64_t new_line_len = location->x + next_line_part_len;
                char* new_line = current_line = realloc(current_line, new_line_len + 1);
@@ -2039,18 +2014,29 @@ void* ce_memrchr(const void* s, int c, size_t n)
      return NULL;
 }
 
-int64_t ce_compute_length(Point* start, Point* end)
+int64_t ce_compute_length(Buffer* buffer, Point start, Point end)
 {
-     // swap end and start if necessary
-     if(end->y < start->y || (end->y == start->y && end->x < start->x)){
-          Point* temp = start;
-          start = end;
-          end = temp;
+     CE_CHECK_PTR_ARG(buffer);
+
+     assert(ce_point_on_buffer(buffer, &start) || start.x == (int64_t)strlen(buffer->lines[start.y]) + 1); // account for newline
+     assert(ce_point_on_buffer(buffer, &end) || end.x == (int64_t)strlen(buffer->lines[end.y]) + 1); // account for newline
+
+     ce_sort_points(&start, &end);
+
+     size_t length = 0;
+
+     if( start.y < end.y){
+          length = strlen(buffer->lines[start.y] + start.x) + 1; // account for newline
+          for(int64_t i = start.y + 1; i < end.y; ++i){
+               length += strlen(buffer->lines[i]) + 1; // account for newline
+          }
+          length += end.x; // do not account for newline
+     }else{
+          assert(start.y == end.y);
+          length += end.x - start.x;
      }
 
-     assert(start->y == end->y); // TODO support multi-line
-
-     return end->x - start->x;
+     return length;
 }
 
 int ce_iswordchar(int c)
@@ -2082,4 +2068,14 @@ bool ce_get_homogenous_adjacents(Buffer* buffer, Point* start, Point* end, int (
      // the last character wasn't homogenous, but end is exclusive
 
      return true;
+}
+
+// if a > b, swap a and b
+void ce_sort_points(Point* a, Point* b)
+{
+     if(b->y < a->y || (b->y == a->y && b->x < a->x)){
+          Point temp = *a;
+          *a = *b;
+          *b = temp;
+     }
 }

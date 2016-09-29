@@ -735,6 +735,17 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
           case 'G':
                ce_find_last_line(buffer, movement_end);
                break;
+          case 'g':
+               switch(key1){
+               case 'g':
+                    ce_find_first_line(buffer, movement_start);
+                    break;
+               case MOVEMENT_CONTINUE:
+                    return MOVEMENT_CONTINUE;
+               default:
+                    return MOVEMENT_INVALID;
+               }
+               break;
           default:
                return MOVEMENT_INVALID;
           }
@@ -1416,8 +1427,20 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     return true;
                case 'g':
                {
-                    Point delta = {0, -cursor->y};
-                    ce_move_cursor(buffer, cursor, &delta);
+                    config_state->movement_keys[1] = config_state->movement_keys[0];
+                    config_state->movement_keys[0] = config_state->command_key;
+                    config_state->movement_multiplier = 1;
+
+                    for(size_t cm = 0; cm < config_state->command_multiplier; cm++){
+                         movement_state_t m_state = try_generic_movement(config_state, buffer, cursor, &movement_start, &movement_end);
+                         if(m_state == MOVEMENT_CONTINUE) return true;
+
+                         // this is a generic movement
+                         if(movement_end.x == cursor->x && movement_end.y == cursor->y)
+                              ce_set_cursor(buffer, cursor, &movement_start);
+                         else
+                              ce_set_cursor(buffer, cursor, &movement_end);
+                    }
                } break;
 #if 0
                case 't':

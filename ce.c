@@ -616,6 +616,20 @@ bool ce_find_last_line(Buffer* buffer, Point* match)
      return true;
 }
 
+// returns Point at the beginning of the fist line; return success
+bool ce_find_first_line(Buffer* buffer, Point* match)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(match);
+
+     *match = (Point) {0, 0};
+     while(!ce_point_on_buffer(buffer, match)){
+          if(match->y >= buffer->line_count) return false;
+          match->y++;
+     }
+
+     return true;
+}
 
 bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor)
 {

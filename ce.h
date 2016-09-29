@@ -135,6 +135,7 @@ int64_t ce_find_next_word(Buffer* buffer, const Point* location, bool punctuatio
 bool ce_find_match(Buffer* buffer, const Point* location, Point* delta);
 bool ce_find_string(Buffer* buffer, const Point* location, const char* search_str, Point* match);
 bool ce_find_last_line(Buffer* buffer, Point* match);
+bool ce_find_first_line(Buffer* buffer, Point* match);
 bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor);
 int ce_ispunct(int c);
 int ce_iswordchar(int c);

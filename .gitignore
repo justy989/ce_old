@@ -2,5 +2,8 @@ ce
 *.o
 *.so
 
+#cscope
+*.out
+
 # WHAT IS THIS AND WHY DOES IT EXIST?
 *.dylib

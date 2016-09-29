@@ -4,7 +4,6 @@
 #include <inttypes.h>
 #include <assert.h>
 
-Buffer* g_message_buffer = NULL;
 Point* g_terminal_dimensions = NULL;
 
 int64_t ce_count_string_lines(const char* string)
@@ -28,13 +27,13 @@ bool ce_alloc_lines(Buffer* buffer, int64_t line_count)
      CE_CHECK_PTR_ARG(buffer);
 
      if(line_count <= 0){
-          ce_message("%s() tried to allocate %"PRId64" lines for a buffer, but we can only allocated > 0 lines", line_count);
+          ce_message("%s() tried to allocate %"PRId64" lines for a buffer, but we can only allocated > 0 lines", __FUNCTION__, line_count);
           return false;
      }
 
      buffer->lines = malloc(line_count * sizeof(char*));
      if(!buffer->lines){
-          ce_message("%s() failed to allocate %"PRId64" lines for buffer", line_count);
+          ce_message("%s() failed to allocate %"PRId64" lines for buffer", __FUNCTION__, line_count);
           return false;
      }
 
@@ -44,7 +43,7 @@ bool ce_alloc_lines(Buffer* buffer, int64_t line_count)
      for(int64_t i = 0; i < line_count; ++i){
           buffer->lines[i] = calloc(1, sizeof(buffer->lines[i]));
           if(!buffer->lines[i]){
-               ce_message("failed to calloc() new line %lld", i);
+               ce_message("failed to calloc() new line %ld", i);
                return false;
           }
      }
@@ -228,7 +227,7 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
                int64_t length = (i - 1) - last_newline;
                char* new_line = realloc(buffer->lines[line], length + 1);
                if(!new_line){
-                    ce_message("%s() failed to alloc line %d", __FUNCTION__, line);
+                    ce_message("%s() failed to alloc line %ld", __FUNCTION__, line);
                     return false;
                }
 
@@ -453,7 +452,7 @@ char* ce_dupe_string(Buffer* buffer, const Point* start, const Point* end)
 char* ce_dupe_line(Buffer* buffer, int64_t line)
 {
      if(buffer->line_count <= line){
-          ce_message("%s() specified line (%d) above buffer line count (%d)",
+          ce_message("%s() specified line (%ld) above buffer line count (%ld)",
                      __FUNCTION__, line, buffer->line_count);
           return NULL;
      }
@@ -729,11 +728,7 @@ bool ce_insert_line(Buffer* buffer, int64_t line, const char* string)
      int64_t new_line_count = buffer->line_count + 1;
      char** new_lines = realloc(buffer->lines, new_line_count * sizeof(char*));
      if(!new_lines){
-          if(buffer == g_message_buffer){
-               printf("%s() failed to malloc new lines: %"PRId64"\n", __FUNCTION__, new_line_count);
-          }else{
-               ce_message("%s() failed to malloc new lines: %"PRId64"", __FUNCTION__, new_line_count);
-          }
+          printf("%s() failed to malloc new lines: %"PRId64"\n", __FUNCTION__, new_line_count);
           return false;
      }
 
@@ -769,7 +764,7 @@ bool ce_join_line(Buffer* buffer, int64_t line){
      CE_CHECK_PTR_ARG(buffer);
 
      if(line >= buffer->line_count || line < 0){
-          ce_message("%s() specified line %lld ouside of buffer, which has %lld lines", __FUNCTION__, line, buffer->line_count);
+          ce_message("%s() specified line %ld ouside of buffer, which has %ld lines", __FUNCTION__, line, buffer->line_count);
           return false;
      }
 
@@ -791,7 +786,7 @@ bool ce_remove_line(Buffer* buffer, int64_t line)
      CE_CHECK_PTR_ARG(buffer);
 
      if(line >= buffer->line_count || line < 0){
-          ce_message("%s() specified line %lld ouside of buffer, which has %lld lines", __FUNCTION__, line, buffer->line_count);
+          ce_message("%s() specified line %ld ouside of buffer, which has %ld lines", __FUNCTION__, line, buffer->line_count);
           return false;
      }
 
@@ -927,24 +922,6 @@ bool ce_save_buffer(const Buffer* buffer, const char* filename)
 
      fclose(file);
      return true;
-}
-
-bool ce_message(const char* format, ...)
-{
-     if(!g_message_buffer){
-          printf("%s() NULL message buffer\n", __FUNCTION__);
-          return false;
-     }
-
-     const int64_t max_line_size = 1024;
-     char line[max_line_size];
-
-     va_list args;
-     va_start(args, format);
-     vsnprintf(line, max_line_size, format, args);
-     va_end(args);
-
-     return ce_append_line(g_message_buffer, line);
 }
 
 bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Point* term_bottom_right,

@@ -722,9 +722,8 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
           case 'G':
           {
                ce_move_cursor_to_end_of_file(buffer, movement_end);
-               Point delta = {0, 0};
-               if(ce_find_delta_to_end_of_line(buffer, &delta))
-                    ce_move_cursor(buffer, movement_end, &delta);
+               Point delta = {ce_find_delta_to_end_of_line(buffer, movement_end), 0};
+               ce_move_cursor(buffer, movement_end, &delta);
           } break;
           case 'g':
                switch(key1){

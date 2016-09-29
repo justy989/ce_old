@@ -379,6 +379,8 @@ bool ce_remove_char(Buffer* buffer, const Point* location)
 char* ce_dupe_string(Buffer* buffer, const Point* start, const Point* end)
 {
      CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(start);
+     CE_CHECK_PTR_ARG(end);
 
      int64_t total_len = ce_compute_length(buffer, start, end);
 
@@ -2001,6 +2003,8 @@ void* ce_memrchr(const void* s, int c, size_t n)
 int64_t ce_compute_length(const Buffer* buffer, const Point* start, const Point* end)
 {
      CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(start);
+     CE_CHECK_PTR_ARG(end);
 
      assert(ce_point_on_buffer(buffer, start) || start->x == (int64_t)strlen(buffer->lines[start->y]) + 1); // account for newline
      assert(ce_point_on_buffer(buffer, end) || end->x == (int64_t)strlen(buffer->lines[end->y]) + 1); // account for newline

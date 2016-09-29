@@ -2053,3 +2053,25 @@ bool ce_get_homogenous_adjacents(Buffer* buffer, Point* start, Point* end, int (
 
      return true;
 }
+
+bool ce_get_word_at_location(Buffer* buffer, const Point* location, Point* word_start, Point* word_end)
+{
+     *word_start = *location;
+     *word_end = *location;
+     char curr_char;
+     bool success = ce_get_char(buffer, word_start, &curr_char);
+     if(!success) return false;
+
+     if(ce_ispunct(curr_char)){
+          success = ce_get_homogenous_adjacents(buffer, word_start, word_end, ce_ispunct);
+          if(!success) return false;
+     }else if(isblank(curr_char)){
+          success = ce_get_homogenous_adjacents(buffer, word_start, word_end, isblank);
+          if(!success) return false;
+     }else{
+          assert(ce_iswordchar(curr_char));
+          success = ce_get_homogenous_adjacents(buffer, word_start, word_end, ce_iswordchar);
+          if(!success) return false;
+     }
+     return true;
+}

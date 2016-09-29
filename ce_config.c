@@ -302,7 +302,10 @@ BufferNode* open_file_buffer(BufferNode* head, const char* filename)
 {
      BufferNode* itr = head;
      while(itr){
-          if(!strcmp(itr->buffer->name, filename)) break; // already open
+          if(!strcmp(itr->buffer->name, filename)){
+               ce_message("switching to already open buffer for: '%s'", filename);
+               break; // already open
+          }
           itr = itr->next;
      }
 

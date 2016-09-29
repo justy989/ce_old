@@ -251,12 +251,12 @@ int main(int argc, char** argv)
                done = true;
                stable_sigsevd = true;
           }else{
-               ce_message("loaded config crashed with SIGSEGV. restoring stable config.");
                config_close(&current_config);
                if(!config_revert(&current_config, config, stable_config_contents, stable_config_size)){
                     ce_save_buffer(g_message_buffer, g_message_buffer->filename);
                     return -1;
                }
+               ce_message("loaded config crashed with SIGSEGV. restoring stable config.");
                using_stable_config = true;
                current_config.initializer(buffer_list_head, g_terminal_dimensions, 0, NULL, &user_data);
           }

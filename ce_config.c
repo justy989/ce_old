@@ -977,7 +977,10 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                break;
           case 27: // ESC
           {
-               if(config_state->input) input_end(config_state); 
+               if(config_state->input){
+                    input_end(config_state); 
+                    config_state->input = false; 
+               }
           } break; 
           case 'q':
                return false; // exit !

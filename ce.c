@@ -574,36 +574,6 @@ bool ce_find_string(Buffer* buffer, const Point* location, const char* search_st
      return false;
 }
 
-// returns Point at the beginning of the last line; return success
-bool ce_find_last_line(Buffer* buffer, Point* match)
-{
-     CE_CHECK_PTR_ARG(buffer);
-     CE_CHECK_PTR_ARG(match);
-
-     *match = (Point) {0, buffer->line_count - 1};
-     while(!ce_point_on_buffer(buffer, match)){
-          if(match->y < 0) return false;
-          match->y--;
-     }
-
-     return true;
-}
-
-// returns Point at the beginning of the fist line; return success
-bool ce_find_first_line(Buffer* buffer, Point* match)
-{
-     CE_CHECK_PTR_ARG(buffer);
-     CE_CHECK_PTR_ARG(match);
-
-     *match = (Point) {0, 0};
-     while(!ce_point_on_buffer(buffer, match)){
-          if(match->y >= buffer->line_count) return false;
-          match->y++;
-     }
-
-     return true;
-}
-
 bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor)
 {
      CE_CHECK_PTR_ARG(buffer);
@@ -1304,6 +1274,20 @@ bool ce_move_cursor_to_end_of_file(const Buffer* buffer, Point* cursor)
 
      cursor->x = len - 1;
      cursor->y = last_line;
+
+     return true;
+}
+
+bool ce_move_cursor_to_beginning_of_file(const Buffer* buffer, Point* cursor)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(cursor);
+
+     *cursor = (Point) {0, 0};
+     while(!ce_point_on_buffer(buffer, cursor)){
+          if(cursor->y >= buffer->line_count) return false;
+          cursor->y++;
+     }
 
      return true;
 }

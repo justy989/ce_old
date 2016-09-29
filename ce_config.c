@@ -733,13 +733,20 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
                }
           } break;
           case 'G':
-               ce_find_last_line(buffer, movement_end);
-               break;
+          {
+               ce_move_cursor_to_end_of_file(buffer, movement_end);
+               Point delta = {0, 0};
+               if(ce_find_delta_to_end_of_line(buffer, &delta))
+                    ce_move_cursor(buffer, movement_end, &delta);
+          } break;
           case 'g':
                switch(key1){
                case 'g':
-                    ce_find_first_line(buffer, movement_start);
-                    break;
+               {
+                    Point delta = {ce_find_delta_to_end_of_line(buffer, movement_end), 0};
+                    ce_move_cursor(buffer, movement_end, &delta);
+                    ce_move_cursor_to_beginning_of_file(buffer, movement_start);
+               } break;
                case MOVEMENT_CONTINUE:
                     return MOVEMENT_CONTINUE;
                default:
@@ -1018,7 +1025,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 't':
           case 'F':
           case 'T':
-          case 'G':
           {
                config_state->movement_keys[0] = config_state->command_key;
                config_state->movement_multiplier = 1;
@@ -1032,6 +1038,19 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          ce_set_cursor(buffer, cursor, &movement_start);
                     else
                          ce_set_cursor(buffer, cursor, &movement_end);
+               }
+          } break;
+          case 'G':
+          {
+               config_state->movement_keys[0] = config_state->command_key;
+               config_state->movement_multiplier = 1;
+
+               for(size_t cm = 0; cm < config_state->command_multiplier; cm++){
+                    movement_state_t m_state = try_generic_movement(config_state, buffer, cursor, &movement_start, &movement_end);
+                    if(m_state == MOVEMENT_CONTINUE) return true;
+
+                    movement_end.x = 0; // G has a slightly different behavior as a command
+                    ce_set_cursor(buffer, cursor, &movement_end);
                }
           } break;
           case 'i':
@@ -1433,11 +1452,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          movement_state_t m_state = try_generic_movement(config_state, buffer, cursor, &movement_start, &movement_end);
                          if(m_state == MOVEMENT_CONTINUE) return true;
 
-                         // this is a generic movement
-                         if(movement_end.x == cursor->x && movement_end.y == cursor->y)
-                              ce_set_cursor(buffer, cursor, &movement_start);
-                         else
-                              ce_set_cursor(buffer, cursor, &movement_end);
+                         movement_start.x = 0; // gg has a slightly different behavior as a command
+                         ce_set_cursor(buffer, cursor, &movement_start);
                     }
                } break;
 #if 0

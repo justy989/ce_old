@@ -27,13 +27,17 @@ WANTS:
 -pair programming? Each connected user can edit text with their own cursor? show other users' cursors!
 */
 
+#include <assert.h>
 #include <dlfcn.h>
+#include <fcntl.h>
 #include <getopt.h>
+#include <inttypes.h>
 #include <setjmp.h>
 #include <signal.h>
 #include <stdbool.h>
-#include <inttypes.h>
+#include <sys/ioctl.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "ce.h"
 
@@ -184,16 +188,27 @@ int main(int argc, char** argv)
      }
 
      // init message buffer
-     g_message_buffer = malloc(sizeof(*g_message_buffer));
-     if(!g_message_buffer){
+     int message_buffer_fds[2];
+     pipe(message_buffer_fds);
+     for(int i = 0 ; i < 2; i++){
+          int fd_flags = fcntl(message_buffer_fds[i], F_GETFL, 0);
+          fcntl(message_buffer_fds[i], F_SETFL, fd_flags | O_NONBLOCK);
+     }
+     stderr = fdopen(message_buffer_fds[1], "w");
+     setvbuf(stderr, NULL, _IONBF, 0);
+     FILE* message_stderr = fdopen(message_buffer_fds[0], "r");
+     setvbuf(message_stderr, NULL, _IONBF, 0);
+
+     Buffer* message_buffer = malloc(sizeof(*message_buffer));
+     if(!message_buffer){
           printf("failed to allocate message buffer: %s\n", strerror(errno));
           return -1;
      }
 
-     g_message_buffer->filename = strdup(MESSAGE_FILE);
-     g_message_buffer->line_count = 0;
-     g_message_buffer->lines = NULL;
-     g_message_buffer->user_data = NULL;
+     message_buffer->filename = strdup(MESSAGE_FILE);
+     message_buffer->line_count = 0;
+     message_buffer->user_data = NULL;
+     ce_alloc_lines(message_buffer, 1);
 
      // init buffer list
      BufferNode* buffer_list_head = malloc(sizeof(*buffer_list_head));
@@ -201,10 +216,10 @@ int main(int argc, char** argv)
           printf("failed to allocate buffer list: %s\n", strerror(errno));
           return -1;
      }
-     buffer_list_head->buffer = g_message_buffer;
+     buffer_list_head->buffer = message_buffer;
      buffer_list_head->next = NULL;
 
-     ce_message(random_greeting());
+     ce_message("%s", random_greeting());
 
      Point terminal_dimensions = {};
      getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);
@@ -242,8 +257,22 @@ int main(int argc, char** argv)
           }
      }
 
+     char message_buffer_buf[BUFSIZ];
      // main loop
      while(!done){
+          // add new input to message buffer
+          while(fgets(message_buffer_buf, BUFSIZ, message_stderr) != NULL){
+               if(strlen(message_buffer_buf) == 1) continue;
+               message_buffer_buf[strlen(message_buffer_buf)-1] = '\0';
+               if(message_buffer->lines[0][0] == '\0'){
+                    Point insert_loc = {0, 0};
+                    ce_insert_string(message_buffer, &insert_loc, message_buffer_buf);
+                    continue;
+               }
+               bool ret = ce_append_line(message_buffer, message_buffer_buf);
+               assert(ret);
+          }
+
           // ncurses macro that gets height and width
           getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);
 
@@ -274,7 +303,7 @@ int main(int argc, char** argv)
      // cleanup ncurses
      endwin();
 
-     if(save_messages_on_exit) ce_save_buffer(g_message_buffer, g_message_buffer->filename);
+     if(save_messages_on_exit) ce_save_buffer(message_buffer, message_buffer->filename);
 
      if(current_config.so_handle != stable_config.so_handle)
           config_close(&current_config, buffer_list_head, user_data);

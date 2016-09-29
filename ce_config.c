@@ -41,7 +41,7 @@ char* backspace_get_string(BackspaceNode* head)
 
      char* str = malloc(len + 1);
      if(!str){
-          ce_message("%s() failed to alloc string");
+          ce_message("%s() failed to alloc string", __FUNCTION__);
           return NULL;
      }
 
@@ -332,7 +332,6 @@ int64_t strlen_ignore_newlines(const char* str)
 bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** argv, void** user_data)
 {
      // NOTE: need to set these in this module
-     g_message_buffer = head->buffer;
      g_terminal_dimensions = terminal_dimensions;
 
      // setup the config's state

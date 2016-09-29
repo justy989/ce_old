@@ -110,16 +110,22 @@ void segv_handler(int signo)
 
 const char* random_greeting()
 {
+     static const char* greetings [] = {
+          "Thank you for flying ce",
+          "There's nothing like a fresh cup of ce in the morning",
+          "Why do kids love the taste of C Editor?\n\nIt's the taste you can ce",
+          "ce is for C Editor, that's good enough for me",
+          "I missed you.",
+          "Hope you're having a great day! -ce",
+          "You're a special person -- or robot. I don't judge.",
+          "I missed you... in a creepy way.",
+          "I'm a potato",
+          "At least this isn't emacs? Am I right!",
+     };
+
      srand(time(NULL));
-     switch(rand() % 6){
-     case 0:  return "Thank you for flying ce";
-     case 1:  return "There's nothing like a fresh cup of ce in the morning";
-     case 2:  return "Why do kids love the taste of C Editor?\n\nIt's the taste you can ce";
-     case 3:  return "ce is for C Editor, that's good enough for me";
-     case 4:  return "I missed you.";
-     case 5:  return "Hope you're having a great day! -ce";
-     default: return "You're a special person -- or robot. I don't judge.";
-     }
+
+     return greetings[ rand() % (sizeof(greetings) / sizeof(greetings[0]))];
 }
 
 int main(int argc, char** argv)

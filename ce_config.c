@@ -1549,16 +1549,28 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }else{
                     input_end(config_state);
                     if(config_state->view_input->buffer_node->buffer->line_count){
-                         Point delta;
+                         Point match;
                          if(ce_find_string(config_state->view_current->buffer_node->buffer,
                                            &config_state->view_current->cursor,
-                                           config_state->view_input->buffer_node->buffer->lines[0], &delta)){
+                                           config_state->view_input->buffer_node->buffer->lines[0], &match)){
+                              add_yank(config_state, '/', strdup(config_state->view_input->buffer_node->buffer->lines[0]), YANK_NORMAL);
                               ce_set_cursor(config_state->view_current->buffer_node->buffer,
-                                             &config_state->view_current->cursor, &delta);
+                                             &config_state->view_current->cursor, &match);
                          }
                     }
                }
           }
+          case 'n':
+          {
+               YankNode* yank = find_yank(config_state, '/');
+               if(yank){
+                    assert(yank->mode == YANK_NORMAL);
+                    Point match;
+                    if(ce_find_string(buffer, cursor, yank->text, &match)){
+                         ce_set_cursor(buffer, cursor, &match);
+                    }
+               }
+          } break;
           break;
           case '=':
           {

@@ -732,6 +732,9 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
                     movement_end->y = cursor->y + delta.y;
                }
           } break;
+          case 'G':
+               ce_find_last_line(buffer, movement_end);
+               break;
           default:
                return MOVEMENT_INVALID;
           }
@@ -1004,6 +1007,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 't':
           case 'F':
           case 'T':
+          case 'G':
           {
                config_state->movement_keys[0] = config_state->command_key;
                config_state->movement_multiplier = 1;
@@ -1389,11 +1393,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     scroll_view_to_location(config_state->view_current, &location);
                     break;
                }
-          } break;
-          case 'G':
-          {
-               Point delta = {0, buffer->line_count - cursor->y};
-               ce_move_cursor(buffer, cursor, &delta);
           } break;
           case '>':
           {

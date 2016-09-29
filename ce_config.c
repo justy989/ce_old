@@ -1339,7 +1339,14 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     // no movement yet, wait for one!
                     return true;
                default:
-                    ce_set_char(buffer, cursor, key);
+               {
+                    char ch = 0;
+                    if(ce_get_char(buffer, cursor, &ch)){
+                         if(ce_set_char(buffer, cursor, key)){
+                              ce_commit_change_char(&buffer_state->commit_tail, cursor, cursor, cursor, key, ch);
+                         }
+                    }
+               }
                }
           } break;
           case 'H':

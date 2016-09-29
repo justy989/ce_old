@@ -1594,7 +1594,6 @@ bool ce_commit_undo(Buffer* buffer, BufferCommitNode** tail, Point* cursor)
           ce_insert_string(buffer, &commit->start, commit->str);
           break;
      case BCT_CHANGE_CHAR:
-          ce_remove_char(buffer, &commit->start);
           ce_set_char(buffer, &commit->start, commit->prev_c);
           break;
      case BCT_CHANGE_STRING:
@@ -1647,7 +1646,6 @@ bool ce_commit_redo(Buffer* buffer, BufferCommitNode** tail, Point* cursor)
           ce_remove_string(buffer, &commit->start, strlen(commit->str));
           break;
      case BCT_CHANGE_CHAR:
-          ce_remove_char(buffer, &commit->start);
           ce_set_char(buffer, &commit->start, commit->c);
           break;
      case BCT_CHANGE_STRING:

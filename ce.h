@@ -122,7 +122,7 @@ bool ce_append_string(Buffer* buffer, int64_t line, const char* string);
 bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length);
 bool ce_remove_char(Buffer* buffer, const Point* location);
 void ce_clear_lines(Buffer* buffer);
-char* ce_dupe_string(Buffer* buffer, Point start, Point end);
+char* ce_dupe_string(Buffer* buffer, const Point* start, const Point* end);
 char* ce_dupe_line(Buffer* buffer, int64_t line);
 bool ce_get_char(Buffer* buffer, const Point* location, char* c);
 bool ce_set_char(Buffer* buffer, const Point* location, char c);
@@ -185,7 +185,7 @@ bool ce_free_views(BufferView** view);
 BufferView* ce_find_view_at_point(BufferView* head, const Point* point);
 
 void* ce_memrchr(const void* s, int c, size_t n);
-int64_t ce_compute_length(Buffer* buffer, Point start, Point movement_end);
-void ce_sort_points(Point* a, Point* b);
+int64_t ce_compute_length(const Buffer* buffer, const Point* start, const Point* movement_end);
+void ce_sort_points(const Point** a, const Point** b);
 
 #endif

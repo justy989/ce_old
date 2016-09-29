@@ -376,20 +376,20 @@ bool ce_remove_char(Buffer* buffer, const Point* location)
      return true;
 }
 
-char* ce_dupe_string(Buffer* buffer, Point start, Point end)
+char* ce_dupe_string(Buffer* buffer, const Point* start, const Point* end)
 {
      CE_CHECK_PTR_ARG(buffer);
 
      int64_t total_len = ce_compute_length(buffer, start, end);
 
-     if(start.y == end.y){
+     if(start->y == end->y){
           // single line allocation
           char* new_str = malloc(total_len + 1);
           if(!new_str){
                ce_message("%s() failed to alloc string", __FUNCTION__);
                return NULL;
           }
-          memcpy(new_str, buffer->lines[start.y] + start.x, total_len);
+          memcpy(new_str, buffer->lines[start->y] + start->x, total_len);
           new_str[total_len] = 0;
 
           return new_str;
@@ -405,19 +405,19 @@ char* ce_dupe_string(Buffer* buffer, Point start, Point end)
      }
 
      char* itr = new_str;
-     int64_t len = strlen(buffer->lines[start.y] + start.x);
-     if(len) memcpy(itr, buffer->lines[start.y] + start.x, len);
+     int64_t len = strlen(buffer->lines[start->y] + start->x);
+     if(len) memcpy(itr, buffer->lines[start->y] + start->x, len);
      itr[len] = '\n'; // add newline
      itr += len + 1;
 
-     for(int64_t i = start.y + 1; i < end.y; ++i){
+     for(int64_t i = start->y + 1; i < end->y; ++i){
           len = strlen(buffer->lines[i]);
           memcpy(itr, buffer->lines[i], len);
           itr[len] = '\n';
           itr += len + 1;
      }
 
-     memcpy(itr, buffer->lines[end.y], end.x);
+     memcpy(itr, buffer->lines[end->y], end->x);
      new_str[total_len] = 0;
 
      return new_str;
@@ -1998,26 +1998,26 @@ void* ce_memrchr(const void* s, int c, size_t n)
      return NULL;
 }
 
-int64_t ce_compute_length(Buffer* buffer, Point start, Point end)
+int64_t ce_compute_length(const Buffer* buffer, const Point* start, const Point* end)
 {
      CE_CHECK_PTR_ARG(buffer);
 
-     assert(ce_point_on_buffer(buffer, &start) || start.x == (int64_t)strlen(buffer->lines[start.y]) + 1); // account for newline
-     assert(ce_point_on_buffer(buffer, &end) || end.x == (int64_t)strlen(buffer->lines[end.y]) + 1); // account for newline
+     assert(ce_point_on_buffer(buffer, start) || start->x == (int64_t)strlen(buffer->lines[start->y]) + 1); // account for newline
+     assert(ce_point_on_buffer(buffer, end) || end->x == (int64_t)strlen(buffer->lines[end->y]) + 1); // account for newline
 
      ce_sort_points(&start, &end);
 
      size_t length = 0;
 
-     if( start.y < end.y){
-          length = strlen(buffer->lines[start.y] + start.x) + 1; // account for newline
-          for(int64_t i = start.y + 1; i < end.y; ++i){
+     if( start->y < end->y){
+          length = strlen(buffer->lines[start->y] + start->x) + 1; // account for newline
+          for(int64_t i = start->y + 1; i < end->y; ++i){
                length += strlen(buffer->lines[i]) + 1; // account for newline
           }
-          length += end.x; // do not account for newline
+          length += end->x; // do not account for newline
      }else{
-          assert(start.y == end.y);
-          length += end.x - start.x;
+          assert(start->y == end->y);
+          length += end->x - start->x;
      }
 
      return length;
@@ -2077,10 +2077,10 @@ bool ce_get_word_at_location(Buffer* buffer, const Point* location, Point* word_
 }
 
 // if a > b, swap a and b
-void ce_sort_points(Point* a, Point* b)
+void ce_sort_points(const Point** a, const Point** b)
 {
-     if(b->y < a->y || (b->y == a->y && b->x < a->x)){
-          Point temp = *a;
+     if((*b)->y < (*a)->y || ((*b)->y == (*a)->y && (*b)->x < (*a)->x)){
+          const Point* temp = *a;
           *a = *b;
           *b = temp;
      }

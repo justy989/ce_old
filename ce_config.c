@@ -569,21 +569,8 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
                switch(key1){
                case 'w':
                {
-                    char curr_char;
-                    bool success = ce_get_char(buffer, movement_start, &curr_char);
-                    if(!success) return MOVEMENT_INVALID;
-
-                    if(ce_ispunct(curr_char)){
-                         success = ce_get_homogenous_adjacents(buffer, movement_start, movement_end, ce_ispunct);
-                         if(!success) return MOVEMENT_INVALID;
-                    }else if(isblank(curr_char)){
-                         success = ce_get_homogenous_adjacents(buffer, movement_start, movement_end, isblank);
-                         if(!success) return MOVEMENT_INVALID;
-                    }else{
-                         assert(ce_iswordchar(curr_char));
-                         success = ce_get_homogenous_adjacents(buffer, movement_start, movement_end, ce_iswordchar);
-                         if(!success) return MOVEMENT_INVALID;
-                    }
+                    if(!ce_get_word_at_location(buffer, movement_start, movement_start, movement_end))
+                         return MOVEMENT_INVALID;
                } break;
                case 'W':
                {
@@ -1496,11 +1483,10 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case '*':
           {
                if(!buffer->lines[cursor->y]) break;
-               // TODO: search for the word under the cursor
-               int64_t word_len = ce_find_delta_to_end_of_word(buffer, cursor, true)+1;
-               char* search_str = alloca(word_len+1);
-               strncpy(search_str, &buffer->lines[cursor->y][cursor->x], word_len);
-               search_str[word_len] = '\0';
+
+               Point word_start, word_end;
+               if(!ce_get_word_at_location(buffer, cursor, &word_start, &word_end)) break;
+               char* search_str = ce_dupe_string(buffer, word_start, word_end);
 
                Point match;
                if(ce_find_string(buffer, cursor, search_str, &match)){

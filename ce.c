@@ -1137,21 +1137,22 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                     // syntax highlighting
                     {
                          if(highlighting_left == 0){
-                              if(!inside_double_quote_string && !inside_single_quote_string && !inside_comment){
+                              if(!inside_double_quote_string && !inside_single_quote_string &&
+                                 !inside_comment && !inside_multiline_comment){
                                    highlighting_left = highlight_keyword(line_to_print, c);
                                    if(highlighting_left) attron(COLOR_PAIR(1));
                               }
 
-                              if(!inside_comment && line_to_print[c] == '/'){
-                                   if(line_to_print[c + 1] == '/'){
+                              if(line_to_print[c] == '/'){
+                                   if(!inside_comment && line_to_print[c + 1] == '/'){
                                         attron(COLOR_PAIR(2));
                                         inside_comment = true;
-                                   }else if(line_to_print[c + 1] == '*'){
+                                   }else if(!inside_multiline_comment && line_to_print[c + 1] == '*'){
                                         inside_multiline_comment = true;
                                         attron(COLOR_PAIR(2));
+                                   }else if(inside_multiline_comment && c > 0 && line_to_print[c - 1] == '*'){
+                                        inside_multiline_comment = false;
                                    }
-                              }else if(inside_multiline_comment && line_to_print[c] == '/' && c > 0 && line_to_print[c - 1] == '*'){
-                                   inside_multiline_comment = false;
                               }else if(line_to_print[c] == '"'){
                                    inside_double_quote_string = !inside_double_quote_string;
                                    if(inside_double_quote_string){

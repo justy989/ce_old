@@ -122,6 +122,9 @@ void segv_handler(int signo)
      if(sigaction(SIGSEGV, &sa, NULL) == -1){
           // TODO: handle error
      }
+     pid_t pid = fork();
+     if(pid == 0) abort();
+     ce_message("dumped core for pid %d", pid);
      siglongjmp(segv_ctxt, 1);
 }
 
@@ -230,7 +233,7 @@ int main(int argc, char** argv)
      void* user_data = NULL;
 
      bool done = false;
-     bool stable_sigsevd = false;
+     bool stable_sigsegvd = false;
 
      Config current_config;
      if(!config_open(&current_config, config)){
@@ -274,7 +277,7 @@ int main(int argc, char** argv)
           if(using_stable_config){
                ce_message("stable config sigsegv'd");
                done = true;
-               stable_sigsevd = true;
+               stable_sigsegvd = true;
           }else{
                config_close(&current_config);
                if(!config_revert(&current_config, config, stable_config_contents, stable_config_size)){
@@ -334,7 +337,7 @@ int main(int argc, char** argv)
 
      if(save_messages_on_exit) ce_save_buffer(g_message_buffer, g_message_buffer->filename);
 
-     if(!stable_sigsevd){
+     if(!stable_sigsegvd){
           current_config.destroyer(buffer_list_head, user_data);
           config_close(&current_config);
      }
@@ -351,7 +354,7 @@ int main(int argc, char** argv)
           free(tmp);
      }
 
-     free(stable_config_contents); 
+     free(stable_config_contents);
 
      return 0;
 }

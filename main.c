@@ -194,6 +194,10 @@ int main(int argc, char** argv)
           int fd_flags = fcntl(message_buffer_fds[i], F_GETFL, 0);
           fcntl(message_buffer_fds[i], F_SETFL, fd_flags | O_NONBLOCK);
      }
+
+     fclose(stderr);
+     close(STDERR_FILENO);
+     dup(message_buffer_fds[1]); // redirect stderr to the message buffer
      stderr = fdopen(message_buffer_fds[1], "w");
      setvbuf(stderr, NULL, _IONBF, 0);
      FILE* message_stderr = fdopen(message_buffer_fds[0], "r");
@@ -308,6 +312,10 @@ int main(int argc, char** argv)
      if(current_config.so_handle != stable_config.so_handle)
           config_close(&current_config, buffer_list_head, user_data);
      config_close(&stable_config, buffer_list_head, user_data);
+
+     fclose(message_stderr);
+     close(message_buffer_fds[0]);
+     close(message_buffer_fds[1]);
 
      // free our buffers
      // TODO: I think we want to move this into the config

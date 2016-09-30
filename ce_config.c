@@ -390,6 +390,12 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
           if(i == 0 && node) config_state->view_current->buffer_node = node;
      }
 
+     // setup colors for syntax highlighting
+     init_pair(S_KEYWORD, COLOR_BLUE, COLOR_BACKGROUND);
+     init_pair(S_COMMENT, COLOR_GREEN, COLOR_BACKGROUND);
+     init_pair(S_STRING, COLOR_RED, COLOR_BACKGROUND);
+     init_pair(S_CONSTANT, COLOR_MAGENTA, COLOR_BACKGROUND);
+     init_pair(S_PREPROC, COLOR_YELLOW, COLOR_BACKGROUND);
 
      return true;
 }

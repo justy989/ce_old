@@ -195,16 +195,6 @@ int main(int argc, char** argv)
      if(has_colors() == TRUE){
           start_color();
           use_default_colors();
-
-          // NOTE: just messing with setting up colors
-          int color_id = 1;
-          init_pair(color_id, COLOR_BLUE, COLOR_BACKGROUND);
-          color_id = 2;
-          init_pair(color_id, COLOR_GREEN, COLOR_BACKGROUND);
-          color_id = 3;
-          init_pair(color_id, COLOR_RED, COLOR_BACKGROUND);
-          color_id = 4;
-          init_pair(color_id, COLOR_MAGENTA, COLOR_BACKGROUND);
      }
 
      // init message buffer

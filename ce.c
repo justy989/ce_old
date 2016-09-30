@@ -950,7 +950,6 @@ bool ce_message(const char* format, ...)
 int64_t highlight_keywords(const char* line, int64_t start_offset)
 {
      static const char* keywords [] = {
-          "NULL",
           "__thread",
           "auto",
           "bool",
@@ -1010,6 +1009,42 @@ int64_t highlight_keywords(const char* line, int64_t start_offset)
      return highlighting_left;
 }
 
+int64_t highlight_preprocs(const char* line, int64_t start_offset)
+{
+     static const char* keywords [] = {
+          "define",
+          "include",
+          "undef",
+          "ifdef",
+          "ifndef",
+          "if",
+          "else",
+          "elif",
+          "endif",
+          "error",
+          "pragma",
+          "push",
+          "pop",
+     };
+
+     static const int keyword_count = sizeof(keywords) / sizeof(keywords[0]);
+
+     // exit early if this isn't a preproc cmd
+     if(line[start_offset] != '#') return 0;
+
+     int64_t highlighting_left = 0;
+     for(int64_t k = 0; k < keyword_count; ++k){
+          // NOTE: I wish we could strlen at compile time ! Can we?
+          int64_t keyword_len = strlen(keywords[k]);
+          if(strncmp(line + start_offset + 1, keywords[k], keyword_len) == 0){
+               highlighting_left = keyword_len + 1; // account for missing prepended #
+               break;
+          }
+     }
+
+     return highlighting_left;
+}
+
 typedef enum {
      CT_NONE,
      CT_SINGLE_LINE,
@@ -1038,31 +1073,31 @@ CommentType highlight_comment(const char* line, int64_t start_offset)
      return CT_NONE;
 }
 
-void highlight_quotes(const char* line, int64_t start_offset, int64_t line_len, bool* inside_quotes, char* last_quote_char)
+void highlight_string(const char* line, int64_t start_offset, int64_t line_len, bool* inside_string, char* last_quote_char)
 {
      char ch = line[start_offset];
      if(ch == '"'){
           // ignore single quotes inside double quotes
-          if(*inside_quotes && *last_quote_char == '\''){
+          if(*inside_string && *last_quote_char == '\''){
                return;
           }
-          *inside_quotes = !*inside_quotes;
-          if(*inside_quotes){
+          *inside_string = !*inside_string;
+          if(*inside_string){
                *last_quote_char = ch;
           }
      }else if(ch == '\''){
-          if(*inside_quotes){
+          if(*inside_string){
                if(*last_quote_char == '"'){
                     return;
                }
-               *inside_quotes = false;
+               *inside_string = false;
           }else{
                char next_char = line[start_offset + 1];
                int64_t next_next_index = start_offset + 2;
                char next_next_char = (next_next_index < line_len) ? line[next_next_index] : 0;
 
                if(next_char == '\\' || next_next_char == '\''){
-                    *inside_quotes = true;
+                    *inside_string = true;
                     *last_quote_char = ch;
                }
           }
@@ -1180,18 +1215,17 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
           const char* buffer_line = buffer->lines[i];
           int64_t line_length = strlen(buffer_line);
 
-          // skip line if we are offset by too much and can't show the line
-          if(line_length <= buffer_top_left->x) continue;
           int64_t print_line_length = strlen(buffer_line + buffer_top_left->x);
 
           int64_t min = max_width < print_line_length ? max_width : print_line_length;
           const char* line_to_print = buffer_line + buffer_top_left->x;
 
           if(has_colors() == TRUE){
-               bool inside_quotes = false;
+               bool inside_string = false;
                char last_quote_char = 0;
                bool inside_comment = false;
                int64_t highlighting_left = 0;
+               int highlight_color = 0;
 
                // NOTE: pre-pass check for comments and strings out of view
                for(int64_t c = 0; c < buffer_top_left->x; ++c){
@@ -1210,40 +1244,68 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                          break;
                     }
 
-                    highlight_quotes(buffer_line, c, line_length, &inside_quotes, &last_quote_char);
+                    highlight_string(buffer_line, c, line_length, &inside_string, &last_quote_char);
 
                     // subtract from what is left of the keyword if we found a keyword earlier
-                    if(highlighting_left) highlighting_left--;
+                    if(highlighting_left){
+                         highlighting_left--;
+                    }else{
+                         if(!inside_string){
+                              if(!inside_comment && !inside_multiline_comment){
+                                   int64_t keyword_left = highlight_keywords(buffer_line, c);
+                                   if(keyword_left){
+                                        highlighting_left = keyword_left;
+                                        highlight_color = S_KEYWORD;
+                                   }else{
+                                        keyword_left = highlight_constants(line_to_print, c);
+                                        if(keyword_left){
+                                             highlighting_left = keyword_left;
+                                             highlight_color = S_CONSTANT;
+                                        }else{
+                                             keyword_left = highlight_preprocs(line_to_print, c);
+                                             if(keyword_left){
+                                                  highlighting_left = keyword_left;
+                                                  highlight_color = S_PREPROC;
 
-                    int64_t keyword_left = highlight_keywords(buffer_line, c);
-                    if(keyword_left){
-                         highlighting_left = keyword_left;
+                                             }
+                                        }
+                                   }
+                              }
+                         }
                     }
                }
 
-               if(inside_comment){
-                    attron(COLOR_PAIR(2));
-               }else if(inside_multiline_comment){
-                    attron(COLOR_PAIR(2));
-               }else if(inside_quotes){
-                    attron(COLOR_PAIR(3));
+               // skip line if we are offset by too much and can't show the line
+               if(line_length <= buffer_top_left->x) continue;
+
+               if(inside_comment || inside_multiline_comment){
+                    attron(COLOR_PAIR(S_COMMENT));
+               }else if(inside_string){
+                    attron(COLOR_PAIR(S_STRING));
                }else if(highlighting_left){
-                    attron(COLOR_PAIR(1));
+                    attron(COLOR_PAIR(highlight_color));
                }
 
                for(int64_t c = 0; c < min; ++c){
                     // syntax highlighting
                     if(highlighting_left == 0){
-                         if(!inside_quotes){
+                         if(!inside_string){
                               if(!inside_comment && !inside_multiline_comment){
                                    highlighting_left = highlight_keywords(line_to_print, c);
                               }
 
                               if(highlighting_left){
-                                   attron(COLOR_PAIR(1));
+                                   attron(COLOR_PAIR(S_KEYWORD));
                               }else{
                                    highlighting_left = highlight_constants(line_to_print, c);
-                                   if(highlighting_left) attron(COLOR_PAIR(4));
+                                   if(highlighting_left){
+                                        attron(COLOR_PAIR(S_CONSTANT));
+                                   }else{
+                                        highlighting_left = highlight_preprocs(line_to_print, c);
+                                        if(highlighting_left){
+                                             attron(COLOR_PAIR(S_PREPROC));
+                                        }
+                                   }
                               }
                          }
 
@@ -1253,23 +1315,23 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                               break;
                          case CT_SINGLE_LINE:
                               inside_comment = true;
-                              attron(COLOR_PAIR(2));
+                              attron(COLOR_PAIR(S_COMMENT));
                               break;
                          case CT_BEGIN_MULTILINE:
                               inside_multiline_comment = true;
-                              attron(COLOR_PAIR(2));
+                              attron(COLOR_PAIR(S_COMMENT));
                               break;
                          case CT_END_MULTILINE:
                               inside_multiline_comment = false;
                               break;
                          }
 
-                         bool pre_quote_check = inside_quotes;
-                         highlight_quotes(line_to_print, c, print_line_length, &inside_quotes, &last_quote_char);
+                         bool pre_quote_check = inside_string;
+                         highlight_string(line_to_print, c, print_line_length, &inside_string, &last_quote_char);
 
-                         // if inside_quotes has changed, update the color
-                         if(pre_quote_check != inside_quotes){
-                              if(inside_quotes) attron(COLOR_PAIR(3));
+                         // if inside_string has changed, update the color
+                         if(pre_quote_check != inside_string){
+                              if(inside_string) attron(COLOR_PAIR(S_STRING));
                               else highlighting_left = 1;
                          }
                     }else{
@@ -1277,12 +1339,10 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                          if(highlighting_left == 0){
                               standend();
 
-                              if(inside_comment){
-                                   attron(COLOR_PAIR(2));
-                              }else if(inside_multiline_comment){
-                                   attron(COLOR_PAIR(2));
-                              }else if(inside_quotes){
-                                   attron(COLOR_PAIR(3));
+                              if(inside_comment || inside_multiline_comment){
+                                   attron(COLOR_PAIR(S_COMMENT));
+                              }else if(inside_string){
+                                   attron(COLOR_PAIR(S_STRING));
                               }
                          }
                     }

@@ -24,6 +24,14 @@
 #define COLOR_BRIGHT_CYAN 14
 #define COLOR_BRIGHT_WHITE 15
 
+typedef enum {
+     S_KEYWORD = 1,
+     S_COMMENT,
+     S_STRING,
+     S_CONSTANT,
+     S_PREPROC,
+} Syntax;
+
 #define CE_CHECK_PTR_ARG(arg)                                                 \
      if(!arg){                                                                \
           ce_message("%s() received NULL argument %s\n", __FUNCTION__, #arg); \

@@ -302,7 +302,10 @@ BufferNode* open_file_buffer(BufferNode* head, const char* filename)
 {
      BufferNode* itr = head;
      while(itr){
-          if(!strcmp(itr->buffer->name, filename)) break; // already open
+          if(!strcmp(itr->buffer->name, filename)){
+               ce_message("switching to already open buffer for: '%s'", filename);
+               break; // already open
+          }
           itr = itr->next;
      }
 
@@ -367,7 +370,6 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
      config_state->view_input->buffer_node = input_buffer_node;
 
      *user_data = config_state;
-
 
      BufferNode* itr = head;
 
@@ -960,9 +962,15 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           Point movement_start, movement_end;
 
           switch(config_state->command_key){
-          case 27: // ESC
           default:
                break;
+          case 27: // ESC
+          {
+               if(config_state->input){
+                    input_end(config_state); 
+                    config_state->input = false; 
+               }
+          } break; 
           case 'q':
                return false; // exit !
           case 'J':
@@ -1330,7 +1338,14 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     // no movement yet, wait for one!
                     return true;
                default:
-                    ce_set_char(buffer, cursor, key);
+               {
+                    char ch = 0;
+                    if(ce_get_char(buffer, cursor, &ch)){
+                         if(ce_set_char(buffer, cursor, key)){
+                              ce_commit_change_char(&buffer_state->commit_tail, cursor, cursor, cursor, key, ch);
+                         }
+                    }
+               }
                }
           } break;
           case 'H':
@@ -1531,10 +1546,12 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }else{
                     input_end(config_state);
                     // just grab the first line and load it as a file
-                    BufferNode* new_node = open_file_buffer(head, config_state->view_input->buffer_node->buffer->lines[0]);
-                    if(new_node){
-                         config_state->view_current->buffer_node = new_node;
-                         config_state->view_current->cursor = (Point){0, 0};
+                    for(int64_t i = 0; i < config_state->view_input->buffer_node->buffer->line_count; ++i){
+                         BufferNode* new_node = open_file_buffer(head, config_state->view_input->buffer_node->buffer->lines[i]);
+                         if(i == 0 && new_node){
+                              config_state->view_current->buffer_node = new_node;
+                              config_state->view_current->cursor = (Point){0, 0};
+                         }
                     }
                }
           }

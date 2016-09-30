@@ -924,6 +924,68 @@ bool ce_save_buffer(const Buffer* buffer, const char* filename)
      return true;
 }
 
+int64_t highlight_keyword(const char* line, int64_t start_offset)
+{
+     static const char* keywords [] = {
+          "NULL",
+          "__thread",
+          "auto",
+          "bool",
+          "break",
+          "case",
+          "char",
+          "const",
+          "continue",
+          "default",
+          "do",
+          "double",
+          "else",
+          "enum",
+          "extern",
+          "float",
+          "for",
+          "goto",
+          "if",
+          "inline",
+          "int",
+          "register",
+          "return",
+          "short",
+          "signed",
+          "sizeof",
+          "static",
+          "struct",
+          "switch",
+          "typedef",
+          "typeof",
+          "union",
+          "unsigned",
+          "void",
+          "volatile",
+          "while",
+     };
+
+     static const int keyword_count = sizeof(keywords) / sizeof(keywords[0]);
+
+     int64_t highlighting_left = 0;
+     for(int64_t k = 0; k < keyword_count; ++k){
+          int64_t keyword_len = strlen(keywords[k]);
+          if(strncmp(line + start_offset, keywords[k], keyword_len) == 0){
+               char pre_char = 0;
+               char post_char = line[start_offset + keyword_len];
+               if(start_offset > 0) pre_char = line[start_offset - 1];
+
+               if(!isalnum(pre_char) && pre_char != '_' &&
+                  !isalnum(post_char) && post_char != '_'){
+                    highlighting_left = keyword_len;
+                    break;
+               }
+          }
+     }
+
+     return highlighting_left;
+}
+
 bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Point* term_bottom_right,
                     const Point* buffer_top_left)
 {
@@ -971,45 +1033,35 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
           return false;
      }
 
-     char line_to_print[g_terminal_dimensions->x];
-
      int64_t max_width = (term_bottom_right->x - term_top_left->x) + 1;
      int64_t last_line = buffer_top_left->y + (term_bottom_right->y - term_top_left->y);
      if(last_line >= buffer->line_count) last_line = buffer->line_count - 1;
-
-     static const char* keywords [] = {
-          "if",
-          "else",
-          "for",
-          "return",
-          "continue",
-          "switch",
-          "break",
-          "enum",
-          "while",
-          "char",
-          "int",
-          "bool",
-          "const",
-          "void",
-          "NULL",
-          "case",
-          "typedef",
-          "default",
-          "struct",
-          "static",
-          "inline",
-          "volatile",
-          "extern",
-          "union",
-          "sizeof",
-          "typeof",
-          "do",
-          "__thread",
-     };
-
-     static int keyword_count = sizeof(keywords) / sizeof(keywords[0]);
      bool inside_multiline_comment = false;
+
+     // do a pass looking for only an ending multiline comment
+     for(int64_t i = buffer_top_left->y; i <= last_line; ++i) {
+          move(term_top_left->y + (i - buffer_top_left->y), term_top_left->x);
+
+          if(!buffer->lines[i][0]) continue;
+          const char* buffer_line = buffer->lines[i];
+          int64_t len = strlen(buffer_line);
+          bool found_open_multiline_comment = false;
+
+          for(int64_t c = 0; c < len; ++c){
+               if(buffer_line[c] == '/' && buffer_line[c + 1] == '*'){
+                    found_open_multiline_comment = true;
+                    break;
+               }
+
+               if(buffer_line[c] == '*' && buffer_line[c + 1] == '/'){
+                    inside_multiline_comment = true;
+               }
+          }
+
+          if(found_open_multiline_comment) break;
+     }
+
+     // TODO: if we found a closing multiline comment, make sure there is a matching opening multiline comment
 
      for(int64_t i = buffer_top_left->y; i <= last_line; ++i) {
           move(term_top_left->y + (i - buffer_top_left->y), term_top_left->x);
@@ -1020,57 +1072,75 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
 
           // skip line if we are offset by too much and can't show the line
           if(line_length <= buffer_top_left->x) continue;
-          buffer_line += buffer_top_left->x;
-          line_length = strlen(buffer_line);
+          line_length = strlen(buffer_line + buffer_top_left->x);
 
           int64_t min = max_width < line_length ? max_width : line_length;
-          memset(line_to_print, 0, min + 1);
-          strncpy(line_to_print, buffer_line, min);
+          const char* line_to_print = buffer_line + buffer_top_left->x;
 
-          if(inside_multiline_comment) attron(COLOR_PAIR(2));
-
-          bool inside_string = false;
+          bool inside_double_quote_string = false;
+          bool inside_single_quote_string = false;
+          bool inside_comment = inside_multiline_comment;
           int64_t highlighting_left = 0;
+
+          // NOTE: check for comments and strings out of view
+          for(int64_t c = 0; c < buffer_top_left->x; ++c){
+               if(buffer_line[c] == '/' && buffer_line[c + 1] == '/'){
+                    inside_comment = true;
+               }
+
+               if(buffer_line[c] == '"'){
+                    inside_double_quote_string = !inside_double_quote_string;
+               }
+
+               if(!inside_double_quote_string && buffer_line[c] == '\''){
+                    inside_single_quote_string = !inside_single_quote_string;
+               }
+
+               // subtract from what is left of the keyword if we found a keyword earlier
+               if(highlighting_left) highlighting_left--;
+
+               if(!inside_comment && !inside_double_quote_string && !inside_single_quote_string){
+                    int64_t keyword_left = highlight_keyword(buffer_line, c);
+                    if(keyword_left) highlighting_left = keyword_left;
+               }
+          }
+
+          if(inside_multiline_comment || inside_comment) attron(COLOR_PAIR(2));
+          else if(inside_double_quote_string || inside_single_quote_string) attron(COLOR_PAIR(3));
+          else if(highlighting_left) attron(COLOR_PAIR(1));
 
           if(has_colors() == TRUE){
                for(int64_t c = 0; c < min; ++c){
                     // syntax highlighting
                     {
                          if(highlighting_left == 0){
-                              if(!inside_string && !inside_multiline_comment){
-                                   for(int64_t k = 0; k < keyword_count; ++k){
-                                        int64_t keyword_len = strlen(keywords[k]);
-                                        if(strncmp(line_to_print + c, keywords[k], keyword_len) == 0){
-                                             char pre_char = 0;
-                                             char post_char = line_to_print[c + keyword_len];
-                                             if(c > 0) pre_char = line_to_print[c - 1];
-
-                                             if(!isalnum(pre_char) && pre_char != '_' &&
-                                                !isalnum(post_char) && post_char != '_'){
-                                                  highlighting_left = keyword_len;
-                                                  attron(COLOR_PAIR(1));
-                                                  break;
-                                             }
-                                        }
-                                   }
+                              if(!inside_double_quote_string && !inside_single_quote_string &&
+                                 !inside_comment && !inside_multiline_comment){
+                                   highlighting_left = highlight_keyword(line_to_print, c);
+                                   if(highlighting_left) attron(COLOR_PAIR(1));
                               }
 
                               if(line_to_print[c] == '/'){
-                                   if(line_to_print[c + 1] == '/'){
+                                   if(!inside_comment && line_to_print[c + 1] == '/'){
                                         attron(COLOR_PAIR(2));
-                                        highlighting_left = min;
-                                   }else if(line_to_print[c + 1] == '*'){
+                                        inside_comment = true;
+                                   }else if(!inside_multiline_comment && line_to_print[c + 1] == '*'){
                                         inside_multiline_comment = true;
                                         attron(COLOR_PAIR(2));
-                                        highlighting_left = min;
+                                   }else if(inside_multiline_comment && c > 0 && line_to_print[c - 1] == '*'){
+                                        inside_multiline_comment = false;
                                    }
-                              }else if(inside_multiline_comment && line_to_print[c] == '*' && line_to_print[c + 1] == '/'){
-                                   inside_multiline_comment = false;
-                                   highlighting_left = 2;
-                              }else if(!inside_multiline_comment && (line_to_print[c] == '"' || line_to_print[c] == '\'')){
+                              }else if(line_to_print[c] == '"'){
+                                   inside_double_quote_string = !inside_double_quote_string;
+                                   if(inside_double_quote_string){
+                                        attron(COLOR_PAIR(3));
+                                   }else{
+                                        highlighting_left = 1;
+                                   }
+                              }else if(!inside_double_quote_string && line_to_print[c] == '\''){
                                    // NOTE: obviously this doesn't work if a " or ' is inside a string
-                                   inside_string = !inside_string;
-                                   if(inside_string){
+                                   inside_single_quote_string = !inside_single_quote_string;
+                                   if(inside_single_quote_string){
                                         attron(COLOR_PAIR(3));
                                    }else{
                                         highlighting_left = 1;
@@ -1079,27 +1149,27 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                          }else{
                               highlighting_left--;
                               if(highlighting_left == 0){
-                                   attroff(COLOR_PAIR(1));
-                                   attroff(COLOR_PAIR(2));
-                                   attroff(COLOR_PAIR(3));
+                                   standend();
+                              }
+                              if(inside_comment || inside_multiline_comment){
+                                   attron(COLOR_PAIR(2));
                               }
                          }
                     }
 
-                    // print the character
+                    // print each character
                     addch(line_to_print[c]);
                }
-
-               standend();
           }else{
                for(int64_t c = 0; c < min; ++c){
-                    // print the character
+                    // print each character
                     addch(line_to_print[c]);
                }
           }
+
+          standend();
      }
 
-     standend();
      return true;
 }
 
@@ -1501,7 +1571,6 @@ bool ce_commit_undo(Buffer* buffer, BufferCommitNode** tail, Point* cursor)
           ce_insert_string(buffer, &commit->start, commit->str);
           break;
      case BCT_CHANGE_CHAR:
-          ce_remove_char(buffer, &commit->start);
           ce_set_char(buffer, &commit->start, commit->prev_c);
           break;
      case BCT_CHANGE_STRING:
@@ -1554,7 +1623,6 @@ bool ce_commit_redo(Buffer* buffer, BufferCommitNode** tail, Point* cursor)
           ce_remove_string(buffer, &commit->start, strlen(commit->str));
           break;
      case BCT_CHANGE_CHAR:
-          ce_remove_char(buffer, &commit->start);
           ce_set_char(buffer, &commit->start, commit->c);
           break;
      case BCT_CHANGE_STRING:

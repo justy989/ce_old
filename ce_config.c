@@ -1537,6 +1537,17 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }
           }
           break;
+          case '#':
+          {
+               if(!buffer->lines[cursor->y]) break;
+
+               Point word_start, word_end;
+               if(!ce_get_word_at_location(buffer, cursor, &word_start, &word_end)) break;
+               char* search_str = ce_dupe_string(buffer, &word_start, &word_end);
+               add_yank(config_state, '/', search_str, YANK_NORMAL);
+               config_state->search_command.direction = CE_UP;
+               goto search;
+          } break;
           case '*':
           {
                if(!buffer->lines[cursor->y]) break;

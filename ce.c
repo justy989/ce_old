@@ -1286,10 +1286,6 @@ bool ce_move_cursor_to_beginning_of_file(const Buffer* buffer, Point* cursor)
      CE_CHECK_PTR_ARG(cursor);
 
      *cursor = (Point) {0, 0};
-     while(!ce_point_on_buffer(buffer, cursor)){
-          if(cursor->y >= buffer->line_count) return false;
-          cursor->y++;
-     }
 
      return true;
 }

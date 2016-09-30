@@ -24,6 +24,14 @@
 #define COLOR_BRIGHT_CYAN 14
 #define COLOR_BRIGHT_WHITE 15
 
+typedef enum {
+     S_KEYWORD = 1,
+     S_COMMENT,
+     S_STRING,
+     S_CONSTANT,
+     S_PREPROC,
+} Syntax;
+
 #define CE_CHECK_PTR_ARG(arg)                                                 \
      if(!arg){                                                                \
           ce_message("%s() received NULL argument %s\n", __FUNCTION__, #arg); \
@@ -123,7 +131,7 @@ bool ce_remove_char(Buffer* buffer, const Point* location);
 void ce_clear_lines(Buffer* buffer);
 char* ce_dupe_string(Buffer* buffer, const Point* start, const Point* end);
 char* ce_dupe_line(Buffer* buffer, int64_t line);
-bool ce_get_char(Buffer* buffer, const Point* location, char* c);
+bool ce_get_char(const Buffer* buffer, const Point* location, char* c);
 bool ce_set_char(Buffer* buffer, const Point* location, char c);
 int64_t ce_find_delta_to_end_of_line(const Buffer* buffer, Point* cursor);
 int64_t ce_find_delta_to_char_forward_in_line(Buffer* buffer, const Point* location, char c);
@@ -136,7 +144,7 @@ bool ce_find_string(Buffer* buffer, const Point* location, const char* search_st
 bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor);
 int ce_ispunct(int c);
 int ce_iswordchar(int c);
-bool ce_get_homogenous_adjacents(Buffer* buffer, Point* start, Point* end, int (*is_homogenous)(int));
+bool ce_get_homogenous_adjacents(const Buffer* buffer, Point* start, Point* end, int (*is_homogenous)(int));
 bool ce_get_word_at_location(Buffer* buffer, const Point* location, Point* word_start, Point* word_end);
 
 // NOTE: passing NULL to string causes an empty line to be inserted

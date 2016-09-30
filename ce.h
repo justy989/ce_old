@@ -35,7 +35,12 @@ typedef struct {
      int64_t y;
 } Point;
 
-// TODO: ce_offset_point(Point* p, int64_t dx, int64_t dy);
+typedef enum{
+     CE_UP = -1,
+     CE_DOWN = 1
+} Direction;
+
+Direction ce_reverse_direction(Direction to_reverse);
 
 typedef struct {
      char** lines; // '\0' terminated, does not contain newlines, NULL if empty
@@ -133,7 +138,7 @@ int64_t ce_find_delta_to_beginning_of_word(Buffer* buffer, const Point* location
 int64_t ce_find_delta_to_end_of_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
 int64_t ce_find_next_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
 bool ce_find_match(Buffer* buffer, const Point* location, Point* delta);
-bool ce_find_string(Buffer* buffer, const Point* location, const char* search_str, Point* match);
+bool ce_find_string(Buffer* buffer, const Point* location, const char* search_str, Point* match, Direction direction);
 bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor);
 int ce_ispunct(int c);
 int ce_iswordchar(int c);

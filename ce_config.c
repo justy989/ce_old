@@ -41,7 +41,7 @@ char* backspace_get_string(BackspaceNode* head)
 
      char* str = malloc(len + 1);
      if(!str){
-          ce_message("%s() failed to alloc string");
+          ce_message("%s() failed to alloc string", __FUNCTION__);
           return NULL;
      }
 
@@ -335,7 +335,6 @@ int64_t strlen_ignore_newlines(const char* str)
 bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** argv, void** user_data)
 {
      // NOTE: need to set these in this module
-     g_message_buffer = head->buffer;
      g_terminal_dimensions = terminal_dimensions;
 
      // setup the config's state
@@ -1566,16 +1565,28 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }else{
                     input_end(config_state);
                     if(config_state->view_input->buffer_node->buffer->line_count){
-                         Point location;
+                         Point match;
                          if(ce_find_string(config_state->view_current->buffer_node->buffer,
                                            &config_state->view_current->cursor,
-                                           config_state->view_input->buffer_node->buffer->lines[0], &location)){
+                                           config_state->view_input->buffer_node->buffer->lines[0], &match)){
+                              add_yank(config_state, '/', strdup(config_state->view_input->buffer_node->buffer->lines[0]), YANK_NORMAL);
                               ce_set_cursor(config_state->view_current->buffer_node->buffer,
-                                             &config_state->view_current->cursor, &location);
+                                             &config_state->view_current->cursor, &match);
                          }
                     }
                }
           }
+          case 'n':
+          {
+               YankNode* yank = find_yank(config_state, '/');
+               if(yank){
+                    assert(yank->mode == YANK_NORMAL);
+                    Point match;
+                    if(ce_find_string(buffer, cursor, yank->text, &match)){
+                         ce_set_cursor(buffer, cursor, &match);
+                    }
+               }
+          } break;
           break;
           case '=':
           {

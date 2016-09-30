@@ -84,6 +84,13 @@ typedef struct BufferCommitNode {
      struct BufferCommitNode* next;
 } BufferCommitNode;
 
+typedef enum{
+     ARROW_UP = 256, // extended ascii + 1
+     ARROW_DOWN,
+     ARROW_RIGHT,
+     ARROW_LEFT,
+} ce_keys;
+
 // horizontal split []|[]
 
 // vertical split

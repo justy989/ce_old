@@ -114,7 +114,6 @@ typedef void ce_destroyer(BufferNode*, void*);
 typedef bool ce_key_handler(int, BufferNode*, void*);
 typedef void ce_view_drawer(const BufferNode*, void*);
 
-extern Buffer* g_message_buffer;
 extern Point* g_terminal_dimensions;
 
 int64_t ce_count_string_lines(const char* string);
@@ -159,7 +158,7 @@ bool ce_set_line(Buffer* buffer, int64_t line, const char* string);
 bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Point* term_bottom_right,
                     const Point* buffer_top_left);
 
-bool ce_message(const char* format, ...);
+#define ce_message(...) fprintf(stderr,__VA_ARGS__); fprintf(stderr,"\n");
 
 // NOTE: we may want to consider taking tail rather than head
 BufferNode* ce_append_buffer_to_list(BufferNode* head, Buffer* buffer);

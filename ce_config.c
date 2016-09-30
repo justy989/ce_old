@@ -505,6 +505,11 @@ int ispunct_or_iswordchar(int c)
      return ce_ispunct(c) || ce_iswordchar(c);
 }
 
+int isnotquote(int c)
+{
+     return c != '"';
+}
+
 typedef enum{
      MOVEMENT_CONTINUE = '\0',
      MOVEMENT_COMPLETE,
@@ -592,6 +597,10 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
                          success = ce_get_homogenous_adjacents(buffer, movement_start, movement_end, ispunct_or_iswordchar);
                          if(!success) return MOVEMENT_INVALID;
                     }
+               } break;
+               case '"':
+               {
+                    if(!ce_get_homogenous_adjacents(buffer, movement_start, movement_end, isnotquote)) return MOVEMENT_INVALID;
                } break;
                case MOVEMENT_CONTINUE:
                     return MOVEMENT_CONTINUE;

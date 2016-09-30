@@ -880,6 +880,23 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     cursor->x = 0;
                }
           } break;
+          case ARROW_UP:
+          case ARROW_DOWN:
+          case ARROW_LEFT:
+          case ARROW_RIGHT:
+          {
+               config_state->movement_keys[0] = key;
+               config_state->movement_multiplier = 1;
+
+               movement_state_t m_state = try_generic_movement(config_state, buffer, cursor, &movement_start, &movement_end);
+               if(m_state == MOVEMENT_CONTINUE) return true;
+
+               // this is a generic movement
+               if(movement_end.x == cursor->x && movement_end.y == cursor->y)
+                    ce_set_cursor(buffer, cursor, &movement_start);
+               else
+                    ce_set_cursor(buffer, cursor, &movement_end);
+          } break;
 #if 0
           case 8: // Ctrl + h
           {
@@ -1754,10 +1771,10 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }
           } break;
           }
-
-          // if we've made it to here, the command is complete
-          clear_keys(config_state);
      }
+
+     // if we've made it to here, the command is complete
+     clear_keys(config_state);
 
      return true;
 }

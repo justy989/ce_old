@@ -137,10 +137,12 @@ static int ce_getch()
      int k0, k1, k2;
 
      while(1){
+          timeout(-1); // getch() blocking
           switch(k0 = getch()){
           case ERR:
                continue;
           case 27:
+               timeout(0); // getch() non-blocking
                switch(k1 = getch()){
                case '[':
                     switch(k2 = getch()){
@@ -207,7 +209,6 @@ int main(int argc, char** argv)
      initscr();
      cbreak();
      noecho();
-     timeout(0);
 
      if(has_colors() == TRUE){
           start_color();

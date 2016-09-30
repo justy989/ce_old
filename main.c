@@ -145,6 +145,8 @@ const char* random_greeting()
           "Found a bug? It's a feature.",
           "Yo.",
           "Slurp'n up whitespace since 2016",
+          "Welcome to GNU Emacs, one component of the GNU/Linux operating system.",
+          "ce, the world's only editor with a Michelin star.",
      };
 
      srand(time(NULL));
@@ -201,6 +203,8 @@ int main(int argc, char** argv)
           init_pair(color_id, COLOR_GREEN, COLOR_BACKGROUND);
           color_id = 3;
           init_pair(color_id, COLOR_RED, COLOR_BACKGROUND);
+          color_id = 4;
+          init_pair(color_id, COLOR_MAGENTA, COLOR_BACKGROUND);
      }
 
      // init message buffer

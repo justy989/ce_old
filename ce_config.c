@@ -41,7 +41,7 @@ char* backspace_get_string(BackspaceNode* head)
 
      char* str = malloc(len + 1);
      if(!str){
-          ce_message("%s() failed to alloc string");
+          ce_message("%s() failed to alloc string", __FUNCTION__);
           return NULL;
      }
 
@@ -302,7 +302,10 @@ BufferNode* open_file_buffer(BufferNode* head, const char* filename)
 {
      BufferNode* itr = head;
      while(itr){
-          if(!strcmp(itr->buffer->name, filename)) break; // already open
+          if(!strcmp(itr->buffer->name, filename)){
+               ce_message("switching to already open buffer for: '%s'", filename);
+               break; // already open
+          }
           itr = itr->next;
      }
 
@@ -332,7 +335,6 @@ int64_t strlen_ignore_newlines(const char* str)
 bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** argv, void** user_data)
 {
      // NOTE: need to set these in this module
-     g_message_buffer = head->buffer;
      g_terminal_dimensions = terminal_dimensions;
 
      // setup the config's state
@@ -368,7 +370,6 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
      config_state->view_input->buffer_node = input_buffer_node;
 
      *user_data = config_state;
-
 
      BufferNode* itr = head;
 
@@ -1009,9 +1010,15 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           // must handle the case a movement is not available yet.
 
           switch(config_state->command_key){
-          case 27: // ESC
           default:
                break;
+          case 27: // ESC
+          {
+               if(config_state->input){
+                    input_end(config_state); 
+                    config_state->input = false; 
+               }
+          } break; 
           case 'q':
                return false; // exit !
           case 'J':
@@ -1394,7 +1401,14 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     // no movement yet, wait for one!
                     return true;
                default:
-                    ce_set_char(buffer, cursor, key);
+               {
+                    char ch = 0;
+                    if(ce_get_char(buffer, cursor, &ch)){
+                         if(ce_set_char(buffer, cursor, key)){
+                              ce_commit_change_char(&buffer_state->commit_tail, cursor, cursor, cursor, key, ch);
+                         }
+                    }
+               }
                }
           } break;
           case 'H':
@@ -1599,10 +1613,12 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }else{
                     input_end(config_state);
                     // just grab the first line and load it as a file
-                    BufferNode* new_node = open_file_buffer(head, config_state->view_input->buffer_node->buffer->lines[0]);
-                    if(new_node){
-                         config_state->view_current->buffer_node = new_node;
-                         config_state->view_current->cursor = (Point){0, 0};
+                    for(int64_t i = 0; i < config_state->view_input->buffer_node->buffer->line_count; ++i){
+                         BufferNode* new_node = open_file_buffer(head, config_state->view_input->buffer_node->buffer->lines[i]);
+                         if(i == 0 && new_node){
+                              config_state->view_current->buffer_node = new_node;
+                              config_state->view_current->cursor = (Point){0, 0};
+                         }
                     }
                }
           }
@@ -1616,16 +1632,28 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }else{
                     input_end(config_state);
                     if(config_state->view_input->buffer_node->buffer->line_count){
-                         Point delta;
+                         Point match;
                          if(ce_find_string(config_state->view_current->buffer_node->buffer,
                                            &config_state->view_current->cursor,
-                                           config_state->view_input->buffer_node->buffer->lines[0], &delta)){
+                                           config_state->view_input->buffer_node->buffer->lines[0], &match)){
+                              add_yank(config_state, '/', strdup(config_state->view_input->buffer_node->buffer->lines[0]), YANK_NORMAL);
                               ce_set_cursor(config_state->view_current->buffer_node->buffer,
-                                             &config_state->view_current->cursor, &delta);
+                                             &config_state->view_current->cursor, &match);
                          }
                     }
                }
           }
+          case 'n':
+          {
+               YankNode* yank = find_yank(config_state, '/');
+               if(yank){
+                    assert(yank->mode == YANK_NORMAL);
+                    Point match;
+                    if(ce_find_string(buffer, cursor, yank->text, &match)){
+                         ce_set_cursor(buffer, cursor, &match);
+                    }
+               }
+          } break;
           break;
           case '=':
           {

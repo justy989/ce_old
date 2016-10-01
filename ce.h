@@ -153,7 +153,6 @@ bool ce_append_line(Buffer* buffer, const char* string);
 bool ce_insert_newline(Buffer* buffer, int64_t line);
 bool ce_join_line(Buffer* buffer, int64_t line);
 bool ce_remove_line(Buffer* buffer, int64_t line);
-bool ce_set_line(Buffer* buffer, int64_t line, const char* string);
 
 bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Point* term_bottom_right,
                     const Point* buffer_top_left);

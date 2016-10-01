@@ -113,6 +113,7 @@ void ce_clear_lines(Buffer* buffer)
           }
 
           free(buffer->lines);
+          buffer->lines = NULL;
           buffer->line_count = 0;
      }
 }
@@ -881,24 +882,6 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
           }
      }
 
-     return true;
-}
-
-// NOTE: unused/untested
-bool ce_set_line(Buffer* buffer, int64_t line, const char* string)
-{
-     CE_CHECK_PTR_ARG(buffer);
-
-     if(line < 0 || line >= buffer->line_count){
-          ce_message("%s() line %"PRId64" outside buffer with %"PRId64" lines", __FUNCTION__, line, buffer->line_count);
-          return false;
-     }
-
-     if(buffer->lines[line]){
-          free(buffer->lines[line]);
-     }
-
-     buffer->lines[line] = strdup(string);
      return true;
 }
 

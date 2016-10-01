@@ -34,23 +34,23 @@ typedef void test_func(bool*);
 
 // NOTE: In registering tests, I'm so sick of the freakin pre-processor being lame, so I'm going to take
 //       advantage of the knowledge that my globals are layed out sequentially
-#define RUN_TESTS()                                      \
-{                                                        \
-     Results results = {0, 0};                           \
-     int test_count = __COUNTER__;                       \
-     printf("executing %d tests\n\n", test_count);       \
-     for(int i = 0; i < test_count; ++i){                \
-          bool failed = false;                           \
-          (*(&g_test_func_0 + i))(&failed);              \
-          if(failed) results.failed++;                   \
-          else results.passed++;                         \
-     }                                                   \
-     if(results.failed){                                 \
-          printf("%d test(s) failed\n", results.failed); \
-          return 1;                                      \
-     }                                                   \
-     printf("\nall test(s) passed\n");                   \
-     return 0;                                           \
+#define RUN_TESTS()                                        \
+{                                                          \
+     Results results = {0, 0};                             \
+     int test_count = __COUNTER__;                         \
+     printf("executing %d tests\n\n", test_count);         \
+     for(int i = 0; i < test_count; ++i){                  \
+          bool failed = false;                             \
+          (*(&g_test_func_0 + i))(&failed);                \
+          if(failed) results.failed++;                     \
+          else results.passed++;                           \
+     }                                                     \
+     if(results.failed){                                   \
+          printf("\n%d test(s) failed\n", results.failed); \
+          return 1;                                        \
+     }                                                     \
+     printf("\nall test(s) passed\n");                     \
+     return 0;                                             \
 }
 
 #endif

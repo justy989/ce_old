@@ -324,7 +324,7 @@ TEST(sanity_append_line)
 {
      Buffer buffer = {};
      buffer.line_count = 1;
-     buffer.lines = malloc(1 * sizeof(char**));
+     buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
 
      ce_append_line(&buffer, "ARE AWESOME");
@@ -341,7 +341,7 @@ TEST(sanity_clear_lines)
 {
      Buffer buffer = {};
      buffer.line_count = 2;
-     buffer.lines = malloc(2 * sizeof(char**));
+     buffer.lines = malloc(2 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
      buffer.lines[1] = strdup("ARE AWESOME");
 
@@ -357,7 +357,7 @@ TEST(sanity_dupe_string)
 {
      Buffer buffer = {};
      buffer.line_count = 1;
-     buffer.lines = malloc(1 * sizeof(char**));
+     buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
 
      Point start = {1, 0};
@@ -376,7 +376,7 @@ TEST(sanity_dupe_string_multiline)
 {
      Buffer buffer = {};
      buffer.line_count = 3;
-     buffer.lines = malloc(3 * sizeof(char**));
+     buffer.lines = malloc(3 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
      buffer.lines[1] = strdup("ARE");
      buffer.lines[2] = strdup("AWESOME");
@@ -396,7 +396,7 @@ TEST(sanity_dupe_line)
 {
      Buffer buffer = {};
      buffer.line_count = 3;
-     buffer.lines = malloc(3 * sizeof(char**));
+     buffer.lines = malloc(3 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
      buffer.lines[1] = strdup("ARE");
      buffer.lines[2] = strdup("AWESOME");
@@ -413,7 +413,7 @@ TEST(sanity_get_char)
 {
      Buffer buffer = {};
      buffer.line_count = 1;
-     buffer.lines = malloc(1 * sizeof(char**));
+     buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
 
      char ch = 0;
@@ -429,15 +429,421 @@ TEST(sanity_set_char)
 {
      Buffer buffer = {};
      buffer.line_count = 1;
-     buffer.lines = malloc(1 * sizeof(char**));
+     buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
 
      Point point = {2, 0};
      ce_set_char(&buffer, &point, 'R');
 
+     ASSERT(buffer.line_count == 1);
      EXPECT(strcmp(buffer.lines[0], "TAROS") == 0);
 
      ce_free_buffer(&buffer);
+}
+
+#if 0 // NOTE: unsure why I can't get ce_find_match to work here
+TEST(sanity_find_match_same_line)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TA COS ARE TA COS");
+
+     Point point = {2, 0};
+     Point delta = {};
+     ce_find_match(&buffer, &point, &delta);
+
+     EXPECT(delta.x == 11);
+     EXPECT(delta.y == 0);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(sanity_find_match_next_line)
+{
+     Buffer buffer = {};
+     buffer.line_count = 2;
+     buffer.lines = malloc(2 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS ARE AWESOME");
+     buffer.lines[1] = strdup("TACOS ARE REVOLUTIONARY");
+
+     Point point = {6, 0};
+     Point delta = {};
+     ce_find_match(&buffer, &point, &delta);
+
+     EXPECT(delta.x == 6);
+     EXPECT(delta.y == 1);
+
+     ce_free_buffer(&buffer);
+}
+#endif
+
+TEST(sanity_find_match_same_line)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS ARE AWESOME");
+
+     Point point = {2, 0};
+     Point match = {};
+     ce_find_string(&buffer, &point, "ARE", &match);
+
+     EXPECT(match.x == 6);
+     EXPECT(match.y == 0);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(sanity_find_match_next_line)
+{
+     Buffer buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE SO");
+     buffer.lines[2] = strdup("AWESOME");
+
+     Point point = {2, 0};
+     Point delta = {};
+     ce_find_string(&buffer, &point, "SO", &delta);
+
+     EXPECT(delta.x == 4);
+     EXPECT(delta.y == 1);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(sanity_clamp_cursor_horizontal)
+{
+     Buffer buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE SO");
+     buffer.lines[2] = strdup("AWESOME");
+
+     Point cursor = {50, 0};
+     ce_clamp_cursor(&buffer, &cursor);
+
+     EXPECT(cursor.x == 4);
+     EXPECT(cursor.y == 0);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(sanity_clamp_cursor_vertical)
+{
+     Buffer buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE SO");
+     buffer.lines[2] = strdup("AWESOME");
+
+     Point cursor = {4, 50};
+     ce_clamp_cursor(&buffer, &cursor);
+
+     EXPECT(cursor.x == 4);
+     EXPECT(cursor.y == 2);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(sanity_move_cursor)
+{
+     Buffer buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE SO");
+     buffer.lines[2] = strdup("AWESOME");
+
+     Point cursor = {2, 0};
+     Point delta = {2, 1};
+     ce_move_cursor(&buffer, &cursor, &delta);
+
+     EXPECT(cursor.x == 4);
+     EXPECT(cursor.y == 1);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(sanity_set_cursor)
+{
+     Buffer buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE SO");
+     buffer.lines[2] = strdup("AWESOME");
+
+     Point cursor = {2, 0};
+     Point delta = {4, 2};
+     ce_set_cursor(&buffer, &cursor, &delta);
+
+     EXPECT(cursor.x == 4);
+     EXPECT(cursor.y == 2);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(sanity_advance_cursor_same_line)
+{
+     Buffer buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE SO");
+     buffer.lines[2] = strdup("AWESOME");
+
+     Point cursor = {1, 0};
+     ce_advance_cursor(&buffer, &cursor, 3);
+
+     EXPECT(cursor.x == 4);
+     EXPECT(cursor.y == 0);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(sanity_advance_cursor_next_line)
+{
+     Buffer buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE SO");
+     buffer.lines[2] = strdup("AWESOME");
+
+     Point cursor = {1, 0};
+     ce_advance_cursor(&buffer, &cursor, 6);
+
+     EXPECT(cursor.x == 2);
+     EXPECT(cursor.y == 1);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(sanity_move_cursor_to_end_of_file)
+{
+     Buffer buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE SO");
+     buffer.lines[2] = strdup("AWESOME");
+
+     Point cursor = {1, 0};
+     ce_move_cursor_to_end_of_file(&buffer, &cursor);
+
+     EXPECT(cursor.x == 6);
+     EXPECT(cursor.y == 2);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(sanity_commit_insert_char_undo_redo)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+
+     BufferCommitNode* tail = calloc(1, sizeof(*tail));
+     ASSERT(tail != NULL);
+
+     Point start = {2, 0};
+     Point undo = {2, 0};
+     Point redo = {3, 0};
+     ce_commit_insert_char(&tail, &start, &undo, &redo, 'C');
+
+     Point cursor = {};
+     ce_commit_undo(&buffer, &tail, &cursor);
+
+     EXPECT(cursor.x == 2);
+     EXPECT(cursor.y == 0);
+     ASSERT(buffer.line_count == 1);
+     EXPECT(strcmp(buffer.lines[0], "TAOS") == 0);
+
+     ce_commit_redo(&buffer, &tail, &cursor);
+
+     EXPECT(cursor.x == 3);
+     EXPECT(cursor.y == 0);
+     ASSERT(buffer.line_count == 1);
+     EXPECT(strcmp(buffer.lines[0], "TACOS") == 0);
+
+     ce_free_buffer(&buffer);
+     ce_commits_free(tail);
+}
+
+TEST(sanity_commit_insert_string_undo_redo)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS ARE AWESOME");
+
+     BufferCommitNode* tail = calloc(1, sizeof(*tail));
+     ASSERT(tail != NULL);
+
+     Point start = {5, 0};
+     Point undo = {5, 0};
+     Point redo = {9, 0};
+     ce_commit_insert_string(&tail, &start, &undo, &redo, strdup(" ARE"));
+
+     Point cursor = {};
+     ce_commit_undo(&buffer, &tail, &cursor);
+
+     EXPECT(cursor.x == 5);
+     EXPECT(cursor.y == 0);
+     ASSERT(buffer.line_count == 1);
+     EXPECT(strcmp(buffer.lines[0], "TACOS AWESOME") == 0);
+
+     ce_commit_redo(&buffer, &tail, &cursor);
+
+     EXPECT(cursor.x == 9);
+     EXPECT(cursor.y == 0);
+     ASSERT(buffer.line_count == 1);
+     EXPECT(strcmp(buffer.lines[0], "TACOS ARE AWESOME") == 0);
+
+     ce_free_buffer(&buffer);
+     ce_commits_free(tail);
+}
+
+TEST(sanity_commit_remove_char_undo_redo)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TAOS");
+
+     BufferCommitNode* tail = calloc(1, sizeof(*tail));
+     ASSERT(tail != NULL);
+
+     Point start = {2, 0};
+     Point undo = {2, 0};
+     Point redo = {2, 0};
+     ce_commit_remove_char(&tail, &start, &undo, &redo, 'C');
+
+     Point cursor = {};
+     ce_commit_undo(&buffer, &tail, &cursor);
+
+     EXPECT(cursor.x == 2);
+     EXPECT(cursor.y == 0);
+     ASSERT(buffer.line_count == 1);
+     EXPECT(strcmp(buffer.lines[0], "TACOS") == 0);
+
+     ce_commit_redo(&buffer, &tail, &cursor);
+
+     EXPECT(cursor.x == 2);
+     EXPECT(cursor.y == 0);
+     ASSERT(buffer.line_count == 1);
+     EXPECT(strcmp(buffer.lines[0], "TAOS") == 0);
+
+     ce_free_buffer(&buffer);
+     ce_commits_free(tail);
+}
+
+TEST(sanity_commit_remove_string_undo_redo)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS AWESOME");
+
+     BufferCommitNode* tail = calloc(1, sizeof(*tail));
+     ASSERT(tail != NULL);
+
+     Point start = {5, 0};
+     Point undo = {9, 0};
+     Point redo = {5, 0};
+     ce_commit_remove_string(&tail, &start, &undo, &redo, strdup(" ARE"));
+
+     Point cursor = {};
+     ce_commit_undo(&buffer, &tail, &cursor);
+
+     EXPECT(cursor.x == 9);
+     EXPECT(cursor.y == 0);
+     ASSERT(buffer.line_count == 1);
+     EXPECT(strcmp(buffer.lines[0], "TACOS ARE AWESOME") == 0);
+
+     ce_commit_redo(&buffer, &tail, &cursor);
+
+     EXPECT(cursor.x == 5);
+     EXPECT(cursor.y == 0);
+     ASSERT(buffer.line_count == 1);
+     EXPECT(strcmp(buffer.lines[0], "TACOS AWESOME") == 0);
+
+     ce_free_buffer(&buffer);
+     ce_commits_free(tail);
+}
+
+TEST(sanity_commit_change_char_undo_redo)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TALOS");
+
+     BufferCommitNode* tail = calloc(1, sizeof(*tail));
+     ASSERT(tail != NULL);
+
+     Point start = {2, 0};
+     Point undo = {2, 0};
+     Point redo = {2, 0};
+     ce_commit_change_char(&tail, &start, &undo, &redo, 'L', 'C');
+
+     Point cursor = {};
+     ce_commit_undo(&buffer, &tail, &cursor);
+
+     EXPECT(cursor.x == 2);
+     EXPECT(cursor.y == 0);
+     ASSERT(buffer.line_count == 1);
+     EXPECT(strcmp(buffer.lines[0], "TACOS") == 0);
+
+     ce_commit_redo(&buffer, &tail, &cursor);
+
+     EXPECT(cursor.x == 2);
+     EXPECT(cursor.y == 0);
+     ASSERT(buffer.line_count == 1);
+     EXPECT(strcmp(buffer.lines[0], "TALOS") == 0);
+
+     ce_free_buffer(&buffer);
+     ce_commits_free(tail);
+}
+
+TEST(sanity_commit_change_string_undo_redo)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS BE AWESOME");
+
+     BufferCommitNode* tail = calloc(1, sizeof(*tail));
+     ASSERT(tail != NULL);
+
+     Point start = {5, 0};
+     Point undo = {9, 0};
+     Point redo = {5, 0};
+     ce_commit_change_string(&tail, &start, &undo, &redo, strdup(" BE"), strdup(" ARE"));
+
+     Point cursor = {};
+     ce_commit_undo(&buffer, &tail, &cursor);
+
+     EXPECT(cursor.x == 9);
+     EXPECT(cursor.y == 0);
+     ASSERT(buffer.line_count == 1);
+     EXPECT(strcmp(buffer.lines[0], "TACOS ARE AWESOME") == 0);
+
+     ce_commit_redo(&buffer, &tail, &cursor);
+
+     EXPECT(cursor.x == 5);
+     EXPECT(cursor.y == 0);
+     ASSERT(buffer.line_count == 1);
+     EXPECT(strcmp(buffer.lines[0], "TACOS BE AWESOME") == 0);
+
+     ce_free_buffer(&buffer);
+     ce_commits_free(tail);
 }
 
 int main()

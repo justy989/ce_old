@@ -151,6 +151,7 @@ const char* random_greeting()
           "Slurp'n up whitespace since 2016",
           "Welcome to GNU Emacs, one component of the GNU/Linux operating system.",
           "ce, the world's only editor with a Michelin star.",
+          "Oy! ce's a beaut!",
      };
 
      srand(time(NULL));

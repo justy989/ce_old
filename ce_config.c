@@ -973,10 +973,10 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 27: // ESC
           {
                if(config_state->input){
-                    input_end(config_state); 
-                    config_state->input = false; 
+                    input_end(config_state);
+                    config_state->input = false;
                }
-          } break; 
+          } break;
           case 'q':
                return false; // exit !
           case 'J':
@@ -1479,12 +1479,14 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case 21: // Ctrl + d
           {
-               Point delta = {0, -g_terminal_dimensions->y / 2};
+               int64_t view_height = config_state->view_current->bottom_right.y - config_state->view_current->top_left.y;
+               Point delta = {0, -view_height / 2};
                ce_move_cursor(buffer, cursor, &delta);
           } break;
           case 4: // Ctrl + u
           {
-               Point delta = {0, g_terminal_dimensions->y / 2};
+               int64_t view_height = config_state->view_current->bottom_right.y - config_state->view_current->top_left.y;
+               Point delta = {0, view_height / 2};
                ce_move_cursor(buffer, cursor, &delta);
           } break;
           case 8: // Ctrl + h

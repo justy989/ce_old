@@ -32,8 +32,8 @@ typedef void test_func(bool*);
           return;                                                                                \
      }
 
-// NOTE: registering tests, I'm so sick of the freakin pre-processor being lame, so I'm going to take
-// advantage of the knowledge that my globals are layed out sequentially
+// NOTE: In registering tests, I'm so sick of the freakin pre-processor being lame, so I'm going to take
+//       advantage of the knowledge that my globals are layed out sequentially
 #define RUN_TESTS()                                      \
 {                                                        \
      Results results = {0, 0};                           \

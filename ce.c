@@ -43,7 +43,7 @@ bool ce_alloc_lines(Buffer* buffer, int64_t line_count)
      for(int64_t i = 0; i < line_count; ++i){
           buffer->lines[i] = calloc(1, sizeof(buffer->lines[i]));
           if(!buffer->lines[i]){
-               ce_message("failed to calloc() new line %ld", i);
+               ce_message("failed to calloc() new line %"PRId64, i);
                return false;
           }
      }
@@ -228,7 +228,7 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
                int64_t length = (i - 1) - last_newline;
                char* new_line = realloc(buffer->lines[line], length + 1);
                if(!new_line){
-                    ce_message("%s() failed to alloc line %ld", __FUNCTION__, line);
+                    ce_message("%s() failed to alloc line %"PRId64, __FUNCTION__, line);
                     return false;
                }
 
@@ -390,14 +390,14 @@ char* ce_dupe_string(Buffer* buffer, const Point* start, const Point* end)
      }
 
      if(start->y > end->y){
-          ce_message("%s() start(%ld, %ld) needs to be below end(%ld, %ld)",
+          ce_message("%s() start(%"PRId64", %"PRId64") needs to be below end(%"PRId64", %"PRId64")",
                      __FUNCTION__, start->x, start->y, end->x, end->y);
           return NULL;
      }
 
      if(start->y == end->y){
           if(start->x >= end->x){
-               ce_message("%s() start(%ld, %ld) needs to be below end(%ld, %ld)",
+               ce_message("%s() start(%"PRId64", %"PRId64") needs to be below end(%"PRId64", %"PRId64")",
                           __FUNCTION__, start->x, start->y, end->x, end->y);
                return NULL;
           }
@@ -453,7 +453,7 @@ char* ce_dupe_string(Buffer* buffer, const Point* start, const Point* end)
 char* ce_dupe_line(Buffer* buffer, int64_t line)
 {
      if(buffer->line_count <= line){
-          ce_message("%s() specified line (%ld) above buffer line count (%ld)",
+          ce_message("%s() specified line (%"PRId64") above buffer line count (%"PRId64")",
                      __FUNCTION__, line, buffer->line_count);
           return NULL;
      }
@@ -765,7 +765,7 @@ bool ce_join_line(Buffer* buffer, int64_t line){
      CE_CHECK_PTR_ARG(buffer);
 
      if(line >= buffer->line_count || line < 0){
-          ce_message("%s() specified line %ld ouside of buffer, which has %ld lines", __FUNCTION__, line, buffer->line_count);
+          ce_message("%s() specified line %"PRId64" ouside of buffer, which has %"PRId64" lines", __FUNCTION__, line, buffer->line_count);
           return false;
      }
 
@@ -787,7 +787,7 @@ bool ce_remove_line(Buffer* buffer, int64_t line)
      CE_CHECK_PTR_ARG(buffer);
 
      if(line >= buffer->line_count || line < 0){
-          ce_message("%s() specified line %ld ouside of buffer, which has %ld lines", __FUNCTION__, line, buffer->line_count);
+          ce_message("%s() specified line %"PRId64" ouside of buffer, which has %"PRId64" lines", __FUNCTION__, line, buffer->line_count);
           return false;
      }
 

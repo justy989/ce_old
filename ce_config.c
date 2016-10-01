@@ -697,7 +697,7 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
                break;
           case 'w':
           case 'W':
-               movement_end->x += ce_find_next_word(buffer, movement_end, key0 == 'w');
+               movement_end->x += ce_find_delta_to_next_word(buffer, movement_end, key0 == 'w');
                break;
           case '$':
                movement_end->x += ce_find_delta_to_end_of_line(buffer, movement_end);
@@ -705,7 +705,7 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
           case '%':
           {
                Point delta;
-               if(!ce_find_match(buffer, cursor, &delta)) break;
+               if(!ce_find_delta_to_match(buffer, cursor, &delta)) break;
 
                // TODO: movement across line boundaries
                assert(delta.y == 0);
@@ -847,6 +847,18 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     }
                     cursor->y++;
                     cursor->x = 0;
+
+                    // indent if necessary
+                    Point prev_line = {0, cursor->y-1};
+                    int64_t indent_len = ce_get_indentation_for_next_line(buffer, &prev_line, strlen(TAB_STRING));
+                    if(indent_len > 0){
+                         char* indent = malloc(indent_len + 1);
+                         memset(indent, ' ', indent_len);
+                         indent[indent_len] = '\0';
+
+                         if(ce_insert_string(buffer, cursor, indent))
+                              cursor->x += indent_len;
+                    }
                }
           } break;
 #if 0
@@ -872,6 +884,28 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                ce_move_cursor(buffer, cursor, &delta);
           } break;
 #endif
+          case '}':
+          {
+               if(ce_insert_char(buffer, cursor, key)){
+                    Point match;
+                    if(ce_find_match(buffer, cursor, &match) && cursor->x > match.x){
+                         if(match.y != cursor->y){
+                              int64_t n_deletes = MIN((int64_t) strlen(TAB_STRING), cursor->x - match.x);
+
+                              bool can_unindent = true;
+                              for(Point iter = {0, cursor->y}; ce_point_on_buffer(buffer, &iter) && iter.x < n_deletes; iter.x++)
+                                   can_unindent &= isblank(ce_get_char_raw(buffer, &iter));
+
+                              if(can_unindent){
+                                   cursor->x -= n_deletes;
+                                   ce_remove_string(buffer, cursor, n_deletes);
+                              }
+                         }
+                    }
+
+                    cursor->x++;
+               }
+          } break;
           default:
                if(ce_insert_char(buffer, cursor, key)) cursor->x++;
                break;
@@ -1454,7 +1488,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case '%':
           {
                Point delta;
-               if(ce_find_match(buffer, cursor, &delta)){
+               if(ce_find_delta_to_match(buffer, cursor, &delta)){
                     ce_move_cursor(buffer, cursor, &delta);
                }
           } break;

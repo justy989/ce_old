@@ -465,7 +465,7 @@ char* ce_dupe_line(Buffer* buffer, int64_t line)
 }
 
 // return x delta between location and the located character 'c' if found. return -1 if not found
-int64_t ce_find_delta_to_char_forward_in_line(Buffer* buffer, const Point* location, char c)
+int64_t ce_find_delta_to_char_forward_in_line(const Buffer* buffer, const Point* location, char c)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -479,7 +479,7 @@ int64_t ce_find_delta_to_char_forward_in_line(Buffer* buffer, const Point* locat
 }
 
 // return -x delta between location and the located character 'c' if found. return -1 if not found
-int64_t ce_find_delta_to_char_backward_in_line(Buffer* buffer, const Point* location, char c)
+int64_t ce_find_delta_to_char_backward_in_line(const Buffer* buffer, const Point* location, char c)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -496,17 +496,19 @@ typedef enum{
      CE_UP = -1,
      CE_DOWN = 1
 } Direction;
+
 // returns the delta to the matching character; return success
-bool ce_find_match(Buffer* buffer, const Point* location, Point* delta)
+bool ce_find_delta_to_match(const Buffer* buffer, const Point* location, Point* delta)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
      CE_CHECK_PTR_ARG(delta);
 
-     const char* cur_char = &buffer->lines[location->y][location->x];
+     char matchee, match;
+     if(!ce_get_char(buffer, location, &matchee)) return false;
+
      Direction d;
-     char match;
-     switch(*cur_char){
+     switch(matchee){
      case '{':
           d = CE_DOWN;
           match = '}';
@@ -543,32 +545,46 @@ bool ce_find_match(Buffer* buffer, const Point* location, Point* delta)
           return false;
      }
 
-     const char* iter_char = cur_char + d;
-     uint64_t counter = 1; // when counter goes to 0, we have found our match
+     uint64_t n_unmatched = 0; // when n_unmatched decrements back to 0, we have found our match
 
-     int64_t line = location->y;
-     const char* line_str = buffer->lines[line];
+     char curr;
+     for(Point iter = *location;
+         d == CE_UP? iter.y >= 0 : iter.y < buffer->line_count;
+         iter.y += d ){
 
-     int64_t n_lines = (d == CE_UP) ? location->y : buffer->line_count - location->y;
-     for(int64_t i = 0; i < n_lines;){
-          while(*iter_char != '\0'){
+          // first iteration we want iter.x to be on our matchee, other iterations we want it at eol/bol
+          if(iter.y != location->y) iter.x = d == CE_UP? strlen(buffer->lines[iter.y]) : 0;
+
+          // loop over buffer
+          for(; ce_get_char(buffer, &iter, &curr); iter.x +=d){
                // loop over line
-               if(*iter_char == match){
-                    if(--counter == 0){
-                         delta->x = (iter_char - buffer->lines[line]) - location->x;
-                         delta->y = line - location->y;
+               if(curr == match){
+                    if(--n_unmatched == 0){
+                         delta->x = iter.x - location->x;
+                         delta->y = iter.y - location->y;
                          return true;
                     }
+               }else if(curr == matchee){
+                    n_unmatched++;
                }
-               else if(*iter_char == *cur_char) counter++;
-               iter_char += d;
           }
-
-          do i++;
-          while(!(line_str = buffer->lines[line += d]) && i < n_lines);
-          iter_char = (d == CE_UP) ? &line_str[strlen(line_str) - 1] : line_str;
      }
      return false;
+}
+
+bool ce_find_match(const Buffer* buffer, const Point* location, Point* match)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+     CE_CHECK_PTR_ARG(match);
+
+     Point delta = {0, 0};
+     if(!ce_find_delta_to_match(buffer, location, &delta)) return false;
+
+     *match = *location;
+     ce_move_cursor(buffer, match, &delta);
+
+     return true;
 }
 
 // returns Point at the next matching string; return success
@@ -605,11 +621,22 @@ bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor)
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
 
-     if(!ce_point_on_buffer(buffer, cursor)) false;
-     const char* line = buffer->lines[cursor->y];
-     int i;
-     for(i = 0; isblank(line[i]); i++);
-     cursor->x = i;
+     if(!ce_point_on_buffer(buffer, cursor)) return false;
+     int64_t delta_x_sbol = ce_find_delta_to_soft_beginning_of_line(buffer, cursor);
+
+     cursor->x += delta_x_sbol;
+     return true;
+}
+
+bool ce_move_cursor_to_soft_end_of_line(Buffer* buffer, Point* cursor)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(cursor);
+
+     if(!ce_point_on_buffer(buffer, cursor)) return false;
+     int64_t delta_x_seol = ce_find_delta_to_soft_end_of_line(buffer, cursor);
+
+     cursor->x += delta_x_seol;
      return true;
 }
 
@@ -619,8 +646,35 @@ int ce_ispunct(int c)
      return c != '_' && ispunct(c);
 }
 
+// delta to move to the soft beginning of line (sbol)
+// if there is not a sbol, returns eol
+int64_t ce_find_delta_to_soft_beginning_of_line(const Buffer* buffer, const Point* cursor)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(cursor);
+
+     const char* line = buffer->lines[cursor->y];
+     int64_t line_len = strlen(line);
+     int i;
+     for(i = 0; i < line_len && isblank(line[i]); i++);
+     return i - cursor->x;
+}
+
+// delta to move to the soft end of line (seol)
+// if there is not a seol, returns bol
+int64_t ce_find_delta_to_soft_end_of_line(const Buffer* buffer, const Point* cursor)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(cursor);
+
+     const char* line = buffer->lines[cursor->y];
+     int64_t i = MAX((int64_t) strlen(line) - 1, 0);
+     while(i>0 && isblank(line[i])) i--;
+     return i - cursor->x;
+}
+
 // return -1 on failure, delta to move left to the beginning of the word on success
-int64_t ce_find_delta_to_beginning_of_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
+int64_t ce_find_delta_to_beginning_of_word(const Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -647,7 +701,7 @@ int64_t ce_find_delta_to_beginning_of_word(Buffer* buffer, const Point* location
 }
 
 // return -1 on failure, delta to move right to the end of the word on success
-int64_t ce_find_delta_to_end_of_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
+int64_t ce_find_delta_to_end_of_word(const Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -675,7 +729,7 @@ int64_t ce_find_delta_to_end_of_word(Buffer* buffer, const Point* location, bool
 }
 
 // return -1 on failure, delta to move right to the beginning of the next word on success
-int64_t ce_find_next_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
+int64_t ce_find_delta_to_next_word(const Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -694,7 +748,7 @@ int64_t ce_find_next_word(Buffer* buffer, const Point* location, bool punctuatio
      return cur_x - location->x;
 }
 
-bool ce_get_char(Buffer* buffer, const Point* location, char* c)
+bool ce_get_char(const Buffer* buffer, const Point* location, char* c)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -704,6 +758,14 @@ bool ce_get_char(Buffer* buffer, const Point* location, char* c)
      *c = buffer->lines[location->y][location->x];
 
      return true;
+}
+
+char ce_get_char_raw(const Buffer* buffer, const Point* location)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+
+     return buffer->lines[location->y][location->x];
 }
 
 bool ce_set_char(Buffer* buffer, const Point* location, char c)
@@ -1218,7 +1280,7 @@ bool ce_remove_buffer_from_list(BufferNode* head, BufferNode** node)
 }
 
 // return x delta to the last character in the line, -1 on error
-int64_t ce_find_delta_to_end_of_line(const Buffer* buffer, Point* cursor)
+int64_t ce_find_delta_to_end_of_line(const Buffer* buffer, const Point* cursor)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
@@ -2101,6 +2163,11 @@ bool ce_get_homogenous_adjacents(Buffer* buffer, Point* start, Point* end, int (
 
 bool ce_get_word_at_location(Buffer* buffer, const Point* location, Point* word_start, Point* word_end)
 {
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+     CE_CHECK_PTR_ARG(word_start);
+     CE_CHECK_PTR_ARG(word_end);
+
      *word_start = *location;
      *word_end = *location;
      char curr_char;
@@ -2119,4 +2186,29 @@ bool ce_get_word_at_location(Buffer* buffer, const Point* location, Point* word_
           if(!success) return false;
      }
      return true;
+}
+
+int64_t ce_get_indentation_for_next_line(Buffer* buffer, const Point* location, int64_t tab_len)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+
+     // first, match this lines indent
+     int64_t indent = ce_find_delta_to_soft_beginning_of_line(buffer, location);
+
+     // then, check the line for a '{' that is globally unmatched + indent if you find one
+     char curr;
+     for(Point iter = {strlen(buffer->lines[location->y]), location->y};
+         ce_get_char(buffer, &iter, &curr);
+         iter.x--){
+          if(curr == '{'){
+               Point match;
+               if(!ce_find_match(buffer, &iter, &match)){
+                    indent += tab_len;
+                    break; // if a line has "{{", we don't want to double tab the next line!
+               }
+           }
+     }
+
+     return indent;
 }

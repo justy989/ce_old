@@ -30,6 +30,15 @@
           return false;                                                       \
      }
 
+#define MAX(a,b)\
+     ({ __typeof__ (a) _a = (a); \
+        __typeof__ (b) _b = (b); \
+        _a > _b? _a : _b; })
+#define MIN(a,b) \
+     ({ __typeof__ (a) _a = (a); \
+        __typeof__ (b) _b = (b); \
+        _a < _b? _a : _b; })
+
 typedef struct {
      int64_t x;
      int64_t y;
@@ -123,15 +132,19 @@ bool ce_remove_char(Buffer* buffer, const Point* location);
 void ce_clear_lines(Buffer* buffer);
 char* ce_dupe_string(Buffer* buffer, const Point* start, const Point* end);
 char* ce_dupe_line(Buffer* buffer, int64_t line);
-bool ce_get_char(Buffer* buffer, const Point* location, char* c);
+bool ce_get_char(const Buffer* buffer, const Point* location, char* c);
+char ce_get_char_raw(const Buffer* buffer, const Point* location);
 bool ce_set_char(Buffer* buffer, const Point* location, char c);
-int64_t ce_find_delta_to_end_of_line(const Buffer* buffer, Point* cursor);
-int64_t ce_find_delta_to_char_forward_in_line(Buffer* buffer, const Point* location, char c);
-int64_t ce_find_delta_to_char_backward_in_line(Buffer* buffer, const Point* location, char c);
-int64_t ce_find_delta_to_beginning_of_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
-int64_t ce_find_delta_to_end_of_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
-int64_t ce_find_next_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
-bool ce_find_match(Buffer* buffer, const Point* location, Point* delta);
+int64_t ce_find_delta_to_soft_beginning_of_line(const Buffer* buffer, const Point* cursor);
+int64_t ce_find_delta_to_soft_end_of_line(const Buffer* buffer, const Point* cursor);
+int64_t ce_find_delta_to_end_of_line(const Buffer* buffer, const Point* cursor);
+int64_t ce_find_delta_to_char_forward_in_line(const Buffer* buffer, const Point* location, char c);
+int64_t ce_find_delta_to_char_backward_in_line(const Buffer* buffer, const Point* location, char c);
+int64_t ce_find_delta_to_beginning_of_word(const Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
+int64_t ce_find_delta_to_end_of_word(const Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
+int64_t ce_find_delta_to_next_word(const Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
+bool ce_find_delta_to_match(const Buffer* buffer, const Point* location, Point* delta);
+bool ce_find_match(const Buffer* buffer, const Point* location, Point* match);
 bool ce_find_string(Buffer* buffer, const Point* location, const char* search_str, Point* match);
 bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor);
 int ce_ispunct(int c);
@@ -184,5 +197,6 @@ BufferView* ce_find_view_at_point(BufferView* head, const Point* point);
 
 void* ce_memrchr(const void* s, int c, size_t n);
 int64_t ce_compute_length(Point* start, Point* end);
+int64_t ce_get_indentation_for_next_line(Buffer* buffer, const Point* location, int64_t tab_len);
 
 #endif

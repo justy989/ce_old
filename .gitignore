@@ -1,9 +1,16 @@
 ce
+test
 *.o
 *.so
+
+#gcov
+*.gcov
+*.gcda
+*.gcno
 
 #cscope
 *.out
 
-# WHAT IS THIS AND WHY DOES IT EXIST?
+#MacOS
 *.dylib
+*.dSYM

@@ -2193,17 +2193,20 @@ int64_t ce_get_indentation_for_next_line(Buffer* buffer, const Point* location, 
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
 
-     // first, match this lines indent
-     int64_t indent = ce_find_delta_to_soft_beginning_of_line(buffer, location);
+     // first, match this line's indentation
+     Point bol = *location;
+     bol.x = 0;
+     int64_t indent = ce_find_delta_to_soft_beginning_of_line(buffer, &bol);
 
-     // then, check the line for a '{' that is globally unmatched + indent if you find one
+     // then, check the line for a '{' that is unmatched on location's line + indent if you find one
      char curr;
      for(Point iter = {strlen(buffer->lines[location->y]), location->y};
          ce_get_char(buffer, &iter, &curr);
          iter.x--){
           if(curr == '{'){
                Point match;
-               if(!ce_find_match(buffer, &iter, &match)){
+               if(!ce_find_match(buffer, &iter, &match) || match.y != location->y){
+                    // '{' is globally unmatched, or unmatched on our line
                     indent += tab_len;
                     break; // if a line has "{{", we don't want to double tab the next line!
                }

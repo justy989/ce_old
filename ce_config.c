@@ -1058,9 +1058,17 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'O':
           {
                Point begin_line = {0, cursor->y};
-               if(ce_insert_char(buffer, &begin_line, '\n')){
-                    ce_commit_insert_char(&buffer_state->commit_tail, &begin_line, cursor, &begin_line, '\n');
-                    cursor->x = 0;
+
+               // indent if necessary
+               int64_t indent_len = ce_get_indentation_for_next_line(buffer, cursor, strlen(TAB_STRING));
+               char* indent_nl = malloc(sizeof '\n' + indent_len + sizeof '\0');
+               memset(&indent_nl[0], ' ', indent_len);
+               indent_nl[indent_len] = '\n';
+               indent_nl[indent_len + 1] = '\0';
+
+               if(ce_insert_string(buffer, &begin_line, indent_nl)){
+                    ce_commit_insert_string(&buffer_state->commit_tail, &begin_line, cursor, &begin_line, indent_nl);
+                    cursor->x = indent_len;
                     enter_insert_mode(config_state, cursor);
                }
           } break;
@@ -1069,9 +1077,16 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                Point end_of_line = *cursor;
                end_of_line.x = strlen(buffer->lines[cursor->y]);
 
-               if(ce_insert_char(buffer, &end_of_line, '\n')){
-                    Point next_cursor = {0, cursor->y+1};
-                    ce_commit_insert_char(&buffer_state->commit_tail, &end_of_line, cursor, &next_cursor, '\n');
+               // indent if necessary
+               int64_t indent_len = ce_get_indentation_for_next_line(buffer, cursor, strlen(TAB_STRING));
+               char* nl_indent = malloc(sizeof '\n' + indent_len + sizeof '\0');
+               nl_indent[0] = '\n';
+               memset(&nl_indent[1], ' ', indent_len);
+               nl_indent[1 + indent_len] = '\0';
+
+               if(ce_insert_string(buffer, &end_of_line, nl_indent)){
+                    Point next_cursor = {indent_len, cursor->y+1};
+                    ce_commit_insert_string(&buffer_state->commit_tail, &end_of_line, cursor, &next_cursor, nl_indent);
                     *cursor = next_cursor;
                     enter_insert_mode(config_state, cursor);
                }

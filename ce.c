@@ -1689,11 +1689,11 @@ bool ce_commit_change(BufferCommitNode** tail, const BufferCommit* commit)
      return true;
 }
 
-bool ce_commits_free(BufferCommitNode* head)
+bool ce_commits_free(BufferCommitNode* tail)
 {
-     while(head){
-          BufferCommitNode* tmp = head;
-          head = head->next;
+     while(tail){
+          BufferCommitNode* tmp = tail;
+          tail = tail->next;
           free_commit(tmp);
      }
 

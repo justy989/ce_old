@@ -1680,6 +1680,11 @@ search:
                          end_format_line = buffer->line_count-1;
                          break;
                     }
+
+                    // TODO support undo with clang-format
+                    ce_commits_free(buffer_state->commit_tail);
+                    buffer_state->commit_tail = NULL;
+
                     int in_fds[2]; // 0 = child stdin
                     int out_fds[2]; // 1 = child stdout
                     if(pipe(in_fds) == -1 || pipe(out_fds) == -1){

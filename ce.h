@@ -29,7 +29,7 @@ typedef enum {
      S_COMMENT,
      S_STRING,
      S_CONSTANT,
-     S_PREPROC,
+     S_PREPROCESSOR,
 } Syntax;
 
 #define CE_CHECK_PTR_ARG(arg)                                                 \
@@ -153,7 +153,6 @@ int64_t ce_find_delta_to_end_of_word(Buffer* buffer, const Point* location, bool
 int64_t ce_find_next_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
 bool ce_find_match(Buffer* buffer, const Point* location, Point* delta);
 bool ce_find_string(Buffer* buffer, const Point* location, const char* search_str, Point* match, Direction direction);
-bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor);
 int ce_ispunct(int c);
 int ce_iswordchar(int c);
 bool ce_get_homogenous_adjacents(const Buffer* buffer, Point* start, Point* end, int (*is_homogenous)(int));
@@ -181,7 +180,7 @@ bool ce_set_cursor(const Buffer* buffer, Point* cursor, const Point* location);
 bool ce_follow_cursor(const Point* cursor, int64_t* left_column, int64_t* top_left, int64_t view_width, int64_t view_height,
                       bool at_terminal_width_edge, bool at_terminal_height_edge);
 bool ce_advance_cursor(const Buffer* buffer, Point* cursor, int64_t delta);
-bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor);
+bool ce_move_cursor_to_soft_beginning_of_line(const Buffer* buffer, Point* cursor);
 bool ce_move_cursor_to_end_of_file(const Buffer* buffer, Point* cursor);
 bool ce_move_cursor_to_beginning_of_file(const Buffer* buffer, Point* cursor);
 

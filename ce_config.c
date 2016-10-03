@@ -733,11 +733,8 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
           case 'g':
                switch(key1){
                case 'g':
-               {
-                    Point delta = {ce_find_delta_to_end_of_line(buffer, movement_end), 0};
-                    ce_move_cursor(buffer, movement_end, &delta);
                     ce_move_cursor_to_beginning_of_file(buffer, movement_start);
-               } break;
+                    break;
                case MOVEMENT_CONTINUE:
                     return MOVEMENT_CONTINUE;
                default:
@@ -1484,7 +1481,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          movement_state_t m_state = try_generic_movement(config_state, buffer, cursor, &movement_start, &movement_end);
                          if(m_state == MOVEMENT_CONTINUE) return true;
 
-                         movement_start.x = 0; // gg has a slightly different behavior as a command
+                         ce_move_cursor_to_soft_beginning_of_line(buffer, &movement_start);
                          ce_set_cursor(buffer, cursor, &movement_start);
                     }
                } break;

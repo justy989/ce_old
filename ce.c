@@ -6,6 +6,10 @@
 
 Point* g_terminal_dimensions = NULL;
 
+Direction ce_reverse_direction(Direction to_reverse){
+     return (to_reverse == CE_UP) ? CE_DOWN : CE_UP;
+}
+
 int64_t ce_count_string_lines(const char* string)
 {
      int64_t string_length = strlen(string);
@@ -493,10 +497,6 @@ int64_t ce_find_delta_to_char_backward_in_line(Buffer* buffer, const Point* loca
      return cur_char - found_char;
 }
 
-typedef enum{
-     CE_UP = -1,
-     CE_DOWN = 1
-} Direction;
 // returns the delta to the matching character; return success
 bool ce_find_match(Buffer* buffer, const Point* location, Point* delta)
 {
@@ -573,30 +573,28 @@ bool ce_find_match(Buffer* buffer, const Point* location, Point* delta)
 }
 
 // returns Point at the next matching string; return success
-bool ce_find_string(Buffer* buffer, const Point* location, const char* search_str, Point* match)
+bool ce_find_string(Buffer* buffer, const Point* location, const char* search_str, Point* match, Direction direction)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
      CE_CHECK_PTR_ARG(search_str);
      CE_CHECK_PTR_ARG(match);
 
-     Direction d = CE_DOWN; // TODO support reverse search
-
      Point search_loc = *location;
      ce_advance_cursor(buffer, &search_loc, 1);
      char* line_str = &buffer->lines[search_loc.y][search_loc.x];
 
-     int64_t n_lines = (d == CE_UP) ? search_loc.y : buffer->line_count - search_loc.y;
+     int64_t n_lines = (direction == CE_UP) ? search_loc.y : buffer->line_count - search_loc.y;
      for(int64_t i = 0; i < n_lines;){
           const char* match_str = strstr(line_str, search_str);
           if(match_str){
-               int64_t line = search_loc.y + i*d;
+               int64_t line = search_loc.y + i*direction;
                match->x = match_str - buffer->lines[line];
                match->y = line;
                return true;
           }
           i++;
-          line_str = buffer->lines[search_loc.y + i*d];
+          line_str = buffer->lines[search_loc.y + i*direction];
      }
      return false;
 }
@@ -1691,11 +1689,11 @@ bool ce_commit_change(BufferCommitNode** tail, const BufferCommit* commit)
      return true;
 }
 
-bool ce_commits_free(BufferCommitNode* head)
+bool ce_commits_free(BufferCommitNode* tail)
 {
-     while(head){
-          BufferCommitNode* tmp = head;
-          head = head->next;
+     while(tail){
+          BufferCommitNode* tmp = tail;
+          tail = tail->next;
           free_commit(tmp);
      }
 

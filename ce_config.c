@@ -41,7 +41,7 @@ char* backspace_get_string(BackspaceNode* head)
 
      char* str = malloc(len + 1);
      if(!str){
-          ce_message("%s() failed to alloc string");
+          ce_message("%s() failed to alloc string", __FUNCTION__);
           return NULL;
      }
 
@@ -308,7 +308,10 @@ BufferNode* open_file_buffer(BufferNode* head, const char* filename)
 {
      BufferNode* itr = head;
      while(itr){
-          if(!strcmp(itr->buffer->name, filename)) break; // already open
+          if(!strcmp(itr->buffer->name, filename)){
+               ce_message("switching to already open buffer for: '%s'", filename);
+               break; // already open
+          }
           itr = itr->next;
      }
 
@@ -338,7 +341,6 @@ int64_t strlen_ignore_newlines(const char* str)
 bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** argv, void** user_data)
 {
      // NOTE: need to set these in this module
-     g_message_buffer = head->buffer;
      g_terminal_dimensions = terminal_dimensions;
 
      // setup the config's state
@@ -375,7 +377,6 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
 
      *user_data = config_state;
 
-
      BufferNode* itr = head;
 
      // setup state for each buffer
@@ -394,6 +395,12 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
           if(i == 0 && node) config_state->view_current->buffer_node = node;
      }
 
+     // setup colors for syntax highlighting
+     init_pair(S_KEYWORD, COLOR_BLUE, COLOR_BACKGROUND);
+     init_pair(S_COMMENT, COLOR_GREEN, COLOR_BACKGROUND);
+     init_pair(S_STRING, COLOR_RED, COLOR_BACKGROUND);
+     init_pair(S_CONSTANT, COLOR_MAGENTA, COLOR_BACKGROUND);
+     init_pair(S_PREPROC, COLOR_YELLOW, COLOR_BACKGROUND);
 
      return true;
 }
@@ -984,9 +991,15 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           Point movement_start, movement_end;
 
           switch(config_state->command_key){
-          case 27: // ESC
           default:
                break;
+          case 27: // ESC
+          {
+               if(config_state->input){
+                    input_end();
+                    config_state->input = false;
+               }
+          } break;
           case 'q':
                return false; // exit !
           case 'J':
@@ -1354,7 +1367,14 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     // no movement yet, wait for one!
                     return true;
                default:
-                    ce_set_char(buffer, cursor, key);
+               {
+                    char ch = 0;
+                    if(ce_get_char(buffer, cursor, &ch)){
+                         if(ce_set_char(buffer, cursor, key)){
+                              ce_commit_change_char(&buffer_state->commit_tail, cursor, cursor, cursor, key, ch);
+                         }
+                    }
+               }
                }
           } break;
           case 'H':
@@ -1469,12 +1489,14 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case 21: // Ctrl + d
           {
-               Point delta = {0, -g_terminal_dimensions->y / 2};
+               int64_t view_height = config_state->view_current->bottom_right.y - config_state->view_current->top_left.y;
+               Point delta = {0, -view_height / 2};
                ce_move_cursor(buffer, cursor, &delta);
           } break;
           case 4: // Ctrl + u
           {
-               Point delta = {0, g_terminal_dimensions->y / 2};
+               int64_t view_height = config_state->view_current->bottom_right.y - config_state->view_current->top_left.y;
+               Point delta = {0, view_height / 2};
                ce_move_cursor(buffer, cursor, &delta);
           } break;
           case 8: // Ctrl + h
@@ -1546,10 +1568,12 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     buffer_view = config_state->view_current;
                     cursor = &config_state->view_current->cursor;
                     // just grab the first line and load it as a file
-                    BufferNode* new_node = open_file_buffer(head, config_state->view_input->buffer_node->buffer->lines[0]);
-                    if(new_node){
-                         config_state->view_current->buffer_node = new_node;
-                         config_state->view_current->cursor = (Point){0, 0};
+                    for(int64_t i = 0; i < config_state->view_input->buffer_node->buffer->line_count; ++i){
+                         BufferNode* new_node = open_file_buffer(head, config_state->view_input->buffer_node->buffer->lines[i]);
+                         if(i == 0 && new_node){
+                              config_state->view_current->buffer_node = new_node;
+                              config_state->view_current->cursor = (Point){0, 0};
+                         }
                     }
                }
           }

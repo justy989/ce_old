@@ -924,7 +924,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          Point sbol_match = {0, match.y};
                          ce_move_cursor_to_soft_beginning_of_line(buffer, &sbol_match);
 
-                         int64_t n_deletes = MIN((int64_t) strlen(TAB_STRING), cursor->x - sbol_match.x);
+                         int64_t n_deletes = CE_MIN((int64_t) strlen(TAB_STRING), cursor->x - sbol_match.x);
 
                          bool can_unindent = true;
                          for(Point iter = {0, cursor->y}; ce_point_on_buffer(buffer, &iter) && iter.x < n_deletes; iter.x++)

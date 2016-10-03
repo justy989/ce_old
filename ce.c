@@ -666,7 +666,7 @@ int64_t ce_find_delta_to_soft_end_of_line(const Buffer* buffer, const Point* cur
      CE_CHECK_PTR_ARG(cursor);
 
      const char* line = buffer->lines[cursor->y];
-     int64_t i = MAX((int64_t) strlen(line) - 1, 0);
+     int64_t i = CE_MAX((int64_t) strlen(line) - 1, 0);
      while(i>0 && isblank(line[i])) i--;
      return i - cursor->x;
 }

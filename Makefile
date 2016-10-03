@@ -5,15 +5,18 @@ LINK=-lncurses
 
 all: ce ce_config.so
 
-testrun: test
+testrun: test test.gcno ce.coverage.o ce.coverage.gcno
+	rm -f *.gcda # remove runtime statistics
 	./test
-	llvm-cov gcov ce.gcov.o
-	grep "#####" ce.c.gcov
+	llvm-cov gcov ce.coverage.o
+	#grep "#####" ce.c.gcov
 
-test: test.c ce.gcov.o
-	$(CC) $(CFLAGS_TEST) $(CFLAGS) $^ -o $@ $(LINK)
+test test.gcno: ce.coverage.gcno ce.coverage.o test.c
+	rm -f @
+	$(CC) $(CFLAGS_TEST) $(CFLAGS) $(filter-out $<,$^) -o $@ $(LINK)
 
-ce.gcov.o: ce.c
+ce.coverage.o ce.coverage.gcno: ce.c
+	rm -f @
 	$(CC) -c -fpic $(CFLAGS_TEST) $(CFLAGS) $^ -o $@
 
 ce: main.c ce.o
@@ -28,9 +31,11 @@ ce_config.o: ce_config.c
 ce_config.so: ce_config.o ce.o
 	$(CC) -shared $(CFLAGS) $^ -o $@ $(LINK)
 
-clean: clean_config
-	rm -rf ce messages.txt ce.o valgrind_results.txt test test.gcda test.gcno \
-	ce.gcov.* ce.c.gcov ce.gcno ce.dSYM test.dSYM
+clean: clean_config clean_test
+	rm -rf ce messages.txt ce.o valgrind_results.txt *.dSYM
 
 clean_config:
 	rm -f ce_config.o ce_config.so ce.o
+
+clean_test:
+	rm -f test ce.coverage.o *.gcda *.gcno *.gcov

@@ -542,25 +542,25 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
 
      for(size_t mm=0; mm < multiplier; mm++) {
           switch(key0){
-          case ARROW_LEFT:
+          case KEY_LEFT:
           case 'h':
           {
                Point delta = {-1, 0};
                ce_move_cursor(buffer, movement_end, &delta);
           } break;
-          case ARROW_DOWN:
+          case KEY_DOWN:
           case 'j':
           {
                Point delta = {0, 1};
                ce_move_cursor(buffer, movement_end, &delta);
           } break;
-          case ARROW_UP:
+          case KEY_UP:
           case 'k':
           {
                Point delta = {0, -1};
                ce_move_cursor(buffer, movement_end, &delta);
           } break;
-          case ARROW_RIGHT:
+          case KEY_RIGHT:
           case 'l':
           {
                Point delta = {1, 0};
@@ -919,10 +919,10 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     }
                }
           } break;
-          case ARROW_UP:
-          case ARROW_DOWN:
-          case ARROW_LEFT:
-          case ARROW_RIGHT:
+          case KEY_UP:
+          case KEY_DOWN:
+          case KEY_LEFT:
+          case KEY_RIGHT:
           {
                config_state->movement_keys[0] = key;
                config_state->movement_multiplier = 1;
@@ -1110,10 +1110,10 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 't':
           case 'F':
           case 'T':
-          case ARROW_UP:
-          case ARROW_DOWN:
-          case ARROW_LEFT:
-          case ARROW_RIGHT:
+          case KEY_UP:
+          case KEY_DOWN:
+          case KEY_LEFT:
+          case KEY_RIGHT:
           {
                config_state->movement_keys[0] = config_state->command_key;
                config_state->movement_multiplier = 1;

@@ -1100,8 +1100,9 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                indent_nl[indent_len + 1] = '\0';
 
                if(ce_insert_string(buffer, &begin_line, indent_nl)){
-                    ce_commit_insert_string(&buffer_state->commit_tail, &begin_line, cursor, &begin_line, indent_nl);
-                    cursor->x = indent_len;
+                    Point next_cursor = {indent_len, cursor->y};
+                    ce_commit_insert_string(&buffer_state->commit_tail, &begin_line, cursor, &next_cursor, indent_nl);
+                    *cursor = next_cursor;
                     enter_insert_mode(config_state, cursor);
                }
           } break;

@@ -887,19 +887,23 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case '}':
           {
                if(ce_insert_char(buffer, cursor, key)){
+
                     Point match;
-                    if(ce_find_match(buffer, cursor, &match) && cursor->x > match.x){
-                         if(match.y != cursor->y){
-                              int64_t n_deletes = MIN((int64_t) strlen(TAB_STRING), cursor->x - match.x);
+                    if(ce_find_match(buffer, cursor, &match) && match.y != cursor->y){
 
-                              bool can_unindent = true;
-                              for(Point iter = {0, cursor->y}; ce_point_on_buffer(buffer, &iter) && iter.x < n_deletes; iter.x++)
-                                   can_unindent &= isblank(ce_get_char_raw(buffer, &iter));
+                         // get the match's sbol (that's the indentation we're matching)
+                         Point sbol_match = {0, match.y};
+                         ce_move_cursor_to_soft_beginning_of_line(buffer, &sbol_match);
 
-                              if(can_unindent){
-                                   cursor->x -= n_deletes;
-                                   ce_remove_string(buffer, cursor, n_deletes);
-                              }
+                         int64_t n_deletes = MIN((int64_t) strlen(TAB_STRING), cursor->x - sbol_match.x);
+
+                         bool can_unindent = true;
+                         for(Point iter = {0, cursor->y}; ce_point_on_buffer(buffer, &iter) && iter.x < n_deletes; iter.x++)
+                              can_unindent &= isblank(ce_get_char_raw(buffer, &iter));
+
+                         if(can_unindent){
+                              cursor->x -= n_deletes;
+                              ce_remove_string(buffer, cursor, n_deletes);
                          }
                     }
 

@@ -3,5 +3,4 @@ compiler:
   - clang
   - gcc
 install: make all
-before_script: make test
-script: ./test
+script: make test

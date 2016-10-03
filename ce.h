@@ -106,6 +106,13 @@ typedef struct BufferCommitNode {
      struct BufferCommitNode* next;
 } BufferCommitNode;
 
+typedef enum{
+     ARROW_UP = 256, // extended ascii + 1
+     ARROW_DOWN,
+     ARROW_RIGHT,
+     ARROW_LEFT,
+} ce_keys;
+
 // horizontal split []|[]
 
 // vertical split
@@ -189,6 +196,7 @@ bool ce_follow_cursor(const Point* cursor, int64_t* left_column, int64_t* top_le
 bool ce_advance_cursor(const Buffer* buffer, Point* cursor, int64_t delta);
 bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor);
 bool ce_move_cursor_to_end_of_file(const Buffer* buffer, Point* cursor);
+bool ce_move_cursor_to_beginning_of_file(const Buffer* buffer, Point* cursor);
 
 bool ce_commit_insert_char(BufferCommitNode** tail, const Point* start, const Point* undo_cursor, const Point* redo_cursor, char c);
 bool ce_commit_insert_string(BufferCommitNode** tail, const Point* start, const Point* undo_cursor, const Point* redo_cursor, char* string);
@@ -209,7 +217,8 @@ bool ce_free_views(BufferView** view);
 BufferView* ce_find_view_at_point(BufferView* head, const Point* point);
 
 void* ce_memrchr(const void* s, int c, size_t n);
-int64_t ce_compute_length(Point* start, Point* end);
+int64_t ce_compute_length(const Buffer* buffer, const Point* start, const Point* movement_end);
+void ce_sort_points(const Point** a, const Point** b);
 int64_t ce_get_indentation_for_next_line(Buffer* buffer, const Point* location, int64_t tab_len);
 
 #endif

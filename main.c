@@ -149,6 +149,9 @@ const char* random_greeting()
           "Found a bug? It's a feature.",
           "Yo.",
           "Slurp'n up whitespace since 2016",
+          "Welcome to GNU Emacs, one component of the GNU/Linux operating system.",
+          "ce, the world's only editor with a Michelin star.",
+          "Oy! ce's a beaut!",
      };
 
      srand(time(NULL));
@@ -197,14 +200,6 @@ int main(int argc, char** argv)
      if(has_colors() == TRUE){
           start_color();
           use_default_colors();
-
-          // NOTE: just messing with setting up colors
-          int color_id = 1;
-          init_pair(color_id, COLOR_BLUE, COLOR_BACKGROUND);
-          color_id = 2;
-          init_pair(color_id, COLOR_GREEN, COLOR_BACKGROUND);
-          color_id = 3;
-          init_pair(color_id, COLOR_RED, COLOR_BACKGROUND);
      }
 
      // init message buffer

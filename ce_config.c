@@ -730,7 +730,7 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
                break;
           case 'w':
           case 'W':
-               movement_end->x += ce_find_next_word(buffer, movement_end, key0 == 'w');
+               movement_end->x += ce_find_delta_to_next_word(buffer, movement_end, key0 == 'w');
                break;
           case '$':
                movement_end->x += ce_find_delta_to_end_of_line(buffer, movement_end);

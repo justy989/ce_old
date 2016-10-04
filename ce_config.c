@@ -262,6 +262,21 @@ BufferNode* new_buffer_from_file(BufferNode* head, const char* filename)
      return new_buffer_node;
 }
 
+void enter_insert_mode(ConfigState* config_state, Point* cursor)
+{
+     config_state->insert = true;
+     config_state->start_insert = *cursor;
+     config_state->original_start_insert = *cursor;
+}
+
+void clear_keys(ConfigState* config_state)
+{
+     config_state->command_multiplier = 0;
+     config_state->command_key = '\0';
+     config_state->movement_multiplier = 0;
+     memset(config_state->movement_keys, 0, sizeof config_state->movement_keys);
+}
+
 void input_start(ConfigState* config_state, const char* input_message, char input_key)
 {
      ce_clear_lines(config_state->view_input->buffer_node->buffer);
@@ -271,7 +286,7 @@ void input_start(ConfigState* config_state, const char* input_message, char inpu
      config_state->input_key = input_key;
      config_state->view_save = config_state->view_current;
      config_state->view_current = config_state->view_input;
-     config_state->insert = true; // NOTE: should we go into insert mode automatically? I think so!
+     enter_insert_mode(config_state, &config_state->view_input->cursor);
 }
 
 #define input_end() ({ \
@@ -484,21 +499,6 @@ void find_command(int command_key, int find_char, Buffer* buffer, Point* cursor)
           assert(0);
           break;
      }
-}
-
-void enter_insert_mode(ConfigState* config_state, Point* cursor)
-{
-     config_state->insert = true;
-     config_state->start_insert = *cursor;
-     config_state->original_start_insert = *cursor;
-}
-
-void clear_keys(ConfigState* config_state)
-{
-     config_state->command_multiplier = 0;
-     config_state->command_key = '\0';
-     config_state->movement_multiplier = 0;
-     memset(config_state->movement_keys, 0, sizeof config_state->movement_keys);
 }
 
 // returns true if key may be interpreted as a multiplier given the current mulitplier state
@@ -1299,17 +1299,30 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          clear_keys(config_state);
                          return true;
                     }
-                    char* save_string = (config_state->movement_keys[0] == 'd') ?
-                         strdup(buffer->lines[movement_start.y]) :
-                         ce_dupe_string(buffer, &movement_start, &movement_end);
-                    if(ce_remove_string(buffer, &movement_start, n_deletes)){
-                         ce_commit_remove_string(&buffer_state->commit_tail, &movement_start, cursor, &movement_start, save_string);
-                         add_yank(config_state, '"', strdup(save_string), yank_mode);
+
+                    char* save_string;
+                    char* yank_string;
+                    if(config_state->movement_keys[0] == 'd'){
+                         size_t save_len = strlen(buffer->lines[movement_start.y]) + 2;
+                         save_string = malloc(sizeof(*save_string)*save_len);
+                         save_string[save_len-2] = '\n';
+                         save_string[save_len-1] = '\0';
+                         memcpy(save_string, buffer->lines[movement_start.y], save_len - 2);
+                         yank_string = strdup(buffer->lines[movement_start.y]);
+                    }
+                    else{
+                         save_string = ce_dupe_string(buffer, &movement_start, &movement_end);
+                         yank_string = strdup(save_string);
                     }
 
-                    ce_set_cursor(buffer, cursor, &movement_start);
+                    if(ce_remove_string(buffer, &movement_start, n_deletes)){
+                         ce_commit_remove_string(&buffer_state->commit_tail, &movement_start, cursor, &movement_start, save_string);
+                         add_yank(config_state, '"', yank_string, yank_mode);
+                    }
+
+                    *cursor = movement_start;
                }
-               if(config_state->command_key=='c') enter_insert_mode(config_state,cursor);
+               if(config_state->command_key=='c') enter_insert_mode(config_state, cursor);
 
           } break;
           case 's':

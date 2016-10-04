@@ -601,7 +601,7 @@ bool ce_move_cursor_to_soft_beginning_of_line(const Buffer* buffer, Point* curso
      return true;
 }
 
-bool ce_move_cursor_to_soft_end_of_line(Buffer* buffer, Point* cursor)
+bool ce_move_cursor_to_soft_end_of_line(const Buffer* buffer, Point* cursor)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);

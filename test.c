@@ -1306,6 +1306,46 @@ TEST(sanity_sort_points_no_swap)
      ASSERT(memcmp(p_end, &end, sizeof(Point)) == 0);
 }
 
+TEST(sanity_move_cursor_to_soft_beginning_of_line)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("     Wow, cats are more delicious than I anticipated.");
+
+     Point cursor;
+
+     cursor = (Point) {0, 0};
+     EXPECT(ce_move_cursor_to_soft_beginning_of_line(&buffer, &cursor) == true);
+     ASSERT(cursor.x == 5);
+     ASSERT(cursor.y == 0);
+
+     cursor = (Point) {13, 0};
+     EXPECT(ce_move_cursor_to_soft_beginning_of_line(&buffer, &cursor) == true);
+     ASSERT(cursor.x == 5);
+     ASSERT(cursor.y == 0);
+}
+
+TEST(sanity_move_cursor_to_soft_end_of_line)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("     Meow.     ");
+
+     Point cursor;
+
+     cursor = (Point) {0, 0};
+     EXPECT(ce_move_cursor_to_soft_end_of_line(&buffer, &cursor) == true);
+     ASSERT(cursor.x == 9);
+     ASSERT(cursor.y == 0);
+
+     cursor = (Point) {13, 0};
+     EXPECT(ce_move_cursor_to_soft_end_of_line(&buffer, &cursor) == true);
+     ASSERT(cursor.x == 9);
+     ASSERT(cursor.y == 0);
+}
+
 int main()
 {
      RUN_TESTS();

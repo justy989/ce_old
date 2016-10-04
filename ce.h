@@ -206,6 +206,7 @@ Point* ce_clamp_cursor                          (const Buffer* buffer, Point* cu
 bool   ce_advance_cursor                        (const Buffer* buffer, Point* cursor, int64_t delta);
 bool   ce_move_cursor                           (const Buffer* buffer, Point* cursor, const Point* delta);
 bool   ce_set_cursor                            (const Buffer* buffer, Point* cursor, const Point* location);
+bool   ce_move_cursor_to_soft_end_of_line       (const Buffer* buffer, Point* cursor);
 bool   ce_move_cursor_to_soft_beginning_of_line (const Buffer* buffer, Point* cursor);
 bool   ce_move_cursor_to_end_of_file            (const Buffer* buffer, Point* cursor);
 bool   ce_move_cursor_to_beginning_of_file      (const Buffer* buffer, Point* cursor);

@@ -846,6 +846,104 @@ TEST(sanity_commit_change_string_undo_redo)
      ce_commits_free(tail);
 }
 
+TEST(sanity_ce_memrchr)
+{
+     char str[] = "TACOS BE AWESOME";
+     char* B;
+
+     ASSERT(B = ce_memrchr(str, 'B', sizeof str));
+     EXPECT(&str[6] == B);
+
+     ASSERT(!ce_memrchr(str, 'Z', sizeof str));
+}
+
+#if 0
+// This currently fails because the first character isn't checked by is_homogenous
+TEST(sanity_get_homogenous_adjacents)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("0123....    ");
+
+     Point start, end;
+     start = end = (Point) {1, 0};
+
+     ASSERT(ce_get_homogenous_adjacents(&buffer, &start, &end, isblank));
+     EXPECT(start.x == 1);
+     EXPECT(start.y == 0);
+     EXPECT(end.x == 1);
+     EXPECT(end.y == 0);
+
+     start = end = (Point) {1, 0};
+
+     ASSERT(ce_get_homogenous_adjacents(&buffer, &start, &end, ce_ispunct));
+     EXPECT(start.x == 1);
+     EXPECT(start.y == 0);
+     EXPECT(end.x == 1);
+     EXPECT(end.y == 0);
+
+     start = end = (Point) {1, 0};
+
+     ASSERT(ce_get_homogenous_adjacents(&buffer, &start, &end, ce_iswordchar));
+     EXPECT(start.x == 0);
+     EXPECT(start.y == 0);
+     EXPECT(end.x == 4);
+     EXPECT(end.y == 0);
+
+     start = end = (Point) {5, 0};
+
+     ASSERT(ce_get_homogenous_adjacents(&buffer, &start, &end, ce_ispunct));
+     EXPECT(start.x == 4);
+     EXPECT(start.y == 0);
+     EXPECT(end.x == 8);
+     EXPECT(end.y == 0);
+
+     start = end = (Point) {9, 0};
+
+     ASSERT(ce_get_homogenous_adjacents(&buffer, &start, &end, ce_ispunct));
+     EXPECT(start.x == 8);
+     EXPECT(start.y == 0);
+     EXPECT(end.x == 12);
+     EXPECT(end.y == 0);
+}
+#endif
+
+TEST(sanity_get_word_at_location)
+{
+     Buffer buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("0123 567 9ABC EFG");
+     buffer.lines[1] = strdup("0123     9ABC EFG");
+     buffer.lines[2] = strdup("0123.... 9ABC EFG");
+
+     Point word_start, word_end;
+     Point cursor = {6, 0};
+
+     ASSERT(ce_get_word_at_location(&buffer, &cursor, &word_start, &word_end));
+     EXPECT(word_start.y == 0);
+     EXPECT(word_start.x == 5);
+     EXPECT(word_end.y == 0);
+     EXPECT(word_end.x == 8);
+
+     cursor = (Point) {6, 1};
+
+     ASSERT(ce_get_word_at_location(&buffer, &cursor, &word_start, &word_end));
+     EXPECT(word_start.y == 1);
+     EXPECT(word_start.x == 4);
+     EXPECT(word_end.y == 1);
+     EXPECT(word_end.x == 9);
+
+     cursor = (Point) {6, 2};
+
+     ASSERT(ce_get_word_at_location(&buffer, &cursor, &word_start, &word_end));
+     EXPECT(word_start.y == 2);
+     EXPECT(word_start.x == 4);
+     EXPECT(word_end.y == 2);
+     EXPECT(word_end.x == 8);
+}
+
 int main()
 {
      RUN_TESTS();

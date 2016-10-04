@@ -2264,6 +2264,7 @@ bool ce_get_homogenous_adjacents(const Buffer* buffer, Point* start, Point* end,
      return true;
 }
 
+// word_start is inclusive, word_end is exclusive
 bool ce_get_word_at_location(Buffer* buffer, const Point* location, Point* word_start, Point* word_end)
 {
      *word_start = *location;

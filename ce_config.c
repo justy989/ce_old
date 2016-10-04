@@ -1320,9 +1320,9 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          add_yank(config_state, '"', yank_string, yank_mode);
                     }
 
-                    ce_set_cursor(buffer, cursor, &movement_start);
+                    *cursor = movement_start;
                }
-               if(config_state->command_key=='c') enter_insert_mode(config_state,cursor);
+               if(config_state->command_key=='c') enter_insert_mode(config_state, cursor);
 
           } break;
           case 's':

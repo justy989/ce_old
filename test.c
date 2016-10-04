@@ -26,7 +26,7 @@ TEST(sanity_load_string)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_load_string_multiline)
+TEST(load_string_multiline)
 {
      const char* str = "TACOS\nARE\nTHE\nBEST";
 
@@ -43,7 +43,7 @@ TEST(sanity_load_string_multiline)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_load_one_line_file)
+TEST(load_one_line_file)
 {
      // NOTE: sorry, can't run this test if you're hd is full !
      char cmd[128];
@@ -62,7 +62,7 @@ TEST(sanity_load_one_line_file)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_load_multiline_file)
+TEST(load_multiline_file)
 {
      // NOTE: sorry, can't run this test if you're hd is full !
      char cmd[128];
@@ -84,7 +84,7 @@ TEST(sanity_load_multiline_file)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_save_buffer_one_line)
+TEST(save_buffer_one_line)
 {
      const char* tmp_file = "/tmp/ce_one_line_file.txt";
 
@@ -112,7 +112,39 @@ TEST(sanity_save_buffer_one_line)
      ce_free_buffer(&other_buffer);
 }
 
-TEST(sanity_point_on_buffer)
+TEST(save_buffer_multiline_line)
+{
+     const char* tmp_file = "/tmp/ce_multiline_file.txt";
+
+     Buffer buffer = {};
+     buffer.filename = strdup(tmp_file);
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE");
+     buffer.lines[2] = strdup("AWESOME");
+
+     ce_save_buffer(&buffer, tmp_file);
+
+     // NOTE: not sure how else to validate this
+     Buffer other_buffer = {};
+     ce_load_file(&other_buffer, tmp_file);
+
+     char cmd[128];
+     sprintf(cmd, "rm %s", tmp_file);
+     system(cmd);
+
+     ASSERT(other_buffer.lines);
+     ASSERT(other_buffer.line_count == 3);
+     EXPECT(strcmp(other_buffer.lines[0], "TACOS") == 0);
+     EXPECT(strcmp(other_buffer.lines[1], "ARE") == 0);
+     EXPECT(strcmp(other_buffer.lines[2], "AWESOME") == 0);
+
+     ce_free_buffer(&buffer);
+     ce_free_buffer(&other_buffer);
+}
+
+TEST(point_on_buffer)
 {
      Buffer buffer = {};
 
@@ -148,7 +180,24 @@ TEST(sanity_insert_char)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_insert_char_newline_end)
+TEST(insert_char_newline_begin)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+
+     Point point = {0, 0};
+     ce_insert_char(&buffer, &point, '\n');
+
+     ASSERT(buffer.line_count == 2);
+     EXPECT(strcmp(buffer.lines[0], "") == 0);
+     EXPECT(strcmp(buffer.lines[1], "TACOS") == 0);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(insert_char_newline_end)
 {
      Buffer buffer = {};
      buffer.line_count = 1;
@@ -165,7 +214,7 @@ TEST(sanity_insert_char_newline_end)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_insert_char_newline_middle)
+TEST(insert_char_newline_middle)
 {
      Buffer buffer = {};
      buffer.line_count = 1;
@@ -198,8 +247,7 @@ TEST(sanity_remove_char)
      ce_free_buffer(&buffer);
 }
 
-#if 0 // NOTE: This fails, and I'm too under the influence to figure out why! It's Friday! :D
-TEST(sanity_remove_char_empty_line)
+TEST(remove_char_empty_line)
 {
      Buffer buffer = {};
      buffer.line_count = 2;
@@ -215,9 +263,8 @@ TEST(sanity_remove_char_empty_line)
 
      ce_free_buffer(&buffer);
 }
-#endif
 
-TEST(sanity_insert_string_begin)
+TEST(insert_string_begin)
 {
      Buffer buffer = {};
      buffer.line_count = 1;
@@ -232,7 +279,7 @@ TEST(sanity_insert_string_begin)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_insert_string_mid)
+TEST(insert_string_mid)
 {
      Buffer buffer = {};
      buffer.line_count = 1;
@@ -247,7 +294,7 @@ TEST(sanity_insert_string_mid)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_insert_string_end)
+TEST(insert_string_end)
 {
      Buffer buffer = {};
      buffer.line_count = 1;
@@ -262,7 +309,7 @@ TEST(sanity_insert_string_end)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_insert_string_multiline_begin)
+TEST(insert_string_multiline_begin)
 {
      Buffer buffer = {};
      buffer.line_count = 1;
@@ -280,7 +327,7 @@ TEST(sanity_insert_string_multiline_begin)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_insert_string_multiline_mid)
+TEST(insert_string_multiline_mid)
 {
      Buffer buffer = {};
      buffer.line_count = 1;
@@ -297,7 +344,7 @@ TEST(sanity_insert_string_multiline_mid)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_insert_string_multiline_end)
+TEST(insert_string_multiline_end)
 {
      Buffer buffer = {};
      buffer.line_count = 1;
@@ -314,7 +361,7 @@ TEST(sanity_insert_string_multiline_end)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_insert_string_multiline_blank_begin)
+TEST(insert_string_multiline_blank_begin)
 {
      Buffer buffer = {};
      buffer.line_count = 1;
@@ -332,7 +379,7 @@ TEST(sanity_insert_string_multiline_blank_begin)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_insert_string_multiline_blank_mid)
+TEST(insert_string_multiline_blank_mid)
 {
      Buffer buffer = {};
      buffer.line_count = 1;
@@ -350,7 +397,7 @@ TEST(sanity_insert_string_multiline_blank_mid)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_insert_string_multiline_blank_end)
+TEST(insert_string_multiline_blank_end)
 {
      Buffer buffer = {};
      buffer.line_count = 1;
@@ -399,7 +446,7 @@ TEST(sanity_append_string_multiline)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_remove_string_begin)
+TEST(remove_string_begin)
 {
      Buffer buffer = {};
      buffer.line_count = 1;
@@ -415,7 +462,7 @@ TEST(sanity_remove_string_begin)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_remove_string_mid)
+TEST(remove_string_mid)
 {
      Buffer buffer = {};
      buffer.line_count = 1;
@@ -431,7 +478,7 @@ TEST(sanity_remove_string_mid)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_remove_string_end)
+TEST(remove_string_end)
 {
      Buffer buffer = {};
      buffer.line_count = 1;
@@ -447,7 +494,7 @@ TEST(sanity_remove_string_end)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_remove_string_multiline_begin)
+TEST(remove_string_multiline_begin)
 {
      Buffer buffer = {};
      buffer.line_count = 3;
@@ -466,7 +513,7 @@ TEST(sanity_remove_string_multiline_begin)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_remove_string_multiline_mid)
+TEST(remove_string_multiline_mid)
 {
      Buffer buffer = {};
      buffer.line_count = 3;
@@ -485,7 +532,7 @@ TEST(sanity_remove_string_multiline_mid)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_remove_string_multiline_end)
+TEST(remove_string_multiline_end)
 {
      Buffer buffer = {};
      buffer.line_count = 3;
@@ -504,7 +551,7 @@ TEST(sanity_remove_string_multiline_end)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_remove_string_multiline_blank_begin)
+TEST(remove_string_multiline_blank_begin)
 {
      Buffer buffer = {};
      buffer.line_count = 5;
@@ -526,7 +573,7 @@ TEST(sanity_remove_string_multiline_blank_begin)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_remove_string_multiline_blank_mid)
+TEST(remove_string_multiline_blank_mid)
 {
      Buffer buffer = {};
      buffer.line_count = 5;
@@ -548,7 +595,7 @@ TEST(sanity_remove_string_multiline_blank_mid)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_remove_string_multiline_blank_end)
+TEST(remove_string_multiline_blank_end)
 {
      Buffer buffer = {};
      buffer.line_count = 5;
@@ -620,9 +667,7 @@ TEST(sanity_dupe_string)
      ce_free_buffer(&buffer);
 }
 
-#if 0
-// NOTE: there seems to be a difference between 1 line and multiple lines!
-TEST(sanity_dupe_string_multiline)
+TEST(dupe_string_multiline)
 {
      Buffer buffer = {};
      buffer.line_count = 3;
@@ -635,14 +680,32 @@ TEST(sanity_dupe_string_multiline)
      Point end = {3, 2};
      char* str = ce_dupe_string(&buffer, &start, &end);
 
-     EXPECT(strcmp(str, "ACOS\nARE\nAW") == 0);
+     EXPECT(strcmp(str, "ACOS\nARE\nAWE") == 0);
 
      free(str);
      ce_free_buffer(&buffer);
 }
-#endif
 
-TEST(sanity_dupe_line)
+TEST(dupe_string_multiline_on_line_boundry)
+{
+     Buffer buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE");
+     buffer.lines[2] = strdup("AWESOME");
+
+     Point start = {1, 0};
+     Point end = {0, 2};
+     char* str = ce_dupe_string(&buffer, &start, &end);
+
+     EXPECT(strcmp(str, "ACOS\nARE\n") == 0);
+
+     free(str);
+     ce_free_buffer(&buffer);
+}
+
+TEST(dupe_line)
 {
      Buffer buffer = {};
      buffer.line_count = 3;
@@ -728,7 +791,7 @@ TEST(sanity_find_match_next_line)
 }
 #endif
 
-TEST(sanity_find_match_same_line)
+TEST(find_match_same_line)
 {
      Buffer buffer = {};
      buffer.line_count = 1;
@@ -745,7 +808,7 @@ TEST(sanity_find_match_same_line)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_find_match_next_line)
+TEST(find_match_next_line)
 {
      Buffer buffer = {};
      buffer.line_count = 3;
@@ -764,7 +827,7 @@ TEST(sanity_find_match_next_line)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_clamp_cursor_horizontal)
+TEST(clamp_cursor_horizontal)
 {
      Buffer buffer = {};
      buffer.line_count = 3;
@@ -782,7 +845,7 @@ TEST(sanity_clamp_cursor_horizontal)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_clamp_cursor_vertical)
+TEST(clamp_cursor_vertical)
 {
      Buffer buffer = {};
      buffer.line_count = 3;
@@ -838,7 +901,7 @@ TEST(sanity_set_cursor)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_advance_cursor_same_line)
+TEST(advance_cursor_same_line)
 {
      Buffer buffer = {};
      buffer.line_count = 3;
@@ -856,7 +919,7 @@ TEST(sanity_advance_cursor_same_line)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_advance_cursor_next_line)
+TEST(advance_cursor_next_line)
 {
      Buffer buffer = {};
      buffer.line_count = 3;
@@ -874,7 +937,7 @@ TEST(sanity_advance_cursor_next_line)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_move_cursor_to_end_of_file)
+TEST(move_cursor_to_end_of_file)
 {
      Buffer buffer = {};
      buffer.line_count = 3;
@@ -892,7 +955,7 @@ TEST(sanity_move_cursor_to_end_of_file)
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_commit_insert_char_undo_redo)
+TEST(commit_insert_char_undo_redo)
 {
      Buffer buffer = {};
      buffer.line_count = 1;
@@ -926,7 +989,7 @@ TEST(sanity_commit_insert_char_undo_redo)
      ce_commits_free(tail);
 }
 
-TEST(sanity_commit_insert_string_undo_redo)
+TEST(commit_insert_string_undo_redo)
 {
      Buffer buffer = {};
      buffer.line_count = 1;
@@ -960,7 +1023,7 @@ TEST(sanity_commit_insert_string_undo_redo)
      ce_commits_free(tail);
 }
 
-TEST(sanity_commit_remove_char_undo_redo)
+TEST(commit_remove_char_undo_redo)
 {
      Buffer buffer = {};
      buffer.line_count = 1;
@@ -994,7 +1057,7 @@ TEST(sanity_commit_remove_char_undo_redo)
      ce_commits_free(tail);
 }
 
-TEST(sanity_commit_remove_string_undo_redo)
+TEST(commit_remove_string_undo_redo)
 {
      Buffer buffer = {};
      buffer.line_count = 1;
@@ -1028,7 +1091,7 @@ TEST(sanity_commit_remove_string_undo_redo)
      ce_commits_free(tail);
 }
 
-TEST(sanity_commit_change_char_undo_redo)
+TEST(commit_change_char_undo_redo)
 {
      Buffer buffer = {};
      buffer.line_count = 1;
@@ -1062,7 +1125,7 @@ TEST(sanity_commit_change_char_undo_redo)
      ce_commits_free(tail);
 }
 
-TEST(sanity_commit_change_string_undo_redo)
+TEST(commit_change_string_undo_redo)
 {
      Buffer buffer = {};
      buffer.line_count = 1;

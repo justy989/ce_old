@@ -345,19 +345,7 @@ bool ce_remove_char(Buffer* buffer, const Point* location)
 
      // remove the line from the list if it is empty
      if(line_len == 0){
-          char** new_lines = calloc((buffer->line_count - 1), sizeof(char*));
-          if(!new_lines){
-               ce_message("%s() failed alloc lines", __FUNCTION__);
-               return false;
-          }
-
-          free(buffer->lines[location->y]);
-          for(int64_t i = 0; i < location->y; ++i) new_lines[i] = buffer->lines[i];
-          for(int64_t i = location->y + 1; i < buffer->line_count; ++i) new_lines[i - 1] = buffer->lines[i];
-
-          free(buffer->lines);
-          buffer->lines = new_lines;
-          return true;
+          return ce_remove_line(buffer, location->y);
      }
 
      if(location->x == line_len){

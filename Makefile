@@ -6,6 +6,7 @@ all: ce ce_config.so
 
 test: test.c ce.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LINK)
+	./test 2> test_output.txt
 
 ce: main.c ce.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LINK) -ldl -Wl,-rpath,.
@@ -20,7 +21,7 @@ ce_config.so: ce_config.o ce.o
 	$(CC) -shared $(CFLAGS) $^ -o $@ $(LINK)
 
 clean: clean_config
-	rm -f ce messages.txt ce.o valgrind_results.txt test
+	rm -f ce messages.txt ce.o valgrind_results.txt test test_output.txt
 
 clean_config:
 	rm -f ce_config.o ce_config.so ce.o

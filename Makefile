@@ -5,18 +5,15 @@ LINK=-lncurses
 
 all: ce ce_config.so
 
-testrun: test test.gcno ce.coverage.o ce.coverage.gcno
-	rm -f *.gcda # remove runtime statistics
-	./test 2> test_output.txt
+coverage: test test.gcno ce.coverage.o ce.coverage.gcno
 	llvm-cov gcov ce.coverage.o
-	#grep "#####" ce.c.gcov
 
 test test.gcno: ce.coverage.gcno ce.coverage.o test.c
-	rm -f @
 	$(CC) $(CFLAGS_TEST) $(CFLAGS) $(filter-out $<,$^) -o $@ $(LINK)
+	rm -f *.gcda # remove runtime statistics
+	./test 2> test_output.txt
 
 ce.coverage.o ce.coverage.gcno: ce.c
-	rm -f @
 	$(CC) -c -fpic $(CFLAGS_TEST) $(CFLAGS) $^ -o $@
 
 ce: main.c ce.o

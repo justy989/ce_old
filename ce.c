@@ -6,6 +6,10 @@
 
 Point* g_terminal_dimensions = NULL;
 
+Direction ce_reverse_direction(Direction to_reverse){
+     return (to_reverse == CE_UP) ? CE_DOWN : CE_UP;
+}
+
 int64_t ce_count_string_lines(const char* string)
 {
      int64_t string_length = strlen(string);
@@ -376,53 +380,28 @@ bool ce_remove_char(Buffer* buffer, const Point* location)
      return true;
 }
 
-char* ce_dupe_string(Buffer* buffer, const Point* start, const Point* end)
+char* ce_dupe_string(const Buffer* buffer, const Point* start, const Point* end)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(start);
      CE_CHECK_PTR_ARG(end);
 
-     if(!ce_point_on_buffer(buffer, start) && start->x != (int64_t)strlen(buffer->lines[start->y])){
-          return NULL;
-     }
-     if(!ce_point_on_buffer(buffer, end) && end->x != (int64_t)strlen(buffer->lines[end->y])){
-          return NULL;
-     }
-
-     if(start->y > end->y){
-          ce_message("%s() start(%"PRId64", %"PRId64") needs to be below end(%"PRId64", %"PRId64")",
-                     __FUNCTION__, start->x, start->y, end->x, end->y);
-          return NULL;
-     }
+     int64_t total_len = ce_compute_length(buffer, start, end);
 
      if(start->y == end->y){
-          if(start->x >= end->x){
-               ce_message("%s() start(%"PRId64", %"PRId64") needs to be below end(%"PRId64", %"PRId64")",
-                          __FUNCTION__, start->x, start->y, end->x, end->y);
-               return NULL;
-          }
-
           // single line allocation
-          int64_t len = end->x - start->x;
-          char* new_str = malloc(len + 1);
+          char* new_str = malloc(total_len + 1);
           if(!new_str){
                ce_message("%s() failed to alloc string", __FUNCTION__);
                return NULL;
           }
-          memcpy(new_str, buffer->lines[start->y] + start->x, len);
-          new_str[len] = 0;
+          memcpy(new_str, buffer->lines[start->y] + start->x, total_len);
+          new_str[total_len] = 0;
 
           return new_str;
      }
 
      // multi line allocation
-
-     // count total length
-     int64_t total_len = strlen(buffer->lines[start->y] + start->x) + 1; // account for newline
-     for(int64_t i = start->y + 1; i < end->y; ++i){
-          total_len += strlen(buffer->lines[i]) + 1; // account for newline
-     }
-     total_len += end->x; // do not account for newline
 
      // build string
      char* new_str = malloc(total_len + 1);
@@ -450,7 +429,7 @@ char* ce_dupe_string(Buffer* buffer, const Point* start, const Point* end)
      return new_str;
 }
 
-char* ce_dupe_line(Buffer* buffer, int64_t line)
+char* ce_dupe_line(const Buffer* buffer, int64_t line)
 {
      if(buffer->line_count <= line){
           ce_message("%s() specified line (%"PRId64") above buffer line count (%"PRId64")",
@@ -466,7 +445,7 @@ char* ce_dupe_line(Buffer* buffer, int64_t line)
 }
 
 // return x delta between location and the located character 'c' if found. return -1 if not found
-int64_t ce_find_delta_to_char_forward_in_line(Buffer* buffer, const Point* location, char c)
+int64_t ce_find_delta_to_char_forward_in_line(const Buffer* buffer, const Point* location, char c)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -480,7 +459,7 @@ int64_t ce_find_delta_to_char_forward_in_line(Buffer* buffer, const Point* locat
 }
 
 // return -x delta between location and the located character 'c' if found. return -1 if not found
-int64_t ce_find_delta_to_char_backward_in_line(Buffer* buffer, const Point* location, char c)
+int64_t ce_find_delta_to_char_backward_in_line(const Buffer* buffer, const Point* location, char c)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -493,21 +472,18 @@ int64_t ce_find_delta_to_char_backward_in_line(Buffer* buffer, const Point* loca
      return cur_char - found_char;
 }
 
-typedef enum{
-     CE_UP = -1,
-     CE_DOWN = 1
-} Direction;
 // returns the delta to the matching character; return success
-bool ce_find_match(Buffer* buffer, const Point* location, Point* delta)
+bool ce_find_delta_to_match(const Buffer* buffer, const Point* location, Point* delta)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
      CE_CHECK_PTR_ARG(delta);
 
-     const char* cur_char = &buffer->lines[location->y][location->x];
+     char matchee, match;
+     if(!ce_get_char(buffer, location, &matchee)) return false;
+
      Direction d;
-     char match;
-     switch(*cur_char){
+     switch(matchee){
      case '{':
           d = CE_DOWN;
           match = '}';
@@ -544,73 +520,96 @@ bool ce_find_match(Buffer* buffer, const Point* location, Point* delta)
           return false;
      }
 
-     const char* iter_char = cur_char + d;
-     uint64_t counter = 1; // when counter goes to 0, we have found our match
+     uint64_t n_unmatched = 0; // when n_unmatched decrements back to 0, we have found our match
 
-     int64_t line = location->y;
-     const char* line_str = buffer->lines[line];
+     char curr;
+     for(Point iter = *location;
+         d == CE_UP? iter.y >= 0 : iter.y < buffer->line_count;
+         iter.y += d ){
 
-     int64_t n_lines = (d == CE_UP) ? location->y : buffer->line_count - location->y;
-     for(int64_t i = 0; i < n_lines;){
-          while(*iter_char != '\0'){
+          // first iteration we want iter.x to be on our matchee, other iterations we want it at eol/bol
+          if(iter.y != location->y) iter.x = d == CE_UP? strlen(buffer->lines[iter.y]) : 0;
+
+          // loop over buffer
+          for(; ce_get_char(buffer, &iter, &curr); iter.x +=d){
                // loop over line
-               if(*iter_char == match){
-                    if(--counter == 0){
-                         delta->x = (iter_char - buffer->lines[line]) - location->x;
-                         delta->y = line - location->y;
+               if(curr == match){
+                    if(--n_unmatched == 0){
+                         delta->x = iter.x - location->x;
+                         delta->y = iter.y - location->y;
                          return true;
                     }
+               }else if(curr == matchee){
+                    n_unmatched++;
                }
-               else if(*iter_char == *cur_char) counter++;
-               iter_char += d;
           }
-
-          do i++;
-          while(!(line_str = buffer->lines[line += d]) && i < n_lines);
-          iter_char = (d == CE_UP) ? &line_str[strlen(line_str) - 1] : line_str;
      }
      return false;
 }
 
+bool ce_find_match(const Buffer* buffer, const Point* location, Point* match)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+     CE_CHECK_PTR_ARG(match);
+
+     Point delta = {0, 0};
+     if(!ce_find_delta_to_match(buffer, location, &delta)) return false;
+
+     *match = *location;
+     ce_move_cursor(buffer, match, &delta);
+
+     return true;
+}
+
 // returns Point at the next matching string; return success
-bool ce_find_string(Buffer* buffer, const Point* location, const char* search_str, Point* match)
+bool ce_find_string(const Buffer* buffer, const Point* location, const char* search_str, Point* match, Direction direction)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
      CE_CHECK_PTR_ARG(search_str);
      CE_CHECK_PTR_ARG(match);
 
-     Direction d = CE_DOWN; // TODO support reverse search
-
      Point search_loc = *location;
      ce_advance_cursor(buffer, &search_loc, 1);
      char* line_str = &buffer->lines[search_loc.y][search_loc.x];
 
-     int64_t n_lines = (d == CE_UP) ? search_loc.y : buffer->line_count - search_loc.y;
+     int64_t n_lines = (direction == CE_UP) ? search_loc.y : buffer->line_count - search_loc.y;
      for(int64_t i = 0; i < n_lines;){
           const char* match_str = strstr(line_str, search_str);
           if(match_str){
-               int64_t line = search_loc.y + i*d;
+               int64_t line = search_loc.y + i*direction;
                match->x = match_str - buffer->lines[line];
                match->y = line;
                return true;
           }
           i++;
-          line_str = buffer->lines[search_loc.y + i*d];
+          line_str = buffer->lines[search_loc.y + i*direction];
      }
      return false;
 }
 
-bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor)
+bool ce_move_cursor_to_soft_beginning_of_line(const Buffer* buffer, Point* cursor)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
 
-     if(!ce_point_on_buffer(buffer, cursor)) false;
-     const char* line = buffer->lines[cursor->y];
-     int i;
-     for(i = 0; isblank(line[i]); i++);
-     cursor->x = i;
+     if(!ce_point_on_buffer(buffer, cursor)) return false;
+     int64_t delta_x_sbol = ce_find_delta_to_soft_beginning_of_line(buffer, cursor);
+
+     cursor->x += delta_x_sbol;
+     return true;
+}
+
+bool ce_move_cursor_to_soft_end_of_line(Buffer* buffer, Point* cursor)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(cursor);
+
+     if(!ce_point_on_buffer(buffer, cursor)) return false;
+     int64_t delta_x_seol = ce_find_delta_to_soft_end_of_line(buffer, cursor);
+
+     cursor->x += delta_x_seol;
      return true;
 }
 
@@ -620,8 +619,35 @@ int ce_ispunct(int c)
      return c != '_' && ispunct(c);
 }
 
+// delta to move to the soft beginning of line (sbol)
+// if there is not a sbol, returns eol
+int64_t ce_find_delta_to_soft_beginning_of_line(const Buffer* buffer, const Point* cursor)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(cursor);
+
+     const char* line = buffer->lines[cursor->y];
+     int64_t line_len = strlen(line);
+     int i;
+     for(i = 0; i < line_len && isblank(line[i]); i++);
+     return i - cursor->x;
+}
+
+// delta to move to the soft end of line (seol)
+// if there is not a seol, returns bol
+int64_t ce_find_delta_to_soft_end_of_line(const Buffer* buffer, const Point* cursor)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(cursor);
+
+     const char* line = buffer->lines[cursor->y];
+     int64_t i = CE_MAX((int64_t) strlen(line) - 1, 0);
+     while(i>0 && isblank(line[i])) i--;
+     return i - cursor->x;
+}
+
 // return -1 on failure, delta to move left to the beginning of the word on success
-int64_t ce_find_delta_to_beginning_of_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
+int64_t ce_find_delta_to_beginning_of_word(const Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -648,7 +674,7 @@ int64_t ce_find_delta_to_beginning_of_word(Buffer* buffer, const Point* location
 }
 
 // return -1 on failure, delta to move right to the end of the word on success
-int64_t ce_find_delta_to_end_of_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
+int64_t ce_find_delta_to_end_of_word(const Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -676,7 +702,7 @@ int64_t ce_find_delta_to_end_of_word(Buffer* buffer, const Point* location, bool
 }
 
 // return -1 on failure, delta to move right to the beginning of the next word on success
-int64_t ce_find_next_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
+int64_t ce_find_delta_to_next_word(const Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -705,6 +731,14 @@ bool ce_get_char(const Buffer* buffer, const Point* location, char* c)
      *c = buffer->lines[location->y][location->x];
 
      return true;
+}
+
+char ce_get_char_raw(const Buffer* buffer, const Point* location)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+
+     return buffer->lines[location->y][location->x];
 }
 
 bool ce_set_char(Buffer* buffer, const Point* location, char c)
@@ -791,21 +825,19 @@ bool ce_remove_line(Buffer* buffer, int64_t line)
           return false;
      }
 
+     // free the old line
+     free(buffer->lines[line]);
+
      int64_t new_line_count = buffer->line_count - 1;
-     char** new_lines = malloc(new_line_count * sizeof(*new_lines));
-     if(!new_lines){
-          ce_message("%s() failed to malloc new lines: %"PRId64"", __FUNCTION__, new_line_count);
+     // move trailing lines up 1
+     memmove(buffer->lines + line, buffer->lines + line + 1, (new_line_count - line) * sizeof(*buffer->lines));
+
+     buffer->lines = realloc(buffer->lines, new_line_count * sizeof(*buffer->lines));
+     if(!buffer->lines){
+          ce_message("%s() failed to realloc new lines: %"PRId64"", __FUNCTION__, new_line_count);
           return false;
      }
 
-     // copy up to deleted line, copy the rest in the buffer
-     memcpy(new_lines, buffer->lines, line * sizeof(*new_lines));
-     memcpy(new_lines + line, buffer->lines + line + 1, (new_line_count - line) * sizeof(*new_lines));
-
-     // free and update the buffer ptr
-     free(buffer->lines[line]);
-     free(buffer->lines);
-     buffer->lines = new_lines;
      buffer->line_count = new_line_count;
 
      return true;
@@ -823,61 +855,57 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
 
      if(!ce_point_on_buffer(buffer, location)) return false;
 
-     char* current_line = buffer->lines[location->y];
-     int64_t current_line_len = strlen(current_line);
+     int64_t current_line_len = strlen(buffer->lines[location->y]);
      int64_t rest_of_the_line_len = (current_line_len - location->x);
 
+     // easy case: string is on a single line
      if(length <= rest_of_the_line_len){
           int64_t new_line_len = current_line_len - length;
-          char* new_line = realloc(current_line, new_line_len + 1);
-          if(!new_line){
+          memmove(buffer->lines[location->y] + location->x,
+                  buffer->lines[location->y] + location->x + length,
+                  current_line_len - (location->x + length));
+          buffer->lines[location->y][new_line_len] = 0;
+
+          // shrink the allocation now that we have fixed up the line
+          buffer->lines[location->y] = realloc(buffer->lines[location->y], new_line_len + 1);
+          if(!buffer->lines[location->y]){
                ce_message("%s() failed to realloc new line", __FUNCTION__);
                return false;
           }
-
-          memmove(new_line + location->x, current_line + location->x + length,
-                  current_line_len - (location->x + length));
-          new_line[new_line_len] = 0;
-
-          buffer->lines[location->y] = new_line;
           return true;
      }
 
-     int64_t line_index = location->y;
+     // don't delete the rest of the first line yet, we'll do this when we mash the first and last lines
+     length -= rest_of_the_line_len + 1; // account for newline
+     buffer->lines[location->y][location->x] = '\0';
 
-     if(current_line_len){
-          length -= rest_of_the_line_len;
-          line_index++;
-     }else{
-          ce_remove_line(buffer, location->y);
-          length--;
-     }
+     // hard case: string spans multiple lines
+     int64_t delete_index = location->y + 1;
 
-     while(length > 0){
-          length--; // account for newlines
+     while(length >= 0){
+          assert(delete_index <= buffer->line_count);
+          if(delete_index >= buffer->line_count) break;
 
-          assert(line_index <= buffer->line_count);
-          if(line_index >= buffer->line_count) break;
-
-          char* next_line = buffer->lines[line_index];
-          int64_t next_line_len = strlen(next_line);
+          int64_t next_line_len = strlen(buffer->lines[delete_index]);
           if(length >= next_line_len + 1){
                // remove any lines that we have the length to remove completely
-               ce_remove_line(buffer, line_index);
+               ce_remove_line(buffer, delete_index);
                length -= next_line_len + 1;
-          }else{
+          }else{ // we have to mash together our first and last line
+               // NOTE: this is only run once
+               // slurp up end of first line and beginning of last line
                int64_t next_line_part_len = next_line_len - length;
                int64_t new_line_len = location->x + next_line_part_len;
-               char* new_line = current_line = realloc(current_line, new_line_len + 1);
-               if(!new_line){
-                    ce_message("%s() failed to malloc new line", __FUNCTION__);
+               buffer->lines[location->y] = realloc(buffer->lines[location->y], new_line_len + 1);
+               if(!buffer->lines[location->y]){
+                    ce_message("%s() failed to realloc new line", __FUNCTION__);
                     return false;
                }
 
-               memcpy(new_line + location->x, next_line + length, next_line_part_len);
-               new_line[new_line_len] = 0;
-               buffer->lines[location->y] = new_line;
-               ce_remove_line(buffer, line_index);
+               assert(buffer->lines[location->y+1][length+next_line_part_len] == '\0');
+               memcpy(buffer->lines[location->y] + location->x,
+                      buffer->lines[location->y+1] + length, next_line_part_len + 1);
+               ce_remove_line(buffer, location->y+1);
                break;
           }
      }
@@ -907,7 +935,7 @@ bool ce_save_buffer(const Buffer* buffer, const char* filename)
      return true;
 }
 
-int64_t highlight_keywords(const char* line, int64_t start_offset)
+int64_t is_c_keyword(const char* line, int64_t start_offset)
 {
      static const char* keywords [] = {
           "__thread",
@@ -969,7 +997,7 @@ int64_t highlight_keywords(const char* line, int64_t start_offset)
      return highlighting_left;
 }
 
-int64_t highlight_preprocs(const char* line, int64_t start_offset)
+int64_t is_preprocessor(const char* line, int64_t start_offset)
 {
      static const char* keywords [] = {
           "define",
@@ -1012,7 +1040,7 @@ typedef enum {
      CT_END_MULTILINE,
 } CommentType;
 
-CommentType highlight_comment(const char* line, int64_t start_offset)
+CommentType is_comment(const char* line, int64_t start_offset)
 {
      char ch = line[start_offset];
 
@@ -1033,7 +1061,7 @@ CommentType highlight_comment(const char* line, int64_t start_offset)
      return CT_NONE;
 }
 
-void highlight_string(const char* line, int64_t start_offset, int64_t line_len, bool* inside_string, char* last_quote_char)
+void is_string_literal(const char* line, int64_t start_offset, int64_t line_len, bool* inside_string, char* last_quote_char)
 {
      char ch = line[start_offset];
      if(ch == '"'){
@@ -1064,17 +1092,16 @@ void highlight_string(const char* line, int64_t start_offset, int64_t line_len, 
      }
 }
 
-int ce_isconstant(int c)
+int iscapsvarchar(int c)
 {
      return isupper(c) || c == '_' || isdigit(c);
 }
 
-// NOTE: constant is not a great name for this
-int64_t highlight_constants(const char* line, int64_t start_offset)
+int64_t is_caps_var(const char* line, int64_t start_offset)
 {
      const char* itr = line + start_offset;
      int64_t count = 0;
-     for(char ch = *itr; ce_isconstant(ch); ++itr){
+     for(char ch = *itr; iscapsvarchar(ch); ++itr){
           ch = *itr;
           count++;
      }
@@ -1085,7 +1112,7 @@ int64_t highlight_constants(const char* line, int64_t start_offset)
 
      // if the surrounding chars are letters, we haven't found a constant
      if(islower(*(itr - 1))) return 0;
-     if(prev_index >= 0 && (ce_isconstant(line[prev_index]) || isalpha(line[prev_index]))) return 0;
+     if(prev_index >= 0 && (iscapsvarchar(line[prev_index]) || isalpha(line[prev_index]))) return 0;
 
      return count - 1; // we over-counted on the last iteration
 }
@@ -1189,7 +1216,7 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
 
                // NOTE: pre-pass check for comments and strings out of view
                for(int64_t c = 0; c < buffer_top_left->x; ++c){
-                    CommentType comment_type = highlight_comment(buffer_line, c);
+                    CommentType comment_type = is_comment(buffer_line, c);
                     switch(comment_type){
                     default:
                          break;
@@ -1204,7 +1231,7 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                          break;
                     }
 
-                    highlight_string(buffer_line, c, line_length, &inside_string, &last_quote_char);
+                    is_string_literal(buffer_line, c, line_length, &inside_string, &last_quote_char);
 
                     // subtract from what is left of the keyword if we found a keyword earlier
                     if(highlighting_left){
@@ -1212,20 +1239,20 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                     }else{
                          if(!inside_string){
                               if(!inside_comment && !inside_multiline_comment){
-                                   int64_t keyword_left = highlight_keywords(buffer_line, c);
+                                   int64_t keyword_left = is_c_keyword(buffer_line, c);
                                    if(keyword_left){
                                         highlighting_left = keyword_left;
                                         highlight_color = S_KEYWORD;
                                    }else{
-                                        keyword_left = highlight_constants(line_to_print, c);
+                                        keyword_left = is_caps_var(buffer_line, c);
                                         if(keyword_left){
                                              highlighting_left = keyword_left;
                                              highlight_color = S_CONSTANT;
                                         }else{
-                                             keyword_left = highlight_preprocs(line_to_print, c);
+                                             keyword_left = is_preprocessor(buffer_line, c);
                                              if(keyword_left){
                                                   highlighting_left = keyword_left;
-                                                  highlight_color = S_PREPROC;
+                                                  highlight_color = S_PREPROCESSOR;
 
                                              }
                                         }
@@ -1251,25 +1278,25 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                     if(highlighting_left == 0){
                          if(!inside_string){
                               if(!inside_comment && !inside_multiline_comment){
-                                   highlighting_left = highlight_keywords(line_to_print, c);
+                                   highlighting_left = is_c_keyword(line_to_print, c);
                               }
 
                               if(highlighting_left){
                                    attron(COLOR_PAIR(S_KEYWORD));
                               }else{
-                                   highlighting_left = highlight_constants(line_to_print, c);
+                                   highlighting_left = is_caps_var(line_to_print, c);
                                    if(highlighting_left){
                                         attron(COLOR_PAIR(S_CONSTANT));
                                    }else{
-                                        highlighting_left = highlight_preprocs(line_to_print, c);
+                                        highlighting_left = is_preprocessor(line_to_print, c);
                                         if(highlighting_left){
-                                             attron(COLOR_PAIR(S_PREPROC));
+                                             attron(COLOR_PAIR(S_PREPROCESSOR));
                                         }
                                    }
                               }
                          }
 
-                         CommentType comment_type = highlight_comment(line_to_print, c);
+                         CommentType comment_type = is_comment(line_to_print, c);
                          switch(comment_type){
                          default:
                               break;
@@ -1287,7 +1314,7 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                          }
 
                          bool pre_quote_check = inside_string;
-                         highlight_string(line_to_print, c, print_line_length, &inside_string, &last_quote_char);
+                         is_string_literal(line_to_print, c, print_line_length, &inside_string, &last_quote_char);
 
                          // if inside_string has changed, update the color
                          if(pre_quote_check != inside_string){
@@ -1313,7 +1340,7 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
 
                // NOTE: post pass after the line to see if multiline comments begin or end
                for(int64_t c = min; c < line_length; ++c){
-                    CommentType comment_type = highlight_comment(buffer_line, c);
+                    CommentType comment_type = is_comment(buffer_line, c);
                     switch(comment_type){
                     default:
                          break;
@@ -1383,7 +1410,7 @@ bool ce_remove_buffer_from_list(BufferNode* head, BufferNode** node)
 }
 
 // return x delta to the last character in the line, -1 on error
-int64_t ce_find_delta_to_end_of_line(const Buffer* buffer, Point* cursor)
+int64_t ce_find_delta_to_end_of_line(const Buffer* buffer, const Point* cursor)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
@@ -1511,6 +1538,16 @@ bool ce_move_cursor_to_end_of_file(const Buffer* buffer, Point* cursor)
 
      cursor->x = len - 1;
      cursor->y = last_line;
+
+     return true;
+}
+
+bool ce_move_cursor_to_beginning_of_file(const Buffer* buffer, Point* cursor)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(cursor);
+
+     *cursor = (Point) {0, 0};
 
      return true;
 }
@@ -1691,11 +1728,11 @@ bool ce_commit_change(BufferCommitNode** tail, const BufferCommit* commit)
      return true;
 }
 
-bool ce_commits_free(BufferCommitNode* head)
+bool ce_commits_free(BufferCommitNode* tail)
 {
-     while(head){
-          BufferCommitNode* tmp = head;
-          head = head->next;
+     while(tail){
+          BufferCommitNode* tmp = tail;
+          tail = tail->next;
           free_commit(tmp);
      }
 
@@ -2219,18 +2256,31 @@ void* ce_memrchr(const void* s, int c, size_t n)
      return NULL;
 }
 
-int64_t ce_compute_length(Point* start, Point* end)
+int64_t ce_compute_length(const Buffer* buffer, const Point* start, const Point* end)
 {
-     // swap end and start if necessary
-     if(end->y < start->y || (end->y == start->y && end->x < start->x)){
-          Point* temp = start;
-          start = end;
-          end = temp;
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(start);
+     CE_CHECK_PTR_ARG(end);
+
+     assert(ce_point_on_buffer(buffer, start) || start->x == (int64_t)strlen(buffer->lines[start->y]) + 1); // account for newline
+     assert(ce_point_on_buffer(buffer, end) || end->x == (int64_t)strlen(buffer->lines[end->y]) + 1); // account for newline
+
+     ce_sort_points(&start, &end);
+
+     size_t length = 0;
+
+     if( start->y < end->y){
+          length = strlen(buffer->lines[start->y] + start->x) + 1; // account for newline
+          for(int64_t i = start->y + 1; i < end->y; ++i){
+               length += strlen(buffer->lines[i]) + 1; // account for newline
+          }
+          length += end->x; // do not account for newline
+     }else{
+          assert(start->y == end->y);
+          length += end->x - start->x;
      }
 
-     assert(start->y == end->y); // TODO support multi-line
-
-     return end->x - start->x;
+     return length;
 }
 
 int ce_iswordchar(int c)
@@ -2265,8 +2315,13 @@ bool ce_get_homogenous_adjacents(const Buffer* buffer, Point* start, Point* end,
 }
 
 // word_start is inclusive, word_end is exclusive
-bool ce_get_word_at_location(Buffer* buffer, const Point* location, Point* word_start, Point* word_end)
+bool ce_get_word_at_location(const Buffer* buffer, const Point* location, Point* word_start, Point* word_end)
 {
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+     CE_CHECK_PTR_ARG(word_start);
+     CE_CHECK_PTR_ARG(word_end);
+
      *word_start = *location;
      *word_end = *location;
      char curr_char;
@@ -2285,4 +2340,42 @@ bool ce_get_word_at_location(Buffer* buffer, const Point* location, Point* word_
           if(!success) return false;
      }
      return true;
+}
+
+int64_t ce_get_indentation_for_next_line(const Buffer* buffer, const Point* location, int64_t tab_len)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+
+     // first, match this line's indentation
+     Point bol = *location;
+     bol.x = 0;
+     int64_t indent = ce_find_delta_to_soft_beginning_of_line(buffer, &bol);
+
+     // then, check the line for a '{' that is unmatched on location's line + indent if you find one
+     char curr;
+     for(Point iter = {strlen(buffer->lines[location->y]), location->y};
+         ce_get_char(buffer, &iter, &curr);
+         iter.x--){
+          if(curr == '{'){
+               Point match;
+               if(!ce_find_match(buffer, &iter, &match) || match.y != location->y){
+                    // '{' is globally unmatched, or unmatched on our line
+                    indent += tab_len;
+                    break; // if a line has "{{", we don't want to double tab the next line!
+               }
+           }
+     }
+
+     return indent;
+}
+
+// if a > b, swap a and b
+void ce_sort_points(const Point** a, const Point** b)
+{
+     if((*b)->y < (*a)->y || ((*b)->y == (*a)->y && (*b)->x < (*a)->x)){
+          const Point* temp = *a;
+          *a = *b;
+          *b = temp;
+     }
 }

@@ -2,14 +2,17 @@ ce
 test
 *.o
 *.so
+test_output.txt
 
 #gcov
 *.gcov
 *.gcda
 *.gcno
+default.profraw
 
 #cscope
 *.out
+*.files
 
 #MacOS
 *.dylib

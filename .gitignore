@@ -2,6 +2,7 @@ ce
 test
 *.o
 *.so
+test_output.txt
 
 #gcov
 *.gcov

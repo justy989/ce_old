@@ -3,13 +3,6 @@
 #include "ce.h"
 #include "test.h"
 
-#if 1
-TEST(asdaasd)
-{
-     ASSERT(true);
-}
-#endif
-
 TEST(sanity_alloc_and_free)
 {
      Buffer buffer = {};

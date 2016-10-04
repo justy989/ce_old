@@ -1092,7 +1092,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                Point end_join_loc = {0, cursor->y+1};
                ce_move_cursor_to_soft_beginning_of_line(buffer, &end_join_loc);
                char* save_str = ce_dupe_string(buffer, &join_loc, &end_join_loc);
-               save_str[0] = '\n';
+               assert(save_str[0] == '\n');
                if(ce_remove_string(buffer, &join_loc, ce_compute_length(buffer, &join_loc, &end_join_loc))){
                     ce_insert_string(buffer, &join_loc, " ");
                     ce_commit_change_string(&buffer_state->commit_tail, &join_loc, cursor, cursor, strdup("\n"), save_str);

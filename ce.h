@@ -29,7 +29,7 @@ typedef enum {
      S_COMMENT,
      S_STRING,
      S_CONSTANT,
-     S_PREPROC,
+     S_PREPROCESSOR,
 } Syntax;
 
 #define CE_CHECK_PTR_ARG(arg)                                                 \
@@ -124,7 +124,6 @@ typedef struct BufferView {
 } BufferView;
 
 extern Point* g_terminal_dimensions;
-
 
 // CE Configuration-Defined Functions
 typedef bool ce_initializer (BufferNode*, Point*, int, char**, void**);
@@ -231,7 +230,6 @@ bool ce_commits_free         (BufferCommitNode* tail);
 // Logging Functions
 #define ce_message(...) fprintf(stderr,__VA_ARGS__); fprintf(stderr,"\n");
 
-
 // Misc. Utility Functions
 int64_t ce_count_string_lines (const char* string);
 void    ce_sort_points        (const Point** a, const Point** b);
@@ -243,6 +241,5 @@ void*   ce_memrchr            (const void* s, int c, size_t n);
 // Uncategorized (TODO: Help me!)
 bool ce_follow_cursor  (const Point* cursor, int64_t* left_column, int64_t* top_left, int64_t view_width, int64_t view_height,
                         bool at_terminal_width_edge, bool at_terminal_height_edge);
-
 
 #endif

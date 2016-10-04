@@ -192,32 +192,7 @@ int main(int argc, char** argv)
           }
      }
 
-     // ncurses_init()
-     keypad(initscr(), TRUE);
-     cbreak();
-     noecho();
-
-     if(has_colors() == TRUE){
-          start_color();
-          use_default_colors();
-     }
-
      // init message buffer
-     int message_buffer_fds[2];
-     pipe(message_buffer_fds);
-     for(int i = 0 ; i < 2; i++){
-          int fd_flags = fcntl(message_buffer_fds[i], F_GETFL, 0);
-          fcntl(message_buffer_fds[i], F_SETFL, fd_flags | O_NONBLOCK);
-     }
-
-     fclose(stderr);
-     close(STDERR_FILENO);
-     dup(message_buffer_fds[1]); // redirect stderr to the message buffer
-     stderr = fdopen(message_buffer_fds[1], "w");
-     setvbuf(stderr, NULL, _IONBF, 0);
-     FILE* message_stderr = fdopen(message_buffer_fds[0], "r");
-     setvbuf(message_stderr, NULL, _IONBF, 0);
-
      Buffer* message_buffer = malloc(sizeof(*message_buffer));
      if(!message_buffer){
           printf("failed to allocate message buffer: %s\n", strerror(errno));
@@ -238,8 +213,6 @@ int main(int argc, char** argv)
      buffer_list_head->buffer = message_buffer;
      buffer_list_head->next = NULL;
 
-     ce_message("%s", random_greeting());
-
      Point terminal_dimensions = {};
      getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);
      g_terminal_dimensions = &terminal_dimensions;
@@ -251,9 +224,36 @@ int main(int argc, char** argv)
 
      Config current_config;
      if(!config_open(&current_config, config)){
-          ce_save_buffer(message_buffer, message_buffer->filename);
           return -1;
      }
+
+     // ncurses_init()
+     keypad(initscr(), TRUE);
+     cbreak();
+     noecho();
+
+     if(has_colors() == TRUE){
+          start_color();
+          use_default_colors();
+     }
+
+     // redirect stderr to the message buffer
+     int message_buffer_fds[2];
+     pipe(message_buffer_fds);
+     for(int i = 0 ; i < 2; i++){
+          int fd_flags = fcntl(message_buffer_fds[i], F_GETFL, 0);
+          fcntl(message_buffer_fds[i], F_SETFL, fd_flags | O_NONBLOCK);
+     }
+
+     fclose(stderr);
+     close(STDERR_FILENO);
+     dup(message_buffer_fds[1]); // redirect stderr to the message buffer
+     stderr = fdopen(message_buffer_fds[1], "w");
+     setvbuf(stderr, NULL, _IONBF, 0);
+     FILE* message_stderr = fdopen(message_buffer_fds[0], "r");
+     setvbuf(message_stderr, NULL, _IONBF, 0);
+
+     ce_message("%s", random_greeting());
 
      // save the stable config in memory
      size_t stable_config_size;
@@ -263,7 +263,7 @@ int main(int argc, char** argv)
           FILE* file = fopen(config, "rb");
           if(!file){
                ce_message("%s() fopen('%s', 'rb') failed: %s", __FUNCTION__, config, strerror(errno));
-               return false;
+               return -1;
           }
 
           fseek(file, 0, SEEK_END);

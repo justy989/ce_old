@@ -1440,22 +1440,22 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'H':
           {
                // move cursor to top line of view
-               // TODO: sometimes it would be nicer to work in absolutes instead of in deltas
-               Point delta = {0, buffer_view->top_row - cursor->y};
-               ce_move_cursor(buffer, cursor, &delta);
+               Point location = {cursor->x, buffer_view->top_row};
+               ce_set_cursor(buffer, cursor, &location);
           } break;
           case 'M':
           {
                // move cursor to middle line of view
-               // TODO: sometimes it would be nicer to work in absolutes instead of in deltas
-               Point delta = {0, (buffer_view->top_row + (g_terminal_dimensions->y - 1) / 2) - cursor->y};
-               ce_move_cursor(buffer, cursor, &delta);
+               int64_t view_height = buffer_view->bottom_right.y - buffer_view->top_left.y;
+               Point location = {cursor->x, buffer_view->top_row + (view_height/2)};
+               ce_set_cursor(buffer, cursor, &location);
           } break;
           case 'L':
           {
                // move cursor to bottom line of view
-               Point delta = {0, (buffer_view->top_row + g_terminal_dimensions->y - 1) - (cursor->y + 1)};
-               ce_move_cursor(buffer, cursor, &delta);
+               int64_t view_height = buffer_view->bottom_right.y - buffer_view->top_left.y;
+               Point location = {cursor->x, buffer_view->top_row + view_height};
+               ce_set_cursor(buffer, cursor, &location);
           } break;
           case 'z':
           {
@@ -1466,18 +1466,22 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     return true;
                case 't':
                     location = (Point) {0, cursor->y};
-                    scroll_view_to_location(config_state->view_current, &location);
+                    scroll_view_to_location(buffer_view, &location);
                     break;
                case 'z':
+               {
                     // center view on cursor
-                    location = (Point) {0, cursor->y - (g_terminal_dimensions->y/2)};
-                    scroll_view_to_location(config_state->view_current, &location);
-                    break;
+                    int64_t view_height = buffer_view->bottom_right.y
+                         - buffer_view->top_left.y;
+                    location = (Point) {0, cursor->y - (view_height/2)};
+                    scroll_view_to_location(buffer_view, &location);
+               } break;
                case 'b':
+               {
                     // move current line to bottom of view
-                    location = (Point) {0, cursor->y - g_terminal_dimensions->y};
-                    scroll_view_to_location(config_state->view_current, &location);
-                    break;
+                    location = (Point) {0, cursor->y - buffer_view->bottom_right.y};
+                    scroll_view_to_location(buffer_view, &location);
+               } break;
                }
           } break;
           case '>':

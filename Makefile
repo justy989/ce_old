@@ -4,14 +4,18 @@ LINK=-lncurses
 
 all: ce ce_config.so
 
-test: test.c ce.o
+coverage: CFLAGS += -fprofile-arcs -ftest-coverage
+coverage: clean_test test
+	llvm-cov gcov ce.test.o
+
+test: test.c ce.test.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LINK)
 	./test 2> test_output.txt
 
 ce: main.c ce.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LINK) -ldl -Wl,-rpath,.
 
-ce.o: ce.c
+ce%o: ce.c
 	$(CC) -c -fpic $(CFLAGS) $^ -o $@
 
 ce_config.o: ce_config.c
@@ -20,8 +24,11 @@ ce_config.o: ce_config.c
 ce_config.so: ce_config.o ce.o
 	$(CC) -shared $(CFLAGS) $^ -o $@ $(LINK)
 
-clean: clean_config
-	rm -f ce messages.txt ce.o valgrind_results.txt test test_output.txt
+clean: clean_config clean_test
+	rm -rf ce messages.txt ce.o valgrind_results.txt *.dSYM
 
 clean_config:
 	rm -f ce_config.o ce_config.so ce.o
+
+clean_test:
+	rm -f test ce.test.o *.gcda *.gcno *.gcov test_output.txt default.profraw

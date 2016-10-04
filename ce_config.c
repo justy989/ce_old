@@ -1087,6 +1087,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                return false; // exit !
           case 'J':
           {
+               if(cursor->y == buffer->line_count - 1) break; // nothing to join
                Point join_loc = {strlen(buffer->lines[cursor->y]), cursor->y};
                if(ce_join_line(buffer, cursor->y)){
                     ce_commit_change_char(&buffer_state->commit_tail,

@@ -279,6 +279,7 @@ int main(int argc, char** argv)
 
      current_config.initializer(buffer_list_head, g_terminal_dimensions, argc - parsed_args, argv + parsed_args, &user_data);
 
+     signal(SIGQUIT, SIG_IGN);
      struct sigaction sa = {};
      sa.sa_handler = segv_handler;
      sigemptyset(&sa.sa_mask);

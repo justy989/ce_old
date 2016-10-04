@@ -2262,8 +2262,8 @@ int64_t ce_compute_length(const Buffer* buffer, const Point* start, const Point*
      CE_CHECK_PTR_ARG(start);
      CE_CHECK_PTR_ARG(end);
 
-     assert(ce_point_on_buffer(buffer, start) || start->x == (int64_t)strlen(buffer->lines[start->y]) + 1); // account for newline
-     assert(ce_point_on_buffer(buffer, end) || end->x == (int64_t)strlen(buffer->lines[end->y]) + 1); // account for newline
+     assert(ce_point_on_buffer(buffer, start));
+     assert(ce_point_on_buffer(buffer, end));
 
      ce_sort_points(&start, &end);
 

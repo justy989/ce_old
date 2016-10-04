@@ -1096,6 +1096,22 @@ TEST(sanity_commit_change_string_undo_redo)
      ce_commits_free(tail);
 }
 
+TEST(sanity_find_delta_to_end_of_line)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("Cats are delicious");
+
+     Point cursor;
+
+     cursor = (Point) {0, 0};
+     ASSERT(ce_find_delta_to_end_of_line(&buffer, &cursor) == (int64_t) strlen(buffer.lines[0]) - 1);
+
+     cursor = (Point) {5, 0};
+     ASSERT(ce_find_delta_to_end_of_line(&buffer, &cursor) == (int64_t) strlen(buffer.lines[0]) - 1 - 5);
+}
+
 TEST(sanity_ce_memrchr)
 {
      char str[] = "TACOS BE AWESOME";
@@ -1107,8 +1123,43 @@ TEST(sanity_ce_memrchr)
      ASSERT(!ce_memrchr(str, 'Z', sizeof str));
 }
 
+TEST(sanity_compute_length)
+{
+     Buffer buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("Cats are delicious");
+     buffer.lines[1] = strdup("This forever has been true");
+     buffer.lines[2] = strdup("We should eat them all.");
+
+     Point start;
+     Point end;
+
+     start = (Point) {0, 0};
+     end = (Point) {1, 0};
+     ASSERT(ce_compute_length(&buffer, &start, &end) == 1);
+
+     start = (Point) {0, 0};
+     end = (Point) {18, 0};
+     ASSERT(ce_compute_length(&buffer, &start, &end) == 18);
+
+     start = (Point) {0, 0};
+     end = (Point) {0, 1};
+     ASSERT(ce_compute_length(&buffer, &start, &end) == 19);
+
+     start = (Point) {0, 0};
+     end = (Point) {1, 1};
+     ASSERT(ce_compute_length(&buffer, &start, &end) == 20);
+
+     start = (Point) {0, 0};
+     end = (Point) {strlen(buffer.lines[2]), 2};
+     ASSERT(ce_compute_length(&buffer, &start, &end) == (int64_t) strlen(buffer.lines[0]) + 1 + // account for null
+                                                        (int64_t) strlen(buffer.lines[1]) + 1 + // account for null
+                                                        (int64_t) strlen(buffer.lines[2]));     // last point is exclusive
+}
+
 #if 0
-// This currently fails because the first character isn't checked by is_homogenous
+// This currently fails because the first character isn't checked by is_homogenous?
 TEST(sanity_get_homogenous_adjacents)
 {
      Buffer buffer = {};
@@ -1192,6 +1243,67 @@ TEST(sanity_get_word_at_location)
      EXPECT(word_start.x == 4);
      EXPECT(word_end.y == 2);
      EXPECT(word_end.x == 8);
+}
+
+TEST(get_indentation_for_next_line_open_bracket)
+{
+     const size_t tab_len = 5;
+
+     Buffer buffer = {};
+     buffer.line_count = 6;
+     buffer.lines = malloc(6 * sizeof(char*));
+     buffer.lines[0] = strdup("int is_delicious_cat(cat_t cat){");
+     buffer.lines[1] = strdup("     if(is_kitten(cat)){");
+     buffer.lines[2] = strdup("          return true;");
+     buffer.lines[3] = strdup("       } // whoops! not aligned!?");
+     buffer.lines[4] = strdup("     return true;");
+     buffer.lines[5] = strdup("}");
+
+     Point cursor;
+
+     cursor = (Point) {5, 0};
+     ASSERT(ce_get_indentation_for_next_line(&buffer, &cursor, tab_len) == 5);
+
+     cursor = (Point) {7, 1};
+     ASSERT(ce_get_indentation_for_next_line(&buffer, &cursor, tab_len) == 10);
+
+     cursor = (Point) {4, 2};
+     ASSERT(ce_get_indentation_for_next_line(&buffer, &cursor, tab_len) == 10);
+
+     cursor = (Point) {2, 3};
+     ASSERT(ce_get_indentation_for_next_line(&buffer, &cursor, tab_len) == 7); // un-aligned!
+
+     cursor = (Point) {1, 4};
+     ASSERT(ce_get_indentation_for_next_line(&buffer, &cursor, tab_len) == 5);
+
+     cursor = (Point) {0, 5};
+     ASSERT(ce_get_indentation_for_next_line(&buffer, &cursor, tab_len) == 0);
+}
+
+TEST(sanity_sort_points_swap)
+{
+     // swap case
+     const Point start = {500, 500};
+     const Point end = {250, 250};
+     const Point* p_start = &start;
+     const Point* p_end = &end;
+
+     ce_sort_points ( &p_start, &p_end );
+     ASSERT(memcmp(p_start, &end, sizeof(Point)) == 0);
+     ASSERT(memcmp(p_end, &start, sizeof(Point)) == 0);
+}
+
+TEST(sanity_sort_points_no_swap)
+{
+     // no swap case
+     const Point start = {250, 250};
+     const Point end = {500, 500};
+     const Point* p_start = &start;
+     const Point* p_end = &end;
+
+     ce_sort_points ( &p_start, &p_end );
+     ASSERT(memcmp(p_start, &start, sizeof(Point)) == 0);
+     ASSERT(memcmp(p_end, &end, sizeof(Point)) == 0);
 }
 
 int main()

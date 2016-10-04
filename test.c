@@ -494,7 +494,7 @@ TEST(sanity_find_match_same_line)
 
      Point point = {2, 0};
      Point match = {};
-     ce_find_string(&buffer, &point, "ARE", &match);
+     ce_find_string(&buffer, &point, "ARE", &match, CE_DOWN);
 
      EXPECT(match.x == 6);
      EXPECT(match.y == 0);
@@ -513,7 +513,7 @@ TEST(sanity_find_match_next_line)
 
      Point point = {2, 0};
      Point delta = {};
-     ce_find_string(&buffer, &point, "SO", &delta);
+     ce_find_string(&buffer, &point, "SO", &delta, CE_DOWN);
 
      EXPECT(delta.x == 4);
      EXPECT(delta.y == 1);

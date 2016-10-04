@@ -7,7 +7,7 @@ all: ce ce_config.so
 
 testrun: test test.gcno ce.coverage.o ce.coverage.gcno
 	rm -f *.gcda # remove runtime statistics
-	./test
+	./test 2> test_output.txt
 	llvm-cov gcov ce.coverage.o
 	#grep "#####" ce.c.gcov
 
@@ -38,4 +38,4 @@ clean_config:
 	rm -f ce_config.o ce_config.so ce.o
 
 clean_test:
-	rm -f test ce.coverage.o *.gcda *.gcno *.gcov
+	rm -f test ce.coverage.o *.gcda *.gcno *.gcov test_output.txt

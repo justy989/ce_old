@@ -43,7 +43,12 @@ typedef struct {
      int64_t y;
 } Point;
 
-// TODO: ce_offset_point(Point* p, int64_t dx, int64_t dy);
+typedef enum{
+     CE_UP = -1,
+     CE_DOWN = 1
+} Direction;
+
+Direction ce_reverse_direction(Direction to_reverse);
 
 typedef struct {
      char** lines; // '\0' terminated, does not contain newlines, NULL if empty
@@ -91,6 +96,13 @@ typedef struct BufferCommitNode {
      struct BufferCommitNode* prev;
      struct BufferCommitNode* next;
 } BufferCommitNode;
+
+typedef enum{
+     ARROW_UP = 256, // extended ascii + 1
+     ARROW_DOWN,
+     ARROW_RIGHT,
+     ARROW_LEFT,
+} ce_keys;
 
 // horizontal split []|[]
 
@@ -140,7 +152,8 @@ int64_t ce_find_delta_to_beginning_of_word(Buffer* buffer, const Point* location
 int64_t ce_find_delta_to_end_of_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
 int64_t ce_find_next_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
 bool ce_find_match(Buffer* buffer, const Point* location, Point* delta);
-bool ce_find_string(Buffer* buffer, const Point* location, const char* search_str, Point* match);
+bool ce_find_string(Buffer* buffer, const Point* location, const char* search_str, Point* match, Direction direction);
+bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor);
 int ce_ispunct(int c);
 int ce_iswordchar(int c);
 bool ce_get_homogenous_adjacents(const Buffer* buffer, Point* start, Point* end, int (*is_homogenous)(int));
@@ -170,6 +183,7 @@ bool ce_follow_cursor(const Point* cursor, int64_t* left_column, int64_t* top_le
 bool ce_advance_cursor(const Buffer* buffer, Point* cursor, int64_t delta);
 bool ce_move_cursor_to_soft_beginning_of_line(Buffer* buffer, Point* cursor);
 bool ce_move_cursor_to_end_of_file(const Buffer* buffer, Point* cursor);
+bool ce_move_cursor_to_beginning_of_file(const Buffer* buffer, Point* cursor);
 
 bool ce_commit_insert_char(BufferCommitNode** tail, const Point* start, const Point* undo_cursor, const Point* redo_cursor, char c);
 bool ce_commit_insert_string(BufferCommitNode** tail, const Point* start, const Point* undo_cursor, const Point* redo_cursor, char* string);
@@ -190,6 +204,7 @@ bool ce_free_views(BufferView** view);
 BufferView* ce_find_view_at_point(BufferView* head, const Point* point);
 
 void* ce_memrchr(const void* s, int c, size_t n);
-int64_t ce_compute_length(Point* start, Point* end);
+int64_t ce_compute_length(const Buffer* buffer, const Point* start, const Point* movement_end);
+void ce_sort_points(const Point** a, const Point** b);
 
 #endif

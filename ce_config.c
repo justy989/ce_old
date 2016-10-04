@@ -290,6 +290,7 @@ void input_start(ConfigState* config_state, const char* input_message, char inpu
 }
 
 #define input_end() ({ \
+     config_state->input = false;\
      config_state->view_current = config_state->view_save; \
      buffer = config_state->view_current->buffer_node->buffer; \
      buffer_state = buffer->user_data; \
@@ -1651,19 +1652,88 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           }
           break;
           case 10: // Ctrl + j
-          {
-               if(config_state->input) break;
-               Point point = {cursor->x - config_state->view_current->left_column + config_state->view_current->top_left.x,
-                              config_state->view_current->bottom_right.y + 2}; // account for window separator
-               if(point.y >= g_terminal_dimensions->y - 1) point.y = 0;
-               BufferView* next_view = ce_find_view_at_point(config_state->view_head, &point);
-               if(next_view){
-                    // save cursor
-                    config_state->view_current->buffer_node->buffer->cursor = config_state->view_current->cursor;
-                    config_state->view_current = next_view;
+               if(config_state->input){
+                    input_end();
+                    switch(config_state->input_key) {
+                    default:
+                         break;
+                    case ':':
+                         // just grab the first line and load it as a file
+                         for(int64_t i = 0; i < config_state->view_input->buffer_node->buffer->line_count; ++i){
+                              BufferNode* new_node = open_file_buffer(head, config_state->view_input->buffer_node->buffer->lines[i]);
+                              if(i == 0 && new_node){
+                                   config_state->view_current->buffer_node = new_node;
+                                   config_state->view_current->cursor = (Point){0, 0};
+                              }
+                         }
+                         break;
+                    case '/':
+                         if(config_state->view_input->buffer_node->buffer->line_count){
+                              config_state->search_command.direction = CE_DOWN;
+                              add_yank(config_state, '/', strdup(config_state->view_input->buffer_node->buffer->lines[0]), YANK_NORMAL);
+                              goto search;
+                         }
+                         break;
+                    case '?':
+                         if(config_state->view_input->buffer_node->buffer->line_count){
+                              config_state->search_command.direction = CE_UP;
+                              add_yank(config_state, '/', strdup(config_state->view_input->buffer_node->buffer->lines[0]), YANK_NORMAL);
+                              goto search;
+                         }
+                         break;
+                    case 24: // Ctrl + x
+                    {
+                         static const char* cmd_buffer_name = "shell_command";
+
+                         // search for an existing command buffer
+                         BufferNode* command_buffer_node = NULL;
+                         BufferNode* itr = head;
+                         while(itr){
+                              if(strcmp(itr->buffer->name, cmd_buffer_name) == 0) command_buffer_node = itr;
+                              itr = itr->next;
+                         }
+
+                         // run the command
+                         FILE* pfile = popen(config_state->view_input->buffer_node->buffer->lines[0], "r");
+
+                         // if we found an existing command buffer, clear it and use it
+                         if(command_buffer_node){
+                              ce_clear_lines(command_buffer_node->buffer);
+                              config_state->view_current->buffer_node = command_buffer_node;
+                         }else{
+                              // create a new one from an empty string
+                              config_state->view_current->buffer_node = new_buffer_from_string(head, "shell_command", "");
+                         }
+
+                         // reset the cursor to the top
+                         config_state->view_current->cursor = (Point){0, 0};
+
+                         // load one line at a time
+                         char cmd_output[BUFSIZ];
+                         while(fgets(cmd_output, BUFSIZ, pfile) != NULL){
+                              // strip newline
+                              size_t cmd_len = strlen(cmd_output);
+                              assert(cmd_output[cmd_len-1] == NEWLINE);
+                              cmd_output[cmd_len-1] = 0;
+
+                              ce_append_line(config_state->view_current->buffer_node->buffer, cmd_output);
+                         }
+
+                         pclose(pfile);
+                    } break;
+                    }
+               }else{
+                    Point point = {cursor->x - config_state->view_current->left_column + config_state->view_current->top_left.x,
+                         config_state->view_current->bottom_right.y + 2}; // account for window separator
+                    if(point.y >= g_terminal_dimensions->y - 1) point.y = 0;
+                    BufferView* next_view = ce_find_view_at_point(config_state->view_head, &point);
+                    if(next_view){
+                         // save cursor
+                         config_state->view_current->buffer_node->buffer->cursor = config_state->view_current->cursor;
+                         config_state->view_current = next_view;
+                    }
                }
-          }
-          break;
+               break;
           case 11: // Ctrl + k
           {
                if(config_state->input) break;
@@ -1693,25 +1763,9 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           break;
           case ':':
           {
-               if(config_state->input && key != config_state->input_key) break;
-               config_state->input = !config_state->input;
-               if(config_state->input){
-                    input_start(config_state, "Load File", key);
-               }else{
-                    input_end();
-                    buffer = config_state->view_current->buffer_node->buffer;
-                    buffer_state = buffer->user_data;
-                    buffer_view = config_state->view_current;
-                    cursor = &config_state->view_current->cursor;
-                    // just grab the first line and load it as a file
-                    for(int64_t i = 0; i < config_state->view_input->buffer_node->buffer->line_count; ++i){
-                         BufferNode* new_node = open_file_buffer(head, config_state->view_input->buffer_node->buffer->lines[i]);
-                         if(i == 0 && new_node){
-                              config_state->view_current->buffer_node = new_node;
-                              config_state->view_current->cursor = (Point){0, 0};
-                         }
-                    }
-               }
+               if(config_state->input) break;
+               config_state->input = true;
+               input_start(config_state, "Load File", key);
           }
           break;
           case '#':
@@ -1738,43 +1792,17 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case '/':
           {
-               if(config_state->input && key != config_state->input_key) break;
-               config_state->input = !config_state->input;
-               if(config_state->input){
-                    input_start(config_state, "Search", key);
-               }else{
-                    input_end();
-                    buffer = config_state->view_current->buffer_node->buffer;
-                    buffer_state = buffer->user_data;
-                    buffer_view = config_state->view_current;
-                    cursor = &config_state->view_current->cursor;
-                    if(config_state->view_input->buffer_node->buffer->line_count){
-                         config_state->search_command.direction = CE_DOWN;
-                         add_yank(config_state, '/', strdup(config_state->view_input->buffer_node->buffer->lines[0]), YANK_NORMAL);
-                         goto search;
-                    }
-               }
+               if(config_state->input) break;
+               config_state->input = true;
+               input_start(config_state, "Search", key);
                break;
           }
           case '?':
           {
-               if(config_state->input && key != config_state->input_key) break;
-               config_state->input = !config_state->input;
-               if(config_state->input){
-                    input_start(config_state, "Reverse Search", key);
-                    break;
-               }else{
-                    input_end();
-                    buffer = config_state->view_current->buffer_node->buffer;
-                    buffer_state = buffer->user_data;
-                    buffer_view = config_state->view_current;
-                    cursor = &config_state->view_current->cursor;
-                    if(config_state->view_input->buffer_node->buffer->line_count){
-                         config_state->search_command.direction = CE_UP;
-                         add_yank(config_state, '/', strdup(config_state->view_input->buffer_node->buffer->lines[0]), YANK_NORMAL);
-                         goto search;
-                    }
-               }
+               if(config_state->input) break;
+               config_state->input = true;
+               input_start(config_state, "Reverse Search", key);
+               break;
           }
           case 'n':
 search:
@@ -1947,6 +1975,12 @@ search:
                     } while (!WIFEXITED(wstatus) && !WIFSIGNALED(wstatus));
                     config_state->command_key = '\0';
                }
+          } break;
+          case 24: // Ctrl + x
+          {
+               if(config_state->input) break;
+               config_state->input = true;
+               input_start(config_state, "Shell Command", key);
           } break;
           }
      }

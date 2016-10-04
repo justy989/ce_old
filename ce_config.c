@@ -262,6 +262,21 @@ BufferNode* new_buffer_from_file(BufferNode* head, const char* filename)
      return new_buffer_node;
 }
 
+void enter_insert_mode(ConfigState* config_state, Point* cursor)
+{
+     config_state->insert = true;
+     config_state->start_insert = *cursor;
+     config_state->original_start_insert = *cursor;
+}
+
+void clear_keys(ConfigState* config_state)
+{
+     config_state->command_multiplier = 0;
+     config_state->command_key = '\0';
+     config_state->movement_multiplier = 0;
+     memset(config_state->movement_keys, 0, sizeof config_state->movement_keys);
+}
+
 void input_start(ConfigState* config_state, const char* input_message, char input_key)
 {
      ce_clear_lines(config_state->view_input->buffer_node->buffer);
@@ -271,7 +286,7 @@ void input_start(ConfigState* config_state, const char* input_message, char inpu
      config_state->input_key = input_key;
      config_state->view_save = config_state->view_current;
      config_state->view_current = config_state->view_input;
-     config_state->insert = true; // NOTE: should we go into insert mode automatically? I think so!
+     enter_insert_mode(config_state, &config_state->view_input->cursor);
 }
 
 #define input_end() ({ \
@@ -484,21 +499,6 @@ void find_command(int command_key, int find_char, Buffer* buffer, Point* cursor)
           assert(0);
           break;
      }
-}
-
-void enter_insert_mode(ConfigState* config_state, Point* cursor)
-{
-     config_state->insert = true;
-     config_state->start_insert = *cursor;
-     config_state->original_start_insert = *cursor;
-}
-
-void clear_keys(ConfigState* config_state)
-{
-     config_state->command_multiplier = 0;
-     config_state->command_key = '\0';
-     config_state->movement_multiplier = 0;
-     memset(config_state->movement_keys, 0, sizeof config_state->movement_keys);
 }
 
 // returns true if key may be interpreted as a multiplier given the current mulitplier state

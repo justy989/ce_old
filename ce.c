@@ -380,7 +380,7 @@ bool ce_remove_char(Buffer* buffer, const Point* location)
      return true;
 }
 
-char* ce_dupe_string(Buffer* buffer, const Point* start, const Point* end)
+char* ce_dupe_string(const Buffer* buffer, const Point* start, const Point* end)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(start);
@@ -429,7 +429,7 @@ char* ce_dupe_string(Buffer* buffer, const Point* start, const Point* end)
      return new_str;
 }
 
-char* ce_dupe_line(Buffer* buffer, int64_t line)
+char* ce_dupe_line(const Buffer* buffer, int64_t line)
 {
      if(buffer->line_count <= line){
           ce_message("%s() specified line (%"PRId64") above buffer line count (%"PRId64")",
@@ -445,7 +445,7 @@ char* ce_dupe_line(Buffer* buffer, int64_t line)
 }
 
 // return x delta between location and the located character 'c' if found. return -1 if not found
-int64_t ce_find_delta_to_char_forward_in_line(Buffer* buffer, const Point* location, char c)
+int64_t ce_find_delta_to_char_forward_in_line(const Buffer* buffer, const Point* location, char c)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -459,7 +459,7 @@ int64_t ce_find_delta_to_char_forward_in_line(Buffer* buffer, const Point* locat
 }
 
 // return -x delta between location and the located character 'c' if found. return -1 if not found
-int64_t ce_find_delta_to_char_backward_in_line(Buffer* buffer, const Point* location, char c)
+int64_t ce_find_delta_to_char_backward_in_line(const Buffer* buffer, const Point* location, char c)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -473,7 +473,7 @@ int64_t ce_find_delta_to_char_backward_in_line(Buffer* buffer, const Point* loca
 }
 
 // returns the delta to the matching character; return success
-bool ce_find_match(Buffer* buffer, const Point* location, Point* delta)
+bool ce_find_match(const Buffer* buffer, const Point* location, Point* delta)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -548,7 +548,7 @@ bool ce_find_match(Buffer* buffer, const Point* location, Point* delta)
 }
 
 // returns Point at the next matching string; return success
-bool ce_find_string(Buffer* buffer, const Point* location, const char* search_str, Point* match, Direction direction)
+bool ce_find_string(const Buffer* buffer, const Point* location, const char* search_str, Point* match, Direction direction)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -594,7 +594,7 @@ int ce_ispunct(int c)
 }
 
 // return -1 on failure, delta to move left to the beginning of the word on success
-int64_t ce_find_delta_to_beginning_of_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
+int64_t ce_find_delta_to_beginning_of_word(const Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -621,7 +621,7 @@ int64_t ce_find_delta_to_beginning_of_word(Buffer* buffer, const Point* location
 }
 
 // return -1 on failure, delta to move right to the end of the word on success
-int64_t ce_find_delta_to_end_of_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
+int64_t ce_find_delta_to_end_of_word(const Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -649,7 +649,7 @@ int64_t ce_find_delta_to_end_of_word(Buffer* buffer, const Point* location, bool
 }
 
 // return -1 on failure, delta to move right to the beginning of the next word on success
-int64_t ce_find_next_word(Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
+int64_t ce_find_delta_to_next_word(const Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -764,21 +764,19 @@ bool ce_remove_line(Buffer* buffer, int64_t line)
           return false;
      }
 
+     // free the old line
+     free(buffer->lines[line]);
+
      int64_t new_line_count = buffer->line_count - 1;
-     char** new_lines = malloc(new_line_count * sizeof(*new_lines));
-     if(!new_lines){
-          ce_message("%s() failed to malloc new lines: %"PRId64"", __FUNCTION__, new_line_count);
+     // move trailing lines up 1
+     memmove(buffer->lines + line, buffer->lines + line + 1, (new_line_count - line) * sizeof(*buffer->lines));
+
+     buffer->lines = realloc(buffer->lines, new_line_count * sizeof(*buffer->lines));
+     if(!buffer->lines){
+          ce_message("%s() failed to realloc new lines: %"PRId64"", __FUNCTION__, new_line_count);
           return false;
      }
 
-     // copy up to deleted line, copy the rest in the buffer
-     memcpy(new_lines, buffer->lines, line * sizeof(*new_lines));
-     memcpy(new_lines + line, buffer->lines + line + 1, (new_line_count - line) * sizeof(*new_lines));
-
-     // free and update the buffer ptr
-     free(buffer->lines[line]);
-     free(buffer->lines);
-     buffer->lines = new_lines;
      buffer->line_count = new_line_count;
 
      return true;
@@ -796,63 +794,56 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
 
      if(!ce_point_on_buffer(buffer, location)) return false;
 
-     char* current_line = buffer->lines[location->y];
-     int64_t current_line_len = strlen(current_line);
+     int64_t current_line_len = strlen(buffer->lines[location->y]);
      int64_t rest_of_the_line_len = (current_line_len - location->x);
 
      // easy case: string is on a single line
      if(length <= rest_of_the_line_len){
           int64_t new_line_len = current_line_len - length;
-          char* new_line = realloc(current_line, new_line_len + 1);
-          if(!new_line){
+          memmove(buffer->lines[location->y] + location->x,
+                  buffer->lines[location->y] + location->x + length,
+                  current_line_len - (location->x + length));
+          buffer->lines[location->y][new_line_len] = 0;
+
+          // shrink the allocation now that we have fixed up the line
+          buffer->lines[location->y] = realloc(buffer->lines[location->y], new_line_len + 1);
+          if(!buffer->lines[location->y]){
                ce_message("%s() failed to realloc new line", __FUNCTION__);
                return false;
           }
-
-          memmove(new_line + location->x, current_line + location->x + length,
-                  current_line_len - (location->x + length));
-          new_line[new_line_len] = 0;
-
-          buffer->lines[location->y] = new_line;
           return true;
      }
 
-     // hard case: string spans multiple lines
-     int64_t line_index = location->y;
+     // don't delete the rest of the first line yet, we'll do this when we mash the first and last lines
+     length -= rest_of_the_line_len + 1; // account for newline
 
-     if(current_line_len){
-          // don't delete the rest of the first line yet, we'll do this when we mash the first and last lines
-          length -= rest_of_the_line_len + 1; // account for newline
-          line_index++;
-     }else{
-          ce_remove_line(buffer, location->y);
-          length--;
-     }
+     // hard case: string spans multiple lines
+     int64_t delete_index = location->y + 1;
 
      while(length >= 0){
-          assert(line_index <= buffer->line_count);
-          if(line_index >= buffer->line_count) break;
+          assert(delete_index <= buffer->line_count);
+          if(delete_index >= buffer->line_count) break;
 
-          char* next_line = buffer->lines[line_index];
-          int64_t next_line_len = strlen(next_line);
+          int64_t next_line_len = strlen(buffer->lines[delete_index]);
           if(length >= next_line_len + 1){
                // remove any lines that we have the length to remove completely
-               ce_remove_line(buffer, line_index);
+               ce_remove_line(buffer, delete_index);
                length -= next_line_len + 1;
-          }else{
+          }else{ // we have to mash together our first and last line
+               // NOTE: this is only run once
                // slurp up end of first line and beginning of last line
                int64_t next_line_part_len = next_line_len - length;
                int64_t new_line_len = location->x + next_line_part_len;
-               char* new_line = current_line = realloc(current_line, new_line_len + 1);
-               if(!new_line){
-                    ce_message("%s() failed to malloc new line", __FUNCTION__);
+               buffer->lines[location->y] = realloc(buffer->lines[location->y], new_line_len + 1);
+               if(!buffer->lines[location->y]){
+                    ce_message("%s() failed to realloc new line", __FUNCTION__);
                     return false;
                }
 
-               memcpy(new_line + location->x, next_line + length, next_line_part_len);
-               new_line[new_line_len] = 0;
-               buffer->lines[location->y] = new_line;
-               ce_remove_line(buffer, line_index);
+               assert(buffer->lines[location->y+1][length+next_line_part_len] == '\0');
+               memcpy(buffer->lines[location->y] + location->x,
+                      buffer->lines[location->y+1] + length, next_line_part_len + 1);
+               ce_remove_line(buffer, location->y+1);
                break;
           }
      }
@@ -1357,7 +1348,7 @@ bool ce_remove_buffer_from_list(BufferNode* head, BufferNode** node)
 }
 
 // return x delta to the last character in the line, -1 on error
-int64_t ce_find_delta_to_end_of_line(const Buffer* buffer, Point* cursor)
+int64_t ce_find_delta_to_end_of_line(const Buffer* buffer, const Point* cursor)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
@@ -2261,7 +2252,7 @@ bool ce_get_homogenous_adjacents(const Buffer* buffer, Point* start, Point* end,
      return true;
 }
 
-bool ce_get_word_at_location(Buffer* buffer, const Point* location, Point* word_start, Point* word_end)
+bool ce_get_word_at_location(const Buffer* buffer, const Point* location, Point* word_start, Point* word_end)
 {
      *word_start = *location;
      *word_end = *location;

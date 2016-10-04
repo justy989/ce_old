@@ -1,9 +1,19 @@
 ce
+test
 *.o
 *.so
+test_output.txt
+
+#gcov
+*.gcov
+*.gcda
+*.gcno
+default.profraw
 
 #cscope
 *.out
+*.files
 
-# WHAT IS THIS AND WHY DOES IT EXIST?
+#MacOS
 *.dylib
+*.dSYM

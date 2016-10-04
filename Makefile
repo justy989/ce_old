@@ -10,7 +10,7 @@ coverage: clean_test test
 
 test: test.c ce.test.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LINK)
-	./test 2> test_output.txt
+	./test 2> test_output.txt || (cat test_output.txt && false)
 
 ce: main.c ce.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LINK) -ldl -Wl,-rpath,.

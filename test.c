@@ -485,7 +485,6 @@ TEST(sanity_remove_string_multiline_mid)
      ce_free_buffer(&buffer);
 }
 
-#if 0
 TEST(sanity_remove_string_multiline_end)
 {
      Buffer buffer = {};
@@ -493,15 +492,14 @@ TEST(sanity_remove_string_multiline_end)
      buffer.lines = malloc(3 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
      buffer.lines[1] = strdup("ARE");
-     buffer.lines[2] = strdup("AWESOME");
+     buffer.lines[2] = strdup("AWESOMT");
 
-     Point point = {1, 2};
+     Point point = {2, 1};
      ce_remove_string(&buffer, &point, 9);
 
-     ASSERT(buffer.line_count == 3);
+     ASSERT(buffer.line_count == 2);
      EXPECT(strcmp(buffer.lines[0], "TACOS") == 0);
      EXPECT(strcmp(buffer.lines[1], "AR") == 0);
-     EXPECT(strcmp(buffer.lines[2], "") == 0);
 
      ce_free_buffer(&buffer);
 }
@@ -527,7 +525,50 @@ TEST(sanity_remove_string_multiline_blank_begin)
 
      ce_free_buffer(&buffer);
 }
-#endif
+
+TEST(sanity_remove_string_multiline_blank_mid)
+{
+     Buffer buffer = {};
+     buffer.line_count = 5;
+     buffer.lines = malloc(5 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("");
+     buffer.lines[2] = strdup("");
+     buffer.lines[3] = strdup("ARE");
+     buffer.lines[4] = strdup("AWESOME");
+
+     Point point = {0, 1};
+     ce_remove_string(&buffer, &point, 4);
+
+     ASSERT(buffer.line_count == 3);
+     EXPECT(strcmp(buffer.lines[0], "TACOS") == 0);
+     EXPECT(strcmp(buffer.lines[1], "E") == 0);
+     EXPECT(strcmp(buffer.lines[2], "AWESOME") == 0);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(sanity_remove_string_multiline_blank_end)
+{
+     Buffer buffer = {};
+     buffer.line_count = 5;
+     buffer.lines = malloc(5 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE");
+     buffer.lines[2] = strdup("AWESOME");
+     buffer.lines[3] = strdup("");
+     buffer.lines[4] = strdup("");
+
+     Point point = {3, 2};
+     ce_remove_string(&buffer, &point, 7);
+
+     ASSERT(buffer.line_count == 3);
+     EXPECT(strcmp(buffer.lines[0], "TACOS") == 0);
+     EXPECT(strcmp(buffer.lines[1], "ARE") == 0);
+     EXPECT(strcmp(buffer.lines[2], "AWE") == 0);
+
+     ce_free_buffer(&buffer);
+}
 
 TEST(sanity_append_line)
 {

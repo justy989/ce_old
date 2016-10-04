@@ -816,6 +816,7 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
 
      // don't delete the rest of the first line yet, we'll do this when we mash the first and last lines
      length -= rest_of_the_line_len + 1; // account for newline
+     buffer->lines[location->y][location->x] = '\0';
 
      // hard case: string spans multiple lines
      int64_t delete_index = location->y + 1;

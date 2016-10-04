@@ -1299,12 +1299,25 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          clear_keys(config_state);
                          return true;
                     }
-                    char* save_string = (config_state->movement_keys[0] == 'd') ?
-                         strdup(buffer->lines[movement_start.y]) :
-                         ce_dupe_string(buffer, &movement_start, &movement_end);
+
+                    char* save_string;
+                    char* yank_string;
+                    if(config_state->movement_keys[0] == 'd'){
+                         size_t save_len = strlen(buffer->lines[movement_start.y]) + 2;
+                         save_string = malloc(sizeof(*save_string)*save_len);
+                         save_string[save_len-2] = '\n';
+                         save_string[save_len-1] = '\0';
+                         memcpy(save_string, buffer->lines[movement_start.y], save_len - 2);
+                         yank_string = strdup(buffer->lines[movement_start.y]);
+                    }
+                    else{
+                         save_string = ce_dupe_string(buffer, &movement_start, &movement_end);
+                         yank_string = strdup(save_string);
+                    }
+
                     if(ce_remove_string(buffer, &movement_start, n_deletes)){
                          ce_commit_remove_string(&buffer_state->commit_tail, &movement_start, cursor, &movement_start, save_string);
-                         add_yank(config_state, '"', strdup(save_string), yank_mode);
+                         add_yank(config_state, '"', yank_string, yank_mode);
                     }
 
                     ce_set_cursor(buffer, cursor, &movement_start);

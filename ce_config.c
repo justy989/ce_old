@@ -1333,6 +1333,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     break;
                }
           case '':
+          case 23: // Ctrl + w 
                ce_save_buffer(buffer, buffer->filename);
                break;
           case 'v':

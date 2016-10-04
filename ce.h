@@ -38,6 +38,15 @@ typedef enum {
           return false;                                                       \
      }
 
+#define CE_MAX(a,b)\
+     ({ __typeof__ (a) _a = (a); \
+        __typeof__ (b) _b = (b); \
+        _a > _b? _a : _b; })
+#define CE_MIN(a,b) \
+     ({ __typeof__ (a) _a = (a); \
+        __typeof__ (b) _b = (b); \
+        _a < _b? _a : _b; })
+
 typedef struct {
      int64_t x;
      int64_t y;
@@ -96,13 +105,6 @@ typedef struct BufferCommitNode {
      struct BufferCommitNode* prev;
      struct BufferCommitNode* next;
 } BufferCommitNode;
-
-typedef enum{
-     ARROW_UP = 256, // extended ascii + 1
-     ARROW_DOWN,
-     ARROW_RIGHT,
-     ARROW_LEFT,
-} ce_keys;
 
 // horizontal split []|[]
 
@@ -170,22 +172,27 @@ bool ce_insert_newline (Buffer* buffer, int64_t line);
 
 
 // Buffer Inspection Functions
-bool    ce_draw_buffer     (const Buffer* buffer, const Point* term_top_left, const Point* term_bottom_right, const Point* buffer_top_left);
-bool    ce_save_buffer     (const Buffer* buffer, const char* filename);
-bool    ce_point_on_buffer (const Buffer* buffer, const Point* location);
-bool    ce_get_char        (const Buffer* buffer, const Point* location, char* c);
-int64_t ce_compute_length  (const Buffer* buffer, const Point* start, const Point* end);
-char*   ce_dupe_string     (const Buffer* buffer, const Point* start, const Point* end);
-char*   ce_dupe_line       (const Buffer* buffer, int64_t line);
+bool    ce_draw_buffer                   (const Buffer* buffer, const Point* term_top_left, const Point* term_bottom_right, const Point* buffer_top_left);
+bool    ce_save_buffer                   (const Buffer* buffer, const char* filename);
+bool    ce_point_on_buffer               (const Buffer* buffer, const Point* location);
+bool    ce_get_char                      (const Buffer* buffer, const Point* location, char* c);
+char    ce_get_char_raw                  (const Buffer* buffer, const Point* location);
+int64_t ce_compute_length                (const Buffer* buffer, const Point* start, const Point* end);
+char*   ce_dupe_string                   (const Buffer* buffer, const Point* start, const Point* end);
+char*   ce_dupe_line                     (const Buffer* buffer, int64_t line);
+int64_t ce_get_indentation_for_next_line (const Buffer* buffer, const Point* location, int64_t tab_len);
 
 
 // Find Delta Functions
-int64_t ce_find_delta_to_end_of_line           (const Buffer* buffer, const Point* location);
-int64_t ce_find_delta_to_char_forward_in_line  (const Buffer* buffer, const Point* location, char c);
-int64_t ce_find_delta_to_char_backward_in_line (const Buffer* buffer, const Point* location, char c);
-int64_t ce_find_delta_to_beginning_of_word     (const Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
-int64_t ce_find_delta_to_end_of_word           (const Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
-int64_t ce_find_delta_to_next_word             (const Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
+int64_t ce_find_delta_to_end_of_line            (const Buffer* buffer, const Point* location);
+int64_t ce_find_delta_to_soft_end_of_line       (const Buffer* buffer, const Point* location);
+int64_t ce_find_delta_to_soft_beginning_of_line (const Buffer* buffer, const Point* location);
+int64_t ce_find_delta_to_char_forward_in_line   (const Buffer* buffer, const Point* location, char c);
+int64_t ce_find_delta_to_char_backward_in_line  (const Buffer* buffer, const Point* location, char c);
+int64_t ce_find_delta_to_beginning_of_word      (const Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
+int64_t ce_find_delta_to_end_of_word            (const Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
+int64_t ce_find_delta_to_next_word              (const Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
+bool    ce_find_delta_to_match                  (const Buffer* buffer, const Point* location, Point* delta);
 
 // Find Point Functions
 bool ce_find_match               (const Buffer* buffer, const Point* location, Point* delta);

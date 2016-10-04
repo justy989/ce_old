@@ -159,46 +159,6 @@ const char* random_greeting()
      return greetings[ rand() % (sizeof(greetings) / sizeof(greetings[0]))];
 }
 
-static int ce_getch()
-{
-     int k0, k1, k2;
-
-     while(1){
-          timeout(-1); // getch() blocking
-          switch(k0 = getch()){
-          case ERR:
-               continue;
-          case 27:
-               timeout(0); // getch() non-blocking
-               switch(k1 = getch()){
-               case '[':
-                    switch(k2 = getch()){
-                    case 'A':
-                         return ARROW_UP;
-                    case 'B':
-                         return ARROW_DOWN;
-                    case 'C':
-                         return ARROW_RIGHT;
-                    case 'D':
-                         return ARROW_LEFT;
-                    default:
-                         ce_message("unknown character %c%c%c entered", k0, k1, k2);
-                    case ERR:
-                         return k0;
-                    }
-                    break;
-               default:
-                    ce_message("unknown character %c%c entered", k0, k1);
-               case ERR:
-                    return k0;
-               }
-               break;
-          default:
-               return k0;
-          }
-     }
-}
-
 int main(int argc, char** argv)
 {
      const char* config = CE_CONFIG;
@@ -268,7 +228,7 @@ int main(int argc, char** argv)
      }
 
      // ncurses_init()
-     initscr();
+     keypad(initscr(), TRUE);
      cbreak();
      noecho();
 
@@ -372,7 +332,7 @@ int main(int argc, char** argv)
           // update the terminal with what we drew
           refresh();
 
-          int key = ce_getch();
+          int key = getch();
           if(key == '`'){
                if(access(current_config.path, F_OK) != -1){
                     current_config.destroyer(buffer_list_head, user_data);

@@ -542,25 +542,25 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
 
      for(size_t mm=0; mm < multiplier; mm++) {
           switch(key0){
-          case ARROW_LEFT:
+          case KEY_LEFT:
           case 'h':
           {
                Point delta = {-1, 0};
                ce_move_cursor(buffer, movement_end, &delta);
           } break;
-          case ARROW_DOWN:
+          case KEY_DOWN:
           case 'j':
           {
                Point delta = {0, 1};
                ce_move_cursor(buffer, movement_end, &delta);
           } break;
-          case ARROW_UP:
+          case KEY_UP:
           case 'k':
           {
                Point delta = {0, -1};
                ce_move_cursor(buffer, movement_end, &delta);
           } break;
-          case ARROW_RIGHT:
+          case KEY_RIGHT:
           case 'l':
           {
                Point delta = {1, 0};
@@ -738,7 +738,7 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
           case '%':
           {
                Point delta;
-               if(!ce_find_match(buffer, cursor, &delta)) break;
+               if(!ce_find_delta_to_match(buffer, cursor, &delta)) break;
 
                // TODO: movement across line boundaries
                assert(delta.y == 0);
@@ -905,12 +905,24 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     }
                     cursor->y++;
                     cursor->x = 0;
+
+                    // indent if necessary
+                    Point prev_line = {0, cursor->y-1};
+                    int64_t indent_len = ce_get_indentation_for_next_line(buffer, &prev_line, strlen(TAB_STRING));
+                    if(indent_len > 0){
+                         char* indent = malloc(indent_len + 1);
+                         memset(indent, ' ', indent_len);
+                         indent[indent_len] = '\0';
+
+                         if(ce_insert_string(buffer, cursor, indent))
+                              cursor->x += indent_len;
+                    }
                }
           } break;
-          case ARROW_UP:
-          case ARROW_DOWN:
-          case ARROW_LEFT:
-          case ARROW_RIGHT:
+          case KEY_UP:
+          case KEY_DOWN:
+          case KEY_LEFT:
+          case KEY_RIGHT:
           {
                config_state->movement_keys[0] = key;
                config_state->movement_multiplier = 1;
@@ -947,6 +959,32 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                ce_move_cursor(buffer, cursor, &delta);
           } break;
 #endif
+          case '}':
+          {
+               if(ce_insert_char(buffer, cursor, key)){
+
+                    Point match;
+                    if(ce_find_match(buffer, cursor, &match) && match.y != cursor->y){
+
+                         // get the match's sbol (that's the indentation we're matching)
+                         Point sbol_match = {0, match.y};
+                         ce_move_cursor_to_soft_beginning_of_line(buffer, &sbol_match);
+
+                         int64_t n_deletes = CE_MIN((int64_t) strlen(TAB_STRING), cursor->x - sbol_match.x);
+
+                         bool can_unindent = true;
+                         for(Point iter = {0, cursor->y}; ce_point_on_buffer(buffer, &iter) && iter.x < n_deletes; iter.x++)
+                              can_unindent &= isblank(ce_get_char_raw(buffer, &iter));
+
+                         if(can_unindent){
+                              cursor->x -= n_deletes;
+                              ce_remove_string(buffer, cursor, n_deletes);
+                         }
+                    }
+
+                    cursor->x++;
+               }
+          } break;
           default:
                if(ce_insert_char(buffer, cursor, key)) cursor->x++;
                break;
@@ -1072,10 +1110,10 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 't':
           case 'F':
           case 'T':
-          case ARROW_UP:
-          case ARROW_DOWN:
-          case ARROW_LEFT:
-          case ARROW_RIGHT:
+          case KEY_UP:
+          case KEY_DOWN:
+          case KEY_LEFT:
+          case KEY_RIGHT:
           {
                config_state->movement_keys[0] = config_state->command_key;
                config_state->movement_multiplier = 1;
@@ -1115,9 +1153,18 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'O':
           {
                Point begin_line = {0, cursor->y};
-               if(ce_insert_char(buffer, &begin_line, '\n')){
-                    ce_commit_insert_char(&buffer_state->commit_tail, &begin_line, cursor, &begin_line, '\n');
-                    cursor->x = 0;
+
+               // indent if necessary
+               int64_t indent_len = ce_get_indentation_for_next_line(buffer, cursor, strlen(TAB_STRING));
+               char* indent_nl = malloc(sizeof '\n' + indent_len + sizeof '\0');
+               memset(&indent_nl[0], ' ', indent_len);
+               indent_nl[indent_len] = '\n';
+               indent_nl[indent_len + 1] = '\0';
+
+               if(ce_insert_string(buffer, &begin_line, indent_nl)){
+                    Point next_cursor = {indent_len, cursor->y};
+                    ce_commit_insert_string(&buffer_state->commit_tail, &begin_line, cursor, &next_cursor, indent_nl);
+                    *cursor = next_cursor;
                     enter_insert_mode(config_state, cursor);
                }
           } break;
@@ -1126,9 +1173,16 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                Point end_of_line = *cursor;
                end_of_line.x = strlen(buffer->lines[cursor->y]);
 
-               if(ce_insert_char(buffer, &end_of_line, '\n')){
-                    Point next_cursor = {0, cursor->y+1};
-                    ce_commit_insert_char(&buffer_state->commit_tail, &end_of_line, cursor, &next_cursor, '\n');
+               // indent if necessary
+               int64_t indent_len = ce_get_indentation_for_next_line(buffer, cursor, strlen(TAB_STRING));
+               char* nl_indent = malloc(sizeof '\n' + indent_len + sizeof '\0');
+               nl_indent[0] = '\n';
+               memset(&nl_indent[1], ' ', indent_len);
+               nl_indent[1 + indent_len] = '\0';
+
+               if(ce_insert_string(buffer, &end_of_line, nl_indent)){
+                    Point next_cursor = {indent_len, cursor->y+1};
+                    ce_commit_insert_string(&buffer_state->commit_tail, &end_of_line, cursor, &next_cursor, nl_indent);
                     *cursor = next_cursor;
                     enter_insert_mode(config_state, cursor);
                }
@@ -1346,6 +1400,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     break;
                }
           case '':
+          case 23: // Ctrl + w 
                ce_save_buffer(buffer, buffer->filename);
                break;
           case 'v':
@@ -1564,7 +1619,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case '%':
           {
                Point delta;
-               if(ce_find_match(buffer, cursor, &delta)){
+               if(ce_find_delta_to_match(buffer, cursor, &delta)){
                     ce_move_cursor(buffer, cursor, &delta);
                }
           } break;

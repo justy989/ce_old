@@ -4,11 +4,11 @@ LINK=-lncurses
 
 all: ce ce_config.so
 
+coverage: CFLAGS += -fprofile-arcs -ftest-coverage
 coverage: clean_test test
-	llvm-cov gcov ce.coverage.o
+	llvm-cov gcov ce.test.o
 
-test: CFLAGS += -fprofile-arcs -ftest-coverage
-test: test.c ce.coverage.o
+test: test.c ce.test.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LINK)
 	./test 2> test_output.txt
 
@@ -31,4 +31,4 @@ clean_config:
 	rm -f ce_config.o ce_config.so ce.o
 
 clean_test:
-	rm -f test ce.coverage.o *.gcda *.gcno *.gcov test_output.txt default.profraw
+	rm -f test ce.test.o *.gcda *.gcno *.gcov test_output.txt default.profraw

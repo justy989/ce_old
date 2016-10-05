@@ -1924,6 +1924,19 @@ TEST(dupe_buffer_multiline)
      ce_free_buffer(&buffer);
 }
 
+TEST(sanity_prepend_string)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+
+     ce_prepend_string(&buffer, 0, "MY ");
+
+     ASSERT(buffer.line_count == 1);
+     EXPECT(strcmp(buffer.lines[0], "MY TACOS") == 0);
+}
+
 int main()
 {
      Point terminal_dimensions = {17, 10};

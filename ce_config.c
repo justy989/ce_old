@@ -1030,6 +1030,29 @@ InputHistory* history_from_input_key(ConfigState* config_state)
      return history;
 }
 
+void view_follow_cursor(BufferView* current_view)
+{
+     ce_follow_cursor(&current_view->cursor, &current_view->left_column, &current_view->top_row,
+                      current_view->bottom_right.x - current_view->top_left.x,
+                      current_view->bottom_right.y - current_view->top_left.y,
+                      current_view->bottom_right.x == (g_terminal_dimensions->x - 1),
+                      current_view->bottom_right.y == (g_terminal_dimensions->y - 2));
+}
+
+void split_view(BufferView* head_view, BufferView* current_view, bool horizontal)
+{
+     BufferView* new_view = ce_split_view(current_view, current_view->buffer_node, horizontal);
+     if(new_view){
+          Point top_left = {0, 0};
+          Point bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 2}; // account for statusbar
+          ce_calc_views(head_view, &top_left, &bottom_right);
+          view_follow_cursor(current_view);
+          new_view->cursor = current_view->cursor;
+          new_view->top_row = current_view->top_row;
+          new_view->left_column = current_view->left_column;
+     }
+}
+
 bool key_handler(int key, BufferNode* head, void* user_data)
 {
      ConfigState* config_state = user_data;
@@ -1656,27 +1679,11 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                break;
           case 'v':
           {
-               BufferView* new_view = ce_split_view(config_state->view_current, config_state->view_current->buffer_node, true);
-               if(new_view){
-                    Point top_left = {0, 0};
-                    Point bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 2}; // account for statusbar
-                    new_view->cursor = config_state->view_current->cursor;
-                    new_view->top_row = config_state->view_current->top_row;
-                    new_view->left_column = config_state->view_current->left_column;
-                    ce_calc_views(config_state->view_head, &top_left, &bottom_right);
-               }
+               split_view(config_state->view_head, config_state->view_current, true);
           } break;
-          case '':
+          case 22: // Ctrl + v
           {
-               BufferView* new_view = ce_split_view(config_state->view_current, config_state->view_current->buffer_node, false);
-               if(new_view){
-                    Point top_left = {0, 0};
-                    Point bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 2}; // account for statusbar
-                    new_view->cursor = config_state->view_current->cursor;
-                    new_view->top_row = config_state->view_current->top_row;
-                    new_view->left_column = config_state->view_current->left_column;
-                    ce_calc_views(config_state->view_head, &top_left, &bottom_right);
-               }
+               split_view(config_state->view_head, config_state->view_current, false);
           } break;
           case 17: // Ctrl + q
           {
@@ -1993,7 +2000,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                               FILE* pfile = popen(cmd, "r");
 
                               // append the command
-                              snprintf(cmd, BUFSIZ, "+ $ %s", config_state->view_input->buffer_node->buffer->lines[i]);
+                              snprintf(cmd, BUFSIZ, "+ %s", config_state->view_input->buffer_node->buffer->lines[i]);
                               ce_append_line(command_buffer_node->buffer, cmd);
 
                               // load one line at a time
@@ -2015,7 +2022,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
 
                               // append the return code
                               int exit_code = pclose(pfile);
-                              snprintf(cmd, BUFSIZ, "+ exit code: %d", WEXITSTATUS(exit_code));
+                              snprintf(cmd, BUFSIZ, "+ exit %d", WEXITSTATUS(exit_code));
                               ce_append_line(command_buffer_node->buffer, cmd);
 
                               // add blank for readability
@@ -2353,14 +2360,12 @@ void view_drawer(const BufferNode* head, void* user_data)
      if(input_top_left.y < 1) input_top_left.y = 1; // clamp to growing to 1, account for input message
      Point input_bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 2}; // account for statusbar
      ce_calc_views(config_state->view_head, &top_left, &bottom_right);
+
      if(config_state->input){
           ce_calc_views(config_state->view_input, &input_top_left, &input_bottom_right);
      }
-     ce_follow_cursor(cursor, &buffer_view->left_column, &buffer_view->top_row,
-                      buffer_view->bottom_right.x - buffer_view->top_left.x,
-                      buffer_view->bottom_right.y - buffer_view->top_left.y,
-                      buffer_view->bottom_right.x == (g_terminal_dimensions->x - 1),
-                      buffer_view->bottom_right.y == (g_terminal_dimensions->y - 2));
+
+     view_follow_cursor(buffer_view);
 
      standend();
      // NOTE: always draw from the head

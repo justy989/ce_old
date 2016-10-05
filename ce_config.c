@@ -70,6 +70,88 @@ void backspace_free(BackspaceNode** head)
      }
 }
 
+// TODO: move this to ce.h
+typedef struct InputHistoryNode {
+     char* entry;
+     struct InputHistoryNode* next;
+     struct InputHistoryNode* prev;
+} InputHistoryNode;
+
+typedef struct {
+     InputHistoryNode* head;
+     InputHistoryNode* tail;
+     InputHistoryNode* cur;
+} InputHistory;
+
+bool input_history_init(InputHistory* history)
+{
+     InputHistoryNode* node = calloc(1, sizeof(*node));
+     if(!node){
+          ce_message("%s() failed to malloc input history node", __FUNCTION__);
+          return false;
+     }
+
+     history->head = node;
+     history->tail = node;
+     history->cur = node;
+
+     return true;
+}
+
+bool input_history_commit_current(InputHistory* history)
+{
+     assert(history->tail);
+     assert(history->cur);
+
+     InputHistoryNode* node = calloc(1, sizeof(*node));
+     if(!node){
+          ce_message("%s() failed to malloc input history node", __FUNCTION__);
+          return false;
+     }
+
+     history->tail->next = node;
+     node->prev = history->tail;
+
+     history->tail = node;
+     history->cur = node;
+
+     return true;
+}
+
+bool input_history_update_current(InputHistory* history, char* duped)
+{
+     if(!history->cur) return false;
+     if(history->cur->entry) free(history->cur->entry);
+     history->cur->entry = duped;
+     return true;
+}
+
+void input_history_free(InputHistory* history)
+{
+     while(history->head){
+          free(history->head->entry);
+          InputHistoryNode* tmp = history->head;
+          history->head = history->head->next;
+          free(tmp);
+     }
+
+     history->tail = NULL;
+     history->cur = NULL;
+}
+
+void input_history_next(InputHistory* history)
+{
+     if(!history->cur) return;
+     if(history->cur->next) history->cur = history->cur->next;
+}
+
+void input_history_prev(InputHistory* history)
+{
+     if(!history->cur) return;
+     if(history->cur->prev) history->cur = history->cur->prev;
+}
+
+// TODO: move yank stuff to ce.h
 typedef enum{
      YANK_NORMAL,
      YANK_LINE,
@@ -109,6 +191,7 @@ typedef struct{
      BufferView* view_current;
      BufferView* view_input;
      BufferView* view_save;
+     InputHistory shell_command_history;
 } ConfigState;
 
 typedef struct MarkNode{
@@ -417,6 +500,8 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
           if(i == 0 && node) config_state->view_current->buffer_node = node;
      }
 
+     input_history_init(&config_state->shell_command_history);
+
      // setup colors for syntax highlighting
      init_pair(S_KEYWORD, COLOR_BLUE, COLOR_BACKGROUND);
      init_pair(S_COMMENT, COLOR_GREEN, COLOR_BACKGROUND);
@@ -458,6 +543,9 @@ bool destroyer(BufferNode* head, void* user_data)
           free(config_state->view_input->buffer_node);
           free(config_state->view_input);
      }
+
+     // history
+     input_history_free(&config_state->shell_command_history);
 
      free(config_state);
      return true;
@@ -1730,12 +1818,21 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                               itr = itr->next;
                          }
 
+                         if(config_state->view_input->buffer_node->buffer->line_count){
+                              char* saved = ce_dupe_buffer(config_state->view_input->buffer_node->buffer);
+                              if((config_state->shell_command_history.cur->prev &&
+                                  strcmp(saved, config_state->shell_command_history.cur->prev->entry) != 0) ||
+                                 !config_state->shell_command_history.cur->prev){
+                                   input_history_update_current(&config_state->shell_command_history, saved);
+                                   input_history_commit_current(&config_state->shell_command_history);
+                              }
+                         }
+
                          // if we found an existing command buffer, clear it and use it
                          BufferView* command_view = NULL;
                          if(command_buffer_node){
                               ce_clear_lines(command_buffer_node->buffer);
                               command_buffer_node->buffer->cursor = (Point){0, 0};
-
                               command_view = ce_buffer_in_view(config_state->view_head, command_buffer_node->buffer);
 
                               if(command_view){
@@ -2058,94 +2155,117 @@ search:
                input_start(config_state, "Shell Command", key);
           } break;
           case 14: // Ctrl + n
-          {
-               Buffer* command_buffer = NULL;
-               BufferNode* itr = head;
-               while(itr){
-                    if(strcmp(itr->buffer->name, cmd_buffer_name) == 0){
-                         command_buffer = itr->buffer;
-                         break;
-                    }
-                    itr = itr->next;
-               }
-
-               if(!command_buffer) break;
-
-               char file_tmp[BUFSIZ];
-               char line_number_tmp[BUFSIZ];
-               int64_t lines_checked = 0;
-               for(int64_t i = config_state->input_last_error + 1; lines_checked < command_buffer->line_count;
-                   ++i, lines_checked++){
-                    if(i == command_buffer->line_count){
-                         i = 0;
-                    }
-
-                    // format: 'filepath:line:column:'
-                    char* first_colon = strchr(command_buffer->lines[i], ':');
-                    if(!first_colon) continue;
-
-                    int64_t filename_len = first_colon - command_buffer->lines[i];
-                    strncpy(file_tmp, command_buffer->lines[i], filename_len);
-                    file_tmp[filename_len] = 0;
-                    if(access(file_tmp, F_OK) == -1) continue; // file does not exist
-
-                    char* second_colon = strchr(first_colon + 1, ':');
-                    if(!second_colon) continue;
-
-                    int64_t line_number_len = second_colon - (first_colon + 1);
-                    strncpy(line_number_tmp, first_colon + 1, line_number_len);
-                    line_number_tmp[line_number_len] = 0;
-
-                    bool all_digits = true;
-                    for(char* c = line_number_tmp; *c; c++){
-                         if(!isdigit(*c)){
-                              all_digits = false;
+               if(config_state->input){
+                    input_history_next(&config_state->shell_command_history);
+                    ce_clear_lines(config_state->view_input->buffer_node->buffer);
+                    ce_append_string(config_state->view_input->buffer_node->buffer, 0, config_state->shell_command_history.cur->entry);
+                    config_state->view_input->cursor = (Point){0, 0};
+                    ce_move_cursor_to_end_of_file(config_state->view_input->buffer_node->buffer, &config_state->view_input->cursor);
+               }else{
+                    Buffer* command_buffer = NULL;
+                    BufferNode* itr = head;
+                    while(itr){
+                         if(strcmp(itr->buffer->name, cmd_buffer_name) == 0){
+                              command_buffer = itr->buffer;
                               break;
                          }
+                         itr = itr->next;
                     }
 
-                    if(!all_digits) continue;
+                    if(!command_buffer) break;
 
-                    BufferNode* node = open_file_buffer(head, file_tmp);
-                    if(node){
-                         config_state->view_current->buffer_node = node;
-                         Point dst = {0, atoi(line_number_tmp) - 1}; // line numbers are 1 indexed
-                         ce_set_cursor(node->buffer, &config_state->view_current->cursor, &dst);
+                    char file_tmp[BUFSIZ];
+                    char line_number_tmp[BUFSIZ];
+                    int64_t lines_checked = 0;
+                    for(int64_t i = config_state->input_last_error + 1; lines_checked < command_buffer->line_count;
+                        ++i, lines_checked++){
+                         if(i == command_buffer->line_count){
+                              i = 0;
+                         }
 
-                         // check for optional column number
-                         char* third_colon = strchr(second_colon + 1, ':');
-                         if(third_colon){
-                              line_number_len = third_colon - (second_colon + 1);
-                              strncpy(line_number_tmp, second_colon + 1, line_number_len);
-                              line_number_tmp[line_number_len] = 0;
+                         // format: 'filepath:line:column:'
+                         char* first_colon = strchr(command_buffer->lines[i], ':');
+                         if(!first_colon) continue;
 
-                              all_digits = true;
-                              for(char* c = line_number_tmp; *c; c++){
-                                   if(!isdigit(*c)){
-                                        all_digits = false;
-                                        break;
-                                   }
+                         int64_t filename_len = first_colon - command_buffer->lines[i];
+                         strncpy(file_tmp, command_buffer->lines[i], filename_len);
+                         file_tmp[filename_len] = 0;
+                         if(access(file_tmp, F_OK) == -1) continue; // file does not exist
+
+                         char* second_colon = strchr(first_colon + 1, ':');
+                         if(!second_colon) continue;
+
+                         int64_t line_number_len = second_colon - (first_colon + 1);
+                         strncpy(line_number_tmp, first_colon + 1, line_number_len);
+                         line_number_tmp[line_number_len] = 0;
+
+                         bool all_digits = true;
+                         for(char* c = line_number_tmp; *c; c++){
+                              if(!isdigit(*c)){
+                                   all_digits = false;
+                                   break;
                               }
+                         }
 
-                              if(all_digits){
-                                   dst.x = atoi(line_number_tmp) - 1; // column numbers are 1 indexed
-                                   assert(dst.x >= 0);
-                                   ce_set_cursor(node->buffer, &config_state->view_current->cursor, &dst);
+                         if(!all_digits) continue;
+
+                         BufferNode* node = open_file_buffer(head, file_tmp);
+                         if(node){
+                              config_state->view_current->buffer_node = node;
+                              Point dst = {0, atoi(line_number_tmp) - 1}; // line numbers are 1 indexed
+                              ce_set_cursor(node->buffer, &config_state->view_current->cursor, &dst);
+
+                              // check for optional column number
+                              char* third_colon = strchr(second_colon + 1, ':');
+                              if(third_colon){
+                                   line_number_len = third_colon - (second_colon + 1);
+                                   strncpy(line_number_tmp, second_colon + 1, line_number_len);
+                                   line_number_tmp[line_number_len] = 0;
+
+                                   all_digits = true;
+                                   for(char* c = line_number_tmp; *c; c++){
+                                        if(!isdigit(*c)){
+                                             all_digits = false;
+                                             break;
+                                        }
+                                   }
+
+                                   if(all_digits){
+                                        dst.x = atoi(line_number_tmp) - 1; // column numbers are 1 indexed
+                                        assert(dst.x >= 0);
+                                        ce_set_cursor(node->buffer, &config_state->view_current->cursor, &dst);
+                                   }else{
+                                        ce_move_cursor_to_soft_beginning_of_line(node->buffer, &config_state->view_current->cursor);
+                                   }
                               }else{
                                    ce_move_cursor_to_soft_beginning_of_line(node->buffer, &config_state->view_current->cursor);
                               }
-                         }else{
-                              ce_move_cursor_to_soft_beginning_of_line(node->buffer, &config_state->view_current->cursor);
-                         }
 
-                         center_view(config_state->view_current);
-                         BufferView* command_view = ce_buffer_in_view(config_state->view_head, command_buffer);
-                         if(command_view) command_view->top_row = i;
-                         config_state->input_last_error = i;
-                         break;
+                              center_view(config_state->view_current);
+                              BufferView* command_view = ce_buffer_in_view(config_state->view_head, command_buffer);
+                              if(command_view) command_view->top_row = i;
+                              config_state->input_last_error = i;
+                              break;
+                         }
                     }
                }
-          } break;
+               break;
+          case 16: // Ctrl + p
+               if(config_state->input){
+                    if(config_state->shell_command_history.tail == config_state->shell_command_history.cur &&
+                       config_state->view_input->buffer_node->buffer->line_count){
+                         input_history_update_current(&config_state->shell_command_history,
+                                                      ce_dupe_buffer(config_state->view_input->buffer_node->buffer));
+                    }
+                    input_history_prev(&config_state->shell_command_history);
+                    ce_clear_lines(config_state->view_input->buffer_node->buffer);
+                    ce_append_string(config_state->view_input->buffer_node->buffer, 0, config_state->shell_command_history.cur->entry);
+                    config_state->view_input->cursor = (Point){0, 0};
+                    ce_move_cursor_to_end_of_file(config_state->view_input->buffer_node->buffer, &config_state->view_input->cursor);
+               }else{
+                    // TODO: go to stuff
+
+               }
           case 6: // Ctrl + f
           {
                if(config_state->input) break;

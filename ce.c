@@ -2229,6 +2229,33 @@ BufferView* ce_find_view_at_point(BufferView* head, const Point* point)
      return find_view_at_point(head, point);
 }
 
+BufferView* buffer_in_view(BufferView* view, const Buffer* buffer)
+{
+     if(view->buffer_node->buffer == buffer){
+          return view;
+     }
+
+     BufferView* result = NULL;
+
+     if(view->next_horizontal){
+          result = buffer_in_view(view->next_horizontal, buffer);
+     }
+
+     if(!result && view->next_vertical){
+          result = buffer_in_view(view->next_vertical, buffer);
+     }
+
+     return result;
+}
+
+BufferView* ce_buffer_in_view(BufferView* head, const Buffer* buffer)
+{
+     CE_CHECK_PTR_ARG(head);
+     CE_CHECK_PTR_ARG(buffer);
+
+     return buffer_in_view(head, buffer);
+}
+
 void* ce_memrchr(const void* s, int c, size_t n)
 {
      char* rev_search = (void*)s + (n-1);

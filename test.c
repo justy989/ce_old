@@ -1379,6 +1379,10 @@ TEST(sanity_split_view)
      BufferView* found_view = ce_find_view_at_point(head, &find_point);
      EXPECT(found_view == new_horizontal_split_view);
 
+     // find view by buffer
+     found_view = ce_buffer_in_view(head, buffers + 3);
+     EXPECT(found_view == new_horizontal_split_view);
+
      // draw views
      // NOTE: we are not initializing curses or anything, so the calls should be nops? We make the call to 
      //       ensure no crashes, but can't really validate anything

@@ -1701,23 +1701,27 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          // if we found an existing command buffer, clear it and use it
                          if(command_buffer_node){
                               ce_clear_lines(command_buffer_node->buffer);
-                              config_state->view_current->buffer_node = command_buffer_node;
+
+                              if(!ce_buffer_in_view(config_state->view_head, command_buffer_node->buffer)){
+                                   config_state->view_current->buffer_node = command_buffer_node;
+                                   config_state->view_current->cursor = (Point){0, 0};
+                              }
                          }else{
                               // create a new one from an empty string
                               config_state->view_current->buffer_node = new_buffer_from_string(head, "shell_command", "");
+                              config_state->view_current->cursor = (Point){0, 0};
+                              command_buffer_node = config_state->view_current->buffer_node;
                          }
-
-                         // reset the cursor to the top
-                         config_state->view_current->cursor = (Point){0, 0};
 
                          for(int64_t i = 0; i < config_state->view_input->buffer_node->buffer->line_count; ++i){
                               // run the command
                               char cmd[BUFSIZ];
                               snprintf(cmd, BUFSIZ, "%s 2>&1", config_state->view_input->buffer_node->buffer->lines[i]);
-
                               FILE* pfile = popen(cmd, "r");
+
+                              // append the command
                               snprintf(cmd, BUFSIZ, "$ %s", config_state->view_input->buffer_node->buffer->lines[i]);
-                              ce_append_line(config_state->view_current->buffer_node->buffer, cmd);
+                              ce_append_line(command_buffer_node->buffer, cmd);
 
                               // load one line at a time
                               while(fgets(cmd, BUFSIZ, pfile) != NULL){
@@ -1726,14 +1730,15 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                                    assert(cmd[cmd_len-1] == NEWLINE);
                                    cmd[cmd_len-1] = 0;
 
-                                   ce_append_line(config_state->view_current->buffer_node->buffer, cmd);
+                                   ce_append_line(command_buffer_node->buffer, cmd);
                               }
 
+                              // append the return code
                               snprintf(cmd, BUFSIZ, "exit code: %d", WEXITSTATUS(pclose(pfile)));
-                              ce_append_line(config_state->view_current->buffer_node->buffer, cmd);
+                              ce_append_line(command_buffer_node->buffer, cmd);
 
-                              // NOTE: add blank for readability
-                              ce_append_line(config_state->view_current->buffer_node->buffer, "");
+                              // add blank for readability
+                              ce_append_line(command_buffer_node->buffer, "");
                          }
                     } break;
                     }

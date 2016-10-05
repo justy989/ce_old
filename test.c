@@ -335,11 +335,13 @@ TEST(insert_string_multiline_mid)
      buffer.lines[0] = strdup("TACOS");
 
      Point point = {2, 0};
-     ce_insert_string(&buffer, &point, " AH\nHH ");
+     ce_insert_string(&buffer, &point, " IN\nTHE\nMID\n ");
 
-     ASSERT(buffer.line_count == 2);
-     EXPECT(strcmp(buffer.lines[0], "TA AH") == 0);
-     EXPECT(strcmp(buffer.lines[1], "HH COS") == 0);
+     ASSERT(buffer.line_count == 4);
+     EXPECT(strcmp(buffer.lines[0], "TA IN") == 0);
+     EXPECT(strcmp(buffer.lines[1], "THE") == 0);
+     EXPECT(strcmp(buffer.lines[2], "MID") == 0);
+     EXPECT(strcmp(buffer.lines[3], " COS") == 0);
 
      ce_free_buffer(&buffer);
 }
@@ -633,6 +635,27 @@ TEST(sanity_append_line)
 
      ce_free_buffer(&buffer);
 }
+
+#if 0
+TEST(sanity_join_line)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE");
+     buffer.lines[2] = strdup("AWESOME");
+
+     ce_join_line(&buffer, 1);
+
+     ASSERT(buffer.line_count == 2);
+
+     EXPECT(strcmp(buffer.lines[0], "TACOS") == 0);
+     EXPECT(strcmp(buffer.lines[1], "ARE AWESOME") == 0);
+
+     ce_free_buffer(&buffer);
+}
+#endif
 
 TEST(sanity_clear_lines)
 {
@@ -1159,7 +1182,231 @@ TEST(commit_change_string_undo_redo)
      ce_commits_free(tail);
 }
 
+TEST(sanity_is_c_keyword)
+{
+     const char* keyword_line = "     while(i == 5)";
+     const char* not_keyword_line = "TACOS ARE GREAT";
+     EXPECT(ce_is_c_keyword(keyword_line, 5) == 5);
+     EXPECT(ce_is_c_keyword(not_keyword_line, 6) == 0);
+}
+
+TEST(sanity_is_preprocessor)
+{
+     const char* preproc_line = "#include <iosux>";
+     const char* not_preproc_line = "EVERYTHING IS AWESOME";
+
+     EXPECT(ce_is_preprocessor(preproc_line, 0) == 8);
+     EXPECT(ce_is_preprocessor(not_preproc_line, 0) == 0);
+}
+
+TEST(sanity_is_comment)
+{
+     const char* non_comment_line = "WHY DOES BACKSPACE NOT WORK FOR ME?";
+     const char* comment_line = "     // tacos ";
+     const char* begin_multiline_comment_line = "     /* ";
+     const char* end_multiline_comment_line = "    */ ";
+
+     EXPECT(ce_is_comment(non_comment_line, 0) == CT_NONE);
+     EXPECT(ce_is_comment(comment_line, 5) == CT_SINGLE_LINE);
+     EXPECT(ce_is_comment(begin_multiline_comment_line, 5) == CT_BEGIN_MULTILINE);
+     EXPECT(ce_is_comment(end_multiline_comment_line, 5) == CT_END_MULTILINE);
+}
+
+TEST(sanity_is_string_literal)
+{
+     const char* non_string_line = "TACOS ARE AWESOME";
+     const char* double_string_line = "printf(\"Hello World\")";
+     const char* single_string_line = "printf('!')";
+
+     bool non_inside_string = false;
+     char non_last_quote_char = 0;
+     ce_is_string_literal(non_string_line, 0, strlen(non_string_line), &non_inside_string, &non_last_quote_char);
+
+     EXPECT(non_inside_string == false);
+     EXPECT(non_last_quote_char == false);
+
+     bool inside_string = false;
+     char last_quote_char = 0;
+     ce_is_string_literal(double_string_line, 7, strlen(double_string_line), &inside_string, &last_quote_char);
+
+     EXPECT(inside_string == true);
+     EXPECT(last_quote_char == '"');
+
+     ce_is_string_literal(double_string_line, 19, strlen(double_string_line), &inside_string, &last_quote_char);
+
+     EXPECT(inside_string == false);
+     EXPECT(last_quote_char == '"');
+
+     inside_string = false;
+     last_quote_char = 0;
+     ce_is_string_literal(single_string_line, 7, strlen(single_string_line), &inside_string, &last_quote_char);
+
+     EXPECT(inside_string == true);
+     EXPECT(last_quote_char == '\'');
+
+     ce_is_string_literal(single_string_line, 9, strlen(single_string_line), &inside_string, &last_quote_char);
+
+     EXPECT(inside_string == false);
+     EXPECT(last_quote_char == '\'');
+}
+
+TEST(sanity_is_caps_var)
+{
+     const char* non_string_line = "i'm using ce to write these tests!";
+     const char* string_line = "#define _GNU_SOURCE";
+
+     EXPECT(ce_is_caps_var(non_string_line, 0) == 0);
+     EXPECT(ce_is_caps_var(string_line, 8) == 11);
+}
+
+TEST(sanity_follow_cursor)
+{
+     int64_t left_column = 0;
+     int64_t top_row = 0;
+     int64_t view_width = 3;
+     int64_t view_height = 4;
+
+     Point cursor = {0, 0};
+
+     ce_follow_cursor(&cursor, &left_column, &top_row, view_width, view_height, false, false);
+     EXPECT(left_column == 0);
+     EXPECT(top_row == 0);
+
+     cursor = (Point){3, 0};
+     ce_follow_cursor(&cursor, &left_column, &top_row, view_width, view_height, false, false);
+     EXPECT(left_column == 1);
+     EXPECT(top_row == 0);
+
+     left_column = 0;
+     cursor = (Point){0, 4};
+     ce_follow_cursor(&cursor, &left_column, &top_row, view_width, view_height, false, false);
+     EXPECT(left_column == 0);
+     EXPECT(top_row == 1);
+}
+
+TEST(sanity_buffer_list)
+{
+     BufferNode* head = calloc(1, sizeof(*head));
+     ASSERT(head);
+
+     Buffer one;
+     Buffer two;
+     Buffer three;
+
+     head->buffer = &one;
+
+     BufferNode* two_node = ce_append_buffer_to_list(head, &two);
+     ASSERT(two_node != NULL);
+
+     BufferNode* three_node = ce_append_buffer_to_list(head, &three);
+     ASSERT(three_node != NULL);
+
+     ASSERT(head->buffer == &one);
+     ASSERT(head->next->buffer == &two);
+     ASSERT(head->next->next->buffer == &three);
+
+     EXPECT(ce_remove_buffer_from_list(head, &two_node) == true);
+     EXPECT(ce_remove_buffer_from_list(head, &two_node) == false);
+
+     ASSERT(head);
+     ASSERT(head->next);
+     ASSERT(head->next->buffer == &three);
+     ASSERT(head->next->next == NULL);
+
+     EXPECT(ce_remove_buffer_from_list(head, &three_node) == true);
+
+     ASSERT(head);
+     ASSERT(head->buffer == &one);
+     ASSERT(head->next == NULL);
+
+     free(head);
+}
+
+TEST(sanity_split_view)
+{
+     BufferView* head = calloc(1, sizeof(*head));
+     ASSERT(head);
+
+     Buffer buffers[4] = {};
+     BufferNode* nodes[4] = {};
+
+     for(int i = 0; i < 4; ++i){
+          ASSERT(ce_alloc_lines(buffers + i, 1));
+          nodes[i] = calloc(1, sizeof(*nodes[i]));
+          ASSERT(nodes[i]);
+          nodes[i]->buffer = buffers + i;
+     }
+
+     head->buffer_node = nodes[0];
+
+     // split views
+     BufferView* horizontal_split_view = ce_split_view(head, nodes[1], true);
+     ASSERT(head->next_horizontal == horizontal_split_view);
+
+     BufferView* vertical_split_view = ce_split_view(head, nodes[2], false);
+     ASSERT(head->next_vertical == vertical_split_view);
+
+     BufferView* new_horizontal_split_view = ce_split_view(vertical_split_view, nodes[3], true);
+     ASSERT(vertical_split_view->next_horizontal == new_horizontal_split_view);
+
+     // calc views
+     Point top_left = {0, 0};
+     Point bottom_right = {16, 9};
+     ASSERT(ce_calc_views(head, &top_left, &bottom_right));
+
+     EXPECT(head->top_left.x == 0);
+     EXPECT(head->top_left.y == 0);
+     EXPECT(head->bottom_right.x == 7);
+     EXPECT(head->bottom_right.y == 4);
+
+     EXPECT(horizontal_split_view->top_left.x == 8);
+     EXPECT(horizontal_split_view->top_left.y == 0);
+     EXPECT(horizontal_split_view->bottom_right.x == 16);
+     EXPECT(horizontal_split_view->bottom_right.y == 9);
+
+     EXPECT(vertical_split_view->top_left.x == 0);
+     EXPECT(vertical_split_view->top_left.y == 5);
+     EXPECT(vertical_split_view->bottom_right.x == 3);
+     EXPECT(vertical_split_view->bottom_right.y == 9);
+
+     EXPECT(new_horizontal_split_view->top_left.x == 4);
+     EXPECT(new_horizontal_split_view->top_left.y == 5);
+     EXPECT(new_horizontal_split_view->bottom_right.x == 7);
+     EXPECT(new_horizontal_split_view->bottom_right.y == 9);
+
+     // find view at point
+     Point find_point = {7, 9};
+     BufferView* found_view = ce_find_view_at_point(head, &find_point);
+     EXPECT(found_view == new_horizontal_split_view);
+
+     // draw views
+     // NOTE: we are not initializing curses or anything, so the calls should be nops? We make the call to 
+     //       ensure no crashes, but can't really validate anything
+     EXPECT(ce_draw_views(head));
+
+     // remove views
+     ASSERT(ce_remove_view(&head, vertical_split_view) == true);
+     EXPECT(head->next_horizontal == horizontal_split_view);
+     EXPECT(head->next_vertical == new_horizontal_split_view);
+     EXPECT(head->next_horizontal->next_horizontal == NULL);
+
+     ASSERT(ce_remove_view(&head, head) == true);
+     EXPECT(head == new_horizontal_split_view);
+     EXPECT(head->next_horizontal == horizontal_split_view);
+
+     // free views
+     ASSERT(ce_free_views(&head));
+
+     for(int i = 0; i < 4; ++i){
+          free(nodes[i]);
+          ce_free_buffer(buffers + i);
+     }
+}
+
 int main()
 {
+     Point terminal_dimensions = {17, 10};
+     g_terminal_dimensions = &terminal_dimensions;
+
      RUN_TESTS();
 }

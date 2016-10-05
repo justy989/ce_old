@@ -1,9 +1,10 @@
 CC?=clang
-CFLAGS=-Wall -Werror -Wextra -std=gnu11 -ggdb3 -D_GNU_SOURCE
+CFLAGS=-Wall -Werror -Wextra -std=c11 -ggdb3 -D_GNU_SOURCE
 LINK=-lncurses
 
 all: ce ce_config.so
 
+cov: coverage
 coverage: CFLAGS += -fprofile-arcs -ftest-coverage
 coverage: clean_test test
 	llvm-cov gcov ce.test.o

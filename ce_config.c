@@ -1693,9 +1693,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                               itr = itr->next;
                          }
 
-                         // run the command
-                         FILE* pfile = popen(config_state->view_input->buffer_node->buffer->lines[0], "r");
-
                          // if we found an existing command buffer, clear it and use it
                          if(command_buffer_node){
                               ce_clear_lines(command_buffer_node->buffer);
@@ -1708,18 +1705,25 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          // reset the cursor to the top
                          config_state->view_current->cursor = (Point){0, 0};
 
-                         // load one line at a time
-                         char cmd_output[BUFSIZ];
-                         while(fgets(cmd_output, BUFSIZ, pfile) != NULL){
-                              // strip newline
-                              size_t cmd_len = strlen(cmd_output);
-                              assert(cmd_output[cmd_len-1] == NEWLINE);
-                              cmd_output[cmd_len-1] = 0;
+                         for(int64_t i = 0; i < config_state->view_input->buffer_node->buffer->line_count; ++i){
+                              // run the command
+                              char cmd[BUFSIZ];
+                              snprintf(cmd, BUFSIZ, "%s 2>&1", config_state->view_input->buffer_node->buffer->lines[i]);
 
-                              ce_append_line(config_state->view_current->buffer_node->buffer, cmd_output);
+                              FILE* pfile = popen(cmd, "r");
+
+                              // load one line at a time
+                              while(fgets(cmd, BUFSIZ, pfile) != NULL){
+                                   // strip newline
+                                   size_t cmd_len = strlen(cmd);
+                                   assert(cmd[cmd_len-1] == NEWLINE);
+                                   cmd[cmd_len-1] = 0;
+
+                                   ce_append_line(config_state->view_current->buffer_node->buffer, cmd);
+                              }
+
+                              pclose(pfile);
                          }
-
-                         pclose(pfile);
                     } break;
                     }
                }else{

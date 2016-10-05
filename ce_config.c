@@ -1337,7 +1337,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                                    Point delta = {-cursor->x, 0};
                                    ce_move_cursor(buffer, cursor, &delta);
                                    movement_start = (Point) {0, cursor->y};
-                                   movement_end = (Point) {strlen(buffer->lines[cursor->y])+1, cursor->y}; // TODO: causes ce_dupe_string to fail (not on buffer)
+                                   movement_end = (Point) {strlen(buffer->lines[cursor->y]), cursor->y}; // TODO: causes ce_dupe_string to fail (not on buffer)
                                    yank_mode = YANK_LINE;
                               } break;
                               default:
@@ -1363,6 +1363,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     char* save_string;
                     char* yank_string;
                     if(config_state->movement_keys[0] == 'd'){
+                         n_deletes++; // delete the new line
                          size_t save_len = strlen(buffer->lines[movement_start.y]) + 2;
                          save_string = malloc(sizeof(*save_string)*save_len);
                          save_string[save_len-2] = '\n';

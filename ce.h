@@ -30,6 +30,8 @@ typedef enum {
      S_STRING,
      S_CONSTANT,
      S_PREPROCESSOR,
+     S_DIFF_ADD,
+     S_DIFF_REMOVE,
 } Syntax;
 
 #define CE_CHECK_PTR_ARG(arg)                                                 \

@@ -423,6 +423,8 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
      init_pair(S_STRING, COLOR_RED, COLOR_BACKGROUND);
      init_pair(S_CONSTANT, COLOR_MAGENTA, COLOR_BACKGROUND);
      init_pair(S_PREPROCESSOR, COLOR_YELLOW, COLOR_BACKGROUND);
+     init_pair(S_DIFF_ADD, COLOR_GREEN, COLOR_BACKGROUND);
+     init_pair(S_DIFF_REMOVE, COLOR_RED, COLOR_BACKGROUND);
 
      return true;
 }

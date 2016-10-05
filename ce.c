@@ -1196,6 +1196,8 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                bool inside_comment = false;
                int64_t highlighting_left = 0;
                int highlight_color = 0;
+               bool diff_add = buffer->lines[i][0] == '+';
+               bool diff_remove = buffer->lines[i][0] == '-';
 
                // NOTE: pre-pass check for comments and strings out of view
                for(int64_t c = 0; c < buffer_top_left->x; ++c){
@@ -1254,6 +1256,10 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                     attron(COLOR_PAIR(S_STRING));
                }else if(highlighting_left){
                     attron(COLOR_PAIR(highlight_color));
+               }else if(diff_add){
+                    attron(COLOR_PAIR(S_DIFF_ADD));
+               }else if(diff_remove){
+                    attron(COLOR_PAIR(S_DIFF_REMOVE));
                }
 
                for(int64_t c = 0; c < min; ++c){
@@ -1313,6 +1319,10 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                                    attron(COLOR_PAIR(S_COMMENT));
                               }else if(inside_string){
                                    attron(COLOR_PAIR(S_STRING));
+                              }else if(diff_add){
+                                   attron(COLOR_PAIR(S_DIFF_ADD));
+                              }else if(diff_remove){
+                                   attron(COLOR_PAIR(S_DIFF_REMOVE));
                               }
                          }
                     }

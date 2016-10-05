@@ -11,6 +11,8 @@
 
 static const char* cmd_buffer_name = "shell_command";
 
+void view_drawer(const BufferNode* head, void* user_data);
+
 typedef struct BackspaceNode{
      char c;
      struct BackspaceNode* next;
@@ -795,6 +797,12 @@ bool is_movement_buffer_full(ConfigState* config_state)
      size_t max_movement_keys = sizeof config_state->movement_keys;
      size_t n_movement_keys = movement_buffer_len(config_state->movement_keys, max_movement_keys);
      return n_movement_keys == max_movement_keys;
+}
+
+void scroll_view_to_last_line(BufferView* view)
+{
+     view->top_row = view->buffer_node->buffer->line_count - (view->bottom_right.y - view->top_left.y);
+     if(view->top_row < 0) view->top_row = 0;
 }
 
 bool key_handler(int key, BufferNode* head, void* user_data)
@@ -1704,25 +1712,32 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          }
 
                          // if we found an existing command buffer, clear it and use it
+                         BufferView* command_view = NULL;
                          if(command_buffer_node){
                               ce_clear_lines(command_buffer_node->buffer);
                               command_buffer_node->buffer->cursor = (Point){0, 0};
 
-                              BufferView* command_view = ce_buffer_in_view(config_state->view_head,
-                                                                           command_buffer_node->buffer);
+                              command_view = ce_buffer_in_view(config_state->view_head, command_buffer_node->buffer);
+
                               if(command_view){
                                    command_view->cursor = (Point){0, 0};
+                                   command_view->top_row = 0;
                               }else{
                                    config_state->view_current->buffer_node = command_buffer_node;
                                    config_state->view_current->cursor = (Point){0, 0};
+                                   config_state->view_current->top_row = 0;
+                                   command_view = config_state->view_current;
                               }
                          }else{
                               // create a new one from an empty string
                               config_state->view_current->buffer_node = new_buffer_from_string(head, "shell_command", "");
                               config_state->view_current->cursor = (Point){0, 0};
+                              config_state->view_current->top_row = 0;
                               command_buffer_node = config_state->view_current->buffer_node;
+                              command_view = config_state->view_current;
                          }
 
+                         assert(command_view);
                          for(int64_t i = 0; i < config_state->view_input->buffer_node->buffer->line_count; ++i){
                               // run the command
                               char cmd[BUFSIZ];
@@ -1741,6 +1756,13 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                                    cmd[cmd_len-1] = 0;
 
                                    ce_append_line(command_buffer_node->buffer, cmd);
+
+                                   scroll_view_to_last_line(command_view);
+                                   command_view->cursor.y = command_view->top_row;
+
+                                   erase();
+                                   view_drawer(head, user_data);
+                                   refresh();
                               }
 
                               // append the return code
@@ -1749,6 +1771,9 @@ bool key_handler(int key, BufferNode* head, void* user_data)
 
                               // add blank for readability
                               ce_append_line(command_buffer_node->buffer, "");
+
+                              scroll_view_to_last_line(command_view);
+                              command_view->cursor.y = command_view->top_row;
                          }
                     } break;
                     }
@@ -2066,6 +2091,8 @@ search:
                          config_state->view_current->buffer_node = node;
                          Point dst = {0, atoi(line_number_tmp) - 1};
                          ce_set_cursor(node->buffer, &config_state->view_current->cursor, &dst);
+                         BufferView* command_view = ce_buffer_in_view(config_state->view_head, command_buffer);
+                         if(command_view) command_view->top_row = i;
                          config_state->input_last_error = i;
                          break;
                     }

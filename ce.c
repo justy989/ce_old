@@ -1100,6 +1100,8 @@ int64_t ce_is_caps_var(const char* line, int64_t start_offset)
      return count - 1; // we over-counted on the last iteration
 }
 
+static const char non_printable_repr = '~';
+
 bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Point* term_bottom_right,
                     const Point* buffer_top_left)
 {
@@ -1196,6 +1198,8 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                bool inside_comment = false;
                int64_t highlighting_left = 0;
                int highlight_color = 0;
+               bool diff_add = buffer->lines[i][0] == '+';
+               bool diff_remove = buffer->lines[i][0] == '-';
 
                // NOTE: pre-pass check for comments and strings out of view
                for(int64_t c = 0; c < buffer_top_left->x; ++c){
@@ -1254,6 +1258,10 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                     attron(COLOR_PAIR(S_STRING));
                }else if(highlighting_left){
                     attron(COLOR_PAIR(highlight_color));
+               }else if(diff_add){
+                    attron(COLOR_PAIR(S_DIFF_ADD));
+               }else if(diff_remove){
+                    attron(COLOR_PAIR(S_DIFF_REMOVE));
                }
 
                for(int64_t c = 0; c < min; ++c){
@@ -1313,12 +1321,20 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                                    attron(COLOR_PAIR(S_COMMENT));
                               }else if(inside_string){
                                    attron(COLOR_PAIR(S_STRING));
+                              }else if(diff_add){
+                                   attron(COLOR_PAIR(S_DIFF_ADD));
+                              }else if(diff_remove){
+                                   attron(COLOR_PAIR(S_DIFF_REMOVE));
                               }
                          }
                     }
 
                     // print each character
-                    addch(line_to_print[c]);
+                    if(isprint(line_to_print[c])){
+                         addch(line_to_print[c]);
+                    }else{
+                         addch(non_printable_repr);
+                    }
                }
 
                // NOTE: post pass after the line to see if multiline comments begin or end
@@ -1338,7 +1354,11 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
           }else{
                for(int64_t c = 0; c < min; ++c){
                     // print each character
-                    addch(line_to_print[c]);
+                    if(isprint(line_to_print[c])){
+                         addch(line_to_print[c]);
+                    }else{
+                         addch(non_printable_repr);
+                    }
                }
           }
 
@@ -2227,6 +2247,33 @@ BufferView* ce_find_view_at_point(BufferView* head, const Point* point)
      CE_CHECK_PTR_ARG(point);
 
      return find_view_at_point(head, point);
+}
+
+BufferView* buffer_in_view(BufferView* view, const Buffer* buffer)
+{
+     if(view->buffer_node->buffer == buffer){
+          return view;
+     }
+
+     BufferView* result = NULL;
+
+     if(view->next_horizontal){
+          result = buffer_in_view(view->next_horizontal, buffer);
+     }
+
+     if(!result && view->next_vertical){
+          result = buffer_in_view(view->next_vertical, buffer);
+     }
+
+     return result;
+}
+
+BufferView* ce_buffer_in_view(BufferView* head, const Buffer* buffer)
+{
+     CE_CHECK_PTR_ARG(head);
+     CE_CHECK_PTR_ARG(buffer);
+
+     return buffer_in_view(head, buffer);
 }
 
 void* ce_memrchr(const void* s, int c, size_t n)

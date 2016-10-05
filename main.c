@@ -61,7 +61,7 @@ typedef struct Config{
      ce_destroyer* destroyer;
      ce_key_handler* key_handler;
      ce_view_drawer* view_drawer;
-}Config;
+} Config;
 
 const Config config_defaults = {NULL, NULL, default_initializer, default_destroyer, default_key_handler, default_view_drawer};
 

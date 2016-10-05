@@ -1716,6 +1716,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                               snprintf(cmd, BUFSIZ, "%s 2>&1", config_state->view_input->buffer_node->buffer->lines[i]);
 
                               FILE* pfile = popen(cmd, "r");
+                              snprintf(cmd, BUFSIZ, "$ %s", config_state->view_input->buffer_node->buffer->lines[i]);
+                              ce_append_line(config_state->view_current->buffer_node->buffer, cmd);
 
                               // load one line at a time
                               while(fgets(cmd, BUFSIZ, pfile) != NULL){
@@ -1727,7 +1729,11 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                                    ce_append_line(config_state->view_current->buffer_node->buffer, cmd);
                               }
 
-                              pclose(pfile);
+                              snprintf(cmd, BUFSIZ, "exit code: %i", WEXITSTATUS(pclose(pfile)));
+                              ce_append_line(config_state->view_current->buffer_node->buffer, cmd);
+
+                              // NOTE: add blank for readability
+                              ce_append_line(config_state->view_current->buffer_node->buffer, "");
                          }
                     } break;
                     }

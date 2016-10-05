@@ -601,7 +601,7 @@ bool ce_move_cursor_to_soft_beginning_of_line(const Buffer* buffer, Point* curso
      return true;
 }
 
-bool ce_move_cursor_to_soft_end_of_line(Buffer* buffer, Point* cursor)
+bool ce_move_cursor_to_soft_end_of_line(const Buffer* buffer, Point* cursor)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
@@ -2262,8 +2262,8 @@ int64_t ce_compute_length(const Buffer* buffer, const Point* start, const Point*
      CE_CHECK_PTR_ARG(start);
      CE_CHECK_PTR_ARG(end);
 
-     assert(ce_point_on_buffer(buffer, start) || start->x == (int64_t)strlen(buffer->lines[start->y]) + 1); // account for newline
-     assert(ce_point_on_buffer(buffer, end) || end->x == (int64_t)strlen(buffer->lines[end->y]) + 1); // account for newline
+     assert(ce_point_on_buffer(buffer, start));
+     assert(ce_point_on_buffer(buffer, end));
 
      ce_sort_points(&start, &end);
 
@@ -2314,6 +2314,7 @@ bool ce_get_homogenous_adjacents(const Buffer* buffer, Point* start, Point* end,
      return true;
 }
 
+// word_start is inclusive, word_end is exclusive
 bool ce_get_word_at_location(const Buffer* buffer, const Point* location, Point* word_start, Point* word_end)
 {
      CE_CHECK_PTR_ARG(buffer);

@@ -876,7 +876,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          Point click = {event.x, event.y};
                          config_state->view_current = ce_find_view_at_point(config_state->view_head, &click);
                          click = (Point) {event.x - (config_state->view_current->top_left.x - config_state->view_current->left_column),
-                                          event.y - config_state->view_current->top_left.y};
+                                          event.y - (config_state->view_current->top_left.y - config_state->view_current->top_row)};
                          ce_set_cursor(config_state->view_current->buffer_node->buffer,
                                        &config_state->view_current->cursor,
                                        &click);
@@ -1118,6 +1118,10 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          ce_set_cursor(config_state->view_current->buffer_node->buffer,
                                        &config_state->view_current->cursor,
                                        &click);
+                    }else if(event.bstate & REPORT_MOUSE_POSITION){
+                         Point scroll_location = {0, buffer_view->top_row + 1};
+                         scroll_view_to_location(buffer_view, &scroll_location);
+                         if(buffer_view->cursor.y <= buffer_view->top_row) buffer_view->cursor.y++;
                     }
                }
           } break;

@@ -553,7 +553,7 @@ bool ce_find_match(const Buffer* buffer, const Point* location, Point* match)
      if(!ce_find_delta_to_match(buffer, location, &delta)) return false;
 
      *match = *location;
-     ce_move_cursor(buffer, match, &delta);
+     ce_move_cursor(buffer, match, delta);
 
      return true;
 }
@@ -1420,17 +1420,15 @@ bool ce_remove_buffer_from_list(BufferNode* head, BufferNode** node)
      return false;
 }
 
-// return x delta to the last character in the line, -1 on error
-int64_t ce_find_delta_to_end_of_line(const Buffer* buffer, const Point* cursor)
+bool ce_move_cursor_to_end_of_line(const Buffer* buffer, Point* cursor)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
 
-     if(!ce_point_on_buffer(buffer, cursor)) return -1;
+     if(!ce_point_on_buffer(buffer, cursor)) return false;
 
-     const char* line = buffer->lines[cursor->y];
-     size_t len = strlen(line);
-     return len ? (len - 1) - cursor->x : 0;
+     cursor->x = strlen(buffer->lines[cursor->y]); 
+     return true;
 }
 
 bool ce_set_cursor(const Buffer* buffer, Point* cursor, const Point* location)
@@ -1464,20 +1462,18 @@ bool ce_set_cursor(const Buffer* buffer, Point* cursor, const Point* location)
 
 // modifies cursor and also returns a pointer to cursor for convience
 Point* ce_clamp_cursor(const Buffer* buffer, Point* cursor){
-     Point clamp = {0, 0};
-     ce_move_cursor(buffer, cursor, &clamp);
+     ce_move_cursor(buffer, cursor, (Point){0,0});
      return cursor;
 }
 
-bool ce_move_cursor(const Buffer* buffer, Point* cursor, const Point* delta)
+bool ce_move_cursor(const Buffer* buffer, Point* cursor, Point delta)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
-     CE_CHECK_PTR_ARG(delta);
 
      Point dst = *cursor;
-     dst.x += delta->x;
-     dst.y += delta->y;
+     dst.x += delta.x;
+     dst.y += delta.y;
 
      if(dst.x < 0) dst.x = 0;
      if(dst.y < 0) dst.y = 0;

@@ -1747,7 +1747,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                               FILE* pfile = popen(cmd, "r");
 
                               // append the command
-                              snprintf(cmd, BUFSIZ, "// $ %s", config_state->view_input->buffer_node->buffer->lines[i]);
+                              snprintf(cmd, BUFSIZ, "+ $ %s", config_state->view_input->buffer_node->buffer->lines[i]);
                               ce_append_line(command_buffer_node->buffer, cmd);
 
                               // load one line at a time
@@ -1769,7 +1769,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
 
                               // append the return code
                               int exit_code = pclose(pfile);
-                              snprintf(cmd, BUFSIZ, "// exit code: %d", WEXITSTATUS(exit_code));
+                              snprintf(cmd, BUFSIZ, "+ exit code: %d", WEXITSTATUS(exit_code));
                               ce_append_line(command_buffer_node->buffer, cmd);
 
                               // add blank for readability

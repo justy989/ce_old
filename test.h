@@ -14,17 +14,17 @@ typedef void test_func(bool*);
      test_func* GLOBAL_TEST_FUNC(__COUNTER__) = name; \
      void name(bool* _test_failed)
 
-#define EXPECT(cond)                                                                             \
-     if(!(cond)){                                                                                \
-          printf("%s:%d %s() FAILED expecting (%s)\n", __FILE__, __LINE__, __FUNCTION__, #cond); \
-          *_test_failed = true;                                                                  \
+#define EXPECT(cond)                                                                              \
+     if(!(cond)){                                                                                 \
+          printf("%s:%d: %s() FAILED expecting (%s)\n", __FILE__, __LINE__, __FUNCTION__, #cond); \
+          *_test_failed = true;                                                                   \
      }
 
-#define ASSERT(cond)                                                                             \
-     if(!(cond)){                                                                                \
-          printf("%s:%d %s() FAILED asserting (%s)\n", __FILE__, __LINE__, __FUNCTION__, #cond); \
-          *_test_failed = true;                                                                  \
-          return;                                                                                \
+#define ASSERT(cond)                                                                              \
+     if(!(cond)){                                                                                 \
+          printf("%s:%d: %s() FAILED asserting (%s)\n", __FILE__, __LINE__, __FUNCTION__, #cond); \
+          *_test_failed = true;                                                                   \
+          return;                                                                                 \
      }
 
 // NOTE: In registering tests, we're going to take advantage of the knowledge that the globals are layed out sequentially

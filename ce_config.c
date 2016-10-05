@@ -9,6 +9,10 @@
 
 #define TAB_STRING "     "
 
+static const char* cmd_buffer_name = "shell_command";
+
+void view_drawer(const BufferNode* head, void* user_data);
+
 typedef struct BackspaceNode{
      char c;
      struct BackspaceNode* next;
@@ -84,6 +88,7 @@ typedef struct{
      const char* input_message;
      char input_key;
      Buffer input_buffer;
+     int64_t input_last_error;
      int last_key;
      uint64_t command_multiplier;
      int command_key;
@@ -296,6 +301,7 @@ void input_start(ConfigState* config_state, const char* input_message, char inpu
      buffer_state = buffer->user_data; \
      buffer_view = config_state->view_current; \
      cursor = &config_state->view_current->cursor; \
+     config_state->input_last_error = 0; \
  })
 
 #ifndef FTW_STOP
@@ -417,6 +423,8 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
      init_pair(S_STRING, COLOR_RED, COLOR_BACKGROUND);
      init_pair(S_CONSTANT, COLOR_MAGENTA, COLOR_BACKGROUND);
      init_pair(S_PREPROCESSOR, COLOR_YELLOW, COLOR_BACKGROUND);
+     init_pair(S_DIFF_ADD, COLOR_GREEN, COLOR_BACKGROUND);
+     init_pair(S_DIFF_REMOVE, COLOR_RED, COLOR_BACKGROUND);
 
      return true;
 }
@@ -791,6 +799,12 @@ bool is_movement_buffer_full(ConfigState* config_state)
      size_t max_movement_keys = sizeof config_state->movement_keys;
      size_t n_movement_keys = movement_buffer_len(config_state->movement_keys, max_movement_keys);
      return n_movement_keys == max_movement_keys;
+}
+
+void scroll_view_to_last_line(BufferView* view)
+{
+     view->top_row = view->buffer_node->buffer->line_count - (view->bottom_right.y - view->top_left.y);
+     if(view->top_row < 0) view->top_row = 0;
 }
 
 bool key_handler(int key, BufferNode* head, void* user_data)
@@ -1689,34 +1703,53 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          break;
                     case 24: // Ctrl + x
                     {
-                         static const char* cmd_buffer_name = "shell_command";
-
                          // search for an existing command buffer
                          BufferNode* command_buffer_node = NULL;
                          BufferNode* itr = head;
                          while(itr){
-                              if(strcmp(itr->buffer->name, cmd_buffer_name) == 0) command_buffer_node = itr;
+                              if(strcmp(itr->buffer->name, cmd_buffer_name) == 0){
+                                   command_buffer_node = itr;
+                                   break;
+                              }
                               itr = itr->next;
                          }
 
                          // if we found an existing command buffer, clear it and use it
+                         BufferView* command_view = NULL;
                          if(command_buffer_node){
                               ce_clear_lines(command_buffer_node->buffer);
-                              config_state->view_current->buffer_node = command_buffer_node;
+                              command_buffer_node->buffer->cursor = (Point){0, 0};
+
+                              command_view = ce_buffer_in_view(config_state->view_head, command_buffer_node->buffer);
+
+                              if(command_view){
+                                   command_view->cursor = (Point){0, 0};
+                                   command_view->top_row = 0;
+                              }else{
+                                   config_state->view_current->buffer_node = command_buffer_node;
+                                   config_state->view_current->cursor = (Point){0, 0};
+                                   config_state->view_current->top_row = 0;
+                                   command_view = config_state->view_current;
+                              }
                          }else{
                               // create a new one from an empty string
                               config_state->view_current->buffer_node = new_buffer_from_string(head, "shell_command", "");
+                              config_state->view_current->cursor = (Point){0, 0};
+                              config_state->view_current->top_row = 0;
+                              command_buffer_node = config_state->view_current->buffer_node;
+                              command_view = config_state->view_current;
                          }
 
-                         // reset the cursor to the top
-                         config_state->view_current->cursor = (Point){0, 0};
-
+                         assert(command_view);
                          for(int64_t i = 0; i < config_state->view_input->buffer_node->buffer->line_count; ++i){
                               // run the command
                               char cmd[BUFSIZ];
                               snprintf(cmd, BUFSIZ, "%s 2>&1", config_state->view_input->buffer_node->buffer->lines[i]);
-
                               FILE* pfile = popen(cmd, "r");
+
+                              // append the command
+                              snprintf(cmd, BUFSIZ, "+ $ %s", config_state->view_input->buffer_node->buffer->lines[i]);
+                              ce_append_line(command_buffer_node->buffer, cmd);
 
                               // load one line at a time
                               while(fgets(cmd, BUFSIZ, pfile) != NULL){
@@ -1725,10 +1758,26 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                                    assert(cmd[cmd_len-1] == NEWLINE);
                                    cmd[cmd_len-1] = 0;
 
-                                   ce_append_line(config_state->view_current->buffer_node->buffer, cmd);
+                                   ce_append_line(command_buffer_node->buffer, cmd);
+
+                                   scroll_view_to_last_line(command_view);
+                                   command_view->cursor.y = command_view->top_row;
+
+                                   erase();
+                                   view_drawer(head, user_data);
+                                   refresh();
                               }
 
-                              pclose(pfile);
+                              // append the return code
+                              int exit_code = pclose(pfile);
+                              snprintf(cmd, BUFSIZ, "+ exit code: %d", WEXITSTATUS(exit_code));
+                              ce_append_line(command_buffer_node->buffer, cmd);
+
+                              // add blank for readability
+                              ce_append_line(command_buffer_node->buffer, "");
+
+                              scroll_view_to_last_line(command_view);
+                              command_view->cursor.y = command_view->top_row;
                          }
                     } break;
                     }
@@ -1992,6 +2041,68 @@ search:
                config_state->input = true;
                input_start(config_state, "Shell Command", key);
           } break;
+          case 16:
+          {
+               Buffer* command_buffer = NULL;
+               BufferNode* itr = head;
+               while(itr){
+                    if(strcmp(itr->buffer->name, cmd_buffer_name) == 0){
+                         command_buffer = itr->buffer;
+                         break;
+                    }
+                    itr = itr->next;
+               }
+
+               if(!command_buffer) break;
+
+               char file_tmp[BUFSIZ];
+               char line_number_tmp[BUFSIZ];
+               int64_t lines_checked = 0;
+               for(int64_t i = config_state->input_last_error + 1; lines_checked < command_buffer->line_count;
+                   ++i, lines_checked++){
+                    if(i == command_buffer->line_count){
+                         i = 0;
+                    }
+
+                    // format: 'filepath.ext:line:'
+                    char* first_colon = strchr(command_buffer->lines[i], ':');
+                    if(!first_colon) continue;
+
+                    int64_t filename_len = first_colon - command_buffer->lines[i];
+                    strncpy(file_tmp, command_buffer->lines[i], filename_len);
+                    file_tmp[filename_len] = 0;
+                    if(access(file_tmp, F_OK) == -1) continue; // file does not exist
+
+                    char* second_colon = strchr(first_colon + 1, ':');
+                    if(!second_colon) continue;
+
+                    int64_t line_number_len = second_colon - (first_colon + 1);
+                    strncpy(line_number_tmp, first_colon + 1, line_number_len);
+                    line_number_tmp[line_number_len] = 0;
+
+                    bool all_digits = true;
+                    for(char* c = line_number_tmp; *c; c++){
+                         if(!isdigit(*c)){
+                              all_digits = false;
+                              break;
+                         }
+                    }
+
+                    if(!all_digits) continue;
+
+                    BufferNode* node = open_file_buffer(head, file_tmp);
+                    if(node){
+                         config_state->view_current->buffer_node = node;
+                         Point dst = {0, atoi(line_number_tmp) - 1};
+                         ce_set_cursor(node->buffer, &config_state->view_current->cursor, &dst);
+                         BufferView* command_view = ce_buffer_in_view(config_state->view_head, command_buffer);
+                         if(command_view) command_view->top_row = i;
+                         config_state->input_last_error = i;
+                         break;
+                    }
+               }
+          }
+          break;
           }
      }
 

@@ -1108,10 +1108,10 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }
           } break;
           case 'j':
-               ce_move_cursor(buffer, cursor, (Point){0, 1});
-          break;
           case 'k':
-               ce_move_cursor(buffer, cursor, (Point){0, -1});
+               for(size_t cm = 0; cm < config_state->command_multiplier; cm++){
+                    ce_move_cursor(buffer, cursor, (Point){0, (config_state->command_key == 'j') ? 1 : -1});
+               }
           break;
           case 'h':
           case 'l':

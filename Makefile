@@ -1,15 +1,16 @@
-CC=clang
-CFLAGS=-Wall -Werror -Wextra -std=gnu11 -ggdb3 -D_GNU_SOURCE
+CC?=clang
+CFLAGS=-Wall -Werror -Wextra -std=c11 -ggdb3 -D_GNU_SOURCE
 LINK=-lncurses
 
 all: ce ce_config.so
 
+cov: coverage
 coverage: CFLAGS += -fprofile-arcs -ftest-coverage
 coverage: clean_test test
 	llvm-cov gcov ce.test.o
 
-test: test.c ce.test.o
-	$(CC) $(CFLAGS) $^ -o $@ $(LINK)
+test: clean_test test.c ce.test.o
+	$(CC) $(CFLAGS) $(filter-out $<,$^) -o $@ $(LINK)
 	./test 2> test_output.txt || (cat test_output.txt && false)
 
 ce: main.c ce.o

@@ -1362,7 +1362,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                                    return true;
                          }
                     }
-                    else if(strchr("$%eTtFf", config_state->movement_keys[0])){
+                    else if(strchr("%eTtFf", config_state->movement_keys[0])){
                          movement_end.x++; // include movement_end char
                     }
 

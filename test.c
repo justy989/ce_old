@@ -896,8 +896,7 @@ TEST(sanity_move_cursor)
      buffer.lines[2] = strdup("AWESOME");
 
      Point cursor = {2, 0};
-     Point delta = {2, 1};
-     ce_move_cursor(&buffer, &cursor, &delta);
+     ce_move_cursor(&buffer, &cursor, (Point){2, 1});
 
      EXPECT(cursor.x == 4);
      EXPECT(cursor.y == 1);
@@ -1403,7 +1402,8 @@ TEST(sanity_split_view)
      }
 }
 
-TEST(sanity_find_delta_to_end_of_line)
+// TODO: this function should point us to the last character. not the newline.
+TEST(sanity_move_cursor_to_end_of_line)
 {
      Buffer buffer = {};
      buffer.line_count = 1;
@@ -1413,10 +1413,14 @@ TEST(sanity_find_delta_to_end_of_line)
      Point cursor;
 
      cursor = (Point) {0, 0};
-     ASSERT(ce_find_delta_to_end_of_line(&buffer, &cursor) == (int64_t) strlen(buffer.lines[0]) - 1);
+     ce_move_cursor_to_end_of_line(&buffer, &cursor);
+     ASSERT(cursor.x == (int64_t) strlen(buffer.lines[0]));
+     ASSERT(cursor.y == 0);
 
      cursor = (Point) {5, 0};
-     ASSERT(ce_find_delta_to_end_of_line(&buffer, &cursor) == (int64_t) strlen(buffer.lines[0]) - 1 - 5);
+     ce_move_cursor_to_end_of_line(&buffer, &cursor);
+     ASSERT(cursor.x == (int64_t) strlen(buffer.lines[0]));
+     ASSERT(cursor.y == 0);
 }
 
 TEST(sanity_ce_memrchr)

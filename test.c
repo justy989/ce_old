@@ -1378,6 +1378,10 @@ TEST(sanity_split_view)
      BufferView* found_view = ce_find_view_at_point(head, &find_point);
      EXPECT(found_view == new_horizontal_split_view);
 
+     // find view by buffer
+     found_view = ce_buffer_in_view(head, buffers + 3);
+     EXPECT(found_view == new_horizontal_split_view);
+
      // draw views
      // NOTE: we are not initializing curses or anything, so the calls should be nops? We make the call to 
      //       ensure no crashes, but can't really validate anything
@@ -1421,6 +1425,194 @@ TEST(sanity_move_cursor_to_end_of_line)
      ce_move_cursor_to_end_of_line(&buffer, &cursor);
      ASSERT(cursor.x == (int64_t) strlen(buffer.lines[0]));
      ASSERT(cursor.y == 0);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(find_delta_to_soft_end_of_line)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("Cats are delicious   ");
+
+     Point cursor;
+
+     cursor = (Point) {0, 0};
+     ASSERT(ce_find_delta_to_soft_end_of_line(&buffer, &cursor) == (int64_t) strlen(buffer.lines[0]) - 1 - 3);
+
+     cursor = (Point) {5, 0};
+     ASSERT(ce_find_delta_to_soft_end_of_line(&buffer, &cursor) == (int64_t) strlen(buffer.lines[0]) - 1 - 5 - 3);
+
+     cursor = (Point) {19, 0};
+     ASSERT(ce_find_delta_to_soft_end_of_line(&buffer, &cursor) == -2);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(find_delta_to_soft_beginning_of_line)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("   Cats are delicious");
+
+     Point cursor;
+
+     cursor = (Point) {0, 0};
+     ASSERT(ce_find_delta_to_soft_beginning_of_line(&buffer, &cursor) == 3);
+
+     cursor = (Point) {5, 0};
+     ASSERT(ce_find_delta_to_soft_beginning_of_line(&buffer, &cursor) == -2);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(find_delta_to_soft_char_forward_in_line)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("Cats are delicious");
+
+     Point cursor;
+
+     cursor = (Point) {0, 0};
+     ASSERT(ce_find_delta_to_char_forward_in_line(&buffer, &cursor, 'd') == 9);
+
+     cursor = (Point) {12, 0};
+     ASSERT(ce_find_delta_to_char_forward_in_line(&buffer, &cursor, 'd') == -1);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(find_delta_to_soft_char_backward_in_line)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("Cats are delicious");
+
+     Point cursor;
+
+     cursor = (Point) {0, 0};
+     ASSERT(ce_find_delta_to_char_backward_in_line(&buffer, &cursor, 'd') == -1);
+
+     cursor = (Point) {12, 0};
+     ASSERT(ce_find_delta_to_char_backward_in_line(&buffer, &cursor, 'd') == 3);
+
+     ce_free_buffer(&buffer);
+}
+
+// TODO: vim's WORDS
+TEST(find_delta_to_beginning_of_word)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("Cats are delicious");
+
+     Point cursor;
+
+     cursor = (Point) {0, 0};
+     ASSERT(ce_find_delta_to_beginning_of_word(&buffer, &cursor, false) == 0);
+
+     cursor = (Point) {2, 0};
+     ASSERT(ce_find_delta_to_beginning_of_word(&buffer, &cursor, false) == 2);
+
+     // NOTE: on whitespace
+     cursor = (Point) {8, 0};
+     ASSERT(ce_find_delta_to_beginning_of_word(&buffer, &cursor, false) == 3);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(find_delta_to_end_of_word)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("Cats are delicious");
+
+     Point cursor;
+
+     cursor = (Point) {0, 0};
+     ASSERT(ce_find_delta_to_end_of_word(&buffer, &cursor, false) == 3);
+
+     cursor = (Point) {2, 0};
+     ASSERT(ce_find_delta_to_end_of_word(&buffer, &cursor, false) == 1);
+
+     // NOTE: on whitespace
+     cursor = (Point) {8, 0};
+     ASSERT(ce_find_delta_to_end_of_word(&buffer, &cursor, false) == 9);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(find_delta_to_end_of_next_word)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("Cats are delicious");
+
+     Point cursor;
+
+     cursor = (Point) {0, 0};
+     ASSERT(ce_find_delta_to_next_word(&buffer, &cursor, false) == 5);
+
+     cursor = (Point) {2, 0};
+     ASSERT(ce_find_delta_to_next_word(&buffer, &cursor, false) == 3);
+
+     cursor = (Point) {12, 0};
+     ASSERT(ce_find_delta_to_next_word(&buffer, &cursor, false) == 6);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(find_delta_to_match_single_line)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("Cats {are} delicious");
+
+     Point cursor;
+     Point delta;
+
+     cursor = (Point) {5, 0};
+     ASSERT(ce_find_delta_to_match(&buffer, &cursor, &delta));
+     EXPECT(delta.x == 4);
+     EXPECT(delta.y == 0);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(find_delta_to_match_multiline)
+{
+     Buffer buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("if(cat.is_dead()){");
+     buffer.lines[1] = strdup("     cat.cook();");
+     buffer.lines[2] = strdup("}");
+
+     Point cursor;
+     Point delta;
+
+     // {}
+     cursor = (Point) {17, 0};
+     ASSERT(ce_find_delta_to_match(&buffer, &cursor, &delta));
+     EXPECT(delta.x == -17);
+     EXPECT(delta.y == 2);
+
+     // ()
+     cursor = (Point) {2, 0};
+     ASSERT(ce_find_delta_to_match(&buffer, &cursor, &delta));
+     EXPECT(delta.x == 14);
+     EXPECT(delta.y == 0);
+
+     ce_free_buffer(&buffer);
 }
 
 TEST(sanity_ce_memrchr)

@@ -30,6 +30,8 @@ typedef enum {
      S_STRING,
      S_CONSTANT,
      S_PREPROCESSOR,
+     S_DIFF_ADD,
+     S_DIFF_REMOVE,
 } Syntax;
 
 #define CE_CHECK_PTR_ARG(arg)                                                 \
@@ -151,6 +153,7 @@ bool ce_calc_views                (BufferView* head, const Point* top_left, cons
 bool ce_draw_views                (const BufferView* head);
 bool ce_free_views                (BufferView** view);
 BufferView* ce_find_view_at_point (BufferView* head, const Point* point);
+BufferView* ce_buffer_in_view(BufferView* head, const Buffer* buffer);
 
 
 // Buffer Manipulation Functions

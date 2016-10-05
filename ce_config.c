@@ -1766,7 +1766,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                               }
 
                               // append the return code
-                              snprintf(cmd, BUFSIZ, "// exit code: %d", WEXITSTATUS(pclose(pfile)));
+                              int rc = WEXITSTATUS(pclose(pfile));
+                              snprintf(cmd, BUFSIZ, "// exit code: %d", rc);
                               ce_append_line(command_buffer_node->buffer, cmd);
 
                               // add blank for readability

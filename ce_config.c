@@ -470,6 +470,12 @@ void scroll_view_to_location(BufferView* buffer_view, const Point* location){
      buffer_view->top_row = (location->y >= 0) ? location->y : 0;
 }
 
+void center_view(BufferView* view)
+{
+     int64_t view_height = view->bottom_right.y - view->top_left.y;
+     Point location = (Point) {0, view->cursor.y - (view_height / 2)};
+     scroll_view_to_location(view, &location);
+}
 
 void find_command(int command_key, int find_char, Buffer* buffer, Point* cursor)
 {
@@ -1085,8 +1091,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     config_state->input = false;
                }
           } break;
-          case 'q':
-               return false; // exit !
           case 'J':
           {
                if(cursor->y == buffer->line_count - 1) break; // nothing to join
@@ -1422,7 +1426,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                default:
                     break;
                }
-          case '':
           case 23: // Ctrl + w 
                ce_save_buffer(buffer, buffer->filename);
                break;
@@ -1450,10 +1453,16 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     ce_calc_views(config_state->view_head, &top_left, &bottom_right);
                }
           } break;
-          case 14: // Ctrl + n
+          case 17: // Ctrl + q
           {
                Point save_cursor = config_state->view_current->cursor;
                config_state->view_current->buffer_node->buffer->cursor = config_state->view_current->cursor;
+               // if we try to quit the last view, quit !
+               if(config_state->view_current == config_state->view_head &&
+                  config_state->view_head->next_horizontal == NULL &&
+                  config_state->view_head->next_vertical == NULL){
+                    return false;
+               }
                ce_remove_view(&config_state->view_head, config_state->view_current);
                BufferView* new_view = ce_find_view_at_point(config_state->view_head, &save_cursor);
                if(new_view){
@@ -1561,11 +1570,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     break;
                case 'z':
                {
-                    // center view on cursor
-                    int64_t view_height = buffer_view->bottom_right.y
-                         - buffer_view->top_left.y;
-                    location = (Point) {0, cursor->y - (view_height/2)};
-                    scroll_view_to_location(buffer_view, &location);
+                    center_view(buffer_view);
                } break;
                case 'b':
                {
@@ -1680,6 +1685,15 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     default:
                          break;
                     case ':':
+                    {
+                         if(config_state->view_input->buffer_node->buffer->line_count){
+                              int64_t line = atoi(config_state->view_input->buffer_node->buffer->lines[0]);
+                              config_state->view_current->cursor = (Point){0, line - 1};
+                              ce_move_cursor_to_soft_beginning_of_line(config_state->view_current->buffer_node->buffer,
+                                                                       &config_state->view_current->cursor);
+                         }
+                    } break;
+                    case 6: // Ctrl + f
                          // just grab the first line and load it as a file
                          for(int64_t i = 0; i < config_state->view_input->buffer_node->buffer->line_count; ++i){
                               BufferNode* new_node = open_file_buffer(head, config_state->view_input->buffer_node->buffer->lines[i]);
@@ -1826,7 +1840,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           {
                if(config_state->input) break;
                config_state->input = true;
-               input_start(config_state, "Load File", key);
+               input_start(config_state, "Goto Line", key);
           }
           break;
           case '#':
@@ -2043,7 +2057,7 @@ search:
                config_state->input = true;
                input_start(config_state, "Shell Command", key);
           } break;
-          case 16:
+          case 14: // Ctrl + n
           {
                Buffer* command_buffer = NULL;
                BufferNode* itr = head;
@@ -2066,7 +2080,7 @@ search:
                          i = 0;
                     }
 
-                    // format: 'filepath.ext:line:'
+                    // format: 'filepath:line:column:'
                     char* first_colon = strchr(command_buffer->lines[i], ':');
                     if(!first_colon) continue;
 
@@ -2095,16 +2109,49 @@ search:
                     BufferNode* node = open_file_buffer(head, file_tmp);
                     if(node){
                          config_state->view_current->buffer_node = node;
-                         Point dst = {0, atoi(line_number_tmp) - 1};
+                         Point dst = {0, atoi(line_number_tmp) - 1}; // line numbers are 1 indexed
                          ce_set_cursor(node->buffer, &config_state->view_current->cursor, &dst);
+
+                         // check for optional column number
+                         char* third_colon = strchr(second_colon + 1, ':');
+                         if(third_colon){
+                              line_number_len = third_colon - (second_colon + 1);
+                              strncpy(line_number_tmp, second_colon + 1, line_number_len);
+                              line_number_tmp[line_number_len] = 0;
+
+                              all_digits = true;
+                              for(char* c = line_number_tmp; *c; c++){
+                                   if(!isdigit(*c)){
+                                        all_digits = false;
+                                        break;
+                                   }
+                              }
+
+                              if(all_digits){
+                                   dst.x = atoi(line_number_tmp) - 1; // column numbers are 1 indexed
+                                   assert(dst.x >= 0);
+                                   ce_set_cursor(node->buffer, &config_state->view_current->cursor, &dst);
+                              }else{
+                                   ce_move_cursor_to_soft_beginning_of_line(node->buffer, &config_state->view_current->cursor);
+                              }
+                         }else{
+                              ce_move_cursor_to_soft_beginning_of_line(node->buffer, &config_state->view_current->cursor);
+                         }
+
+                         center_view(config_state->view_current);
                          BufferView* command_view = ce_buffer_in_view(config_state->view_head, command_buffer);
                          if(command_view) command_view->top_row = i;
                          config_state->input_last_error = i;
                          break;
                     }
                }
-          }
-          break;
+          } break;
+          case 6: // Ctrl + f
+          {
+               if(config_state->input) break;
+               config_state->input = true;
+               input_start(config_state, "Load File", key);
+          } break;
           }
      }
 

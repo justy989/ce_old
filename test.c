@@ -1849,6 +1849,33 @@ TEST(sanity_move_cursor_to_soft_end_of_line)
      ASSERT(cursor.y == 0);
 }
 
+TEST(sanity_append_char)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS ARE AWESOM");
+
+     ASSERT(ce_append_char(&buffer, 'E'));
+     ASSERT(buffer.line_count == 1);
+     EXPECT(strcmp(buffer.lines[0], "TACOS ARE AWESOME") == 0);
+}
+
+TEST(append_newline)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS ARE AWESOME");
+
+     ASSERT(ce_append_char(&buffer, '\n'));
+     ASSERT(ce_append_char(&buffer, 'Y'));
+     ASSERT(ce_append_char(&buffer, 'O'));
+     ASSERT(buffer.line_count == 2);
+     EXPECT(strcmp(buffer.lines[0], "TACOS ARE AWESOME") == 0);
+     EXPECT(strcmp(buffer.lines[1], "YO") == 0);
+}
+
 int main()
 {
      Point terminal_dimensions = {17, 10};

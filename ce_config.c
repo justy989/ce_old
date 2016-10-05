@@ -1691,7 +1691,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                                                                        &config_state->view_current->cursor);
                          }
                     } break;
-                    case 6:
+                    case 6: // Ctrl + f
                          // just grab the first line and load it as a file
                          for(int64_t i = 0; i < config_state->view_input->buffer_node->buffer->line_count; ++i){
                               BufferNode* new_node = open_file_buffer(head, config_state->view_input->buffer_node->buffer->lines[i]);
@@ -2078,7 +2078,7 @@ search:
                          i = 0;
                     }
 
-                    // format: 'filepath.ext:line:'
+                    // format: 'filepath:line:column:'
                     char* first_colon = strchr(command_buffer->lines[i], ':');
                     if(!first_colon) continue;
 
@@ -2107,7 +2107,7 @@ search:
                     BufferNode* node = open_file_buffer(head, file_tmp);
                     if(node){
                          config_state->view_current->buffer_node = node;
-                         Point dst = {0, atoi(line_number_tmp) - 1};
+                         Point dst = {0, atoi(line_number_tmp) - 1}; // line numbers are 1 indexed
                          ce_set_cursor(node->buffer, &config_state->view_current->cursor, &dst);
 
                          // check for optional column number
@@ -2126,7 +2126,7 @@ search:
                               }
 
                               if(all_digits){
-                                   dst.x = atoi(line_number_tmp) - 1;
+                                   dst.x = atoi(line_number_tmp) - 1; // column numbers are 1 indexed
                                    assert(dst.x >= 0);
                                    ce_set_cursor(node->buffer, &config_state->view_current->cursor, &dst);
                               }else{
@@ -2144,7 +2144,7 @@ search:
                     }
                }
           } break;
-          case 6:
+          case 6: // Ctrl + f
           {
                if(config_state->input) break;
                config_state->input = true;

@@ -1087,10 +1087,15 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                return false; // exit !
           case 'J':
           {
+               if(cursor->y == buffer->line_count) break; // nothing to join
                Point join_loc = {strlen(buffer->lines[cursor->y]), cursor->y};
-               if(ce_join_line(buffer, cursor->y)){
-                    ce_commit_change_char(&buffer_state->commit_tail,
-                                          &join_loc, cursor, cursor, ' ', '\n');
+               Point end_join_loc = {0, cursor->y+1};
+               ce_move_cursor_to_soft_beginning_of_line(buffer, &end_join_loc);
+               char* save_str = ce_dupe_string(buffer, &join_loc, &end_join_loc);
+               assert(save_str[0] == '\n');
+               if(ce_remove_string(buffer, &join_loc, ce_compute_length(buffer, &join_loc, &end_join_loc))){
+                    ce_insert_string(buffer, &join_loc, " ");
+                    ce_commit_change_string(&buffer_state->commit_tail, &join_loc, cursor, cursor, strdup("\n"), save_str);
                }
           } break;
           case 'j':

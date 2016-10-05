@@ -29,7 +29,7 @@ typedef enum {
      S_COMMENT,
      S_STRING,
      S_CONSTANT,
-     S_PREPROC,
+     S_PREPROCESSOR,
 } Syntax;
 
 #define CE_CHECK_PTR_ARG(arg)                                                 \
@@ -123,8 +123,14 @@ typedef struct BufferView {
      struct BufferView* next_vertical;
 } BufferView;
 
-extern Point* g_terminal_dimensions;
+typedef enum {
+     CT_NONE,
+     CT_SINGLE_LINE,
+     CT_BEGIN_MULTILINE,
+     CT_END_MULTILINE,
+} CommentType;
 
+extern Point* g_terminal_dimensions;
 
 // CE Configuration-Defined Functions
 typedef bool ce_initializer (BufferNode*, Point*, int, char**, void**);
@@ -207,10 +213,12 @@ Point* ce_clamp_cursor                          (const Buffer* buffer, Point* cu
 bool   ce_advance_cursor                        (const Buffer* buffer, Point* cursor, int64_t delta);
 bool   ce_move_cursor                           (const Buffer* buffer, Point* cursor, const Point* delta);
 bool   ce_set_cursor                            (const Buffer* buffer, Point* cursor, const Point* location);
+bool   ce_move_cursor_to_soft_end_of_line       (const Buffer* buffer, Point* cursor);
 bool   ce_move_cursor_to_soft_beginning_of_line (const Buffer* buffer, Point* cursor);
 bool   ce_move_cursor_to_end_of_file            (const Buffer* buffer, Point* cursor);
 bool   ce_move_cursor_to_beginning_of_file      (const Buffer* buffer, Point* cursor);
-
+bool   ce_follow_cursor                         (const Point* cursor, int64_t* left_column, int64_t* top_row, int64_t view_width, int64_t view_height,
+                                                 bool at_terminal_width_edge, bool at_terminal_height_edge);
 
 // Undo/Redo Functions
 bool ce_commit_insert_char   (BufferCommitNode** tail, const Point* start, const Point* undo_cursor, const Point* redo_cursor, char c);
@@ -227,10 +235,15 @@ bool ce_commit_change        (BufferCommitNode** tail, const BufferCommit* chang
 
 bool ce_commits_free         (BufferCommitNode* tail);
 
+// Syntax
+int64_t ce_is_c_keyword(const char* line, int64_t start_offset);
+int64_t ce_is_preprocessor(const char* line, int64_t start_offset);
+CommentType ce_is_comment(const char* line, int64_t start_offset);
+void ce_is_string_literal(const char* line, int64_t start_offset, int64_t line_len, bool* inside_string, char* last_quote_char);
+int64_t ce_is_caps_var(const char* line, int64_t start_offset);
 
 // Logging Functions
 #define ce_message(...) fprintf(stderr,__VA_ARGS__); fprintf(stderr,"\n");
-
 
 // Misc. Utility Functions
 int64_t ce_count_string_lines (const char* string);
@@ -238,11 +251,5 @@ void    ce_sort_points        (const Point** a, const Point** b);
 int     ce_ispunct            (int c);
 int     ce_iswordchar         (int c);
 void*   ce_memrchr            (const void* s, int c, size_t n);
-
-
-// Uncategorized (TODO: Help me!)
-bool ce_follow_cursor  (const Point* cursor, int64_t* left_column, int64_t* top_left, int64_t view_width, int64_t view_height,
-                        bool at_terminal_width_edge, bool at_terminal_height_edge);
-
 
 #endif

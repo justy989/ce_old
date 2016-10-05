@@ -345,19 +345,7 @@ bool ce_remove_char(Buffer* buffer, const Point* location)
 
      // remove the line from the list if it is empty
      if(line_len == 0){
-          char** new_lines = calloc((buffer->line_count - 1), sizeof(char*));
-          if(!new_lines){
-               ce_message("%s() failed alloc lines", __FUNCTION__);
-               return false;
-          }
-
-          free(buffer->lines[location->y]);
-          for(int64_t i = 0; i < location->y; ++i) new_lines[i] = buffer->lines[i];
-          for(int64_t i = location->y + 1; i < buffer->line_count; ++i) new_lines[i - 1] = buffer->lines[i];
-
-          free(buffer->lines);
-          buffer->lines = new_lines;
-          return true;
+          return ce_remove_line(buffer, location->y);
      }
 
      if(location->x == line_len){
@@ -601,7 +589,7 @@ bool ce_move_cursor_to_soft_beginning_of_line(const Buffer* buffer, Point* curso
      return true;
 }
 
-bool ce_move_cursor_to_soft_end_of_line(Buffer* buffer, Point* cursor)
+bool ce_move_cursor_to_soft_end_of_line(const Buffer* buffer, Point* cursor)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
@@ -877,6 +865,7 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
 
      // don't delete the rest of the first line yet, we'll do this when we mash the first and last lines
      length -= rest_of_the_line_len + 1; // account for newline
+     buffer->lines[location->y][location->x] = '\0';
 
      // hard case: string spans multiple lines
      int64_t delete_index = location->y + 1;
@@ -934,7 +923,7 @@ bool ce_save_buffer(const Buffer* buffer, const char* filename)
      return true;
 }
 
-int64_t highlight_keywords(const char* line, int64_t start_offset)
+int64_t ce_is_c_keyword(const char* line, int64_t start_offset)
 {
      static const char* keywords [] = {
           "__thread",
@@ -951,6 +940,7 @@ int64_t highlight_keywords(const char* line, int64_t start_offset)
           "else",
           "enum",
           "extern",
+          "false",
           "float",
           "for",
           "goto",
@@ -965,6 +955,7 @@ int64_t highlight_keywords(const char* line, int64_t start_offset)
           "static",
           "struct",
           "switch",
+          "true",
           "typedef",
           "typeof",
           "union",
@@ -996,7 +987,7 @@ int64_t highlight_keywords(const char* line, int64_t start_offset)
      return highlighting_left;
 }
 
-int64_t highlight_preprocs(const char* line, int64_t start_offset)
+int64_t ce_is_preprocessor(const char* line, int64_t start_offset)
 {
      static const char* keywords [] = {
           "define",
@@ -1032,14 +1023,7 @@ int64_t highlight_preprocs(const char* line, int64_t start_offset)
      return highlighting_left;
 }
 
-typedef enum {
-     CT_NONE,
-     CT_SINGLE_LINE,
-     CT_BEGIN_MULTILINE,
-     CT_END_MULTILINE,
-} CommentType;
-
-CommentType highlight_comment(const char* line, int64_t start_offset)
+CommentType ce_is_comment(const char* line, int64_t start_offset)
 {
      char ch = line[start_offset];
 
@@ -1060,7 +1044,7 @@ CommentType highlight_comment(const char* line, int64_t start_offset)
      return CT_NONE;
 }
 
-void highlight_string(const char* line, int64_t start_offset, int64_t line_len, bool* inside_string, char* last_quote_char)
+void ce_is_string_literal(const char* line, int64_t start_offset, int64_t line_len, bool* inside_string, char* last_quote_char)
 {
      char ch = line[start_offset];
      if(ch == '"'){
@@ -1091,17 +1075,16 @@ void highlight_string(const char* line, int64_t start_offset, int64_t line_len, 
      }
 }
 
-int ce_isconstant(int c)
+int iscapsvarchar(int c)
 {
      return isupper(c) || c == '_' || isdigit(c);
 }
 
-// NOTE: constant is not a great name for this
-int64_t highlight_constants(const char* line, int64_t start_offset)
+int64_t ce_is_caps_var(const char* line, int64_t start_offset)
 {
      const char* itr = line + start_offset;
      int64_t count = 0;
-     for(char ch = *itr; ce_isconstant(ch); ++itr){
+     for(char ch = *itr; iscapsvarchar(ch); ++itr){
           ch = *itr;
           count++;
      }
@@ -1112,7 +1095,7 @@ int64_t highlight_constants(const char* line, int64_t start_offset)
 
      // if the surrounding chars are letters, we haven't found a constant
      if(islower(*(itr - 1))) return 0;
-     if(prev_index >= 0 && (ce_isconstant(line[prev_index]) || isalpha(line[prev_index]))) return 0;
+     if(prev_index >= 0 && (iscapsvarchar(line[prev_index]) || isalpha(line[prev_index]))) return 0;
 
      return count - 1; // we over-counted on the last iteration
 }
@@ -1216,7 +1199,7 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
 
                // NOTE: pre-pass check for comments and strings out of view
                for(int64_t c = 0; c < buffer_top_left->x; ++c){
-                    CommentType comment_type = highlight_comment(buffer_line, c);
+                    CommentType comment_type = ce_is_comment(buffer_line, c);
                     switch(comment_type){
                     default:
                          break;
@@ -1231,7 +1214,7 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                          break;
                     }
 
-                    highlight_string(buffer_line, c, line_length, &inside_string, &last_quote_char);
+                    ce_is_string_literal(buffer_line, c, line_length, &inside_string, &last_quote_char);
 
                     // subtract from what is left of the keyword if we found a keyword earlier
                     if(highlighting_left){
@@ -1239,20 +1222,20 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                     }else{
                          if(!inside_string){
                               if(!inside_comment && !inside_multiline_comment){
-                                   int64_t keyword_left = highlight_keywords(buffer_line, c);
+                                   int64_t keyword_left = ce_is_c_keyword(buffer_line, c);
                                    if(keyword_left){
                                         highlighting_left = keyword_left;
                                         highlight_color = S_KEYWORD;
                                    }else{
-                                        keyword_left = highlight_constants(line_to_print, c);
+                                        keyword_left = ce_is_caps_var(buffer_line, c);
                                         if(keyword_left){
                                              highlighting_left = keyword_left;
                                              highlight_color = S_CONSTANT;
                                         }else{
-                                             keyword_left = highlight_preprocs(line_to_print, c);
+                                             keyword_left = ce_is_preprocessor(buffer_line, c);
                                              if(keyword_left){
                                                   highlighting_left = keyword_left;
-                                                  highlight_color = S_PREPROC;
+                                                  highlight_color = S_PREPROCESSOR;
 
                                              }
                                         }
@@ -1278,25 +1261,25 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                     if(highlighting_left == 0){
                          if(!inside_string){
                               if(!inside_comment && !inside_multiline_comment){
-                                   highlighting_left = highlight_keywords(line_to_print, c);
+                                   highlighting_left = ce_is_c_keyword(line_to_print, c);
                               }
 
                               if(highlighting_left){
                                    attron(COLOR_PAIR(S_KEYWORD));
                               }else{
-                                   highlighting_left = highlight_constants(line_to_print, c);
+                                   highlighting_left = ce_is_caps_var(line_to_print, c);
                                    if(highlighting_left){
                                         attron(COLOR_PAIR(S_CONSTANT));
                                    }else{
-                                        highlighting_left = highlight_preprocs(line_to_print, c);
+                                        highlighting_left = ce_is_preprocessor(line_to_print, c);
                                         if(highlighting_left){
-                                             attron(COLOR_PAIR(S_PREPROC));
+                                             attron(COLOR_PAIR(S_PREPROCESSOR));
                                         }
                                    }
                               }
                          }
 
-                         CommentType comment_type = highlight_comment(line_to_print, c);
+                         CommentType comment_type = ce_is_comment(line_to_print, c);
                          switch(comment_type){
                          default:
                               break;
@@ -1314,7 +1297,7 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                          }
 
                          bool pre_quote_check = inside_string;
-                         highlight_string(line_to_print, c, print_line_length, &inside_string, &last_quote_char);
+                         ce_is_string_literal(line_to_print, c, print_line_length, &inside_string, &last_quote_char);
 
                          // if inside_string has changed, update the color
                          if(pre_quote_check != inside_string){
@@ -1340,7 +1323,7 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
 
                // NOTE: post pass after the line to see if multiline comments begin or end
                for(int64_t c = min; c < line_length; ++c){
-                    CommentType comment_type = highlight_comment(buffer_line, c);
+                    CommentType comment_type = ce_is_comment(buffer_line, c);
                     switch(comment_type){
                     default:
                          break;
@@ -2262,8 +2245,8 @@ int64_t ce_compute_length(const Buffer* buffer, const Point* start, const Point*
      CE_CHECK_PTR_ARG(start);
      CE_CHECK_PTR_ARG(end);
 
-     assert(ce_point_on_buffer(buffer, start) || start->x == (int64_t)strlen(buffer->lines[start->y]) + 1); // account for newline
-     assert(ce_point_on_buffer(buffer, end) || end->x == (int64_t)strlen(buffer->lines[end->y]) + 1); // account for newline
+     assert(ce_point_on_buffer(buffer, start));
+     assert(ce_point_on_buffer(buffer, end));
 
      ce_sort_points(&start, &end);
 
@@ -2314,6 +2297,7 @@ bool ce_get_homogenous_adjacents(const Buffer* buffer, Point* start, Point* end,
      return true;
 }
 
+// word_start is inclusive, word_end is exclusive
 bool ce_get_word_at_location(const Buffer* buffer, const Point* location, Point* word_start, Point* word_end)
 {
      CE_CHECK_PTR_ARG(buffer);

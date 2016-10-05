@@ -1100,6 +1100,8 @@ int64_t ce_is_caps_var(const char* line, int64_t start_offset)
      return count - 1; // we over-counted on the last iteration
 }
 
+static const char non_printable_repr = '~';
+
 bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Point* term_bottom_right,
                     const Point* buffer_top_left)
 {
@@ -1328,7 +1330,11 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                     }
 
                     // print each character
-                    addch(line_to_print[c]);
+                    if(isprint(line_to_print[c])){
+                         addch(line_to_print[c]);
+                    }else{
+                         addch(non_printable_repr);
+                    }
                }
 
                // NOTE: post pass after the line to see if multiline comments begin or end
@@ -1348,7 +1354,11 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
           }else{
                for(int64_t c = 0; c < min; ++c){
                     // print each character
-                    addch(line_to_print[c]);
+                    if(isprint(line_to_print[c])){
+                         addch(line_to_print[c]);
+                    }else{
+                         addch(non_printable_repr);
+                    }
                }
           }
 

@@ -1197,7 +1197,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'A':
           {
                if(ce_move_cursor_to_end_of_line(buffer, cursor)){
-                    cursor->x++;
                     enter_insert_mode(config_state, cursor);
                }
           } break;
@@ -1254,6 +1253,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     break;
                }
           } break;
+          case 'P':
           case 'p':
           {
                YankNode* yank = find_yank(config_state, '"');
@@ -1261,26 +1261,47 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     switch(yank->mode){
                     case YANK_LINE:
                     {
-                         // TODO: bring this all into a ce_commit_insert_line function
-                         Point new_line_begin = {0, cursor->y+1};
-                         Point cur_line_end = {strlen(buffer->lines[cursor->y]), cursor->y};
-                         size_t len = strlen(yank->text) + 1; // account for newline
-                         char* save_str = malloc(len + 1);
-                         save_str[0] = '\n'; // prepend a new line to create a line
-                         memcpy(save_str + 1, yank->text, len);
-                         bool res = ce_insert_string(buffer, &cur_line_end, save_str);
+                         size_t len = strlen(yank->text);
+                         char* save_str = malloc(len + 2); // newline and '\0'
+                         Point insert_loc;
+                         Point cursor_loc;
+                         if(config_state->command_key == 'p'){
+                              // TODO: bring this all into a ce_commit_insert_line function
+
+                              save_str[0] = '\n'; // prepend a new line to create a line
+                              memcpy(save_str + 1, yank->text, len + 1); // also copy the '\0'
+
+                              cursor_loc = (Point){0, cursor->y+1};
+
+                              // insert at the end of the current line
+                              insert_loc = (Point){strlen(buffer->lines[cursor->y]), cursor->y};
+                         }
+                         else{
+                              save_str[len] = '\n'; // append a new line to create a line
+                              save_str[len+1] = '\0';
+                              memcpy(save_str, yank->text, len);
+
+                              cursor_loc = (Point){0, cursor->y};
+
+                              // insert at the beginning of the current line
+                              insert_loc = (Point){0, cursor->y};
+                         }
+
+                         bool res = ce_insert_string(buffer, &insert_loc, save_str);
                          assert(res);
                          ce_commit_insert_string(&buffer_state->commit_tail,
-                                                 &cur_line_end, cursor, &new_line_begin,
+                                                 &insert_loc, cursor, &cursor_loc,
                                                  save_str);
-                         ce_set_cursor(buffer, cursor, &new_line_begin);
+                         ce_set_cursor(buffer, cursor, &cursor_loc);
                     } break;
                     case YANK_NORMAL:
                     {
                          Point insert_cursor = *cursor;
-                         if(strnlen(buffer->lines[cursor->y], 1)){
-                              insert_cursor.x++; // don't increment x for blank lines
-                         } else assert(cursor->x == 0);
+                         if(config_state->command_key == 'p'){
+                              if(strnlen(buffer->lines[cursor->y], 1)){
+                                   insert_cursor.x++; // don't increment x for blank lines
+                              } else assert(cursor->x == 0);
+                         }
 
                          ce_insert_string(buffer, &insert_cursor, yank->text);
                          ce_commit_insert_string(&buffer_state->commit_tail,

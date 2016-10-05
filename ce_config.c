@@ -557,11 +557,14 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
           {
                *movement_start = (Point){0, cursor->y};
                ce_move_cursor(buffer, movement_end, (Point){0, 1});
+               ce_move_cursor_to_end_of_line(buffer, movement_end);
           } break;
           case KEY_UP:
           case 'k':
           {
-               ce_move_cursor(buffer, movement_end, (Point){0, -1});
+               *movement_start = (Point){0, cursor->y};
+               ce_move_cursor(buffer, movement_start, (Point){0, -1});
+               ce_move_cursor_to_end_of_line(buffer, movement_end);
           } break;
           case KEY_RIGHT:
           case 'l':
@@ -828,11 +831,12 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                        config_state->start_insert.y == config_state->original_start_insert.y){
                          // TODO: assert cursor is after start_insert
                          // exclusively inserts
+                         Point last_inserted_char = {cursor->x-1, cursor->y};
                          ce_commit_insert_string(&buffer_state->commit_tail,
                                                  &config_state->start_insert,
                                                  &config_state->original_start_insert,
                                                  &end_cursor,
-                                                 ce_dupe_string(buffer, &config_state->start_insert, cursor));
+                                                 ce_dupe_string(buffer, &config_state->start_insert, &last_inserted_char));
                     }else if(config_state->start_insert.x < config_state->original_start_insert.x ||
                              config_state->start_insert.y < config_state->original_start_insert.y){
                          if(cursor->x == config_state->start_insert.x &&
@@ -846,13 +850,14 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                               backspace_free(&buffer_state->backspace_head);
                          }else{
                               // mixture of inserts and backspaces
+                              Point last_inserted_char = {cursor->x-1, cursor->y};
                               ce_commit_change_string(&buffer_state->commit_tail,
                                                       &config_state->start_insert,
                                                       &config_state->original_start_insert,
                                                       &end_cursor,
                                                       ce_dupe_string(buffer,
                                                                      &config_state->start_insert,
-                                                                     cursor),
+                                                                     &last_inserted_char),
                                                       backspace_get_string(buffer_state->backspace_head));
                               backspace_free(&buffer_state->backspace_head);
                          }
@@ -1093,6 +1098,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                Point join_loc = {strlen(buffer->lines[cursor->y]), cursor->y};
                Point end_join_loc = {0, cursor->y+1};
                ce_move_cursor_to_soft_beginning_of_line(buffer, &end_join_loc);
+               if(!end_join_loc.x) end_join_loc = join_loc;
+               else end_join_loc.x--;
                char* save_str = ce_dupe_string(buffer, &join_loc, &end_join_loc);
                assert(save_str[0] == '\n');
                if(ce_remove_string(buffer, &join_loc, ce_compute_length(buffer, &join_loc, &end_join_loc))){
@@ -1101,7 +1108,11 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }
           } break;
           case 'j':
+               ce_move_cursor(buffer, cursor, (Point){0, 1});
+          break;
           case 'k':
+               ce_move_cursor(buffer, cursor, (Point){0, -1});
+          break;
           case 'h':
           case 'l':
           case 'w':
@@ -1197,6 +1208,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'A':
           {
                if(ce_move_cursor_to_end_of_line(buffer, cursor)){
+                    cursor->x++;
                     enter_insert_mode(config_state, cursor);
                }
           } break;
@@ -1238,9 +1250,23 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                case MOVEMENT_CONTINUE:
                     return true; // no movement yet, wait for one!
                case MOVEMENT_COMPLETE:
-                    add_yank(config_state, '0', ce_dupe_string(buffer, &movement_start, &movement_end), YANK_NORMAL);
-                    add_yank(config_state, '"', ce_dupe_string(buffer, &movement_start, &movement_end), YANK_NORMAL);
-                    break;
+               {
+                    YankMode yank_mode; 
+                    switch(config_state->movement_keys[0]){
+                    case 'j':
+                    case 'k':
+                         yank_mode = YANK_LINE;
+                         break; 
+                    default:
+                         yank_mode = YANK_NORMAL; 
+                    }
+                    if(strchr("wW", config_state->movement_keys[0])){
+                         movement_end.x--; // exclude movement_end char
+                         assert(movement_end.x >= 0);
+                    }
+                    add_yank(config_state, '0', ce_dupe_string(buffer, &movement_start, &movement_end), yank_mode);
+                    add_yank(config_state, '"', ce_dupe_string(buffer, &movement_start, &movement_end), yank_mode);
+               } break;
                case MOVEMENT_INVALID:
                     switch(config_state->movement_keys[0]){
                     case 'y':
@@ -1340,21 +1366,18 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     movement_state_t m_state = try_generic_movement(config_state, buffer, cursor, &movement_start, &movement_end);
                     if(m_state == MOVEMENT_CONTINUE) return true;
 
-                    YankMode yank_mode = YANK_NORMAL;
                     if(m_state == MOVEMENT_INVALID){
                          switch(config_state->movement_keys[0]){
                               case 'c':
                                    movement_start = *cursor;
                                    ce_move_cursor_to_soft_beginning_of_line(buffer, &movement_start);
-                                   movement_end = (Point) {strlen(buffer->lines[cursor->y]), cursor->y}; // TODO: causes ce_dupe_string to fail (not on buffer)
-                                   yank_mode = YANK_LINE;
+                                   movement_end = (Point) {strlen(buffer->lines[cursor->y])-1, cursor->y}; // TODO: causes ce_dupe_string to fail (not on buffer)
                                    break;
                               case 'd':
                               {
                                    ce_move_cursor(buffer, cursor, (Point){-cursor->x, 0});
                                    movement_start = (Point) {0, cursor->y};
-                                   movement_end = (Point) {strlen(buffer->lines[cursor->y]), cursor->y}; // TODO: causes ce_dupe_string to fail (not on buffer)
-                                   yank_mode = YANK_LINE;
+                                   movement_end = (Point) {strlen(buffer->lines[cursor->y])-1, cursor->y}; // TODO: causes ce_dupe_string to fail (not on buffer)
                               } break;
                               default:
                                    // not a valid movement
@@ -1362,8 +1385,25 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                                    return true;
                          }
                     }
-                    else if(strchr("%eTtFf", config_state->movement_keys[0])){
-                         movement_end.x++; // include movement_end char
+                    else if(strchr("wW", config_state->movement_keys[0])){
+                         movement_end.x--; // exclude movement_end char
+                         assert(movement_end.x >= 0);
+                    }
+
+                    Point yank_end = movement_end; 
+                    YankMode yank_mode;
+                    switch(config_state->movement_keys[0]){
+                         case 'd':
+                         case 'j':
+                         case 'k':
+                             yank_mode = YANK_LINE; 
+                             movement_end.x++;
+                             break;
+                         case 'c':
+                             yank_mode = YANK_LINE; 
+                             break;
+                         default:
+                             yank_mode = YANK_NORMAL; 
                     }
 
                     // this is a generic movement
@@ -1378,19 +1418,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
 
                     char* save_string;
                     char* yank_string;
-                    if(config_state->movement_keys[0] == 'd'){
-                         n_deletes++; // delete the new line
-                         size_t save_len = strlen(buffer->lines[movement_start.y]) + 2;
-                         save_string = malloc(sizeof(*save_string)*save_len);
-                         save_string[save_len-2] = '\n';
-                         save_string[save_len-1] = '\0';
-                         memcpy(save_string, buffer->lines[movement_start.y], save_len - 2);
-                         yank_string = strdup(buffer->lines[movement_start.y]);
-                    }
-                    else{
-                         save_string = ce_dupe_string(buffer, &movement_start, &movement_end);
-                         yank_string = strdup(save_string);
-                    }
+                    save_string = ce_dupe_string(buffer, &movement_start, &movement_end);
+                    yank_string = ce_dupe_string(buffer, &movement_start, &yank_end);
 
                     if(ce_remove_string(buffer, &movement_start, n_deletes)){
                          ce_commit_remove_string(&buffer_state->commit_tail, &movement_start, cursor, &movement_start, save_string);

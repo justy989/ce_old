@@ -375,6 +375,7 @@ char* ce_dupe_string(const Buffer* buffer, const Point* start, const Point* end)
      CE_CHECK_PTR_ARG(end);
 
      int64_t total_len = ce_compute_length(buffer, start, end);
+     assert(total_len);
 
      if(start->y == end->y){
           // single line allocation
@@ -384,6 +385,7 @@ char* ce_dupe_string(const Buffer* buffer, const Point* start, const Point* end)
                return NULL;
           }
           memcpy(new_str, buffer->lines[start->y] + start->x, total_len);
+          if(!new_str[total_len-1]) new_str[total_len-1] = '\n';
           new_str[total_len] = 0;
 
           return new_str;
@@ -411,7 +413,9 @@ char* ce_dupe_string(const Buffer* buffer, const Point* start, const Point* end)
           itr += len + 1;
      }
 
-     memcpy(itr, buffer->lines[end->y], end->x);
+     memcpy(itr, buffer->lines[end->y], end->x+1);
+     // if the end cursor is on the NUL terminator, append newline
+     if(!new_str[total_len-1]) new_str[total_len-1] = '\n';
      new_str[total_len] = 0;
 
      return new_str;
@@ -1419,7 +1423,7 @@ bool ce_move_cursor_to_end_of_line(const Buffer* buffer, Point* cursor)
 
      if(!ce_point_on_buffer(buffer, cursor)) return false;
 
-     cursor->x = strlen(buffer->lines[cursor->y]); 
+     cursor->x = strlen(buffer->lines[cursor->y])-1; 
      return true;
 }
 
@@ -2277,7 +2281,7 @@ void* ce_memrchr(const void* s, int c, size_t n)
      char* rev_search = (void*)s + (n-1);
      while((uintptr_t)rev_search >= (uintptr_t)s){
           if(*rev_search == c) return rev_search;
-	  rev_search--;
+          rev_search--;
      }
      return NULL;
 }
@@ -2295,15 +2299,15 @@ int64_t ce_compute_length(const Buffer* buffer, const Point* start, const Point*
 
      size_t length = 0;
 
-     if( start->y < end->y){
+     if(start->y < end->y){
           length = strlen(buffer->lines[start->y] + start->x) + 1; // account for newline
           for(int64_t i = start->y + 1; i < end->y; ++i){
                length += strlen(buffer->lines[i]) + 1; // account for newline
           }
-          length += end->x; // do not account for newline
+          length += end->x+1; // do not account for newline. end is inclusive
      }else{
           assert(start->y == end->y);
-          length += end->x - start->x;
+          length += end->x+1 - start->x;
      }
 
      return length;

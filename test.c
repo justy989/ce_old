@@ -684,7 +684,7 @@ TEST(sanity_dupe_string)
      Point end = {3, 0};
      char* str = ce_dupe_string(&buffer, &start, &end);
 
-     EXPECT(strcmp(str, "AC") == 0);
+     EXPECT(strcmp(str, "ACO") == 0);
 
      free(str);
      ce_free_buffer(&buffer);
@@ -703,7 +703,7 @@ TEST(dupe_string_multiline)
      Point end = {3, 2};
      char* str = ce_dupe_string(&buffer, &start, &end);
 
-     EXPECT(strcmp(str, "ACOS\nARE\nAWE") == 0);
+     EXPECT(strcmp(str, "ACOS\nARE\nAWES") == 0);
 
      free(str);
      ce_free_buffer(&buffer);
@@ -719,7 +719,7 @@ TEST(dupe_string_multiline_on_line_boundry)
      buffer.lines[2] = strdup("AWESOME");
 
      Point start = {1, 0};
-     Point end = {0, 2};
+     Point end = {3, 1};
      char* str = ce_dupe_string(&buffer, &start, &end);
 
      EXPECT(strcmp(str, "ACOS\nARE\n") == 0);
@@ -1418,12 +1418,12 @@ TEST(sanity_move_cursor_to_end_of_line)
 
      cursor = (Point) {0, 0};
      ce_move_cursor_to_end_of_line(&buffer, &cursor);
-     ASSERT(cursor.x == (int64_t) strlen(buffer.lines[0]));
+     ASSERT(cursor.x == (int64_t) strlen(buffer.lines[0])-1);
      ASSERT(cursor.y == 0);
 
      cursor = (Point) {5, 0};
      ce_move_cursor_to_end_of_line(&buffer, &cursor);
-     ASSERT(cursor.x == (int64_t) strlen(buffer.lines[0]));
+     ASSERT(cursor.x == (int64_t) strlen(buffer.lines[0])-1);
      ASSERT(cursor.y == 0);
 
      ce_free_buffer(&buffer);
@@ -1640,25 +1640,25 @@ TEST(sanity_compute_length)
 
      start = (Point) {0, 0};
      end = (Point) {1, 0};
-     ASSERT(ce_compute_length(&buffer, &start, &end) == 1);
+     ASSERT(ce_compute_length(&buffer, &start, &end) == 2);
 
      start = (Point) {0, 0};
      end = (Point) {18, 0};
-     ASSERT(ce_compute_length(&buffer, &start, &end) == 18);
-
-     start = (Point) {0, 0};
-     end = (Point) {0, 1};
      ASSERT(ce_compute_length(&buffer, &start, &end) == 19);
 
      start = (Point) {0, 0};
-     end = (Point) {1, 1};
+     end = (Point) {0, 1};
      ASSERT(ce_compute_length(&buffer, &start, &end) == 20);
+
+     start = (Point) {0, 0};
+     end = (Point) {1, 1};
+     ASSERT(ce_compute_length(&buffer, &start, &end) == 21);
 
      start = (Point) {0, 0};
      end = (Point) {strlen(buffer.lines[2]), 2};
      ASSERT(ce_compute_length(&buffer, &start, &end) == (int64_t) strlen(buffer.lines[0]) + 1 + // account for null
                                                         (int64_t) strlen(buffer.lines[1]) + 1 + // account for null
-                                                        (int64_t) strlen(buffer.lines[2]));     // last point is exclusive
+                                                        (int64_t) strlen(buffer.lines[2]) + 1);
 }
 
 #if 0

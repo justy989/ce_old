@@ -1729,7 +1729,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                                    ce_append_line(config_state->view_current->buffer_node->buffer, cmd);
                               }
 
-                              snprintf(cmd, BUFSIZ, "exit code: %i", WEXITSTATUS(pclose(pfile)));
+                              snprintf(cmd, BUFSIZ, "exit code: %d", WEXITSTATUS(pclose(pfile)));
                               ce_append_line(config_state->view_current->buffer_node->buffer, cmd);
 
                               // NOTE: add blank for readability

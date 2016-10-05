@@ -862,6 +862,16 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                // when we exit insert mode, do not move the cursor back unless we are at the end of the line
                *cursor = end_cursor;
           } break;
+          case KEY_MOUSE:
+          {
+               MEVENT event;
+               if(getmouse(&event) == OK){
+                    if(event.bstate & BUTTON1_PRESSED){
+                         Point click = {event.x, event.y};
+                         ce_set_cursor(buffer, cursor, &click);
+                    }
+               }
+          } break;
           case KEY_BACKSPACE:
                if(buffer->line_count){
                     if(cursor->x <= 0){
@@ -1087,6 +1097,16 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case 'q':
                return false; // exit !
+          case KEY_MOUSE:
+          {
+               MEVENT event;
+               if(getmouse(&event) == OK){
+                    if(event.bstate & BUTTON1_PRESSED){
+                         Point click = {event.x, event.y};
+                         ce_set_cursor(buffer, cursor, &click);
+                    }
+               }
+          } break;
           case 'J':
           {
                if(cursor->y == buffer->line_count - 1) break; // nothing to join

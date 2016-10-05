@@ -230,6 +230,8 @@ int main(int argc, char** argv)
      // ncurses_init()
      initscr();
      keypad(stdscr, TRUE);
+     mousemask(ALL_MOUSE_EVENTS, NULL);
+     mouseinterval(0);
      cbreak();
      noecho();
 

@@ -478,31 +478,27 @@ void find_command(int command_key, int find_char, Buffer* buffer, Point* cursor)
      {
           int64_t x_delta = ce_find_delta_to_char_forward_in_line(buffer, cursor, find_char);
           if(x_delta == -1) break;
-          Point delta = {x_delta, 0};
-          ce_move_cursor(buffer, cursor, &delta);
+          ce_move_cursor(buffer, cursor, (Point){x_delta, 0});
      } break;
      case 't':
      {
           Point search_point = {cursor->x + 1, cursor->y};
           int64_t x_delta = ce_find_delta_to_char_forward_in_line(buffer, &search_point, find_char);
           if(x_delta <= 0) break;
-          Point delta = {x_delta, 0};
-          ce_move_cursor(buffer, cursor, &delta);
+          ce_move_cursor(buffer, cursor, (Point){x_delta, 0});
      } break;
      case 'F':
      {
           int64_t x_delta = ce_find_delta_to_char_backward_in_line(buffer, cursor, find_char);
           if(x_delta == -1) break;
-          Point delta = {-x_delta, 0};
-          ce_move_cursor(buffer, cursor, &delta);
+          ce_move_cursor(buffer, cursor, (Point){-x_delta, 0});
      } break;
      case 'T':
      {
           Point search_point = {cursor->x - 1, cursor->y};
           int64_t x_delta = ce_find_delta_to_char_backward_in_line(buffer, &search_point, find_char);
           if(x_delta <= 0) break;
-          Point delta = {-x_delta, 0};
-          ce_move_cursor(buffer, cursor, &delta);
+          ce_move_cursor(buffer, cursor, (Point){-x_delta, 0});
      } break;
      default:
           assert(0);
@@ -554,26 +550,23 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
           case KEY_LEFT:
           case 'h':
           {
-               Point delta = {-1, 0};
-               ce_move_cursor(buffer, movement_end, &delta);
+               ce_move_cursor(buffer, movement_end, (Point){-1, 0});
           } break;
           case KEY_DOWN:
           case 'j':
           {
-               Point delta = {0, 1};
-               ce_move_cursor(buffer, movement_end, &delta);
+               *movement_start = (Point){0, cursor->y};
+               ce_move_cursor(buffer, movement_end, (Point){0, 1});
           } break;
           case KEY_UP:
           case 'k':
           {
-               Point delta = {0, -1};
-               ce_move_cursor(buffer, movement_end, &delta);
+               ce_move_cursor(buffer, movement_end, (Point){0, -1});
           } break;
           case KEY_RIGHT:
           case 'l':
           {
-               Point delta = {1, 0};
-               ce_move_cursor(buffer, movement_end, &delta);
+               ce_move_cursor(buffer, movement_end, (Point){1, 0});
           } break;
           case '0':
           {
@@ -742,7 +735,7 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
                movement_end->x += ce_find_delta_to_next_word(buffer, movement_end, key0 == 'w');
                break;
           case '$':
-               movement_end->x += ce_find_delta_to_end_of_line(buffer, movement_end);
+               ce_move_cursor_to_end_of_line(buffer, movement_end);
                break;
           case '%':
           {
@@ -765,8 +758,7 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
           case 'G':
           {
                ce_move_cursor_to_end_of_file(buffer, movement_end);
-               Point delta = {ce_find_delta_to_end_of_line(buffer, movement_end), 0};
-               ce_move_cursor(buffer, movement_end, &delta);
+               ce_move_cursor_to_end_of_line(buffer, movement_end);
           } break;
           case 'g':
                switch(key1){
@@ -906,8 +898,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case '\t':
           {
                ce_insert_string(buffer, cursor, TAB_STRING);
-               Point delta = {5, 0};
-               ce_move_cursor(buffer, cursor, &delta);
+               ce_move_cursor(buffer, cursor, (Point){5, 0});
           } break;
           case 10: // return
           {
@@ -954,24 +945,20 @@ bool key_handler(int key, BufferNode* head, void* user_data)
 #if 0
           case 8: // Ctrl + h
           {
-               Point delta = {-1, 0};
-               ce_move_cursor(buffer, cursor, &delta);
+               ce_move_cursor(buffer, cursor, (Point){-1, 0});
           } break;
           // NOTE: NOOOOO Ctrl + j == Ctrl + m == Return... WHY IS EVERYTHING SO TERRIBLE!
           case 10: // Ctrl + j
           {
-               Point delta = {0, 1};
-               ce_move_cursor(buffer, cursor, &delta);
+               ce_move_cursor(buffer, cursor, (Point){0, 1});
           } break;
           case 11: // Ctrl + k
           {
-               Point delta = {0, -1};
-               ce_move_cursor(buffer, cursor, &delta);
+               ce_move_cursor(buffer, cursor, (Point){0, -1});
           } break;
           case 12: // Ctrl + l
           {
-               Point delta = {1, 0};
-               ce_move_cursor(buffer, cursor, &delta);
+               ce_move_cursor(buffer, cursor, (Point){1, 0});
           } break;
 #endif
           case '}':
@@ -1209,8 +1196,10 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case 'A':
           {
-               cursor->x += ce_find_delta_to_end_of_line(buffer, cursor) + 1;
-               enter_insert_mode(config_state, cursor);
+               if(ce_move_cursor_to_end_of_line(buffer, cursor)){
+                    cursor->x++;
+                    enter_insert_mode(config_state, cursor);
+               }
           } break;
           case 'm':
           {
@@ -1302,26 +1291,13 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     }
                }
           } break;
-          case 'S':
-          {
-               // TODO: unify with cc
-               ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
-               int64_t n_deletes = ce_find_delta_to_end_of_line(buffer, cursor) + 1;
-               Point delete_end = {cursor->x + n_deletes, cursor->y};
-               char* save_string = ce_dupe_string(buffer, cursor, &delete_end);
-               if(ce_remove_string(buffer, cursor, n_deletes)){
-                    ce_commit_remove_string(&buffer_state->commit_tail, cursor, cursor, cursor, save_string);
-                    add_yank(config_state, '"', strdup(save_string), YANK_NORMAL);
-               }
-               enter_insert_mode(config_state, cursor);
-          } break;
           case 'C':
           case 'D':
           {
-               int64_t n_deletes = ce_find_delta_to_end_of_line(buffer, cursor) + 1;
+               Point end = *cursor;
+               ce_move_cursor_to_end_of_line(buffer, &end);
+               int64_t n_deletes = strlen(&buffer->lines[cursor->y][cursor->x]);
                if(n_deletes){
-                    Point end = *cursor;
-                    end.x += n_deletes;
                     char* save_string = ce_dupe_string(buffer, cursor, &end);
                     if(ce_remove_string(buffer, cursor, n_deletes)){
                          ce_commit_remove_string(&buffer_state->commit_tail, cursor, cursor, cursor, save_string);
@@ -1330,6 +1306,12 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }
                if(key == 'C') enter_insert_mode(config_state, cursor);
           } break;
+          case 'S':
+          {
+               config_state->movement_multiplier = 1;
+               config_state->movement_keys[0] = 'c';
+               config_state->command_key = 'c';
+          } // fall through to 'cc'
           case 'c':
           case 'd':
           {
@@ -1348,8 +1330,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                                    break;
                               case 'd':
                               {
-                                   Point delta = {-cursor->x, 0};
-                                   ce_move_cursor(buffer, cursor, &delta);
+                                   ce_move_cursor(buffer, cursor, (Point){-cursor->x, 0});
                                    movement_start = (Point) {0, cursor->y};
                                    movement_end = (Point) {strlen(buffer->lines[cursor->y]), cursor->y}; // TODO: causes ce_dupe_string to fail (not on buffer)
                                    yank_mode = YANK_LINE;
@@ -1641,20 +1622,20 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           {
                Point delta;
                if(ce_find_delta_to_match(buffer, cursor, &delta)){
-                    ce_move_cursor(buffer, cursor, &delta);
+                    ce_move_cursor(buffer, cursor, delta);
                }
           } break;
           case 21: // Ctrl + d
           {
                int64_t view_height = config_state->view_current->bottom_right.y - config_state->view_current->top_left.y;
                Point delta = {0, -view_height / 2};
-               ce_move_cursor(buffer, cursor, &delta);
+               ce_move_cursor(buffer, cursor, delta);
           } break;
           case 4: // Ctrl + u
           {
                int64_t view_height = config_state->view_current->bottom_right.y - config_state->view_current->top_left.y;
                Point delta = {0, view_height / 2};
-               ce_move_cursor(buffer, cursor, &delta);
+               ce_move_cursor(buffer, cursor, delta);
           } break;
           case 8: // Ctrl + h
           {

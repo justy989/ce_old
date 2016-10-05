@@ -192,6 +192,8 @@ typedef struct{
      BufferView* view_input;
      BufferView* view_save;
      InputHistory shell_command_history;
+     InputHistory search_history;
+     InputHistory load_file_history;
 } ConfigState;
 
 typedef struct MarkNode{
@@ -414,7 +416,6 @@ BufferNode* open_file_buffer(BufferNode* head, const char* filename)
      BufferNode* itr = head;
      while(itr){
           if(!strcmp(itr->buffer->name, filename)){
-               ce_message("switching to already open buffer for: '%s'", filename);
                break; // already open
           }
           itr = itr->next;
@@ -501,6 +502,8 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
      }
 
      input_history_init(&config_state->shell_command_history);
+     input_history_init(&config_state->search_history);
+     input_history_init(&config_state->load_file_history);
 
      // setup colors for syntax highlighting
      init_pair(S_KEYWORD, COLOR_BLUE, COLOR_BACKGROUND);
@@ -546,6 +549,8 @@ bool destroyer(BufferNode* head, void* user_data)
 
      // history
      input_history_free(&config_state->shell_command_history);
+     input_history_free(&config_state->search_history);
+     input_history_free(&config_state->load_file_history);
 
      free(config_state);
      return true;
@@ -986,6 +991,44 @@ void jump_to_next_shell_command_file_destination(BufferNode* head, ConfigState* 
      }
 }
 
+bool commit_input_to_history(ConfigState* config_state, InputHistory* history)
+{
+     if(config_state->view_input->buffer_node->buffer->line_count){
+          char* saved = ce_dupe_buffer(config_state->view_input->buffer_node->buffer);
+          if((history->cur->prev && strcmp(saved, history->cur->prev->entry) != 0) ||
+             !history->cur->prev){
+               history->cur = history->tail;
+               input_history_update_current(history, saved);
+               input_history_commit_current(history);
+          }
+     }else{
+          return false;
+     }
+
+     return true;
+}
+
+InputHistory* history_from_input_key(ConfigState* config_state)
+{
+     InputHistory* history = NULL;
+
+     switch(config_state->input_key){
+     default:
+          break;
+     case '/':
+     case '?':
+          history = &config_state->search_history;
+          break;
+     case 24: // Ctrl + x
+          history = &config_state->shell_command_history;
+          break;
+     case 6: // Ctrl + f
+          history = &config_state->load_file_history;
+          break;
+     }
+
+     return history;
+}
 
 bool key_handler(int key, BufferNode* head, void* user_data)
 {
@@ -1877,6 +1920,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     } break;
                     case 6: // Ctrl + f
                          // just grab the first line and load it as a file
+                         commit_input_to_history(config_state, &config_state->load_file_history);
                          for(int64_t i = 0; i < config_state->view_input->buffer_node->buffer->line_count; ++i){
                               BufferNode* new_node = open_file_buffer(head, config_state->view_input->buffer_node->buffer->lines[i]);
                               if(i == 0 && new_node){
@@ -1887,6 +1931,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          break;
                     case '/':
                          if(config_state->view_input->buffer_node->buffer->line_count){
+                              commit_input_to_history(config_state, &config_state->search_history);
                               config_state->search_command.direction = CE_DOWN;
                               add_yank(config_state, '/', strdup(config_state->view_input->buffer_node->buffer->lines[0]), YANK_NORMAL);
                               goto search;
@@ -1894,6 +1939,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          break;
                     case '?':
                          if(config_state->view_input->buffer_node->buffer->line_count){
+                              commit_input_to_history(config_state, &config_state->search_history);
                               config_state->search_command.direction = CE_UP;
                               add_yank(config_state, '/', strdup(config_state->view_input->buffer_node->buffer->lines[0]), YANK_NORMAL);
                               goto search;
@@ -1912,16 +1958,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                               itr = itr->next;
                          }
 
-                         if(config_state->view_input->buffer_node->buffer->line_count){
-                              char* saved = ce_dupe_buffer(config_state->view_input->buffer_node->buffer);
-                              if((config_state->shell_command_history.cur->prev &&
-                                  strcmp(saved, config_state->shell_command_history.cur->prev->entry) != 0) ||
-                                 !config_state->shell_command_history.cur->prev){
-                                   config_state->shell_command_history.cur = config_state->shell_command_history.tail;
-                                   input_history_update_current(&config_state->shell_command_history, saved);
-                                   input_history_commit_current(&config_state->shell_command_history);
-                              }
-                         }
+                         commit_input_to_history(config_state, &config_state->shell_command_history);
 
                          // if we found an existing command buffer, clear it and use it
                          BufferView* command_view = NULL;
@@ -2251,9 +2288,12 @@ search:
           } break;
           case 14: // Ctrl + n
                if(config_state->input){
-                    input_history_next(&config_state->shell_command_history);
+                    InputHistory* history = history_from_input_key(config_state);
+                    if(!history) break;
+
+                    input_history_next(history);
                     ce_clear_lines(config_state->view_input->buffer_node->buffer);
-                    ce_append_string(config_state->view_input->buffer_node->buffer, 0, config_state->shell_command_history.cur->entry);
+                    ce_append_string(config_state->view_input->buffer_node->buffer, 0, history->cur->entry);
                     config_state->view_input->cursor = (Point){0, 0};
                     ce_move_cursor_to_end_of_file(config_state->view_input->buffer_node->buffer, &config_state->view_input->cursor);
                }else{
@@ -2262,14 +2302,20 @@ search:
                break;
           case 16: // Ctrl + p
                if(config_state->input){
-                    if(config_state->shell_command_history.tail == config_state->shell_command_history.cur &&
+                    InputHistory* history = history_from_input_key(config_state);
+                    if(!history) break;
+
+                    // update the current history node if we are at the tail to save what the user typed
+                    // skip this if they haven't typed anything
+                    if(history->tail == history->cur &&
                        config_state->view_input->buffer_node->buffer->line_count){
-                         input_history_update_current(&config_state->shell_command_history,
+                         input_history_update_current(history,
                                                       ce_dupe_buffer(config_state->view_input->buffer_node->buffer));
                     }
-                    input_history_prev(&config_state->shell_command_history);
+
+                    input_history_prev(history);
                     ce_clear_lines(config_state->view_input->buffer_node->buffer);
-                    ce_append_string(config_state->view_input->buffer_node->buffer, 0, config_state->shell_command_history.cur->entry);
+                    ce_append_string(config_state->view_input->buffer_node->buffer, 0, history->cur->entry);
                     config_state->view_input->cursor = (Point){0, 0};
                     ce_move_cursor_to_end_of_file(config_state->view_input->buffer_node->buffer, &config_state->view_input->cursor);
                }else{

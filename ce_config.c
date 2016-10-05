@@ -862,7 +862,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                // when we exit insert mode, do not move the cursor back unless we are at the end of the line
                *cursor = end_cursor;
           } break;
-          case 127: // backspace
+          case KEY_BACKSPACE:
                if(buffer->line_count){
                     if(cursor->x <= 0){
                          if(cursor->y){

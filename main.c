@@ -228,8 +228,8 @@ int main(int argc, char** argv)
      }
 
      // ncurses_init()
-     //keypad(initscr(), TRUE); // NOTE: keypad breaks backspace for justin!
      initscr();
+     keypad(stdscr, TRUE);
      cbreak();
      noecho();
 

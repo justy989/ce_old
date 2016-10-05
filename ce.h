@@ -195,7 +195,6 @@ int64_t ce_get_indentation_for_next_line (const Buffer* buffer, const Point* loc
 
 
 // Find Delta Functions
-int64_t ce_find_delta_to_end_of_line            (const Buffer* buffer, const Point* location);
 int64_t ce_find_delta_to_soft_end_of_line       (const Buffer* buffer, const Point* location);
 int64_t ce_find_delta_to_soft_beginning_of_line (const Buffer* buffer, const Point* location);
 int64_t ce_find_delta_to_char_forward_in_line   (const Buffer* buffer, const Point* location, char c);
@@ -215,8 +214,9 @@ bool ce_get_homogenous_adjacents (const Buffer* buffer, Point* start, Point* end
 // Cursor Movement Functions
 Point* ce_clamp_cursor                          (const Buffer* buffer, Point* cursor);
 bool   ce_advance_cursor                        (const Buffer* buffer, Point* cursor, int64_t delta);
-bool   ce_move_cursor                           (const Buffer* buffer, Point* cursor, const Point* delta);
+bool   ce_move_cursor                           (const Buffer* buffer, Point* cursor, Point delta);
 bool   ce_set_cursor                            (const Buffer* buffer, Point* cursor, const Point* location);
+bool   ce_move_cursor_to_end_of_line            (const Buffer* buffer, Point* cursor);
 bool   ce_move_cursor_to_soft_end_of_line       (const Buffer* buffer, Point* cursor);
 bool   ce_move_cursor_to_soft_beginning_of_line (const Buffer* buffer, Point* cursor);
 bool   ce_move_cursor_to_end_of_file            (const Buffer* buffer, Point* cursor);

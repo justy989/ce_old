@@ -1403,6 +1403,256 @@ TEST(sanity_split_view)
      }
 }
 
+TEST(sanity_find_delta_to_end_of_line)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("Cats are delicious");
+
+     Point cursor;
+
+     cursor = (Point) {0, 0};
+     ASSERT(ce_find_delta_to_end_of_line(&buffer, &cursor) == (int64_t) strlen(buffer.lines[0]) - 1);
+
+     cursor = (Point) {5, 0};
+     ASSERT(ce_find_delta_to_end_of_line(&buffer, &cursor) == (int64_t) strlen(buffer.lines[0]) - 1 - 5);
+}
+
+TEST(sanity_ce_memrchr)
+{
+     char str[] = "TACOS BE AWESOME";
+     char* B;
+
+     ASSERT(B = ce_memrchr(str, 'B', sizeof str));
+     EXPECT(&str[6] == B);
+
+     ASSERT(!ce_memrchr(str, 'Z', sizeof str));
+}
+
+TEST(sanity_compute_length)
+{
+     Buffer buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("Cats are delicious");
+     buffer.lines[1] = strdup("This forever has been true");
+     buffer.lines[2] = strdup("We should eat them all.");
+
+     Point start;
+     Point end;
+
+     start = (Point) {0, 0};
+     end = (Point) {1, 0};
+     ASSERT(ce_compute_length(&buffer, &start, &end) == 1);
+
+     start = (Point) {0, 0};
+     end = (Point) {18, 0};
+     ASSERT(ce_compute_length(&buffer, &start, &end) == 18);
+
+     start = (Point) {0, 0};
+     end = (Point) {0, 1};
+     ASSERT(ce_compute_length(&buffer, &start, &end) == 19);
+
+     start = (Point) {0, 0};
+     end = (Point) {1, 1};
+     ASSERT(ce_compute_length(&buffer, &start, &end) == 20);
+
+     start = (Point) {0, 0};
+     end = (Point) {strlen(buffer.lines[2]), 2};
+     ASSERT(ce_compute_length(&buffer, &start, &end) == (int64_t) strlen(buffer.lines[0]) + 1 + // account for null
+                                                        (int64_t) strlen(buffer.lines[1]) + 1 + // account for null
+                                                        (int64_t) strlen(buffer.lines[2]));     // last point is exclusive
+}
+
+#if 0
+// This currently fails because the first character isn't checked by is_homogenous?
+TEST(sanity_get_homogenous_adjacents)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("0123....    ");
+
+     Point start, end;
+     start = end = (Point) {1, 0};
+
+     ASSERT(ce_get_homogenous_adjacents(&buffer, &start, &end, isblank));
+     EXPECT(start.x == 1);
+     EXPECT(start.y == 0);
+     EXPECT(end.x == 1);
+     EXPECT(end.y == 0);
+
+     start = end = (Point) {1, 0};
+
+     ASSERT(ce_get_homogenous_adjacents(&buffer, &start, &end, ce_ispunct));
+     EXPECT(start.x == 1);
+     EXPECT(start.y == 0);
+     EXPECT(end.x == 1);
+     EXPECT(end.y == 0);
+
+     start = end = (Point) {1, 0};
+
+     ASSERT(ce_get_homogenous_adjacents(&buffer, &start, &end, ce_iswordchar));
+     EXPECT(start.x == 0);
+     EXPECT(start.y == 0);
+     EXPECT(end.x == 4);
+     EXPECT(end.y == 0);
+
+     start = end = (Point) {5, 0};
+
+     ASSERT(ce_get_homogenous_adjacents(&buffer, &start, &end, ce_ispunct));
+     EXPECT(start.x == 4);
+     EXPECT(start.y == 0);
+     EXPECT(end.x == 8);
+     EXPECT(end.y == 0);
+
+     start = end = (Point) {9, 0};
+
+     ASSERT(ce_get_homogenous_adjacents(&buffer, &start, &end, ce_ispunct));
+     EXPECT(start.x == 8);
+     EXPECT(start.y == 0);
+     EXPECT(end.x == 12);
+     EXPECT(end.y == 0);
+}
+#endif
+
+TEST(sanity_get_word_at_location)
+{
+     Buffer buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("0123 567 9ABC EFG");
+     buffer.lines[1] = strdup("0123     9ABC EFG");
+     buffer.lines[2] = strdup("0123.... 9ABC EFG");
+
+     Point word_start, word_end;
+     Point cursor = {6, 0};
+
+     ASSERT(ce_get_word_at_location(&buffer, &cursor, &word_start, &word_end));
+     EXPECT(word_start.y == 0);
+     EXPECT(word_start.x == 5);
+     EXPECT(word_end.y == 0);
+     EXPECT(word_end.x == 8);
+
+     cursor = (Point) {6, 1};
+
+     ASSERT(ce_get_word_at_location(&buffer, &cursor, &word_start, &word_end));
+     EXPECT(word_start.y == 1);
+     EXPECT(word_start.x == 4);
+     EXPECT(word_end.y == 1);
+     EXPECT(word_end.x == 9);
+
+     cursor = (Point) {6, 2};
+
+     ASSERT(ce_get_word_at_location(&buffer, &cursor, &word_start, &word_end));
+     EXPECT(word_start.y == 2);
+     EXPECT(word_start.x == 4);
+     EXPECT(word_end.y == 2);
+     EXPECT(word_end.x == 8);
+}
+
+TEST(get_indentation_for_next_line_open_bracket)
+{
+     const size_t tab_len = 5;
+
+     Buffer buffer = {};
+     buffer.line_count = 6;
+     buffer.lines = malloc(6 * sizeof(char*));
+     buffer.lines[0] = strdup("int is_delicious_cat(cat_t cat){");
+     buffer.lines[1] = strdup("     if(is_kitten(cat)){");
+     buffer.lines[2] = strdup("          return true;");
+     buffer.lines[3] = strdup("       } // whoops! not aligned!?");
+     buffer.lines[4] = strdup("     return true;");
+     buffer.lines[5] = strdup("}");
+
+     Point cursor;
+
+     cursor = (Point) {5, 0};
+     ASSERT(ce_get_indentation_for_next_line(&buffer, &cursor, tab_len) == 5);
+
+     cursor = (Point) {7, 1};
+     ASSERT(ce_get_indentation_for_next_line(&buffer, &cursor, tab_len) == 10);
+
+     cursor = (Point) {4, 2};
+     ASSERT(ce_get_indentation_for_next_line(&buffer, &cursor, tab_len) == 10);
+
+     cursor = (Point) {2, 3};
+     ASSERT(ce_get_indentation_for_next_line(&buffer, &cursor, tab_len) == 7); // un-aligned!
+
+     cursor = (Point) {1, 4};
+     ASSERT(ce_get_indentation_for_next_line(&buffer, &cursor, tab_len) == 5);
+
+     cursor = (Point) {0, 5};
+     ASSERT(ce_get_indentation_for_next_line(&buffer, &cursor, tab_len) == 0);
+}
+
+TEST(sanity_sort_points_swap)
+{
+     // swap case
+     const Point start = {500, 500};
+     const Point end = {250, 250};
+     const Point* p_start = &start;
+     const Point* p_end = &end;
+
+     ce_sort_points ( &p_start, &p_end );
+     ASSERT(memcmp(p_start, &end, sizeof(Point)) == 0);
+     ASSERT(memcmp(p_end, &start, sizeof(Point)) == 0);
+}
+
+TEST(sanity_sort_points_no_swap)
+{
+     // no swap case
+     const Point start = {250, 250};
+     const Point end = {500, 500};
+     const Point* p_start = &start;
+     const Point* p_end = &end;
+
+     ce_sort_points ( &p_start, &p_end );
+     ASSERT(memcmp(p_start, &start, sizeof(Point)) == 0);
+     ASSERT(memcmp(p_end, &end, sizeof(Point)) == 0);
+}
+
+TEST(sanity_move_cursor_to_soft_beginning_of_line)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("     Wow, cats are more delicious than I anticipated.");
+
+     Point cursor;
+
+     cursor = (Point) {0, 0};
+     EXPECT(ce_move_cursor_to_soft_beginning_of_line(&buffer, &cursor) == true);
+     ASSERT(cursor.x == 5);
+     ASSERT(cursor.y == 0);
+
+     cursor = (Point) {13, 0};
+     EXPECT(ce_move_cursor_to_soft_beginning_of_line(&buffer, &cursor) == true);
+     ASSERT(cursor.x == 5);
+     ASSERT(cursor.y == 0);
+}
+
+TEST(sanity_move_cursor_to_soft_end_of_line)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("     Meow.     ");
+
+     Point cursor;
+
+     cursor = (Point) {0, 0};
+     EXPECT(ce_move_cursor_to_soft_end_of_line(&buffer, &cursor) == true);
+     ASSERT(cursor.x == 9);
+     ASSERT(cursor.y == 0);
+
+     cursor = (Point) {13, 0};
+     EXPECT(ce_move_cursor_to_soft_end_of_line(&buffer, &cursor) == true);
+     ASSERT(cursor.x == 9);
+     ASSERT(cursor.y == 0);
+}
+
 int main()
 {
      Point terminal_dimensions = {17, 10};

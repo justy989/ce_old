@@ -200,6 +200,14 @@ bool ce_insert_char(Buffer* buffer, const Point* location, char c)
      return true;
 }
 
+bool ce_append_char(Buffer* buffer, char c)
+{
+     Point end = {};
+     ce_move_cursor_to_end_of_file(buffer, &end);
+     end.x++;
+     return ce_insert_char(buffer, &end, c);
+}
+
 bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_string)
 {
      CE_CHECK_PTR_ARG(buffer);

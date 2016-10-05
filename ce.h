@@ -166,6 +166,7 @@ bool ce_load_string    (Buffer* buffer, const char* string);
 bool ce_load_file      (Buffer* buffer, const char* filename);
 
 bool ce_insert_char    (Buffer* buffer, const Point* location, char c);
+bool ce_append_char    (Buffer* buffer, char c);
 bool ce_remove_char    (Buffer* buffer, const Point* location);
 bool ce_set_char       (Buffer* buffer, const Point* location, char c);
 

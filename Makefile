@@ -1,5 +1,5 @@
 CC?=clang
-CFLAGS+=-Wall -Werror -Wextra -std=c11 -ggdb3 -D_GNU_SOURCE
+CFLAGS+=-Wall -Werror -Wextra -std=c11 -ggdb3 -D_GNU_SOURCE $(SCROLL_FLAG)
 LINK=-lncurses
 
 all: ce ce_config.so

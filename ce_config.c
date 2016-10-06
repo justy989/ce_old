@@ -1883,7 +1883,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          case 'j':
                          case 'k':
                              yank_mode = YANK_LINE; 
-                             movement_end.x++;
+                             // include the newline in the delete
+                             movement_end.x = strlen(buffer->lines[movement_end.y]);
                              break;
                          case 'c':
                              yank_mode = YANK_LINE; 
@@ -1902,10 +1903,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                               return true;
                          }
 
-                         char* save_string;
-                         char* yank_string;
-                              save_string = ce_dupe_string(buffer, &movement_start, &movement_end);
-                    yank_string = ce_dupe_string(buffer, &movement_start, &yank_end);
+                         char* save_string = ce_dupe_string(buffer, &movement_start, &movement_end);
+                         char* yank_string = ce_dupe_string(buffer, &movement_start, &yank_end);
 
                          if(ce_remove_string(buffer, &movement_start, n_deletes)){
                               ce_commit_remove_string(&buffer_state->commit_tail, &movement_start, cursor, &movement_start, save_string);

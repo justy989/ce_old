@@ -138,8 +138,6 @@ bool ce_point_on_buffer(const Buffer* buffer, const Point* location)
      if(line) line_len = strlen(line);
 
      if(location->x > line_len){
-          ce_message("%s() %"PRId64", %"PRId64" not in buffer with line %"PRId64" only %"PRId64" characters long",
-                     __FUNCTION__, location->x, location->y, buffer->line_count, line_len);
           return false;
      }
 
@@ -226,7 +224,7 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
 
      // if the whole buffer is empty
      if(!buffer->lines){
-		int64_t line_count = ce_count_string_lines(new_string);
+          int64_t line_count = ce_count_string_lines(new_string);
           ce_alloc_lines(buffer, line_count);
 
           int64_t line = 0;
@@ -598,10 +596,12 @@ bool ce_find_delta_to_match(const Buffer* buffer, const Point* location, Point* 
          iter.y += d ){
 
           // first iteration we want iter.x to be on our matchee, other iterations we want it at eol/bol
-          if(iter.y != location->y) iter.x = d == CE_UP? strlen(buffer->lines[iter.y]) : 0;
+          if(iter.y != location->y) iter.x = (d == CE_UP) ? ce_last_index(buffer->lines[iter.y]) : 0;
 
           // loop over buffer
-          for(; ce_get_char(buffer, &iter, &curr); iter.x +=d){
+          for(; ce_point_on_buffer(buffer, &iter); iter.x +=d){
+               ce_get_char(buffer, &iter, &curr);
+
                // loop over line
                if(curr == match){
                     if(--n_unmatched == 0){
@@ -797,7 +797,7 @@ bool ce_get_char(const Buffer* buffer, const Point* location, char* c)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
-     assert(ce_point_on_buffer(buffer, location));
+     // NOTE: this assert seems to be pretty useful for debugging
 
      if(!ce_point_on_buffer(buffer, location)) return false;
 
@@ -2487,7 +2487,7 @@ int64_t ce_get_indentation_for_next_line(const Buffer* buffer, const Point* loca
 
      // then, check the line for a '{' that is unmatched on location's line + indent if you find one
      char curr;
-     for(Point iter = {strlen(buffer->lines[location->y]) - 1, location->y};
+     for(Point iter = {ce_last_index(buffer->lines[location->y]), location->y};
          ce_get_char(buffer, &iter, &curr);
          iter.x--){
           if(curr == '{'){

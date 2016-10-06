@@ -325,7 +325,9 @@ BufferNode* new_buffer_from_string(BufferNode* head, const char* name, const cha
           return NULL;
      }
 
-     ce_load_string(buffer, str);
+     if(str){
+          ce_load_string(buffer, str);
+     }
 
      BufferNode* new_buffer_node = ce_append_buffer_to_list(head, buffer);
      if(!new_buffer_node){
@@ -1629,7 +1631,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'o':
           {
                Point end_of_line = *cursor;
-               end_of_line.x = ce_last_index(buffer->lines[cursor->y]);
+               end_of_line.x = strlen(buffer->lines[cursor->y]);
 
                // indent if necessary
                int64_t indent_len = ce_get_indentation_for_next_line(buffer, cursor, strlen(TAB_STRING));
@@ -2226,7 +2228,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                               }
                          }else{
                               // create a new one from an empty string
-                              config_state->view_current->buffer_node = new_buffer_from_string(head, "shell_command", "");
+                              config_state->view_current->buffer_node = new_buffer_from_string(head, "shell_command", NULL);
                               config_state->view_current->cursor = (Point){0, 0};
                               config_state->view_current->top_row = 0;
                               command_buffer_node = config_state->view_current->buffer_node;

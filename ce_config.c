@@ -1607,6 +1607,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     }
                }
                if(key == 'C') enter_insert_mode(config_state, cursor);
+               else ce_clamp_cursor(buffer, cursor);
           } break;
           case 'S':
           {

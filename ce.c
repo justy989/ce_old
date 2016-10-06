@@ -776,7 +776,6 @@ int64_t ce_find_delta_to_next_word(const Buffer* buffer, const Point* location, 
 {
      // TODO: make this ce_move_cursor_to_next_word. Also, this function appears to be broken.
      // test case: word = blah // put the cursor on the d in word and hit w or put the cursor on = and hit w
-     
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
 
@@ -798,6 +797,7 @@ bool ce_get_char(const Buffer* buffer, const Point* location, char* c)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
+     assert(ce_point_on_buffer(buffer, location));
 
      if(!ce_point_on_buffer(buffer, location)) return false;
 
@@ -1641,9 +1641,8 @@ bool ce_move_cursor_to_end_of_file(const Buffer* buffer, Point* cursor)
      if(!buffer->line_count) return false;
 
      int64_t last_line = buffer->line_count - 1;
-     int64_t len = strlen(buffer->lines[last_line]);
 
-     cursor->x = len - 1;
+     cursor->x = ce_last_index(buffer->lines[last_line]);
      cursor->y = last_line;
 
      return true;
@@ -2488,7 +2487,7 @@ int64_t ce_get_indentation_for_next_line(const Buffer* buffer, const Point* loca
 
      // then, check the line for a '{' that is unmatched on location's line + indent if you find one
      char curr;
-     for(Point iter = {strlen(buffer->lines[location->y]), location->y};
+     for(Point iter = {strlen(buffer->lines[location->y]) - 1, location->y};
          ce_get_char(buffer, &iter, &curr);
          iter.x--){
           if(curr == '{'){
@@ -2514,7 +2513,7 @@ void ce_sort_points(const Point** a, const Point** b)
      }
 }
 
-bool ce_point_in_range (const Point* p, const Point* start, const Point* end)
+bool ce_point_in_range(const Point* p, const Point* start, const Point* end)
 {
     if( ((p->y == start->y && p->x >= start->x) || (p->y > start->y)) &&
         ((p->y == end->y && p->x <= end->x) || (p->y < end->y )) ){
@@ -2522,4 +2521,14 @@ bool ce_point_in_range (const Point* p, const Point* start, const Point* end)
     }
 
      return false;
+}
+
+int64_t ce_last_index(const char* string)
+{
+     CE_CHECK_PTR_ARG(string);
+
+     int64_t len = strlen(string);
+     if(len) len--;
+
+     return len;
 }

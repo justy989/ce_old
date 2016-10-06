@@ -271,5 +271,6 @@ int     ce_ispunct            (int c);
 int     ce_iswordchar         (int c);
 void*   ce_memrchr            (const void* s, int c, size_t n);
 bool    ce_point_in_range     (const Point* p, const Point* start, const Point* end);
+int64_t ce_last_index         (const char* string);
 
 #endif

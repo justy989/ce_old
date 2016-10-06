@@ -1935,6 +1935,8 @@ TEST(sanity_prepend_string)
 
      ASSERT(buffer.line_count == 1);
      EXPECT(strcmp(buffer.lines[0], "MY TACOS") == 0);
+
+     ce_free_buffer(&buffer);
 }
 
 TEST(dupe_lines)
@@ -1948,9 +1950,17 @@ TEST(dupe_lines)
      buffer.lines[3] = strdup("BEST");
      buffer.lines[4] = strdup("YO");
 
-     char* duped = ce_dupe_lines(&buffer, 1, 3); 
-
+     char* duped = ce_dupe_lines(&buffer, 1, 3);
      EXPECT(strcmp(duped, "ARE\nTHE\nBEST\n") == 0);
+
+     free(duped);
+
+     duped = ce_dupe_lines(&buffer, 2, 0);
+     EXPECT(strcmp(duped, "TACOS\nARE\nTHE\n") == 0);
+
+     free(duped);
+
+     ce_free_buffer(&buffer);
 }
 
 TEST(sanity_point_in_line)

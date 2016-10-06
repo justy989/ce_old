@@ -1935,6 +1935,43 @@ TEST(sanity_prepend_string)
 
      ASSERT(buffer.line_count == 1);
      EXPECT(strcmp(buffer.lines[0], "MY TACOS") == 0);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(dupe_lines)
+{
+     Buffer buffer = {};
+     buffer.line_count = 5;
+     buffer.lines = malloc(5 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE");
+     buffer.lines[2] = strdup("THE");
+     buffer.lines[3] = strdup("BEST");
+     buffer.lines[4] = strdup("YO");
+
+     char* duped = ce_dupe_lines(&buffer, 1, 3);
+     EXPECT(strcmp(duped, "ARE\nTHE\nBEST\n") == 0);
+
+     free(duped);
+
+     duped = ce_dupe_lines(&buffer, 2, 0);
+     EXPECT(strcmp(duped, "TACOS\nARE\nTHE\n") == 0);
+
+     free(duped);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(sanity_point_in_line)
+{
+     Point start = {1, 1};
+     Point end = {3, 3};
+     Point a = {0, 0};
+     Point b = {2, 2};
+
+     EXPECT(ce_point_in_range(&a, &start, &end) == false);
+     EXPECT(ce_point_in_range(&b, &start, &end) == true);
 }
 
 int main()

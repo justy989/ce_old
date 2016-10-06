@@ -49,11 +49,6 @@ typedef struct{
      Point cursor;
 } DefaultConfigState;
 
-bool default_initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** argv, void** user_data);
-void default_destroyer(BufferNode* head, void* user_data);
-bool default_key_handler(int key, BufferNode* head, void* user_data);
-void default_view_drawer(const BufferNode* head, void* user_data);
-
 typedef struct Config{
      char* path;
      void* so_handle;
@@ -63,14 +58,12 @@ typedef struct Config{
      ce_view_drawer* view_drawer;
 } Config;
 
-const Config config_defaults = {NULL, NULL, default_initializer, default_destroyer, default_key_handler, default_view_drawer};
-
 bool config_open(Config* config, const char* path)
 {
      ce_message("load config: '%s'", path);
 
      // try to load the config shared object
-     *config = config_defaults;
+     memset(config, 0, sizeof(*config));
      config->so_handle = dlopen(path, RTLD_NOW);
      if(!config->so_handle){
           ce_message("dlopen() failed: '%s'", dlerror());
@@ -228,8 +221,7 @@ int main(int argc, char** argv)
      }
 
      // ncurses_init()
-     //keypad(initscr(), TRUE); // NOTE: keypad breaks backspace for justin!
-     initscr();
+     keypad(initscr(), TRUE); // NOTE: keypad breaks backspace for justin!
      cbreak();
      noecho();
 
@@ -393,87 +385,3 @@ int main(int argc, char** argv)
      return 0;
 }
 
-bool default_initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** argv, void** user_data)
-{
-     (void)(argc);
-     (void)(argv);
-     (void)(head);
-     (void)(terminal_dimensions);
-
-     DefaultConfigState* config_state = malloc(sizeof(*config_state));
-     if(!config_state) return false;
-
-     *user_data = config_state;
-     return true;
-}
-
-void default_destroyer(BufferNode* head, void* user_data)
-{
-     (void)(head);
-     free(user_data);
-}
-
-bool default_key_handler(int key, BufferNode* head, void* user_data)
-{
-     DefaultConfigState* config_state = user_data;
-     Buffer* buffer = head->buffer;
-
-     config_state->last_key = key;
-
-     switch(key){
-     default:
-          if(ce_insert_char(buffer, &config_state->cursor, key)) config_state->cursor.x++;
-          break;
-     case '':
-          return false;
-     case '':
-          ce_save_buffer(buffer, buffer->filename);
-          break;
-     }
-
-     return true;
-}
-
-void default_view_drawer(const BufferNode* head, void* user_data)
-{
-     DefaultConfigState* config_state = user_data;
-     Buffer* buffer = head->buffer;
-
-     // calculate the last line we can draw
-     int64_t last_line = config_state->start_line + (g_terminal_dimensions->y - 2);
-
-     // adjust the starting line based on where the cursor is
-     if(config_state->cursor.y > last_line) config_state->start_line++;
-     if(config_state->cursor.y < config_state->start_line) config_state->start_line--;
-
-     // recalc the starting line
-     last_line = config_state->start_line + (g_terminal_dimensions->y - 2);
-
-     if(last_line > (buffer->line_count - 1)){
-          last_line = buffer->line_count - 1;
-          config_state->start_line = last_line - (g_terminal_dimensions->y - 2);
-     }
-
-     if(config_state->start_line < 0) config_state->start_line = 0;
-
-     // print the range of lines we want to show
-     Point buffer_top_left = {0, config_state->start_line};
-     if(buffer->line_count){
-          standend();
-          Point term_top_left = {0, 0};
-          Point term_bottom_right = {g_terminal_dimensions->x, g_terminal_dimensions->y - 1};
-          ce_draw_buffer(buffer, &term_top_left, &term_bottom_right, &buffer_top_left);
-     }
-
-     // print the file and terminal info
-     char line_info[g_terminal_dimensions->x];
-     attron(A_REVERSE);
-     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %"PRId64" lines", buffer->filename, buffer->line_count);
-     snprintf(line_info, g_terminal_dimensions->x, "DEFAULT_CONFIG key: %d, term: %"PRId64", %"PRId64" cursor: %"PRId64", %"PRId64"",
-              config_state->last_key, g_terminal_dimensions->x, g_terminal_dimensions->y, config_state->cursor.x, config_state->cursor.y);
-     mvaddstr(g_terminal_dimensions->y - 1, g_terminal_dimensions->x - strlen(line_info), line_info);
-     attroff(A_REVERSE);
-
-     // reset the cursor
-     move(config_state->cursor.y - buffer_top_left.y, config_state->cursor.x);
-}

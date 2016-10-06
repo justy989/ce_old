@@ -1120,6 +1120,13 @@ int64_t ce_is_caps_var(const char* line, int64_t start_offset)
      return count - 1; // we over-counted on the last iteration
 }
 
+int set_color(Syntax syntax, bool highlighted)
+{
+     if(highlighted) attron(COLOR_PAIR(syntax + S_NORMAL_HIGHLIGHTED));
+     else attron(COLOR_PAIR(syntax));
+     return syntax;
+}
+
 static const char non_printable_repr = '~';
 
 bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Point* term_bottom_right,
@@ -1220,6 +1227,8 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                int highlight_color = 0;
                bool diff_add = buffer->lines[i][0] == '+';
                bool diff_remove = buffer->lines[i][0] == '-';
+               bool inside_highlight = false;
+               int fg_color = 0;
 
                // NOTE: pre-pass check for comments and strings out of view
                for(int64_t c = 0; c < buffer_top_left->x; ++c){
@@ -1269,22 +1278,41 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                     }
                }
 
+               Point point = {buffer_top_left->x, i};
+               if(ce_point_in_range(&point, &buffer->highlight_start, &buffer->highlight_end)) {
+                    inside_highlight = true;
+               } else if(inside_highlight) {
+                    inside_highlight = false;
+               }
+
                // skip line if we are offset by too much and can't show the line
                if(line_length <= buffer_top_left->x) continue;
 
                if(inside_comment || inside_multiline_comment){
-                    attron(COLOR_PAIR(S_COMMENT));
+                    fg_color = set_color(S_COMMENT, inside_highlight);
                }else if(inside_string){
-                    attron(COLOR_PAIR(S_STRING));
+                    fg_color = set_color(S_STRING, inside_highlight);
                }else if(highlighting_left){
-                    attron(COLOR_PAIR(highlight_color));
+                    fg_color = set_color(highlight_color, inside_highlight);
                }else if(diff_add){
-                    attron(COLOR_PAIR(S_DIFF_ADD));
+                    fg_color = set_color(S_DIFF_ADD, inside_highlight);
                }else if(diff_remove){
-                    attron(COLOR_PAIR(S_DIFF_REMOVE));
+                    fg_color = set_color(S_DIFF_REMOVE, inside_highlight);
+               }else{
+                    fg_color = set_color(S_NORMAL, inside_highlight);
                }
 
                for(int64_t c = 0; c < min; ++c){
+
+                    // check for the highlight
+                    point = (Point){c + buffer_top_left->x, i};
+                    if( ce_point_in_range(&point, &buffer->highlight_start, &buffer->highlight_end)){
+                         inside_highlight = true;
+                    }else if(inside_highlight){
+                         inside_highlight = false;
+                         fg_color = set_color(fg_color, inside_highlight);
+                    }
+
                     // syntax highlighting
                     if(highlighting_left == 0){
                          if(!inside_string){
@@ -1293,15 +1321,15 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                               }
 
                               if(highlighting_left){
-                                   attron(COLOR_PAIR(S_KEYWORD));
+                                   fg_color = set_color(S_KEYWORD, inside_highlight);
                               }else{
                                    highlighting_left = ce_is_caps_var(line_to_print, c);
                                    if(highlighting_left){
-                                        attron(COLOR_PAIR(S_CONSTANT));
+                                        fg_color = set_color(S_CONSTANT, inside_highlight);
                                    }else{
                                         highlighting_left = ce_is_preprocessor(line_to_print, c);
                                         if(highlighting_left){
-                                             attron(COLOR_PAIR(S_PREPROCESSOR));
+                                             fg_color = set_color(S_PREPROCESSOR, inside_highlight);
                                         }
                                    }
                               }
@@ -1313,11 +1341,11 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                               break;
                          case CT_SINGLE_LINE:
                               inside_comment = true;
-                              attron(COLOR_PAIR(S_COMMENT));
+                              fg_color = set_color(S_COMMENT, inside_highlight);
                               break;
                          case CT_BEGIN_MULTILINE:
                               inside_multiline_comment = true;
-                              attron(COLOR_PAIR(S_COMMENT));
+                              fg_color = set_color(S_COMMENT, inside_highlight);
                               break;
                          case CT_END_MULTILINE:
                               inside_multiline_comment = false;
@@ -1329,22 +1357,23 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
 
                          // if inside_string has changed, update the color
                          if(pre_quote_check != inside_string){
-                              if(inside_string) attron(COLOR_PAIR(S_STRING));
+                              if(inside_string) fg_color = set_color(S_STRING, inside_highlight);
                               else highlighting_left = 1;
                          }
                     }else{
                          highlighting_left--;
                          if(highlighting_left == 0){
                               standend();
+                              fg_color = set_color(S_NORMAL, inside_highlight);
 
                               if(inside_comment || inside_multiline_comment){
-                                   attron(COLOR_PAIR(S_COMMENT));
+                                   fg_color = set_color(S_COMMENT, inside_highlight);
                               }else if(inside_string){
-                                   attron(COLOR_PAIR(S_STRING));
+                                   fg_color = set_color(S_STRING, inside_highlight);
                               }else if(diff_add){
-                                   attron(COLOR_PAIR(S_DIFF_ADD));
+                                   fg_color = set_color(S_DIFF_ADD, inside_highlight);
                               }else if(diff_remove){
-                                   attron(COLOR_PAIR(S_DIFF_REMOVE));
+                                   fg_color = set_color(S_DIFF_REMOVE, inside_highlight);
                               }
                          }
                     }
@@ -2424,4 +2453,14 @@ void ce_sort_points(const Point** a, const Point** b)
           *a = *b;
           *b = temp;
      }
+}
+
+bool ce_point_in_range (const Point* p, const Point* start, const Point* end)
+{
+    if( ((p->y == start->y && p->x >= start->x) || (p->y > start->y)) &&
+        ((p->y == end->y && p->x <= end->x) || (p->y < end->y )) ){
+         return true;
+    }
+
+     return false;
 }

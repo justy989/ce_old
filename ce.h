@@ -25,13 +25,22 @@
 #define COLOR_BRIGHT_WHITE 15
 
 typedef enum {
-     S_KEYWORD = 1,
+     S_NORMAL,
+     S_KEYWORD,
      S_COMMENT,
      S_STRING,
      S_CONSTANT,
      S_PREPROCESSOR,
      S_DIFF_ADD,
      S_DIFF_REMOVE,
+     S_NORMAL_HIGHLIGHTED,
+     S_KEYWORD_HIGHLIGHTED,
+     S_COMMENT_HIGHLIGHTED,
+     S_STRING_HIGHLIGHTED,
+     S_CONSTANT_HIGHLIGHTED,
+     S_PREPROCESSOR_HIGHLIGHTED,
+     S_DIFF_ADD_HIGHLIGHTED,
+     S_DIFF_REMOVE_HIGHLIGHTED,
 } Syntax;
 
 #define CE_CHECK_PTR_ARG(arg)                                                 \
@@ -65,6 +74,8 @@ typedef struct {
      char** lines; // '\0' terminated, does not contain newlines, NULL if empty
      int64_t line_count;
      Point cursor;
+     Point highlight_start;
+     Point highlight_end;
      union {
           char* filename;
           char* name;
@@ -257,5 +268,6 @@ void    ce_sort_points        (const Point** a, const Point** b);
 int     ce_ispunct            (int c);
 int     ce_iswordchar         (int c);
 void*   ce_memrchr            (const void* s, int c, size_t n);
+bool    ce_point_in_range     (const Point* p, const Point* start, const Point* end);
 
 #endif

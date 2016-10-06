@@ -1121,31 +1121,56 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           {
                MEVENT event;
                if(getmouse(&event) == OK){
-                    if(event.bstate & BUTTON1_PRESSED){
-                         Point click = {event.x, event.y};
-                         config_state->view_current = ce_find_view_at_point(config_state->view_head, &click);
-                         click = (Point) {event.x - (config_state->view_current->top_left.x - config_state->view_current->left_column),
-                                          event.y - (config_state->view_current->top_left.y - config_state->view_current->top_row)};
-                         ce_set_cursor(config_state->view_current->buffer_node->buffer,
-                                       &config_state->view_current->cursor,
-                                       &click);
-                    }else if(event.bstate & (REPORT_MOUSE_POSITION | BUTTON2_PRESSED)){
-                         Point next_line = {0, cursor->y + SCROLL_LINES};
-                         if(ce_point_on_buffer(buffer, &next_line)){
-                              Point scroll_location = {0, buffer_view->top_row + SCROLL_LINES};
-                              scroll_view_to_location(buffer_view, &scroll_location);
-                              if(buffer_view->cursor.y < buffer_view->top_row)
-                                   ce_move_cursor(buffer, cursor, (Point){0, SCROLL_LINES});
-                         }
-                    }else if(event.bstate & BUTTON4_PRESSED){
-                         Point next_line = {0, cursor->y - SCROLL_LINES};
-                         if(ce_point_on_buffer(buffer, &next_line)){
-                              Point scroll_location = {0, buffer_view->top_row - SCROLL_LINES};
-                              scroll_view_to_location(buffer_view, &scroll_location);
-                              if(buffer_view->cursor.y > buffer_view->top_row + (buffer_view->bottom_right.y - buffer_view->top_left.y))
-                                   ce_move_cursor(buffer, cursor, (Point){0, -SCROLL_LINES});
-                         }
-                    }
+                    if(event.bstate & BUTTON1_PRESSED)
+                         ce_message("%s", "BUTTON1_PRESSED");
+                    else if(event.bstate & BUTTON1_RELEASED)
+                         ce_message("%s", "BUTTON1_RELEASED");
+                    else if(event.bstate & BUTTON1_CLICKED)
+                         ce_message("%s", "BUTTON1_CLICKED");
+                    else if(event.bstate & BUTTON1_DOUBLE_CLICKED)
+                         ce_message("%s", "BUTTON1_DOUBLE_CLICKED");
+                    else if(event.bstate & BUTTON1_TRIPLE_CLICKED)
+                         ce_message("%s", "BUTTON1_TRIPLE_CLICKED");
+                    else if(event.bstate & BUTTON2_PRESSED)
+                         ce_message("%s", "BUTTON2_PRESSED");
+                    else if(event.bstate & BUTTON2_RELEASED)
+                         ce_message("%s", "BUTTON2_RELEASED");
+                    else if(event.bstate & BUTTON2_CLICKED)
+                         ce_message("%s", "BUTTON2_CLICKED");
+                    else if(event.bstate & BUTTON2_DOUBLE_CLICKED)
+                         ce_message("%s", "BUTTON2_DOUBLE_CLICKED");
+                    else if(event.bstate & BUTTON2_TRIPLE_CLICKED)
+                         ce_message("%s", "BUTTON2_TRIPLE_CLICKED");
+                    else if(event.bstate & BUTTON3_PRESSED)
+                         ce_message("%s", "BUTTON3_PRESSED");
+                    else if(event.bstate & BUTTON3_RELEASED)
+                         ce_message("%s", "BUTTON3_RELEASED");
+                    else if(event.bstate & BUTTON3_CLICKED)
+                         ce_message("%s", "BUTTON3_CLICKED");
+                    else if(event.bstate & BUTTON3_DOUBLE_CLICKED)
+                         ce_message("%s", "BUTTON3_DOUBLE_CLICKED");
+                    else if(event.bstate & BUTTON3_TRIPLE_CLICKED)
+                         ce_message("%s", "BUTTON3_TRIPLE_CLICKED");
+                    else if(event.bstate & BUTTON4_PRESSED)
+                         ce_message("%s", "BUTTON4_PRESSED");
+                    else if(event.bstate & BUTTON4_RELEASED)
+                         ce_message("%s", "BUTTON4_RELEASED");
+                    else if(event.bstate & BUTTON4_CLICKED)
+                         ce_message("%s", "BUTTON4_CLICKED");
+                    else if(event.bstate & BUTTON4_DOUBLE_CLICKED)
+                         ce_message("%s", "BUTTON4_DOUBLE_CLICKED");
+                    else if(event.bstate & BUTTON4_TRIPLE_CLICKED)
+                         ce_message("%s", "BUTTON4_TRIPLE_CLICKED");
+                    else if(event.bstate & BUTTON_SHIFT)
+                         ce_message("%s", "BUTTON_SHIFT");
+                    else if(event.bstate & BUTTON_CTRL)
+                         ce_message("%s", "BUTTON_CTRL");
+                    else if(event.bstate & BUTTON_ALT)
+                         ce_message("%s", "BUTTON_ALT");
+                    else if(event.bstate & ALL_MOUSE_EVENTS)
+                         ce_message("%s", "ALL_MOUSE_EVENTS");
+                    else if(event.bstate & REPORT_MOUSE_POSITION)
+                         ce_message("%s", "REPORT_MOUSE_POSITION");
                }
           } break;
           case 127: // keypad unable to map

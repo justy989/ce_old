@@ -1953,6 +1953,17 @@ TEST(dupe_lines)
      EXPECT(strcmp(duped, "ARE\nTHE\nBEST\n") == 0);
 }
 
+TEST(sanity_point_in_line)
+{
+     Point start = {1, 1};
+     Point end = {3, 3};
+     Point a = {0, 0};
+     Point b = {2, 2};
+
+     EXPECT(ce_point_in_range(&a, &start, &end) == false);
+     EXPECT(ce_point_in_range(&b, &start, &end) == true);
+}
+
 int main()
 {
      Point terminal_dimensions = {17, 10};

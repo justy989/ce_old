@@ -1072,14 +1072,14 @@ void split_view(BufferView* head_view, BufferView* current_view, bool horizontal
      }
 }
 
-void page_up(BufferView* view)
+void half_page_up(BufferView* view)
 {
      int64_t view_height = view->bottom_right.y - view->top_left.y;
      Point delta = { 0, -view_height / 2 };
      ce_move_cursor(view->buffer_node->buffer, &view->cursor, delta);
 }
 
-void page_down(BufferView* view)
+void half_page_down(BufferView* view)
 {
      int64_t view_height = view->bottom_right.y - view->top_left.y;
      Point delta = { 0, view_height / 2 };
@@ -1860,12 +1860,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 23: // Ctrl + w
                ce_save_buffer(buffer, buffer->filename);
                break;
-#if 0
-          case 'v':
-          {
-               split_view(config_state->view_head, config_state->view_current, true);
-          } break;
-#endif
           case 'v':
           {
                config_state->vim_mode = VM_VISUAL_RANGE;
@@ -1877,9 +1871,13 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                config_state->visual_start = buffer_view->cursor;
           }
           break;
-          case 22: // Ctrl + v
+          case 7: // Ctrl + g
           {
                split_view(config_state->view_head, config_state->view_current, false);
+          } break;
+          case 22: // Ctrl + v
+          {
+               split_view(config_state->view_head, config_state->view_current, true);
           } break;
           case 17: // Ctrl + q
           {
@@ -2061,11 +2059,11 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case 21: // Ctrl + d
           {
-               page_up(config_state->view_current);
+               half_page_up(config_state->view_current);
           } break;
           case 4: // Ctrl + u
           {
-               page_down(config_state->view_current);
+               half_page_down(config_state->view_current);
           } break;
           case 8: // Ctrl + h
           {

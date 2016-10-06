@@ -1242,6 +1242,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          }
                     }
                }
+               break;
           case KEY_DC:
                ce_remove_char(buffer, cursor);
                break;

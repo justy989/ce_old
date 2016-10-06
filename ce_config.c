@@ -436,6 +436,10 @@ BufferNode* open_file_buffer(BufferNode* head, const char* filename)
           itr = itr->next;
      }
 
+     if(access(filename, F_OK) == 0){
+          return new_buffer_from_file(head, filename);
+     }
+
      if(!itr){
           // clang doesn't support nested functions so we need to deal with global state
           nftw_state.search_filename = filename;
@@ -1411,25 +1415,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                else
                     ce_set_cursor(buffer, cursor, &movement_end);
           } break;
-#if 0
-          case 8: // Ctrl + h
-          {
-               ce_move_cursor(buffer, cursor, (Point){-1, 0});
-          } break;
-          // NOTE: NOOOOO Ctrl + j == Ctrl + m == Return... WHY IS EVERYTHING SO TERRIBLE!
-          case 10: // Ctrl + j
-          {
-               ce_move_cursor(buffer, cursor, (Point){0, 1});
-          } break;
-          case 11: // Ctrl + k
-          {
-               ce_move_cursor(buffer, cursor, (Point){0, -1});
-          } break;
-          case 12: // Ctrl + l
-          {
-               ce_move_cursor(buffer, cursor, (Point){1, 0});
-          } break;
-#endif
           case '}':
           {
                if(ce_insert_char(buffer, cursor, key)){
@@ -2149,6 +2134,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     // save cursor
                     config_state->view_current->buffer_node->buffer->cursor = config_state->view_current->cursor;
                     config_state->view_current = next_view;
+                    config_state->vim_mode = VM_NORMAL;
                }
           }
           break;
@@ -2162,9 +2148,11 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     {
                          if(config_state->view_input->buffer_node->buffer->line_count){
                               int64_t line = atoi(config_state->view_input->buffer_node->buffer->lines[0]);
-                              config_state->view_current->cursor = (Point){0, line - 1};
-                              ce_move_cursor_to_soft_beginning_of_line(config_state->view_current->buffer_node->buffer,
-                                                                       &config_state->view_current->cursor);
+                              if(line > 0){
+                                   config_state->view_current->cursor = (Point){0, line - 1};
+                                   ce_move_cursor_to_soft_beginning_of_line(config_state->view_current->buffer_node->buffer,
+                                                                            &config_state->view_current->cursor);
+                              }
                          }
                     } break;
                     case 6: // Ctrl + f
@@ -2284,6 +2272,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          // save cursor
                          config_state->view_current->buffer_node->buffer->cursor = config_state->view_current->cursor;
                          config_state->view_current = next_view;
+                         config_state->vim_mode = VM_NORMAL;
                     }
                }
                break;
@@ -2297,6 +2286,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     // save cursor
                     config_state->view_current->buffer_node->buffer->cursor = config_state->view_current->cursor;
                     config_state->view_current = next_view;
+                    config_state->vim_mode = VM_NORMAL;
                }
           }
           break;
@@ -2311,6 +2301,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     // save cursor
                     config_state->view_current->buffer_node->buffer->cursor = config_state->view_current->cursor;
                     config_state->view_current = next_view;
+                    config_state->vim_mode = VM_NORMAL;
                }
           }
           break;

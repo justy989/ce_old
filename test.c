@@ -1974,6 +1974,17 @@ TEST(sanity_point_in_line)
      EXPECT(ce_point_in_range(&b, &start, &end) == true);
 }
 
+TEST(sanity_last_index)
+{
+     const char* short_str = "tacos";
+     const char* long_str = "TACOS ARE THE BEST";
+     const char* no_str = "";
+
+     EXPECT(ce_last_index(short_str) == 4);
+     EXPECT(ce_last_index(long_str) == 17);
+     EXPECT(ce_last_index(no_str) == 0);
+}
+
 int main()
 {
      Point terminal_dimensions = {17, 10};

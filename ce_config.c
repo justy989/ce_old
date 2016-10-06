@@ -325,7 +325,9 @@ BufferNode* new_buffer_from_string(BufferNode* head, const char* name, const cha
           return NULL;
      }
 
-     ce_load_string(buffer, str);
+     if(str){
+          ce_load_string(buffer, str);
+     }
 
      BufferNode* new_buffer_node = ce_append_buffer_to_list(head, buffer);
      if(!new_buffer_node){
@@ -449,18 +451,6 @@ BufferNode* open_file_buffer(BufferNode* head, const char* filename)
           return nftw_state.new_node;
      }
      return itr;
-}
-
-int64_t strlen_ignore_newlines(const char* str)
-{
-     int64_t count = 0;
-
-     while(*str){
-          if(*str != NEWLINE) count++;
-          str++;
-     }
-
-     return count;
 }
 
 bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** argv, void** user_data)
@@ -1174,8 +1164,7 @@ void yank_visual_lines(ConfigState* config_state)
      }
 
      Point start = {0, start_line};
-     Point end = {strlen(buffer->lines[end_line]) - 1, end_line};
-     if(end.x < 0) end.x = 0;
+     Point end = {ce_last_index(buffer->lines[end_line]), end_line};
 
      add_yank(config_state, '0', ce_dupe_string(buffer, &start, &end), YANK_LINE);
      add_yank(config_state, '"', ce_dupe_string(buffer, &start, &end), YANK_LINE);
@@ -1220,8 +1209,7 @@ void remove_visual_lines(ConfigState* config_state)
      }
 
      Point start = {0, start_line};
-     Point end = {strlen(buffer->lines[end_line]) - 1, end_line};
-     if(end.x < 0) end.x = 0;
+     Point end = {ce_last_index(buffer->lines[end_line]), end_line};
 
      char* removed_str = ce_dupe_lines(buffer, start.y, end.y);
      int64_t remove_len = strlen(removed_str);
@@ -1335,13 +1323,17 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                if(buffer->line_count){
                     if(cursor->x <= 0){
                          if(cursor->y){
-                              int64_t line_len = strlen(buffer->lines[cursor->y - 1]);
-                              ce_append_string(buffer, cursor->y - 1, buffer->lines[cursor->y]);
+                              int64_t prev_line_len = strlen(buffer->lines[cursor->y - 1]);
+                              int64_t cur_line_len = strlen(buffer->lines[cursor->y]);
+
+                              if(cur_line_len){
+                                   ce_append_string(buffer, cursor->y - 1, buffer->lines[cursor->y]);
+                              }
 
                               if(ce_remove_line(buffer, cursor->y)){
                                    backspace_push(&buffer_state->backspace_head, '\n');
                                    cursor->y--;
-                                   cursor->x = line_len;
+                                   cursor->x = prev_line_len;
                                    config_state->start_insert = *cursor;
                               }
                          }
@@ -1852,14 +1844,13 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                                    case 'c':
                                         movement_start = *cursor;
                                         ce_move_cursor_to_soft_beginning_of_line(buffer, &movement_start);
-                                   movement_end = (Point) {strlen(buffer->lines[cursor->y])-1, cursor->y}; // TODO: causes ce_dupe_string to fail (not on buffer)
+                                        movement_end = (Point) {ce_last_index(buffer->lines[cursor->y]), cursor->y}; // TODO: causes ce_dupe_string to fail (not on buffer)
                                         break;
                                    case 'd':
-                                        {
-                                             ce_move_cursor(buffer, cursor, (Point){-cursor->x, 0});
-                                             movement_start = (Point) {0, cursor->y};
-                                   movement_end = (Point) {strlen(buffer->lines[cursor->y])-1, cursor->y}; // TODO: causes ce_dupe_string to fail (not on buffer)
-                                        } break;
+                                        ce_move_cursor(buffer, cursor, (Point){-cursor->x, 0});
+                                        movement_start = (Point) {0, cursor->y};
+                                        movement_end = (Point) {ce_last_index(buffer->lines[cursor->y]), cursor->y}; // TODO: causes ce_dupe_string to fail (not on buffer)
+                                        break;
                                    default:
                                         // not a valid movement
                                         clear_keys(config_state);
@@ -2237,7 +2228,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                               }
                          }else{
                               // create a new one from an empty string
-                              config_state->view_current->buffer_node = new_buffer_from_string(head, "shell_command", "");
+                              config_state->view_current->buffer_node = new_buffer_from_string(head, "shell_command", NULL);
                               config_state->view_current->cursor = (Point){0, 0};
                               config_state->view_current->top_row = 0;
                               command_buffer_node = config_state->view_current->buffer_node;

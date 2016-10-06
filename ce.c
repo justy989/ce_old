@@ -443,6 +443,65 @@ char* ce_dupe_line(const Buffer* buffer, int64_t line)
      return memcpy(duped_line, buffer->lines[line], len - 2);
 }
 
+char* ce_dupe_lines(const Buffer* buffer, int64_t start_line, int64_t end_line)
+{
+     if(start_line < 0){
+          ce_message("%s() specified start line (%"PRId64") less than 0",
+                     __FUNCTION__, start_line);
+          return NULL;
+     }
+
+     if(end_line < 0){
+          ce_message("%s() specified end line (%"PRId64") less than 0",
+                     __FUNCTION__, end_line);
+          return NULL;
+     }
+
+     if(buffer->line_count <= start_line){
+          ce_message("%s() specified start line (%"PRId64") above buffer line count (%"PRId64")",
+                     __FUNCTION__, start_line, buffer->line_count);
+          return NULL;
+     }
+
+     if(buffer->line_count <= end_line){
+          ce_message("%s() specified end line (%"PRId64") above buffer line count (%"PRId64")",
+                     __FUNCTION__, end_line, buffer->line_count);
+          return NULL;
+     }
+
+     // NOTE: I feel like swap() should be in the c standard library? Maybe I should make a macro.
+     if(start_line > end_line){
+          int64_t tmp = end_line;
+          end_line = start_line;
+          start_line = tmp;
+     }
+
+     int64_t len = 0;
+     for(int64_t i = start_line; i <= end_line; ++i){
+          len += strlen(buffer->lines[i]) + 1; // account for newline
+     }
+     len++; // account for null terminator after final newline
+
+     char* duped_line = malloc(len);
+     if(!duped_line){
+          ce_message("%s() failed to allocate duped line", __FUNCTION__);
+          return NULL;
+     }
+
+     // copy each line, adding a newline to the end
+     int64_t line_len = 0;
+     char* itr = duped_line;
+     for(int64_t i = start_line; i <= end_line; ++i){
+          line_len = strlen(buffer->lines[i]);
+          memcpy(itr, buffer->lines[i], line_len);
+          itr[line_len] = '\n';
+          itr += (line_len + 1);
+     }
+
+     duped_line[len-1] = '\0';
+     return duped_line;
+}
+
 char* ce_dupe_buffer(const Buffer* buffer)
 {
      Point start = {};
@@ -1308,6 +1367,7 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                     point = (Point){c + buffer_top_left->x, i};
                     if( ce_point_in_range(&point, &buffer->highlight_start, &buffer->highlight_end)){
                          inside_highlight = true;
+                         fg_color = set_color(fg_color, inside_highlight);
                     }else if(inside_highlight){
                          inside_highlight = false;
                          fg_color = set_color(fg_color, inside_highlight);

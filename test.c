@@ -1937,6 +1937,22 @@ TEST(sanity_prepend_string)
      EXPECT(strcmp(buffer.lines[0], "MY TACOS") == 0);
 }
 
+TEST(dupe_lines)
+{
+     Buffer buffer = {};
+     buffer.line_count = 5;
+     buffer.lines = malloc(5 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE");
+     buffer.lines[2] = strdup("THE");
+     buffer.lines[3] = strdup("BEST");
+     buffer.lines[4] = strdup("YO");
+
+     char* duped = ce_dupe_lines(&buffer, 1, 3); 
+
+     EXPECT(strcmp(duped, "ARE\nTHE\nBEST\n") == 0);
+}
+
 int main()
 {
      Point terminal_dimensions = {17, 10};

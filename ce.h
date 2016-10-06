@@ -204,6 +204,7 @@ int64_t ce_compute_length                (const Buffer* buffer, const Point* sta
 char*   ce_dupe_string                   (const Buffer* buffer, const Point* start, const Point* end);
 char*   ce_dupe_buffer                   (const Buffer* buffer);
 char*   ce_dupe_line                     (const Buffer* buffer, int64_t line);
+char*   ce_dupe_lines                    (const Buffer* buffer, int64_t start_line, int64_t end_line);
 int64_t ce_get_indentation_for_next_line (const Buffer* buffer, const Point* location, int64_t tab_len);
 
 

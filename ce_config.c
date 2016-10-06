@@ -1112,6 +1112,97 @@ bool scroll_z_cursor(ConfigState* config_state)
      return false;
 }
 
+void yank_visual_range(ConfigState* config_state)
+{
+     Buffer* buffer = config_state->view_current->buffer_node->buffer;
+     Point* cursor = &config_state->view_current->cursor;
+     Point start = config_state->visual_start;
+     Point end = {cursor->x, cursor->y};
+
+     const Point* a = &start;
+     const Point* b = &end;
+
+     ce_sort_points(&a, &b);
+     ((Point*)(b))->x++;
+
+     add_yank(config_state, '0', ce_dupe_string(buffer, a, b), YANK_NORMAL);
+     add_yank(config_state, '"', ce_dupe_string(buffer, a, b), YANK_NORMAL);
+}
+
+void yank_visual_lines(ConfigState* config_state)
+{
+     Buffer* buffer = config_state->view_current->buffer_node->buffer;
+     Point* cursor = &config_state->view_current->cursor;
+     int64_t start_line = config_state->visual_start.y;
+     int64_t end_line = cursor->y;
+
+     if(start_line > end_line){
+          int64_t tmp = start_line;
+          start_line = end_line;
+          end_line = tmp;
+     }
+
+     Point start = {0, start_line};
+     Point end = {strlen(buffer->lines[end_line]), end_line};
+
+     add_yank(config_state, '0', ce_dupe_string(buffer, &start, &end), YANK_LINE);
+     add_yank(config_state, '"', ce_dupe_string(buffer, &start, &end), YANK_LINE);
+}
+
+void remove_visual_range(ConfigState* config_state)
+{
+     Point* cursor = &config_state->view_current->cursor;
+     Buffer* buffer = config_state->view_current->buffer_node->buffer;
+     BufferState* buffer_state = buffer->user_data;
+     Point start = config_state->visual_start;
+     Point end = {cursor->x, cursor->y};
+
+     const Point* a = &start;
+     const Point* b = &end;
+
+     ce_sort_points(&a, &b);
+     ((Point*)(b))->x++;
+
+     char* removed_str = ce_dupe_string(buffer, a, b);
+     int64_t remove_len = ce_compute_length(buffer, a, b);
+     if(ce_remove_string(buffer, a, remove_len)){
+          ce_commit_remove_string(&buffer_state->commit_tail, a, cursor, a, removed_str);
+          ce_set_cursor(buffer, cursor, a);
+     }else{
+          free(removed_str);
+     }
+     config_state->vim_mode = VM_NORMAL;
+}
+
+void remove_visual_lines(ConfigState* config_state)
+{
+     Point* cursor = &config_state->view_current->cursor;
+     Buffer* buffer = config_state->view_current->buffer_node->buffer;
+     BufferState* buffer_state = buffer->user_data;
+     int64_t start_line = config_state->visual_start.y;
+     int64_t end_line = cursor->y;
+
+     if(start_line > end_line){
+          int64_t tmp = start_line;
+          start_line = end_line;
+          end_line = tmp;
+     }
+
+     Point start = {0, start_line};
+     Point end = {strlen(buffer->lines[end_line]), end_line};
+
+     char* removed_str = ce_dupe_lines(buffer, start.y, end.y);
+     int64_t remove_len = strlen(removed_str);
+     if(ce_remove_string(buffer, &start, remove_len)){
+          ce_commit_remove_string(&buffer_state->commit_tail, &start, cursor, &start,
+                                  removed_str);
+          ce_set_cursor(buffer, cursor, &start);
+     }else{
+          free(removed_str);
+     }
+     config_state->vim_mode = VM_NORMAL;
+}
+
 bool key_handler(int key, BufferNode* head, void* user_data)
 {
      ConfigState* config_state = user_data;
@@ -1539,24 +1630,38 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case 'y':
           {
-               movement_state_t m_state = try_generic_movement(config_state, buffer, cursor, &movement_start, &movement_end);
-               switch(m_state){
-               case MOVEMENT_CONTINUE:
-                    return true; // no movement yet, wait for one!
-               case MOVEMENT_COMPLETE:
-                    add_yank(config_state, '0', ce_dupe_string(buffer, &movement_start, &movement_end), YANK_NORMAL);
-                    add_yank(config_state, '"', ce_dupe_string(buffer, &movement_start, &movement_end), YANK_NORMAL);
-                    break;
-               case MOVEMENT_INVALID:
-                    switch(config_state->movement_keys[0]){
-                    case 'y':
-                         add_yank(config_state, '0', strdup(buffer->lines[cursor->y]), YANK_LINE);
-                         add_yank(config_state, '"', strdup(buffer->lines[cursor->y]), YANK_LINE);
+               if(config_state->vim_mode == VM_VISUAL_RANGE){
+                    Point end = *cursor;
+                    end.x++;
+                    add_yank(config_state, '0', ce_dupe_string(buffer, &config_state->visual_start, &end), YANK_NORMAL);
+                    add_yank(config_state, '"', ce_dupe_string(buffer, &config_state->visual_start, &end), YANK_NORMAL);
+                    config_state->vim_mode = VM_NORMAL;
+               }else if(config_state->vim_mode == VM_VISUAL_LINE){
+                    Point start = {0, config_state->visual_start.y};
+                    Point end = {strlen(buffer->lines[cursor->y]), cursor->y};
+                    add_yank(config_state, '0', ce_dupe_string(buffer, &start, &end), YANK_LINE);
+                    add_yank(config_state, '"', ce_dupe_string(buffer, &start, &end), YANK_LINE);
+                    config_state->vim_mode = VM_NORMAL;
+               }else{
+                    movement_state_t m_state = try_generic_movement(config_state, buffer, cursor, &movement_start, &movement_end);
+                    switch(m_state){
+                    case MOVEMENT_CONTINUE:
+                         return true; // no movement yet, wait for one!
+                    case MOVEMENT_COMPLETE:
+                         add_yank(config_state, '0', ce_dupe_string(buffer, &movement_start, &movement_end), YANK_NORMAL);
+                         add_yank(config_state, '"', ce_dupe_string(buffer, &movement_start, &movement_end), YANK_NORMAL);
                          break;
-                    default:
+                    case MOVEMENT_INVALID:
+                         switch(config_state->movement_keys[0]){
+                         case 'y':
+                              add_yank(config_state, '0', strdup(buffer->lines[cursor->y]), YANK_LINE);
+                              add_yank(config_state, '"', strdup(buffer->lines[cursor->y]), YANK_LINE);
+                              break;
+                         default:
+                              break;
+                         }
                          break;
                     }
-                    break;
                }
           } break;
           case 'P':
@@ -1564,6 +1669,13 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           {
                YankNode* yank = find_yank(config_state, '"');
                if(yank){
+                    // NOTE: unsure why this isn't plug and play !
+                    if(config_state->vim_mode == VM_VISUAL_RANGE){
+                         remove_visual_range(config_state);
+                    }else if(config_state->vim_mode == VM_VISUAL_LINE){
+                         remove_visual_lines(config_state);
+                    }
+
                     switch(yank->mode){
                     case YANK_LINE:
                     {
@@ -1621,14 +1733,22 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'C':
           case 'D':
           {
-               Point end = *cursor;
-               ce_move_cursor_to_end_of_line(buffer, &end);
-               int64_t n_deletes = strlen(&buffer->lines[cursor->y][cursor->x]);
-               if(n_deletes){
-                    char* save_string = ce_dupe_string(buffer, cursor, &end);
-                    if(ce_remove_string(buffer, cursor, n_deletes)){
-                         ce_commit_remove_string(&buffer_state->commit_tail, cursor, cursor, cursor, save_string);
-                         add_yank(config_state, '"', strdup(save_string), YANK_NORMAL);
+               if(config_state->vim_mode == VM_VISUAL_RANGE){
+                    yank_visual_range(config_state);
+                    remove_visual_range(config_state);
+               }else if(config_state->vim_mode == VM_VISUAL_LINE){
+                    yank_visual_lines(config_state);
+                    remove_visual_lines(config_state);
+               }else{
+                    Point end = *cursor;
+                    ce_move_cursor_to_end_of_line(buffer, &end);
+                    int64_t n_deletes = strlen(&buffer->lines[cursor->y][cursor->x]);
+                    if(n_deletes){
+                         char* save_string = ce_dupe_string(buffer, cursor, &end);
+                         if(ce_remove_string(buffer, cursor, n_deletes)){
+                              ce_commit_remove_string(&buffer_state->commit_tail, cursor, cursor, cursor, save_string);
+                              add_yank(config_state, '"', strdup(save_string), YANK_NORMAL);
+                         }
                     }
                }
                if(key == 'C') enter_insert_mode(config_state, cursor);
@@ -1642,69 +1762,78 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'c':
           case 'd':
           {
-               for(size_t cm = 0; cm < config_state->command_multiplier; cm++){
-                    movement_state_t m_state = try_generic_movement(config_state, buffer, cursor, &movement_start, &movement_end);
-                    if(m_state == MOVEMENT_CONTINUE) return true;
+               if(config_state->vim_mode == VM_VISUAL_RANGE){
+                    yank_visual_range(config_state);
+                    remove_visual_range(config_state);
+               }else if(config_state->vim_mode == VM_VISUAL_LINE){
+                    yank_visual_lines(config_state);
+                    remove_visual_lines(config_state);
+               }else{
+                    for(size_t cm = 0; cm < config_state->command_multiplier; cm++){
+                         movement_state_t m_state = try_generic_movement(config_state, buffer, cursor, &movement_start, &movement_end);
+                         if(m_state == MOVEMENT_CONTINUE) return true;
 
-                    YankMode yank_mode = YANK_NORMAL;
-                    if(m_state == MOVEMENT_INVALID){
-                         switch(config_state->movement_keys[0]){
-                              case 'c':
-                                   movement_start = *cursor;
-                                   ce_move_cursor_to_soft_beginning_of_line(buffer, &movement_start);
-                                   movement_end = (Point) {strlen(buffer->lines[cursor->y]), cursor->y}; // TODO: causes ce_dupe_string to fail (not on buffer)
-                                   yank_mode = YANK_LINE;
-                                   break;
-                              case 'd':
-                              {
-                                   ce_move_cursor(buffer, cursor, (Point){-cursor->x, 0});
-                                   movement_start = (Point) {0, cursor->y};
-                                   movement_end = (Point) {strlen(buffer->lines[cursor->y]), cursor->y}; // TODO: causes ce_dupe_string to fail (not on buffer)
-                                   yank_mode = YANK_LINE;
-                              } break;
-                              default:
-                                   // not a valid movement
-                                   clear_keys(config_state);
-                                   return true;
+                         YankMode yank_mode = YANK_NORMAL;
+                         if(m_state == MOVEMENT_INVALID){
+                              switch(config_state->movement_keys[0]){
+                                   case 'c':
+                                        movement_start = *cursor;
+                                        ce_move_cursor_to_soft_beginning_of_line(buffer, &movement_start);
+                                        movement_end = (Point) {strlen(buffer->lines[cursor->y]), cursor->y}; // TODO: causes ce_dupe_string to fail (not on buffer)
+                                        yank_mode = YANK_LINE;
+                                        break;
+                                   case 'd':
+                                        {
+                                             ce_move_cursor(buffer, cursor, (Point){-cursor->x, 0});
+                                             movement_start = (Point) {0, cursor->y};
+                                             movement_end = (Point) {strlen(buffer->lines[cursor->y]), cursor->y}; // TODO: causes ce_dupe_string to fail (not on buffer)
+                                             yank_mode = YANK_LINE;
+                                        } break;
+                                   default:
+                                        // not a valid movement
+                                        clear_keys(config_state);
+                                        return true;
+                              }
                          }
-                    }
-                    else if(strchr("$%eTtFf", config_state->movement_keys[0])){
-                         movement_end.x++; // include movement_end char
-                    }
+                         else if(strchr("$%eTtFf", config_state->movement_keys[0])){
+                              movement_end.x++; // include movement_end char
+                         }
 
-                    // this is a generic movement
+                         // this is a generic movement
 
-                    // delete all chars movement_start..movement_end inclusive
-                    int64_t n_deletes = ce_compute_length(buffer, &movement_start, &movement_end);
-                    if(!n_deletes){
-                         // nothing to do
-                         clear_keys(config_state);
-                         return true;
-                    }
+                         // delete all chars movement_start..movement_end inclusive
+                         int64_t n_deletes = ce_compute_length(buffer, &movement_start, &movement_end);
+                         if(!n_deletes){
+                              // nothing to do
+                              clear_keys(config_state);
+                              return true;
+                         }
 
-                    char* save_string;
-                    char* yank_string;
-                    if(config_state->movement_keys[0] == 'd'){
-                         n_deletes++; // delete the new line
-                         size_t save_len = strlen(buffer->lines[movement_start.y]) + 2;
-                         save_string = malloc(sizeof(*save_string)*save_len);
-                         save_string[save_len-2] = '\n';
-                         save_string[save_len-1] = '\0';
-                         memcpy(save_string, buffer->lines[movement_start.y], save_len - 2);
-                         yank_string = strdup(buffer->lines[movement_start.y]);
-                    }
-                    else{
-                         save_string = ce_dupe_string(buffer, &movement_start, &movement_end);
-                         yank_string = strdup(save_string);
-                    }
+                         char* save_string;
+                         char* yank_string;
+                         if(config_state->movement_keys[0] == 'd'){
+                              n_deletes++; // delete the new line
+                              size_t save_len = strlen(buffer->lines[movement_start.y]) + 2;
+                              save_string = malloc(sizeof(*save_string)*save_len);
+                              save_string[save_len-2] = '\n';
+                              save_string[save_len-1] = '\0';
+                              memcpy(save_string, buffer->lines[movement_start.y], save_len - 2);
+                              yank_string = strdup(buffer->lines[movement_start.y]);
+                         }
+                         else{
+                              save_string = ce_dupe_string(buffer, &movement_start, &movement_end);
+                              yank_string = strdup(save_string);
+                         }
 
-                    if(ce_remove_string(buffer, &movement_start, n_deletes)){
-                         ce_commit_remove_string(&buffer_state->commit_tail, &movement_start, cursor, &movement_start, save_string);
-                         add_yank(config_state, '"', yank_string, yank_mode);
-                    }
+                         if(ce_remove_string(buffer, &movement_start, n_deletes)){
+                              ce_commit_remove_string(&buffer_state->commit_tail, &movement_start, cursor, &movement_start, save_string);
+                              add_yank(config_state, '"', yank_string, yank_mode);
+                         }
 
-                    *cursor = movement_start;
+                         *cursor = movement_start;
+                    }
                }
+
                if(config_state->command_key=='c') enter_insert_mode(config_state, cursor);
 
           } break;

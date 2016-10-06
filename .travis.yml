@@ -2,7 +2,7 @@ language: c
 os: linux
 dist: trusty
 compiler:
- -clang
- -gcc
+ - clang
+ - gcc
 install: make all
 script: make test

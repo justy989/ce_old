@@ -1145,7 +1145,13 @@ void yank_visual_range(ConfigState* config_state)
      const Point* b = &end;
 
      ce_sort_points(&a, &b);
-     ((Point*)(b))->x++;
+
+     // to avoid modifying a const point, explicitly check start and end before extending the end point
+     if(b == &start){
+          start.x++;
+     }else if(b == &end){
+          end.x++;
+     }
 
      add_yank(config_state, '0', ce_dupe_string(buffer, a, b), YANK_NORMAL);
      add_yank(config_state, '"', ce_dupe_string(buffer, a, b), YANK_NORMAL);
@@ -1183,7 +1189,13 @@ void remove_visual_range(ConfigState* config_state)
      const Point* b = &end;
 
      ce_sort_points(&a, &b);
-     ((Point*)(b))->x++;
+
+     // to avoid modifying a const point, explicitly check start and end before extending the end point
+     if(b == &start){
+          start.x++;
+     }else if(b == &end){
+          end.x++;
+     }
 
      char* removed_str = ce_dupe_string(buffer, a, b);
      int64_t remove_len = ce_compute_length(buffer, a, b);

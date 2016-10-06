@@ -1685,6 +1685,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     *cursor = movement_start;
                }
                if(config_state->command_key=='c') enter_insert_mode(config_state, cursor);
+               else ce_clamp_cursor(buffer, cursor);
 
           } break;
           case 's':

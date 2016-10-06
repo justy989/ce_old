@@ -1446,6 +1446,7 @@ bool ce_move_cursor_to_end_of_line(const Buffer* buffer, Point* cursor)
      if(!ce_point_on_buffer(buffer, cursor)) return false;
 
      cursor->x = strlen(buffer->lines[cursor->y])-1; 
+     if(cursor->x < 0) cursor->x = 0;
      return true;
 }
 

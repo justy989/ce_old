@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 #define TAB_STRING "     "
+#define SCROLL_LINES 1
 
 static const char* cmd_buffer_name = "shell_command";
 
@@ -880,9 +881,26 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          ce_set_cursor(config_state->view_current->buffer_node->buffer,
                                        &config_state->view_current->cursor,
                                        &click);
+                    }else if(event.bstate & (REPORT_MOUSE_POSITION | BUTTON2_PRESSED)){
+                         Point next_line = {0, cursor->y + SCROLL_LINES};
+                         if(ce_point_on_buffer(buffer, &next_line)){
+                              Point scroll_location = {0, buffer_view->top_row + SCROLL_LINES};
+                              scroll_view_to_location(buffer_view, &scroll_location);
+                              if(buffer_view->cursor.y < buffer_view->top_row)
+                                   ce_move_cursor(buffer, cursor, (Point){0, SCROLL_LINES});
+                         }
+                    }else if(event.bstate & BUTTON4_PRESSED){
+                         Point next_line = {0, cursor->y - SCROLL_LINES};
+                         if(ce_point_on_buffer(buffer, &next_line)){
+                              Point scroll_location = {0, buffer_view->top_row - SCROLL_LINES};
+                              scroll_view_to_location(buffer_view, &scroll_location);
+                              if(buffer_view->cursor.y > buffer_view->top_row + (buffer_view->bottom_right.y - buffer_view->top_left.y))
+                                   ce_move_cursor(buffer, cursor, (Point){0, -SCROLL_LINES});
+                         }
                     }
                }
           } break;
+          case 127: // keypad unable to map
           case KEY_BACKSPACE:
                if(buffer->line_count){
                     if(cursor->x <= 0){
@@ -913,8 +931,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          }
                     }
                }
-          case 126: // delete ?
-               //ce_remove_char(buffer, cursor);
+          case KEY_DC:
+               ce_remove_char(buffer, cursor);
                break;
           case '\t':
           {
@@ -1118,10 +1136,22 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          ce_set_cursor(config_state->view_current->buffer_node->buffer,
                                        &config_state->view_current->cursor,
                                        &click);
-                    }else if(event.bstate & REPORT_MOUSE_POSITION){
-                         Point scroll_location = {0, buffer_view->top_row + 1};
-                         scroll_view_to_location(buffer_view, &scroll_location);
-                         if(buffer_view->cursor.y <= buffer_view->top_row) buffer_view->cursor.y++;
+                    }else if(event.bstate & (REPORT_MOUSE_POSITION | BUTTON2_PRESSED)){
+                         Point next_line = {0, cursor->y + SCROLL_LINES};
+                         if(ce_point_on_buffer(buffer, &next_line)){
+                              Point scroll_location = {0, buffer_view->top_row + SCROLL_LINES};
+                              scroll_view_to_location(buffer_view, &scroll_location);
+                              if(buffer_view->cursor.y < buffer_view->top_row)
+                                   ce_move_cursor(buffer, cursor, (Point){0, SCROLL_LINES});
+                         }
+                    }else if(event.bstate & BUTTON4_PRESSED){
+                         Point next_line = {0, cursor->y - SCROLL_LINES};
+                         if(ce_point_on_buffer(buffer, &next_line)){
+                              Point scroll_location = {0, buffer_view->top_row - SCROLL_LINES};
+                              scroll_view_to_location(buffer_view, &scroll_location);
+                              if(buffer_view->cursor.y > buffer_view->top_row + (buffer_view->bottom_right.y - buffer_view->top_left.y))
+                                   ce_move_cursor(buffer, cursor, (Point){0, -SCROLL_LINES});
+                         }
                     }
                }
           } break;

@@ -1549,6 +1549,12 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     ce_commit_change_string(&buffer_state->commit_tail, &join_loc, cursor, cursor, strdup("\n"), save_str);
                }
           } break;
+          case KEY_UP:
+          case KEY_DOWN:
+               for(size_t cm = 0; cm < config_state->command_multiplier; cm++){
+                    ce_move_cursor(buffer, cursor, (Point){0, (config_state->command_key == KEY_DOWN) ? 1 : -1});
+               }
+               break;
           case 'j':
           case 'k':
                for(size_t cm = 0; cm < config_state->command_multiplier; cm++){
@@ -1570,8 +1576,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 't':
           case 'F':
           case 'T':
-          case KEY_UP:
-          case KEY_DOWN:
           case KEY_LEFT:
           case KEY_RIGHT:
           {
@@ -2370,6 +2374,7 @@ search:
                     Point match;
                     if(ce_find_string(buffer, cursor, yank->text, &match, config_state->search_command.direction)){
                          ce_set_cursor(buffer, cursor, &match);
+                         center_view(config_state->view_current);
                     }
                }
           } break;
@@ -2381,6 +2386,7 @@ search:
                     Point match;
                     if(ce_find_string(buffer, cursor, yank->text, &match, ce_reverse_direction(config_state->search_command.direction))){
                          ce_set_cursor(buffer, cursor, &match);
+                         center_view(config_state->view_current);
                     }
                }
           } break;
@@ -2618,20 +2624,25 @@ void view_drawer(const BufferNode* head, void* user_data)
      }
 
      standend();
+
+     const char* search = NULL;
+     YankNode* yank = find_yank(config_state, '/');
+     if(yank) search = yank->text;
+
      // NOTE: always draw from the head
-     ce_draw_views(config_state->view_head);
+     ce_draw_views(config_state->view_head, search);
 
      if(config_state->input){
           attron(A_REVERSE);
           move(input_top_left.y - 1, 0);
           for(int i = 0; i < g_terminal_dimensions->x; ++i) addch(' ');
-          mvprintw(input_top_left.y - 1, 0, "%s (in normal mode: ctrl+n next ctrl+p prev)", config_state->input_message);
+          mvprintw(input_top_left.y - 1, 0, "%s (ctrl+n next ctrl+p prev)", config_state->input_message);
           attroff(A_REVERSE);
           for(int y = input_top_left.y; y <= input_bottom_right.y; ++y){
                move(y, 0);
                clrtoeol();
           }
-          ce_draw_views(config_state->view_input);
+          ce_draw_views(config_state->view_input, search);
      }
 
      attron(A_REVERSE);

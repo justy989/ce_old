@@ -1198,7 +1198,7 @@ int set_color(Syntax syntax, bool highlighted)
 static const char non_printable_repr = '~';
 
 bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Point* term_bottom_right,
-                    const Point* buffer_top_left)
+                    const Point* buffer_top_left, const char* highlight_word)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(term_top_left);
@@ -1274,6 +1274,8 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
      }
 
      // TODO: if we found a closing multiline comment, make sure there is a matching opening multiline comment
+     size_t highlight_word_len = 0;
+     if(highlight_word) highlight_word_len = strlen(highlight_word);
 
      for(int64_t i = buffer_top_left->y; i <= last_line; ++i) {
           move(term_top_left->y + (i - buffer_top_left->y), term_top_left->x);
@@ -1291,11 +1293,12 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                bool inside_string = false;
                char last_quote_char = 0;
                bool inside_comment = false;
-               int64_t highlighting_left = 0;
+               int64_t color_left = 0;
                int highlight_color = 0;
                bool diff_add = buffer->lines[i][0] == '+';
                bool diff_remove = buffer->lines[i][0] == '-';
                bool inside_highlight = false;
+               int64_t highlighting_left = 0;
                int fg_color = 0;
 
                // NOTE: pre-pass check for comments and strings out of view
@@ -1315,27 +1318,37 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                          break;
                     }
 
+                    if(highlight_word && strncmp(buffer_line + c, highlight_word, highlight_word_len) == 0){
+                         highlighting_left = highlight_word_len;
+                         inside_highlight = true;
+                    }else if(inside_highlight){
+                         highlighting_left--;
+                         if(!highlighting_left){
+                              inside_highlight = false;
+                         }
+                    }
+
                     ce_is_string_literal(buffer_line, c, line_length, &inside_string, &last_quote_char);
 
                     // subtract from what is left of the keyword if we found a keyword earlier
-                    if(highlighting_left){
-                         highlighting_left--;
+                    if(color_left){
+                         color_left--;
                     }else{
                          if(!inside_string){
                               if(!inside_comment && !inside_multiline_comment){
                                    int64_t keyword_left = ce_is_c_keyword(buffer_line, c);
                                    if(keyword_left){
-                                        highlighting_left = keyword_left;
+                                        color_left = keyword_left;
                                         highlight_color = S_KEYWORD;
                                    }else{
                                         keyword_left = ce_is_caps_var(buffer_line, c);
                                         if(keyword_left){
-                                             highlighting_left = keyword_left;
+                                             color_left = keyword_left;
                                              highlight_color = S_CONSTANT;
                                         }else{
                                              keyword_left = ce_is_preprocessor(buffer_line, c);
                                              if(keyword_left){
-                                                  highlighting_left = keyword_left;
+                                                  color_left = keyword_left;
                                                   highlight_color = S_PREPROCESSOR;
 
                                              }
@@ -1355,7 +1368,7 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                     fg_color = set_color(S_COMMENT, inside_highlight);
                }else if(inside_string){
                     fg_color = set_color(S_STRING, inside_highlight);
-               }else if(highlighting_left){
+               }else if(color_left){
                     fg_color = set_color(highlight_color, inside_highlight);
                }else if(diff_add){
                     fg_color = set_color(S_DIFF_ADD, inside_highlight);
@@ -1369,27 +1382,43 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                     if(ce_point_in_range(&point, &buffer->highlight_start, &buffer->highlight_end)){
                          inside_highlight = true;
                          set_color(fg_color, inside_highlight);
-                    }else if(inside_highlight){
-                         inside_highlight = false;
-                         set_color(fg_color, inside_highlight);
+                    }else{
+                         if(highlight_word && strncmp(buffer_line + c, highlight_word, highlight_word_len) == 0){
+                              highlighting_left = highlight_word_len;
+                              inside_highlight = true;
+                              set_color(fg_color, inside_highlight);
+                         }else if(inside_highlight){
+                              if(highlighting_left){
+                                   highlighting_left--;
+                                   if(!highlighting_left){
+                                        inside_highlight = false;
+                                        set_color(fg_color, inside_highlight);
+                                   }
+                              }else{
+                                   inside_highlight = false;
+                                   set_color(fg_color, inside_highlight);
+
+                              }
+                         }
                     }
 
+
                     // syntax highlighting
-                    if(highlighting_left == 0){
+                    if(color_left == 0){
                          if(!inside_string){
                               if(!inside_comment && !inside_multiline_comment){
-                                   highlighting_left = ce_is_c_keyword(line_to_print, c);
+                                   color_left = ce_is_c_keyword(line_to_print, c);
                               }
 
-                              if(highlighting_left){
+                              if(color_left){
                                    fg_color = set_color(S_KEYWORD, inside_highlight);
                               }else{
-                                   highlighting_left = ce_is_caps_var(line_to_print, c);
-                                   if(highlighting_left){
+                                   color_left = ce_is_caps_var(line_to_print, c);
+                                   if(color_left){
                                         fg_color = set_color(S_CONSTANT, inside_highlight);
                                    }else{
-                                        highlighting_left = ce_is_preprocessor(line_to_print, c);
-                                        if(highlighting_left){
+                                        color_left = ce_is_preprocessor(line_to_print, c);
+                                        if(color_left){
                                              fg_color = set_color(S_PREPROCESSOR, inside_highlight);
                                         }
                                    }
@@ -1419,11 +1448,11 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                          // if inside_string has changed, update the color
                          if(pre_quote_check != inside_string){
                               if(inside_string) fg_color = set_color(S_STRING, inside_highlight);
-                              else highlighting_left = 1;
+                              else color_left = 1;
                          }
                     }else{
-                         highlighting_left--;
-                         if(highlighting_left == 0){
+                         color_left--;
+                         if(color_left == 0){
                               fg_color = set_color(S_NORMAL, inside_highlight);
 
                               if(inside_comment || inside_multiline_comment){
@@ -2221,9 +2250,9 @@ void draw_view_bottom_right_borders(const BufferView* view)
      }
 }
 
-bool draw_vertical_views(const BufferView* view, bool already_drawn);
+bool draw_vertical_views(const BufferView* view, bool already_drawn, const char* highlight_word);
 
-bool draw_horizontal_views(const BufferView* view, bool already_drawn)
+bool draw_horizontal_views(const BufferView* view, bool already_drawn, const char* highlight_word)
 {
      const BufferView* itr = view;
      while(itr){
@@ -2231,10 +2260,10 @@ bool draw_horizontal_views(const BufferView* view, bool already_drawn)
           // or if this is any view other than the first view
           // and we have a horizontal view below us, then draw the horizontal views
           if(((!already_drawn && itr == view) || (itr != view)) && itr->next_vertical){
-               draw_vertical_views(itr, true);
+               draw_vertical_views(itr, true, highlight_word);
           }else{
                Point buffer_top_left = {itr->left_column, itr->top_row};
-               ce_draw_buffer(itr->buffer_node->buffer, &itr->top_left, &itr->bottom_right, &buffer_top_left);
+               ce_draw_buffer(itr->buffer_node->buffer, &itr->top_left, &itr->bottom_right, &buffer_top_left, highlight_word);
                draw_view_bottom_right_borders(itr);
           }
 
@@ -2244,7 +2273,7 @@ bool draw_horizontal_views(const BufferView* view, bool already_drawn)
      return true;
 }
 
-bool draw_vertical_views(const BufferView* view, bool already_drawn)
+bool draw_vertical_views(const BufferView* view, bool already_drawn, const char* highlight_word)
 {
      const BufferView* itr = view;
      while(itr){
@@ -2252,10 +2281,10 @@ bool draw_vertical_views(const BufferView* view, bool already_drawn)
           // or if this is any view other than the first view
           // and we have a vertical view below us, then draw the vertical views
           if(((!already_drawn && itr == view) || (itr != view)) && itr->next_horizontal){
-               draw_horizontal_views(itr, true);
+               draw_horizontal_views(itr, true, highlight_word);
           }else{
                Point buffer_top_left = {itr->left_column, itr->top_row};
-               ce_draw_buffer(itr->buffer_node->buffer, &itr->top_left, &itr->bottom_right, &buffer_top_left);
+               ce_draw_buffer(itr->buffer_node->buffer, &itr->top_left, &itr->bottom_right, &buffer_top_left, highlight_word);
                draw_view_bottom_right_borders(itr);
           }
 
@@ -2319,11 +2348,11 @@ bool connect_borders(const BufferView* view)
             connect_at_point(&bottom_right) && connect_at_point(&bottom_left);
 }
 
-bool ce_draw_views(const BufferView* view)
+bool ce_draw_views(const BufferView* view, const char* highlight_word)
 {
      CE_CHECK_PTR_ARG(view);
 
-     return draw_horizontal_views(view, false) && connect_borders(view);
+     return draw_horizontal_views(view, false, highlight_word) && connect_borders(view);
 }
 
 BufferView* find_view_at_point(BufferView* view, const Point* point)

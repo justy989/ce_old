@@ -77,6 +77,8 @@ typedef struct {
      Point cursor;
      Point highlight_start;
      Point highlight_end;
+     bool modified;
+     bool readonly;
      union {
           char* filename;
           char* name;
@@ -162,7 +164,7 @@ bool ce_remove_buffer_from_list      (BufferNode* head, BufferNode** node);
 BufferView* ce_split_view         (BufferView* view, BufferNode* buffer_node, bool horizontal);
 bool ce_remove_view               (BufferView** head, BufferView* view);
 bool ce_calc_views                (BufferView* head, const Point* top_left, const Point* top_right);
-bool ce_draw_views                (const BufferView* head);
+bool ce_draw_views                (const BufferView* head, const char* highlight_word);
 bool ce_free_views                (BufferView** view);
 BufferView* ce_find_view_at_point (BufferView* head, const Point* point);
 BufferView* ce_buffer_in_view(BufferView* head, const Buffer* buffer);
@@ -196,8 +198,9 @@ bool ce_insert_newline (Buffer* buffer, int64_t line);
 
 
 // Buffer Inspection Functions
-bool    ce_draw_buffer                   (const Buffer* buffer, const Point* term_top_left, const Point* term_bottom_right, const Point* buffer_top_left);
-bool    ce_save_buffer                   (const Buffer* buffer, const char* filename);
+bool    ce_draw_buffer                   (const Buffer* buffer, const Point* term_top_left, const Point* term_bottom_right, const Point* buffer_top_left,
+                                          const char* highlight_word);
+bool    ce_save_buffer                   (Buffer* buffer, const char* filename);
 bool    ce_point_on_buffer               (const Buffer* buffer, const Point* location);
 bool    ce_get_char                      (const Buffer* buffer, const Point* location, char* c);
 char    ce_get_char_raw                  (const Buffer* buffer, const Point* location);

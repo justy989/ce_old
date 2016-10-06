@@ -377,6 +377,7 @@ void enter_normal_mode(ConfigState* config_state)
 
 void enter_insert_mode(ConfigState* config_state, Point* cursor)
 {
+     if(config_state->view_current->buffer_node->buffer->readonly) return;
      config_state->vim_mode = VM_INSERT;
      config_state->start_insert = *cursor;
      config_state->original_start_insert = *cursor;
@@ -1687,6 +1688,10 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case KEY_UP:
           case KEY_DOWN:
+               for(size_t cm = 0; cm < config_state->command_multiplier; cm++){
+                    ce_move_cursor(buffer, cursor, (Point){0, (config_state->command_key == KEY_DOWN) ? 1 : -1});
+               }
+               break;
           case 'j':
           case 'k':
                for(size_t cm = 0; cm < config_state->command_multiplier; cm++){
@@ -2128,6 +2133,9 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'u':
                if(buffer_state->commit_tail && buffer_state->commit_tail->commit.type != BCT_NONE){
                     ce_commit_undo(buffer, &buffer_state->commit_tail, cursor);
+                    if(buffer_state->commit_tail->commit.type == BCT_NONE){
+                         buffer->modified = false;
+                    }
                }
                break;
           case 'x':
@@ -2514,6 +2522,7 @@ search:
                     Point match;
                     if(ce_find_string(buffer, cursor, yank->text, &match, config_state->search_command.direction)){
                          ce_set_cursor(buffer, cursor, &match);
+                         center_view(config_state->view_current);
                     }
                }
           } break;
@@ -2525,6 +2534,7 @@ search:
                     Point match;
                     if(ce_find_string(buffer, cursor, yank->text, &match, ce_reverse_direction(config_state->search_command.direction))){
                          ce_set_cursor(buffer, cursor, &match);
+                         center_view(config_state->view_current);
                     }
                }
           } break;
@@ -2762,20 +2772,25 @@ void view_drawer(const BufferNode* head, void* user_data)
      }
 
      standend();
+
+     const char* search = NULL;
+     YankNode* yank = find_yank(config_state, '/');
+     if(yank) search = yank->text;
+
      // NOTE: always draw from the head
-     ce_draw_views(config_state->view_head);
+     ce_draw_views(config_state->view_head, search);
 
      if(config_state->input){
           attron(A_REVERSE);
           move(input_top_left.y - 1, 0);
           for(int i = 0; i < g_terminal_dimensions->x; ++i) addch(' ');
-          mvprintw(input_top_left.y - 1, 0, "%s (in normal mode: ctrl+n next ctrl+p prev)", config_state->input_message);
+          mvprintw(input_top_left.y - 1, 0, "%s (ctrl+n next ctrl+p prev)", config_state->input_message);
           attroff(A_REVERSE);
           for(int y = input_top_left.y; y <= input_bottom_right.y; ++y){
                move(y, 0);
                clrtoeol();
           }
-          ce_draw_views(config_state->view_input);
+          ce_draw_views(config_state->view_input, search);
      }
 
      attron(A_REVERSE);
@@ -2792,8 +2807,8 @@ void view_drawer(const BufferNode* head, void* user_data)
      };
 
      // draw the status line
-     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s %ld lines, k %s %d, c %ld, %ld, v %ld, %ld -> %ld, %ld t: %ld, %ld",
-              mode_names[config_state->vim_mode], buffer->filename, buffer->line_count, keyname(config_state->last_key), config_state->last_key,
+     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s%s%s %ld lines, k %s %d, c %ld, %ld, v %ld, %ld -> %ld, %ld t: %ld, %ld",
+              mode_names[config_state->vim_mode], buffer->modified ? "*" : "", buffer->readonly ? "[RO]" : "", buffer->filename, buffer->line_count, keyname(config_state->last_key), config_state->last_key,
               cursor->x, cursor->y, buffer_view->top_left.x, buffer_view->top_left.y, buffer_view->bottom_right.x, buffer_view->bottom_right.y, g_terminal_dimensions->x, g_terminal_dimensions->y);
      attroff(A_REVERSE);
 

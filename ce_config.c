@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 #define TAB_STRING "     "
+#define SCROLL_LINES 1
 
 static const char* cmd_buffer_name = "shell_command";
 
@@ -369,11 +370,74 @@ BufferNode* new_buffer_from_file(BufferNode* head, const char* filename)
      return new_buffer_node;
 }
 
+void enter_normal_mode(ConfigState* config_state)
+{
+     config_state->vim_mode = VM_NORMAL;
+}
+
 void enter_insert_mode(ConfigState* config_state, Point* cursor)
 {
      config_state->vim_mode = VM_INSERT;
      config_state->start_insert = *cursor;
      config_state->original_start_insert = *cursor;
+}
+
+void enter_visual_range_mode(ConfigState* config_state, BufferView* buffer_view)
+{
+     config_state->vim_mode = VM_VISUAL_RANGE;
+     config_state->visual_start = buffer_view->cursor;
+}
+
+void enter_visual_line_mode(ConfigState* config_state, BufferView* buffer_view)
+{
+     config_state->vim_mode = VM_VISUAL_LINE;
+     config_state->visual_start = buffer_view->cursor;
+}
+
+void commit_insert_mode_changes(ConfigState* config_state, Buffer* buffer, BufferState* buffer_state, Point* cursor, Point* end_cursor)
+{
+     if(config_state->start_insert.x == cursor->x &&
+        config_state->start_insert.y == cursor->y &&
+        config_state->original_start_insert.x == cursor->x &&
+        config_state->original_start_insert.y == cursor->y){
+        // pass
+     }else{
+          if(config_state->start_insert.x == config_state->original_start_insert.x &&
+             config_state->start_insert.y == config_state->original_start_insert.y){
+               // TODO: assert cursor is after start_insert
+               // exclusively inserts
+               Point last_inserted_char = {cursor->x-1, cursor->y};
+               ce_commit_insert_string(&buffer_state->commit_tail,
+                                       &config_state->start_insert,
+                                       &config_state->original_start_insert,
+                                       end_cursor,
+                                       ce_dupe_string(buffer, &config_state->start_insert, &last_inserted_char));
+          }else if(config_state->start_insert.x < config_state->original_start_insert.x ||
+                   config_state->start_insert.y < config_state->original_start_insert.y){
+               if(cursor->x == config_state->start_insert.x &&
+                  cursor->y == config_state->start_insert.y){
+                    // exclusively backspaces!
+                    ce_commit_remove_string(&buffer_state->commit_tail,
+                                            cursor,
+                                            &config_state->original_start_insert,
+                                            end_cursor,
+                                            backspace_get_string(buffer_state->backspace_head));
+                    backspace_free(&buffer_state->backspace_head);
+               }else{
+                    // mixture of inserts and backspaces
+                    Point last_inserted_char = {cursor->x-1, cursor->y};
+                    ce_commit_change_string(&buffer_state->commit_tail,
+                                            &config_state->start_insert,
+                                            &config_state->original_start_insert,
+                                            end_cursor,
+                                            ce_dupe_string(buffer,
+                                                           &config_state->start_insert,
+                                                           &last_inserted_char),
+                                            backspace_get_string(buffer_state->backspace_head));
+                    backspace_free(&buffer_state->backspace_head);
+               }
+          }
+     }
 }
 
 void clear_keys(ConfigState* config_state)
@@ -1097,6 +1161,108 @@ void split_view(BufferView* head_view, BufferView* current_view, bool horizontal
      }
 }
 
+void handle_mouse_event(ConfigState* config_state, Buffer* buffer, BufferState* buffer_state, BufferView* buffer_view, Point* cursor)
+{
+     MEVENT event;
+     if(getmouse(&event) == OK){
+          bool enter_insert;
+          if((enter_insert = config_state->vim_mode == VM_INSERT)){
+               Point end_cursor = *cursor;
+               ce_clamp_cursor(buffer, &end_cursor);
+               enter_normal_mode(config_state);
+               commit_insert_mode_changes(config_state, buffer, buffer_state, cursor, &end_cursor);
+               *cursor = end_cursor;
+          }
+#ifdef MOUSE_DIAG
+          ce_message("0x%x", event.bstate);
+          if(event.bstate & BUTTON1_PRESSED)
+               ce_message("%s", "BUTTON1_PRESSED");
+          else if(event.bstate & BUTTON1_RELEASED)
+               ce_message("%s", "BUTTON1_RELEASED");
+          else if(event.bstate & BUTTON1_CLICKED)
+               ce_message("%s", "BUTTON1_CLICKED");
+          else if(event.bstate & BUTTON1_DOUBLE_CLICKED)
+               ce_message("%s", "BUTTON1_DOUBLE_CLICKED");
+          else if(event.bstate & BUTTON1_TRIPLE_CLICKED)
+               ce_message("%s", "BUTTON1_TRIPLE_CLICKED");
+          else if(event.bstate & BUTTON2_PRESSED)
+               ce_message("%s", "BUTTON2_PRESSED");
+          else if(event.bstate & BUTTON2_RELEASED)
+               ce_message("%s", "BUTTON2_RELEASED");
+          else if(event.bstate & BUTTON2_CLICKED)
+               ce_message("%s", "BUTTON2_CLICKED");
+          else if(event.bstate & BUTTON2_DOUBLE_CLICKED)
+               ce_message("%s", "BUTTON2_DOUBLE_CLICKED");
+          else if(event.bstate & BUTTON2_TRIPLE_CLICKED)
+               ce_message("%s", "BUTTON2_TRIPLE_CLICKED");
+          else if(event.bstate & BUTTON3_PRESSED)
+               ce_message("%s", "BUTTON3_PRESSED");
+          else if(event.bstate & BUTTON3_RELEASED)
+               ce_message("%s", "BUTTON3_RELEASED");
+          else if(event.bstate & BUTTON3_CLICKED)
+               ce_message("%s", "BUTTON3_CLICKED");
+          else if(event.bstate & BUTTON3_DOUBLE_CLICKED)
+               ce_message("%s", "BUTTON3_DOUBLE_CLICKED");
+          else if(event.bstate & BUTTON3_TRIPLE_CLICKED)
+               ce_message("%s", "BUTTON3_TRIPLE_CLICKED");
+          else if(event.bstate & BUTTON4_PRESSED)
+               ce_message("%s", "BUTTON4_PRESSED");
+          else if(event.bstate & BUTTON4_RELEASED)
+               ce_message("%s", "BUTTON4_RELEASED");
+          else if(event.bstate & BUTTON4_CLICKED)
+               ce_message("%s", "BUTTON4_CLICKED");
+          else if(event.bstate & BUTTON4_DOUBLE_CLICKED)
+               ce_message("%s", "BUTTON4_DOUBLE_CLICKED");
+          else if(event.bstate & BUTTON4_TRIPLE_CLICKED)
+               ce_message("%s", "BUTTON4_TRIPLE_CLICKED");
+          else if(event.bstate & BUTTON_SHIFT)
+               ce_message("%s", "BUTTON_SHIFT");
+          else if(event.bstate & BUTTON_CTRL)
+               ce_message("%s", "BUTTON_CTRL");
+          else if(event.bstate & BUTTON_ALT)
+               ce_message("%s", "BUTTON_ALT");
+          else if(event.bstate & REPORT_MOUSE_POSITION)
+               ce_message("%s", "REPORT_MOUSE_POSITION");
+          else if(event.bstate & ALL_MOUSE_EVENTS)
+               ce_message("%s", "ALL_MOUSE_EVENTS");
+#endif
+          if(event.bstate & BUTTON1_PRESSED){ // Left click OSX
+               Point click = {event.x, event.y};
+               config_state->view_current = ce_find_view_at_point(config_state->view_head, &click);
+               click = (Point) {event.x - (config_state->view_current->top_left.x - config_state->view_current->left_column),
+                                event.y - (config_state->view_current->top_left.y - config_state->view_current->top_row)};
+               ce_set_cursor(config_state->view_current->buffer_node->buffer,
+                             &config_state->view_current->cursor,
+                             &click);
+          }
+#ifdef SCROLL_SUPPORT
+          // This feature is currently unreliable and is only known to work for Ryan :)
+          else if(event.bstate & (BUTTON_ALT | BUTTON2_CLICKED)){
+               Point next_line = {0, cursor->y + SCROLL_LINES};
+               if(ce_point_on_buffer(buffer, &next_line)){
+                    Point scroll_location = {0, buffer_view->top_row + SCROLL_LINES};
+                    scroll_view_to_location(buffer_view, &scroll_location);
+                    if(buffer_view->cursor.y < buffer_view->top_row)
+                         ce_move_cursor(buffer, cursor, (Point){0, SCROLL_LINES});
+               }
+          }else if(event.bstate & BUTTON4_TRIPLE_CLICKED){
+               Point next_line = {0, cursor->y - SCROLL_LINES};
+               if(ce_point_on_buffer(buffer, &next_line)){
+                    Point scroll_location = {0, buffer_view->top_row - SCROLL_LINES};
+                    scroll_view_to_location(buffer_view, &scroll_location);
+                    if(buffer_view->cursor.y > buffer_view->top_row + (buffer_view->bottom_right.y - buffer_view->top_left.y))
+                         ce_move_cursor(buffer, cursor, (Point){0, -SCROLL_LINES});
+               }
+          }
+#else
+          (void) buffer;
+          (void) buffer_view;
+#endif
+          // if we left insert and haven't switched views, enter insert mode
+          if(enter_insert && config_state->view_current == buffer_view) enter_insert_mode(config_state, cursor);
+     }
+}
+
 void half_page_up(BufferView* view)
 {
      int64_t view_height = view->bottom_right.y - view->top_left.y;
@@ -1194,7 +1360,7 @@ void remove_visual_range(ConfigState* config_state)
      }else{
           free(removed_str);
      }
-     config_state->vim_mode = VM_NORMAL;
+     enter_normal_mode(config_state);
 }
 
 void remove_visual_lines(ConfigState* config_state)
@@ -1223,7 +1389,7 @@ void remove_visual_lines(ConfigState* config_state)
      }else{
           free(removed_str);
      }
-     config_state->vim_mode = VM_NORMAL;
+     enter_normal_mode(config_state);
 }
 
 void iterate_history_input(ConfigState* config_state, bool previous)
@@ -1269,60 +1435,22 @@ bool key_handler(int key, BufferNode* head, void* user_data)
      if(config_state->vim_mode == VM_INSERT){
           assert(config_state->command_key == '\0');
           switch(key){
-          case 27: // escape
+          case 27: // ESC
           {
                Point end_cursor = *cursor;
                ce_clamp_cursor(buffer, &end_cursor);
 
-               config_state->vim_mode = VM_NORMAL;
-               if(config_state->start_insert.x == cursor->x &&
-                  config_state->start_insert.y == cursor->y &&
-                  config_state->original_start_insert.x == cursor->x &&
-                  config_state->original_start_insert.y == cursor->y){
-                  // pass
-               }else{
-                    if(config_state->start_insert.x == config_state->original_start_insert.x &&
-                       config_state->start_insert.y == config_state->original_start_insert.y){
-                         // TODO: assert cursor is after start_insert
-                         // exclusively inserts
-                         Point last_inserted_char = {cursor->x-1, cursor->y};
-                         ce_commit_insert_string(&buffer_state->commit_tail,
-                                                 &config_state->start_insert,
-                                                 &config_state->original_start_insert,
-                                                 &end_cursor,
-                                                 ce_dupe_string(buffer, &config_state->start_insert, &last_inserted_char));
-                    }else if(config_state->start_insert.x < config_state->original_start_insert.x ||
-                             config_state->start_insert.y < config_state->original_start_insert.y){
-                         if(cursor->x == config_state->start_insert.x &&
-                            cursor->y == config_state->start_insert.y){
-                              // exclusively backspaces!
-                              ce_commit_remove_string(&buffer_state->commit_tail,
-                                                      cursor,
-                                                      &config_state->original_start_insert,
-                                                      &end_cursor,
-                                                      backspace_get_string(buffer_state->backspace_head));
-                              backspace_free(&buffer_state->backspace_head);
-                         }else{
-                              // mixture of inserts and backspaces
-                              Point last_inserted_char = {cursor->x-1, cursor->y};
-                              ce_commit_change_string(&buffer_state->commit_tail,
-                                                      &config_state->start_insert,
-                                                      &config_state->original_start_insert,
-                                                      &end_cursor,
-                                                      ce_dupe_string(buffer,
-                                                                     &config_state->start_insert,
-                                                                     &last_inserted_char),
-                                                      backspace_get_string(buffer_state->backspace_head));
-                              backspace_free(&buffer_state->backspace_head);
-                         }
-                    }
-               }
+               enter_normal_mode(config_state);
+               commit_insert_mode_changes(config_state, buffer, buffer_state, cursor, &end_cursor);
 
                // when we exit insert mode, do not move the cursor back unless we are at the end of the line
                *cursor = end_cursor;
           } break;
-          case 127:
-          case KEY_BACKSPACE: // backspace
+          case KEY_MOUSE:
+               handle_mouse_event(config_state, buffer, buffer_state, buffer_view, cursor);
+               break;
+          case 127: // Temporary fix for Ry-guy
+          case KEY_BACKSPACE:
                if(buffer->line_count){
                     if(cursor->x <= 0){
                          if(cursor->y){
@@ -1356,8 +1484,9 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          }
                     }
                }
-          case 126: // delete ?
-               //ce_remove_char(buffer, cursor);
+               break;
+          case KEY_DC:
+               ce_remove_char(buffer, cursor);
                break;
           case '\t':
           {
@@ -1534,9 +1663,12 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     config_state->input = false;
                }
                if(config_state->vim_mode != VM_NORMAL){
-                    config_state->vim_mode = VM_NORMAL;
+                    enter_normal_mode(config_state);
                }
           } break;
+          case KEY_MOUSE:
+               handle_mouse_event(config_state, buffer, buffer_state, buffer_view, cursor);
+               break;
           case 'J':
           {
                if(cursor->y == buffer->line_count - 1) break; // nothing to join
@@ -1552,10 +1684,12 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     ce_commit_change_string(&buffer_state->commit_tail, &join_loc, cursor, cursor, strdup("\n"), save_str);
                }
           } break;
+          case KEY_UP:
+          case KEY_DOWN:
           case 'j':
           case 'k':
                for(size_t cm = 0; cm < config_state->command_multiplier; cm++){
-                    ce_move_cursor(buffer, cursor, (Point){0, (config_state->command_key == 'j') ? 1 : -1});
+                    ce_move_cursor(buffer, cursor, (Point){0, (config_state->command_key == 'j' || config_state->command_key == KEY_DOWN) ? 1 : -1});
                }
           break;
           case 'B':
@@ -1584,8 +1718,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 't':
           case 'F':
           case 'T':
-          case KEY_UP:
-          case KEY_DOWN:
           case KEY_LEFT:
           case KEY_RIGHT:
           {
@@ -1703,10 +1835,10 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           {
                if(config_state->vim_mode == VM_VISUAL_RANGE){
                     yank_visual_range(config_state);
-                    config_state->vim_mode = VM_NORMAL;
+                    enter_normal_mode(config_state);
                }else if(config_state->vim_mode == VM_VISUAL_LINE){
                     yank_visual_lines(config_state);
-                    config_state->vim_mode = VM_NORMAL;
+                    enter_normal_mode(config_state);
                }else{
                     movement_state_t m_state = try_generic_movement(config_state, buffer, cursor, &movement_start, &movement_end);
                     switch(m_state){
@@ -1944,13 +2076,11 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                break;
           case 'v':
           {
-               config_state->vim_mode = VM_VISUAL_RANGE;
-               config_state->visual_start = buffer_view->cursor;
+               enter_visual_range_mode(config_state, buffer_view);
           } break;
           case 'V':
           {
-               config_state->vim_mode = VM_VISUAL_LINE;
-               config_state->visual_start = buffer_view->cursor;
+               enter_visual_line_mode(config_state, buffer_view);
           }
           break;
           case 7: // Ctrl + g
@@ -1961,7 +2091,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           {
                split_view(config_state->view_head, config_state->view_current, true);
           } break;
-          case 'q':
+          case 17: // Ctrl + q
           {
                Point save_cursor = config_state->view_current->cursor;
                config_state->view_current->buffer_node->buffer->cursor = config_state->view_current->cursor;
@@ -2160,7 +2290,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     // save cursor
                     config_state->view_current->buffer_node->buffer->cursor = config_state->view_current->cursor;
                     config_state->view_current = next_view;
-                    config_state->vim_mode = VM_NORMAL;
+                    enter_normal_mode(config_state);
                }
           }
           break;
@@ -2298,7 +2428,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          // save cursor
                          config_state->view_current->buffer_node->buffer->cursor = config_state->view_current->cursor;
                          config_state->view_current = next_view;
-                         config_state->vim_mode = VM_NORMAL;
+                         enter_normal_mode(config_state);
                     }
                }
                break;
@@ -2312,7 +2442,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     // save cursor
                     config_state->view_current->buffer_node->buffer->cursor = config_state->view_current->cursor;
                     config_state->view_current = next_view;
-                    config_state->vim_mode = VM_NORMAL;
+                    enter_normal_mode(config_state);
                }
           }
           break;
@@ -2327,7 +2457,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     // save cursor
                     config_state->view_current->buffer_node->buffer->cursor = config_state->view_current->cursor;
                     config_state->view_current = next_view;
-                    config_state->vim_mode = VM_NORMAL;
+                    enter_normal_mode(config_state);
                }
           }
           break;

@@ -1285,7 +1285,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                        config_state->start_insert.y == config_state->original_start_insert.y){
                          // TODO: assert cursor is after start_insert
                          // exclusively inserts
-                         Point last_inserted_char = {cursor->x-1, cursor->y};
+                         Point last_inserted_char = {cursor->x, cursor->y};
+                         ce_advance_cursor(buffer, &last_inserted_char, -1);
                          ce_commit_insert_string(&buffer_state->commit_tail,
                                                  &config_state->start_insert,
                                                  &config_state->original_start_insert,

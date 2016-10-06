@@ -199,7 +199,7 @@ bool ce_insert_char(Buffer* buffer, const Point* location, char c)
 
 bool ce_append_char(Buffer* buffer, char c)
 {
-     Point end = {};
+     Point end = {0, 0};
      ce_move_cursor_to_end_of_file(buffer, &end);
      end.x++;
      return ce_insert_char(buffer, &end, c);
@@ -386,6 +386,7 @@ char* ce_dupe_string(const Buffer* buffer, const Point* start, const Point* end)
      CE_CHECK_PTR_ARG(end);
 
      int64_t total_len = ce_compute_length(buffer, start, end);
+     assert(total_len);
 
      if(start->y == end->y){
           // single line allocation
@@ -395,6 +396,7 @@ char* ce_dupe_string(const Buffer* buffer, const Point* start, const Point* end)
                return NULL;
           }
           memcpy(new_str, buffer->lines[start->y] + start->x, total_len);
+          if(!new_str[total_len-1]) new_str[total_len-1] = '\n';
           new_str[total_len] = 0;
 
           return new_str;
@@ -422,7 +424,9 @@ char* ce_dupe_string(const Buffer* buffer, const Point* start, const Point* end)
           itr += len + 1;
      }
 
-     memcpy(itr, buffer->lines[end->y], end->x);
+     memcpy(itr, buffer->lines[end->y], end->x+1);
+     // if the end cursor is on the NUL terminator, append newline
+     if(!new_str[total_len-1]) new_str[total_len-1] = '\n';
      new_str[total_len] = 0;
 
      return new_str;
@@ -443,12 +447,70 @@ char* ce_dupe_line(const Buffer* buffer, int64_t line)
      return memcpy(duped_line, buffer->lines[line], len - 2);
 }
 
+char* ce_dupe_lines(const Buffer* buffer, int64_t start_line, int64_t end_line)
+{
+     if(start_line < 0){
+          ce_message("%s() specified start line (%"PRId64") less than 0",
+                     __FUNCTION__, start_line);
+          return NULL;
+     }
+
+     if(end_line < 0){
+          ce_message("%s() specified end line (%"PRId64") less than 0",
+                     __FUNCTION__, end_line);
+          return NULL;
+     }
+
+     if(buffer->line_count <= start_line){
+          ce_message("%s() specified start line (%"PRId64") above buffer line count (%"PRId64")",
+                     __FUNCTION__, start_line, buffer->line_count);
+          return NULL;
+     }
+
+     if(buffer->line_count <= end_line){
+          ce_message("%s() specified end line (%"PRId64") above buffer line count (%"PRId64")",
+                     __FUNCTION__, end_line, buffer->line_count);
+          return NULL;
+     }
+
+     // NOTE: I feel like swap() should be in the c standard library? Maybe I should make a macro.
+     if(start_line > end_line){
+          int64_t tmp = end_line;
+          end_line = start_line;
+          start_line = tmp;
+     }
+
+     int64_t len = 0;
+     for(int64_t i = start_line; i <= end_line; ++i){
+          len += strlen(buffer->lines[i]) + 1; // account for newline
+     }
+     len++; // account for null terminator after final newline
+
+     char* duped_line = malloc(len);
+     if(!duped_line){
+          ce_message("%s() failed to allocate duped line", __FUNCTION__);
+          return NULL;
+     }
+
+     // copy each line, adding a newline to the end
+     int64_t line_len = 0;
+     char* itr = duped_line;
+     for(int64_t i = start_line; i <= end_line; ++i){
+          line_len = strlen(buffer->lines[i]);
+          memcpy(itr, buffer->lines[i], line_len);
+          itr[line_len] = '\n';
+          itr += (line_len + 1);
+     }
+
+     duped_line[len-1] = '\0';
+     return duped_line;
+}
+
 char* ce_dupe_buffer(const Buffer* buffer)
 {
-     Point start = {};
-     Point end = {};
+     Point start = {0, 0};
+     Point end = {0, 0};
      ce_move_cursor_to_end_of_file(buffer, &end);
-     end.x++;
      return ce_dupe_string(buffer, &start, &end);
 }
 
@@ -712,6 +774,9 @@ int64_t ce_find_delta_to_end_of_word(const Buffer* buffer, const Point* location
 // return -1 on failure, delta to move right to the beginning of the next word on success
 int64_t ce_find_delta_to_next_word(const Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
 {
+     // TODO: make this ce_move_cursor_to_next_word. Also, this function appears to be broken.
+     // test case: word = blah // put the cursor on the d in word and hit w or put the cursor on = and hit w
+     
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
 
@@ -1120,6 +1185,14 @@ int64_t ce_is_caps_var(const char* line, int64_t start_offset)
      return count - 1; // we over-counted on the last iteration
 }
 
+int set_color(Syntax syntax, bool highlighted)
+{
+     standend();
+     if(highlighted) attron(COLOR_PAIR(syntax + S_NORMAL_HIGHLIGHTED - 1));
+     else attron(COLOR_PAIR(syntax));
+     return syntax;
+}
+
 static const char non_printable_repr = '~';
 
 bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Point* term_bottom_right,
@@ -1220,6 +1293,8 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                int highlight_color = 0;
                bool diff_add = buffer->lines[i][0] == '+';
                bool diff_remove = buffer->lines[i][0] == '-';
+               bool inside_highlight = false;
+               int fg_color = 0;
 
                // NOTE: pre-pass check for comments and strings out of view
                for(int64_t c = 0; c < buffer_top_left->x; ++c){
@@ -1272,19 +1347,31 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                // skip line if we are offset by too much and can't show the line
                if(line_length <= buffer_top_left->x) continue;
 
+               fg_color = set_color(S_NORMAL, inside_highlight);
+
                if(inside_comment || inside_multiline_comment){
-                    attron(COLOR_PAIR(S_COMMENT));
+                    fg_color = set_color(S_COMMENT, inside_highlight);
                }else if(inside_string){
-                    attron(COLOR_PAIR(S_STRING));
+                    fg_color = set_color(S_STRING, inside_highlight);
                }else if(highlighting_left){
-                    attron(COLOR_PAIR(highlight_color));
+                    fg_color = set_color(highlight_color, inside_highlight);
                }else if(diff_add){
-                    attron(COLOR_PAIR(S_DIFF_ADD));
+                    fg_color = set_color(S_DIFF_ADD, inside_highlight);
                }else if(diff_remove){
-                    attron(COLOR_PAIR(S_DIFF_REMOVE));
+                    fg_color = set_color(S_DIFF_REMOVE, inside_highlight);
                }
 
                for(int64_t c = 0; c < min; ++c){
+                    // check for the highlight
+                    Point point = {c + buffer_top_left->x, i};
+                    if(ce_point_in_range(&point, &buffer->highlight_start, &buffer->highlight_end)){
+                         inside_highlight = true;
+                         set_color(fg_color, inside_highlight);
+                    }else if(inside_highlight){
+                         inside_highlight = false;
+                         set_color(fg_color, inside_highlight);
+                    }
+
                     // syntax highlighting
                     if(highlighting_left == 0){
                          if(!inside_string){
@@ -1293,15 +1380,15 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                               }
 
                               if(highlighting_left){
-                                   attron(COLOR_PAIR(S_KEYWORD));
+                                   fg_color = set_color(S_KEYWORD, inside_highlight);
                               }else{
                                    highlighting_left = ce_is_caps_var(line_to_print, c);
                                    if(highlighting_left){
-                                        attron(COLOR_PAIR(S_CONSTANT));
+                                        fg_color = set_color(S_CONSTANT, inside_highlight);
                                    }else{
                                         highlighting_left = ce_is_preprocessor(line_to_print, c);
                                         if(highlighting_left){
-                                             attron(COLOR_PAIR(S_PREPROCESSOR));
+                                             fg_color = set_color(S_PREPROCESSOR, inside_highlight);
                                         }
                                    }
                               }
@@ -1313,11 +1400,11 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                               break;
                          case CT_SINGLE_LINE:
                               inside_comment = true;
-                              attron(COLOR_PAIR(S_COMMENT));
+                              fg_color = set_color(S_COMMENT, inside_highlight);
                               break;
                          case CT_BEGIN_MULTILINE:
                               inside_multiline_comment = true;
-                              attron(COLOR_PAIR(S_COMMENT));
+                              fg_color = set_color(S_COMMENT, inside_highlight);
                               break;
                          case CT_END_MULTILINE:
                               inside_multiline_comment = false;
@@ -1329,22 +1416,22 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
 
                          // if inside_string has changed, update the color
                          if(pre_quote_check != inside_string){
-                              if(inside_string) attron(COLOR_PAIR(S_STRING));
+                              if(inside_string) fg_color = set_color(S_STRING, inside_highlight);
                               else highlighting_left = 1;
                          }
                     }else{
                          highlighting_left--;
                          if(highlighting_left == 0){
-                              standend();
+                              fg_color = set_color(S_NORMAL, inside_highlight);
 
                               if(inside_comment || inside_multiline_comment){
-                                   attron(COLOR_PAIR(S_COMMENT));
+                                   fg_color = set_color(S_COMMENT, inside_highlight);
                               }else if(inside_string){
-                                   attron(COLOR_PAIR(S_STRING));
+                                   fg_color = set_color(S_STRING, inside_highlight);
                               }else if(diff_add){
-                                   attron(COLOR_PAIR(S_DIFF_ADD));
+                                   fg_color = set_color(S_DIFF_ADD, inside_highlight);
                               }else if(diff_remove){
-                                   attron(COLOR_PAIR(S_DIFF_REMOVE));
+                                   fg_color = set_color(S_DIFF_REMOVE, inside_highlight);
                               }
                          }
                     }
@@ -1439,7 +1526,8 @@ bool ce_move_cursor_to_end_of_line(const Buffer* buffer, Point* cursor)
 
      if(!ce_point_on_buffer(buffer, cursor)) return false;
 
-     cursor->x = strlen(buffer->lines[cursor->y]); 
+     cursor->x = strlen(buffer->lines[cursor->y])-1; 
+     if(cursor->x < 0) cursor->x = 0;
      return true;
 }
 
@@ -2315,15 +2403,15 @@ int64_t ce_compute_length(const Buffer* buffer, const Point* start, const Point*
 
      size_t length = 0;
 
-     if( start->y < end->y){
+     if(start->y < end->y){
           length = strlen(buffer->lines[start->y] + start->x) + 1; // account for newline
           for(int64_t i = start->y + 1; i < end->y; ++i){
                length += strlen(buffer->lines[i]) + 1; // account for newline
           }
-          length += end->x; // do not account for newline
+          length += end->x+1; // do not account for newline. end is inclusive
      }else{
           assert(start->y == end->y);
-          length += end->x - start->x;
+          length += end->x+1 - start->x;
      }
 
      return length;
@@ -2335,7 +2423,7 @@ int ce_iswordchar(int c)
 }
 
 // given a buffer, two points, and a function ptr, return a range of characters that match defined criteria
-// NOTE: start is inclusive, end is exclusive
+// NOTE: start is inclusive, end is inclusive
 bool ce_get_homogenous_adjacents(const Buffer* buffer, Point* start, Point* end, int (*is_homogenous)(int))
 {
      assert(memcmp(start, end, sizeof *start) == 0);
@@ -2355,7 +2443,7 @@ bool ce_get_homogenous_adjacents(const Buffer* buffer, Point* start, Point* end,
           if(!ce_get_char(buffer, end, &curr_char)) break;
      }while((*is_homogenous)(curr_char));
 
-     // the last character wasn't homogenous, but end is exclusive
+     end->x--; // the last character wasn't homogenous
 
      return true;
 }
@@ -2424,4 +2512,14 @@ void ce_sort_points(const Point** a, const Point** b)
           *a = *b;
           *b = temp;
      }
+}
+
+bool ce_point_in_range (const Point* p, const Point* start, const Point* end)
+{
+    if( ((p->y == start->y && p->x >= start->x) || (p->y > start->y)) &&
+        ((p->y == end->y && p->x <= end->x) || (p->y < end->y )) ){
+         return true;
+    }
+
+     return false;
 }

@@ -25,13 +25,23 @@
 #define COLOR_BRIGHT_WHITE 15
 
 typedef enum {
-     S_KEYWORD = 1,
+     S_NORMAL = 1,
+     S_KEYWORD,
      S_COMMENT,
      S_STRING,
      S_CONSTANT,
      S_PREPROCESSOR,
      S_DIFF_ADD,
      S_DIFF_REMOVE,
+
+     S_NORMAL_HIGHLIGHTED,
+     S_KEYWORD_HIGHLIGHTED,
+     S_COMMENT_HIGHLIGHTED,
+     S_STRING_HIGHLIGHTED,
+     S_CONSTANT_HIGHLIGHTED,
+     S_PREPROCESSOR_HIGHLIGHTED,
+     S_DIFF_ADD_HIGHLIGHTED,
+     S_DIFF_REMOVE_HIGHLIGHTED,
 } Syntax;
 
 #define CE_CHECK_PTR_ARG(arg)                                                 \
@@ -65,6 +75,8 @@ typedef struct {
      char** lines; // '\0' terminated, does not contain newlines, NULL if empty
      int64_t line_count;
      Point cursor;
+     Point highlight_start;
+     Point highlight_end;
      union {
           char* filename;
           char* name;
@@ -193,6 +205,7 @@ int64_t ce_compute_length                (const Buffer* buffer, const Point* sta
 char*   ce_dupe_string                   (const Buffer* buffer, const Point* start, const Point* end);
 char*   ce_dupe_buffer                   (const Buffer* buffer);
 char*   ce_dupe_line                     (const Buffer* buffer, int64_t line);
+char*   ce_dupe_lines                    (const Buffer* buffer, int64_t start_line, int64_t end_line);
 int64_t ce_get_indentation_for_next_line (const Buffer* buffer, const Point* location, int64_t tab_len);
 
 
@@ -258,5 +271,6 @@ void    ce_sort_points        (const Point** a, const Point** b);
 int     ce_ispunct            (int c);
 int     ce_iswordchar         (int c);
 void*   ce_memrchr            (const void* s, int c, size_t n);
+bool    ce_point_in_range     (const Point* p, const Point* start, const Point* end);
 
 #endif

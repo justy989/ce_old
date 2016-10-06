@@ -1,7 +1,5 @@
 language: c
-os:
-  - linux
-  - osx
-compiler: clang # gcc on travis is 4.6 and doesn't support c11 :(
+os: linux
+compiler: clang
 install: make all
 script: make test

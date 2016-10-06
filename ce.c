@@ -452,7 +452,6 @@ char* ce_dupe_buffer(const Buffer* buffer)
      Point start = {};
      Point end = {};
      ce_move_cursor_to_end_of_file(buffer, &end);
-     end.x++;
      return ce_dupe_string(buffer, &start, &end);
 }
 

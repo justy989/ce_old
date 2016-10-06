@@ -1181,7 +1181,8 @@ int64_t ce_is_caps_var(const char* line, int64_t start_offset)
 
 int set_color(Syntax syntax, bool highlighted)
 {
-     if(highlighted) attron(COLOR_PAIR(syntax + S_NORMAL_HIGHLIGHTED));
+     standend();
+     if(highlighted) attron(COLOR_PAIR(syntax + S_NORMAL_HIGHLIGHTED - 1));
      else attron(COLOR_PAIR(syntax));
      return syntax;
 }
@@ -1337,15 +1338,10 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                     }
                }
 
-               Point point = {buffer_top_left->x, i};
-               if(ce_point_in_range(&point, &buffer->highlight_start, &buffer->highlight_end)) {
-                    inside_highlight = true;
-               } else if(inside_highlight) {
-                    inside_highlight = false;
-               }
-
                // skip line if we are offset by too much and can't show the line
                if(line_length <= buffer_top_left->x) continue;
+
+               fg_color = set_color(S_NORMAL, inside_highlight);
 
                if(inside_comment || inside_multiline_comment){
                     fg_color = set_color(S_COMMENT, inside_highlight);
@@ -1357,20 +1353,17 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                     fg_color = set_color(S_DIFF_ADD, inside_highlight);
                }else if(diff_remove){
                     fg_color = set_color(S_DIFF_REMOVE, inside_highlight);
-               }else{
-                    fg_color = set_color(S_NORMAL, inside_highlight);
                }
 
                for(int64_t c = 0; c < min; ++c){
-
                     // check for the highlight
-                    point = (Point){c + buffer_top_left->x, i};
-                    if( ce_point_in_range(&point, &buffer->highlight_start, &buffer->highlight_end)){
+                    Point point = {c + buffer_top_left->x, i};
+                    if(ce_point_in_range(&point, &buffer->highlight_start, &buffer->highlight_end)){
                          inside_highlight = true;
-                         fg_color = set_color(fg_color, inside_highlight);
+                         set_color(fg_color, inside_highlight);
                     }else if(inside_highlight){
                          inside_highlight = false;
-                         fg_color = set_color(fg_color, inside_highlight);
+                         set_color(fg_color, inside_highlight);
                     }
 
                     // syntax highlighting
@@ -1423,7 +1416,6 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                     }else{
                          highlighting_left--;
                          if(highlighting_left == 0){
-                              standend();
                               fg_color = set_color(S_NORMAL, inside_highlight);
 
                               if(inside_comment || inside_multiline_comment){

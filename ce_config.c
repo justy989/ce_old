@@ -139,16 +139,22 @@ void input_history_free(InputHistory* history)
      history->cur = NULL;
 }
 
-void input_history_next(InputHistory* history)
+bool input_history_next(InputHistory* history)
 {
-     if(!history->cur) return;
-     if(history->cur->next) history->cur = history->cur->next;
+     if(!history->cur) return false;
+     if(!history->cur->next) return false;
+
+     history->cur = history->cur->next;
+     return true;
 }
 
-void input_history_prev(InputHistory* history)
+bool input_history_prev(InputHistory* history)
 {
-     if(!history->cur) return;
-     if(history->cur->prev) history->cur = history->cur->prev;
+     if(!history->cur) return false;
+     if(!history->cur->prev) return false;
+
+     history->cur = history->cur->prev;
+     return true;
 }
 
 typedef enum{
@@ -915,6 +921,22 @@ void scroll_view_to_last_line(BufferView* view)
 {
      view->top_row = view->buffer_node->buffer->line_count - (view->bottom_right.y - view->top_left.y);
      if(view->top_row < 0) view->top_row = 0;
+}
+
+// NOTE: clear commits then create the initial required entry to restart
+void reset_buffer_commits(BufferCommitNode** tail)
+{
+     BufferCommitNode* node = *tail;
+     while(node->prev) node = node->prev;
+     ce_commits_free(node);
+
+     BufferCommitNode* new_tail = calloc(1, sizeof(*new_tail));
+     if(!new_tail){
+          ce_message("failed to allocate commit history for buffer");
+          return;
+     }
+
+     *tail = new_tail;
 }
 
 // TODO: rather than taking in config_state, I'd like to take in only the parts it needs, if it's too much, config_state is fine
@@ -2462,11 +2484,13 @@ search:
                     InputHistory* history = history_from_input_key(config_state);
                     if(!history) break;
 
-                    input_history_next(history);
-                    ce_clear_lines(config_state->view_input->buffer_node->buffer);
-                    ce_append_string(config_state->view_input->buffer_node->buffer, 0, history->cur->entry);
-                    config_state->view_input->cursor = (Point){0, 0};
-                    ce_move_cursor_to_end_of_file(config_state->view_input->buffer_node->buffer, &config_state->view_input->cursor);
+                    if(input_history_next(history)){
+                         ce_clear_lines(config_state->view_input->buffer_node->buffer);
+                         ce_append_string(config_state->view_input->buffer_node->buffer, 0, history->cur->entry);
+                         config_state->view_input->cursor = (Point){0, 0};
+                         ce_move_cursor_to_end_of_file(config_state->view_input->buffer_node->buffer, &config_state->view_input->cursor);
+                         reset_buffer_commits(&buffer_state->commit_tail);
+                    }
                }else{
                     jump_to_next_shell_command_file_destination(head, config_state, true);
                }
@@ -2484,11 +2508,13 @@ search:
                                                       ce_dupe_buffer(config_state->view_input->buffer_node->buffer));
                     }
 
-                    input_history_prev(history);
-                    ce_clear_lines(config_state->view_input->buffer_node->buffer);
-                    ce_append_string(config_state->view_input->buffer_node->buffer, 0, history->cur->entry);
-                    config_state->view_input->cursor = (Point){0, 0};
-                    ce_move_cursor_to_end_of_file(config_state->view_input->buffer_node->buffer, &config_state->view_input->cursor);
+                    if(input_history_prev(history)){
+                         ce_clear_lines(config_state->view_input->buffer_node->buffer);
+                         ce_append_string(config_state->view_input->buffer_node->buffer, 0, history->cur->entry);
+                         config_state->view_input->cursor = (Point){0, 0};
+                         ce_move_cursor_to_end_of_file(config_state->view_input->buffer_node->buffer, &config_state->view_input->cursor);
+                         reset_buffer_commits(&buffer_state->commit_tail);
+                    }
                }else{
                     jump_to_next_shell_command_file_destination(head, config_state, false);
                }

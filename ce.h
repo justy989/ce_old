@@ -25,7 +25,7 @@
 #define COLOR_BRIGHT_WHITE 15
 
 typedef enum {
-     S_NORMAL,
+     S_NORMAL = 1,
      S_KEYWORD,
      S_COMMENT,
      S_STRING,
@@ -33,6 +33,7 @@ typedef enum {
      S_PREPROCESSOR,
      S_DIFF_ADD,
      S_DIFF_REMOVE,
+
      S_NORMAL_HIGHLIGHTED,
      S_KEYWORD_HIGHLIGHTED,
      S_COMMENT_HIGHLIGHTED,

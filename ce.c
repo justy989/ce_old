@@ -30,11 +30,14 @@ bool ce_alloc_lines(Buffer* buffer, int64_t line_count)
 {
      CE_CHECK_PTR_ARG(buffer);
 
+     if(buffer->readonly) return false;
+
      if(line_count <= 0){
           ce_message("%s() tried to allocate %"PRId64" lines for a buffer, but we can only allocated > 0 lines", __FUNCTION__, line_count);
           return false;
      }
 
+     // NOTE: if we have lines, we should free them here!
      buffer->lines = malloc(line_count * sizeof(char*));
      if(!buffer->lines){
           ce_message("%s() failed to allocate %"PRId64" lines for buffer", __FUNCTION__, line_count);
@@ -52,11 +55,14 @@ bool ce_alloc_lines(Buffer* buffer, int64_t line_count)
           }
      }
 
+     buffer->modified = true;
      return true;
 }
 
 bool ce_load_file(Buffer* buffer, const char* filename)
 {
+     if(buffer->readonly) return false;
+
      ce_message("load file '%s'", filename);
 
      // read the entire file
@@ -88,7 +94,7 @@ bool ce_load_file(Buffer* buffer, const char* filename)
      }
 
      free(contents);
-
+     buffer->modified = false;
      return true;
 }
 
@@ -107,10 +113,14 @@ void ce_free_buffer(Buffer* buffer)
      free(buffer->filename);
 
      ce_clear_lines(buffer);
+     buffer->modified = false;
+     buffer->readonly = false;
 }
 
 void ce_clear_lines(Buffer* buffer)
 {
+     if(buffer->readonly) return;
+
      if(buffer->lines){
           for(int64_t i = 0; i < buffer->line_count; ++i){
                free(buffer->lines[i]);
@@ -120,6 +130,7 @@ void ce_clear_lines(Buffer* buffer)
           buffer->lines = NULL;
           buffer->line_count = 0;
      }
+     buffer->modified = true;
 }
 
 bool ce_point_on_buffer(const Buffer* buffer, const Point* location)
@@ -148,6 +159,8 @@ bool ce_insert_char(Buffer* buffer, const Point* location, char c)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
+
+     if(buffer->readonly) return false;
 
      if(buffer->line_count == 0 && location->x == 0 && location->y == 0) ce_alloc_lines(buffer, 1);
 
@@ -192,11 +205,14 @@ bool ce_insert_char(Buffer* buffer, const Point* location, char c)
      // NULL terminate the newline, and free the old line
      new_line[new_len - 1] = 0;
      buffer->lines[location->y] = new_line;
+     buffer->modified = true;
      return true;
 }
 
 bool ce_append_char(Buffer* buffer, char c)
 {
+     if(buffer->readonly) return false;
+
      Point end = {0, 0};
      if(buffer->line_count){
           end.y = buffer->line_count - 1;
@@ -210,6 +226,8 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
      CE_CHECK_PTR_ARG(new_string);
+
+     if(buffer->readonly) return false;
 
      if(location->x != 0 && location->y != 0){
           if(!ce_point_on_buffer(buffer, location)){
@@ -249,6 +267,7 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
                line++;
           }
 
+          buffer->modified = true;
           return true;
      }
 
@@ -328,6 +347,7 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
           free(current_line);
      }
 
+     buffer->modified = true;
      return true;
 }
 
@@ -348,6 +368,8 @@ bool ce_remove_char(Buffer* buffer, const Point* location)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
+
+     if(buffer->readonly) return false;
 
      if(!ce_point_on_buffer(buffer, location)) return false;
 
@@ -376,6 +398,7 @@ bool ce_remove_char(Buffer* buffer, const Point* location)
      free(line);
      buffer->lines[location->y] = new_line;
 
+     buffer->modified = true;
      return true;
 }
 
@@ -993,7 +1016,7 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
      return true;
 }
 
-bool ce_save_buffer(const Buffer* buffer, const char* filename)
+bool ce_save_buffer(Buffer* buffer, const char* filename)
 {
      // save file loaded
      FILE* file = fopen(filename, "w");
@@ -1012,6 +1035,7 @@ bool ce_save_buffer(const Buffer* buffer, const char* filename)
      }
 
      fclose(file);
+     buffer->modified = false;
      return true;
 }
 

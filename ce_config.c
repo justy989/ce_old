@@ -2001,6 +2001,9 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'u':
                if(buffer_state->commit_tail && buffer_state->commit_tail->commit.type != BCT_NONE){
                     ce_commit_undo(buffer, &buffer_state->commit_tail, cursor);
+                    if(buffer_state->commit_tail->commit.type == BCT_NONE){
+                         buffer->modified = false;
+                    }
                }
                break;
           case 'x':
@@ -2672,8 +2675,8 @@ void view_drawer(const BufferNode* head, void* user_data)
      };
 
      // draw the status line
-     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s %ld lines, k %s %d, c %ld, %ld, v %ld, %ld -> %ld, %ld t: %ld, %ld",
-              mode_names[config_state->vim_mode], buffer->filename, buffer->line_count, keyname(config_state->last_key), config_state->last_key,
+     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s%s %ld lines, k %s %d, c %ld, %ld, v %ld, %ld -> %ld, %ld t: %ld, %ld",
+              mode_names[config_state->vim_mode], buffer->modified ? "*" : "", buffer->filename, buffer->line_count, keyname(config_state->last_key), config_state->last_key,
               cursor->x, cursor->y, buffer_view->top_left.x, buffer_view->top_left.y, buffer_view->bottom_right.x, buffer_view->bottom_right.y, g_terminal_dimensions->x, g_terminal_dimensions->y);
      attroff(A_REVERSE);
 

@@ -77,6 +77,8 @@ typedef struct {
      Point cursor;
      Point highlight_start;
      Point highlight_end;
+     bool modified;
+     bool readonly;
      union {
           char* filename;
           char* name;
@@ -198,7 +200,7 @@ bool ce_insert_newline (Buffer* buffer, int64_t line);
 // Buffer Inspection Functions
 bool    ce_draw_buffer                   (const Buffer* buffer, const Point* term_top_left, const Point* term_bottom_right, const Point* buffer_top_left,
                                           const char* highlight_word);
-bool    ce_save_buffer                   (const Buffer* buffer, const char* filename);
+bool    ce_save_buffer                   (Buffer* buffer, const char* filename);
 bool    ce_point_on_buffer               (const Buffer* buffer, const Point* location);
 bool    ce_get_char                      (const Buffer* buffer, const Point* location, char* c);
 char    ce_get_char_raw                  (const Buffer* buffer, const Point* location);

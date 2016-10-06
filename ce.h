@@ -215,7 +215,6 @@ int64_t ce_find_delta_to_soft_end_of_line       (const Buffer* buffer, const Poi
 int64_t ce_find_delta_to_soft_beginning_of_line (const Buffer* buffer, const Point* location);
 int64_t ce_find_delta_to_char_forward_in_line   (const Buffer* buffer, const Point* location, char c);
 int64_t ce_find_delta_to_char_backward_in_line  (const Buffer* buffer, const Point* location, char c);
-int64_t ce_find_delta_to_beginning_of_word      (const Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
 int64_t ce_find_delta_to_end_of_word            (const Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
 int64_t ce_find_delta_to_next_word              (const Buffer* buffer, const Point* location, bool punctuation_word_boundaries);
 bool    ce_find_delta_to_match                  (const Buffer* buffer, const Point* location, Point* delta);
@@ -232,7 +231,9 @@ Point* ce_clamp_cursor                          (const Buffer* buffer, Point* cu
 bool   ce_advance_cursor                        (const Buffer* buffer, Point* cursor, int64_t delta);
 bool   ce_move_cursor                           (const Buffer* buffer, Point* cursor, Point delta);
 bool   ce_set_cursor                            (const Buffer* buffer, Point* cursor, const Point* location);
+bool   ce_move_cursor_to_beginning_of_word      (const Buffer* buffer, Point* cursor, bool punctuation_word_boundaries);
 bool   ce_move_cursor_to_end_of_line            (const Buffer* buffer, Point* cursor);
+void   ce_move_cursor_to_beginning_of_line      (const Buffer* buffer, Point* cursor);
 bool   ce_move_cursor_to_soft_end_of_line       (const Buffer* buffer, Point* cursor);
 bool   ce_move_cursor_to_soft_beginning_of_line (const Buffer* buffer, Point* cursor);
 bool   ce_move_cursor_to_end_of_file            (const Buffer* buffer, Point* cursor);

@@ -1631,16 +1631,10 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 'y':
           {
                if(config_state->vim_mode == VM_VISUAL_RANGE){
-                    Point end = *cursor;
-                    end.x++;
-                    add_yank(config_state, '0', ce_dupe_string(buffer, &config_state->visual_start, &end), YANK_NORMAL);
-                    add_yank(config_state, '"', ce_dupe_string(buffer, &config_state->visual_start, &end), YANK_NORMAL);
+                    yank_visual_range(config_state);
                     config_state->vim_mode = VM_NORMAL;
                }else if(config_state->vim_mode == VM_VISUAL_LINE){
-                    Point start = {0, config_state->visual_start.y};
-                    Point end = {strlen(buffer->lines[cursor->y]), cursor->y};
-                    add_yank(config_state, '0', ce_dupe_string(buffer, &start, &end), YANK_LINE);
-                    add_yank(config_state, '"', ce_dupe_string(buffer, &start, &end), YANK_LINE);
+                    yank_visual_lines(config_state);
                     config_state->vim_mode = VM_NORMAL;
                }else{
                     movement_state_t m_state = try_generic_movement(config_state, buffer, cursor, &movement_start, &movement_end);

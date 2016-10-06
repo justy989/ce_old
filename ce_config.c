@@ -756,11 +756,13 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
           case '0':
           {
                movement_start->x = 0;
+               ce_move_cursor(buffer, movement_end, (Point){-1, 0});
           } break;
           case '^':
           {
                Point begin_line_cursor = *cursor;
                ce_move_cursor_to_soft_beginning_of_line(buffer, &begin_line_cursor);
+               ce_move_cursor(buffer, &begin_line_cursor, (Point){-1, 0});
                if(cursor->x < begin_line_cursor.x) *movement_end = begin_line_cursor;
                else *movement_start = begin_line_cursor;
           } break;
@@ -916,7 +918,8 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
                break;
           case 'b':
           case 'B':
-               movement_start->x -= ce_find_delta_to_beginning_of_word(buffer, cursor, key0 == 'b');
+               ce_move_cursor_to_beginning_of_word(buffer, movement_start, key0 == 'b');
+               ce_move_cursor(buffer, movement_end, (Point){-1, 0});
                break;
           case 'w':
           case 'W':
@@ -1688,17 +1691,28 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     ce_move_cursor(buffer, cursor, (Point){0, (config_state->command_key == 'j' || config_state->command_key == KEY_DOWN) ? 1 : -1});
                }
           break;
+          case 'B':
+          case 'b':
+          {
+               for(size_t cm = 0; cm < config_state->command_multiplier; cm++){
+                    ce_move_cursor_to_beginning_of_word(buffer, cursor, key == 'b');
+               }
+          } break;
+          case '^':
+          {
+               ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
+          } break;
+          case '0':
+          {
+               ce_move_cursor_to_beginning_of_line(buffer, cursor);
+          } break;
           case 'h':
           case 'l':
           case 'w':
           case 'W':
           case '$':
-          case 'b':
-          case 'B':
           case 'e':
           case 'E':
-          case '0':
-          case '^':
           case 'f':
           case 't':
           case 'F':
@@ -2000,7 +2014,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          case 'j':
                          case 'k':
                              yank_mode = YANK_LINE; 
-                             movement_end.x++;
+                             // include the newline in the delete
+                             movement_end.x = strlen(buffer->lines[movement_end.y]);
                              break;
                          case 'c':
                              yank_mode = YANK_LINE; 
@@ -2019,10 +2034,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                               return true;
                          }
 
-                         char* save_string;
-                         char* yank_string;
-                              save_string = ce_dupe_string(buffer, &movement_start, &movement_end);
-                    yank_string = ce_dupe_string(buffer, &movement_start, &yank_end);
+                         char* save_string = ce_dupe_string(buffer, &movement_start, &movement_end);
+                         char* yank_string = ce_dupe_string(buffer, &movement_start, &yank_end);
 
                          if(ce_remove_string(buffer, &movement_start, n_deletes)){
                               ce_commit_remove_string(&buffer_state->commit_tail, &movement_start, cursor, &movement_start, save_string);

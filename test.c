@@ -1505,7 +1505,7 @@ TEST(find_delta_to_soft_char_backward_in_line)
 }
 
 // TODO: vim's WORDS
-TEST(find_delta_to_beginning_of_word)
+TEST(move_cursor_to_beginning_of_word)
 {
      Buffer buffer = {};
      buffer.line_count = 1;
@@ -1515,14 +1515,20 @@ TEST(find_delta_to_beginning_of_word)
      Point cursor;
 
      cursor = (Point) {0, 0};
-     ASSERT(ce_find_delta_to_beginning_of_word(&buffer, &cursor, false) == 0);
+     ASSERT(ce_move_cursor_to_beginning_of_word(&buffer, &cursor, false));
+     EXPECT(cursor.x == 0);
+     EXPECT(cursor.y == 0);
 
      cursor = (Point) {2, 0};
-     ASSERT(ce_find_delta_to_beginning_of_word(&buffer, &cursor, false) == 2);
+     ASSERT(ce_move_cursor_to_beginning_of_word(&buffer, &cursor, false));
+     EXPECT(cursor.x == 0);
+     EXPECT(cursor.y == 0);
 
      // NOTE: on whitespace
      cursor = (Point) {8, 0};
-     ASSERT(ce_find_delta_to_beginning_of_word(&buffer, &cursor, false) == 3);
+     ASSERT(ce_move_cursor_to_beginning_of_word(&buffer, &cursor, false));
+     EXPECT(cursor.x == 5);
+     EXPECT(cursor.y == 0);
 
      ce_free_buffer(&buffer);
 }

@@ -386,6 +386,7 @@ char* ce_dupe_string(const Buffer* buffer, const Point* start, const Point* end)
      CE_CHECK_PTR_ARG(end);
 
      int64_t total_len = ce_compute_length(buffer, start, end);
+     assert(total_len);
 
      if(start->y == end->y){
           // single line allocation
@@ -395,6 +396,7 @@ char* ce_dupe_string(const Buffer* buffer, const Point* start, const Point* end)
                return NULL;
           }
           memcpy(new_str, buffer->lines[start->y] + start->x, total_len);
+          if(!new_str[total_len-1]) new_str[total_len-1] = '\n';
           new_str[total_len] = 0;
 
           return new_str;
@@ -422,7 +424,9 @@ char* ce_dupe_string(const Buffer* buffer, const Point* start, const Point* end)
           itr += len + 1;
      }
 
-     memcpy(itr, buffer->lines[end->y], end->x);
+     memcpy(itr, buffer->lines[end->y], end->x+1);
+     // if the end cursor is on the NUL terminator, append newline
+     if(!new_str[total_len-1]) new_str[total_len-1] = '\n';
      new_str[total_len] = 0;
 
      return new_str;
@@ -448,7 +452,6 @@ char* ce_dupe_buffer(const Buffer* buffer)
      Point start = {};
      Point end = {};
      ce_move_cursor_to_end_of_file(buffer, &end);
-     end.x++;
      return ce_dupe_string(buffer, &start, &end);
 }
 
@@ -712,6 +715,9 @@ int64_t ce_find_delta_to_end_of_word(const Buffer* buffer, const Point* location
 // return -1 on failure, delta to move right to the beginning of the next word on success
 int64_t ce_find_delta_to_next_word(const Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
 {
+     // TODO: make this ce_move_cursor_to_next_word. Also, this function appears to be broken.
+     // test case: word = blah // put the cursor on the d in word and hit w or put the cursor on = and hit w
+     
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
 
@@ -1439,7 +1445,8 @@ bool ce_move_cursor_to_end_of_line(const Buffer* buffer, Point* cursor)
 
      if(!ce_point_on_buffer(buffer, cursor)) return false;
 
-     cursor->x = strlen(buffer->lines[cursor->y]); 
+     cursor->x = strlen(buffer->lines[cursor->y])-1; 
+     if(cursor->x < 0) cursor->x = 0;
      return true;
 }
 
@@ -2297,7 +2304,7 @@ void* ce_memrchr(const void* s, int c, size_t n)
      char* rev_search = (void*)s + (n-1);
      while((uintptr_t)rev_search >= (uintptr_t)s){
           if(*rev_search == c) return rev_search;
-	  rev_search--;
+          rev_search--;
      }
      return NULL;
 }
@@ -2315,15 +2322,15 @@ int64_t ce_compute_length(const Buffer* buffer, const Point* start, const Point*
 
      size_t length = 0;
 
-     if( start->y < end->y){
+     if(start->y < end->y){
           length = strlen(buffer->lines[start->y] + start->x) + 1; // account for newline
           for(int64_t i = start->y + 1; i < end->y; ++i){
                length += strlen(buffer->lines[i]) + 1; // account for newline
           }
-          length += end->x; // do not account for newline
+          length += end->x+1; // do not account for newline. end is inclusive
      }else{
           assert(start->y == end->y);
-          length += end->x - start->x;
+          length += end->x+1 - start->x;
      }
 
      return length;
@@ -2335,7 +2342,7 @@ int ce_iswordchar(int c)
 }
 
 // given a buffer, two points, and a function ptr, return a range of characters that match defined criteria
-// NOTE: start is inclusive, end is exclusive
+// NOTE: start is inclusive, end is inclusive
 bool ce_get_homogenous_adjacents(const Buffer* buffer, Point* start, Point* end, int (*is_homogenous)(int))
 {
      assert(memcmp(start, end, sizeof *start) == 0);
@@ -2355,7 +2362,7 @@ bool ce_get_homogenous_adjacents(const Buffer* buffer, Point* start, Point* end,
           if(!ce_get_char(buffer, end, &curr_char)) break;
      }while((*is_homogenous)(curr_char));
 
-     // the last character wasn't homogenous, but end is exclusive
+     end->x--; // the last character wasn't homogenous
 
      return true;
 }

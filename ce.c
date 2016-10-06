@@ -859,7 +859,7 @@ bool ce_set_char(Buffer* buffer, const Point* location, char c)
      if(c == NEWLINE) return ce_insert_string(buffer, location, "\n");
 
      buffer->lines[location->y][location->x] = c;
-
+     buffer->modified = true;
      return true;
 }
 
@@ -923,6 +923,7 @@ bool ce_join_line(Buffer* buffer, int64_t line){
      l1 = buffer->lines[line];
      l1[l1_len] = ' ';
      memcpy(&l1[l1_len+1], l2, l2_len+1);
+     buffer->modified = true;
      return ce_remove_line(buffer, line+1);
 }
 
@@ -951,7 +952,7 @@ bool ce_remove_line(Buffer* buffer, int64_t line)
      }
 
      buffer->line_count = new_line_count;
-
+     buffer->modified = true;
      return true;
 }
 
@@ -986,6 +987,7 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
                ce_message("%s() failed to realloc new line", __FUNCTION__);
                return false;
           }
+          buffer->modified = true;
           return true;
      }
 
@@ -1024,6 +1026,7 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
           }
      }
 
+     buffer->modified = true;
      return true;
 }
 

@@ -199,7 +199,7 @@ bool ce_insert_char(Buffer* buffer, const Point* location, char c)
 
 bool ce_append_char(Buffer* buffer, char c)
 {
-     Point end = {};
+     Point end = {0, 0};
      ce_move_cursor_to_end_of_file(buffer, &end);
      end.x++;
      return ce_insert_char(buffer, &end, c);
@@ -504,8 +504,8 @@ char* ce_dupe_lines(const Buffer* buffer, int64_t start_line, int64_t end_line)
 
 char* ce_dupe_buffer(const Buffer* buffer)
 {
-     Point start = {};
-     Point end = {};
+     Point start = {0, 0};
+     Point end = {0, 0};
      ce_move_cursor_to_end_of_file(buffer, &end);
      end.x++;
      return ce_dupe_string(buffer, &start, &end);

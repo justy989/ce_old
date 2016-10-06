@@ -1144,7 +1144,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          char c = 0;
                          if(ce_get_char(buffer, &previous, &c)){
                               if(ce_remove_char(buffer, &previous)){
-                                   if(previous.x <= config_state->start_insert.x){
+                                   if(previous.x < config_state->start_insert.x){
                                         backspace_push(&buffer_state->backspace_head, c);
                                         config_state->start_insert.x--;
                                    }

@@ -696,6 +696,9 @@ int64_t ce_find_delta_to_end_of_word(const Buffer* buffer, const Point* location
 // return -1 on failure, delta to move right to the beginning of the next word on success
 int64_t ce_find_delta_to_next_word(const Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
 {
+     // TODO: make this ce_move_cursor_to_next_word. Also, this function appears to be broken.
+     // test case: word = blah // put the cursor on the d in word and hit w or put the cursor on = and hit w
+     
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
 
@@ -2319,7 +2322,7 @@ int ce_iswordchar(int c)
 }
 
 // given a buffer, two points, and a function ptr, return a range of characters that match defined criteria
-// NOTE: start is inclusive, end is exclusive
+// NOTE: start is inclusive, end is inclusive
 bool ce_get_homogenous_adjacents(const Buffer* buffer, Point* start, Point* end, int (*is_homogenous)(int))
 {
      assert(memcmp(start, end, sizeof *start) == 0);
@@ -2339,7 +2342,7 @@ bool ce_get_homogenous_adjacents(const Buffer* buffer, Point* start, Point* end,
           if(!ce_get_char(buffer, end, &curr_char)) break;
      }while((*is_homogenous)(curr_char));
 
-     // the last character wasn't homogenous, but end is exclusive
+     end->x--; // the last character wasn't homogenous
 
      return true;
 }

@@ -619,7 +619,6 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
                     if(!ce_get_homogenous_adjacents(buffer, movement_start, movement_end, isnotquote)) return MOVEMENT_INVALID;
                     if(movement_start->x == movement_end->x && movement_start->y == movement_end->y) return MOVEMENT_INVALID;
                     assert(movement_start->y == movement_end->y);
-                    movement_end->x--; // TODO: opposite of ce_advance_cursor
                } break;
                case MOVEMENT_CONTINUE:
                     return MOVEMENT_CONTINUE;
@@ -636,7 +635,8 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
                     if(!success) return MOVEMENT_INVALID;
 
 #define SLURP_RIGHT(condition)\
-               do{ movement_end->x++; if(!ce_get_char(buffer, movement_end, &c)) break; }while(condition(c));
+               do{ movement_end->x++; if(!ce_get_char(buffer, movement_end, &c)) break; }while(condition(c));\
+               movement_end->x--;
 #define SLURP_LEFT(condition)\
                do{ movement_start->x--; if(!ce_get_char(buffer, movement_start, &c)) break; }while(condition(c));\
                movement_start->x++;
@@ -718,7 +718,9 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer,
                {
                     if(!ce_get_homogenous_adjacents(buffer, movement_start, movement_end, isnotquote)) return MOVEMENT_INVALID;
                     assert(movement_start->x > 0);
+                    assert(movement_end->x + 1 < (int64_t)strlen(buffer->lines[movement_end->y]));
                     movement_start->x--;
+                    movement_end->x++;
                } break;
                case MOVEMENT_CONTINUE:
                     return MOVEMENT_CONTINUE;

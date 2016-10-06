@@ -1729,7 +1729,7 @@ TEST(sanity_get_word_at_location)
      EXPECT(word_start.y == 0);
      EXPECT(word_start.x == 5);
      EXPECT(word_end.y == 0);
-     EXPECT(word_end.x == 8);
+     EXPECT(word_end.x == 7);
 
      cursor = (Point) {6, 1};
 
@@ -1737,7 +1737,7 @@ TEST(sanity_get_word_at_location)
      EXPECT(word_start.y == 1);
      EXPECT(word_start.x == 4);
      EXPECT(word_end.y == 1);
-     EXPECT(word_end.x == 9);
+     EXPECT(word_end.x == 8);
 
      cursor = (Point) {6, 2};
 
@@ -1745,7 +1745,7 @@ TEST(sanity_get_word_at_location)
      EXPECT(word_start.y == 2);
      EXPECT(word_start.x == 4);
      EXPECT(word_end.y == 2);
-     EXPECT(word_end.x == 8);
+     EXPECT(word_end.x == 7);
 }
 
 TEST(get_indentation_for_next_line_open_bracket)

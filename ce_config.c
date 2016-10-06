@@ -1109,38 +1109,7 @@ void handle_mouse_event(ConfigState* config_state, Buffer* buffer, BufferView* b
 {
      MEVENT event;
      if(getmouse(&event) == OK){
-#ifndef MOUSE_DIAG
-          if(event.bstate & BUTTON1_PRESSED){ // Left click OSX
-               Point click = {event.x, event.y};
-               config_state->view_current = ce_find_view_at_point(config_state->view_head, &click);
-               click = (Point) {event.x - (config_state->view_current->top_left.x - config_state->view_current->left_column),
-                                event.y - (config_state->view_current->top_left.y - config_state->view_current->top_row)};
-               ce_set_cursor(config_state->view_current->buffer_node->buffer,
-                             &config_state->view_current->cursor,
-                             &click);
-          }else if(event.bstate & (REPORT_MOUSE_POSITION | BUTTON2_PRESSED)){ // Scroll down OSX (alternates between these two flags)
-               Point next_line = {0, cursor->y + SCROLL_LINES};
-               if(ce_point_on_buffer(buffer, &next_line)){
-                    Point scroll_location = {0, buffer_view->top_row + SCROLL_LINES};
-                    scroll_view_to_location(buffer_view, &scroll_location);
-                    if(buffer_view->cursor.y < buffer_view->top_row)
-                         ce_move_cursor(buffer, cursor, (Point){0, SCROLL_LINES});
-               }
-          }else if(event.bstate & BUTTON4_PRESSED){ // Scroll up OSX
-               Point next_line = {0, cursor->y - SCROLL_LINES};
-               if(ce_point_on_buffer(buffer, &next_line)){
-                    Point scroll_location = {0, buffer_view->top_row - SCROLL_LINES};
-                    scroll_view_to_location(buffer_view, &scroll_location);
-                    if(buffer_view->cursor.y > buffer_view->top_row + (buffer_view->bottom_right.y - buffer_view->top_left.y))
-                         ce_move_cursor(buffer, cursor, (Point){0, -SCROLL_LINES});
-               }
-          }
-#else
-          (void) config_state;
-          (void) buffer;
-          (void) buffer_view;
-          (void) cursor;
-
+#ifdef MOUSE_DIAG
           ce_message("0x%x", event.bstate);
           if(event.bstate & BUTTON1_PRESSED)
                ce_message("%s", "BUTTON1_PRESSED");
@@ -1192,6 +1161,39 @@ void handle_mouse_event(ConfigState* config_state, Buffer* buffer, BufferView* b
                ce_message("%s", "REPORT_MOUSE_POSITION");
           else if(event.bstate & ALL_MOUSE_EVENTS)
                ce_message("%s", "ALL_MOUSE_EVENTS");
+#endif
+          if(event.bstate & BUTTON1_PRESSED){ // Left click OSX
+               Point click = {event.x, event.y};
+               config_state->view_current = ce_find_view_at_point(config_state->view_head, &click);
+               click = (Point) {event.x - (config_state->view_current->top_left.x - config_state->view_current->left_column),
+                                event.y - (config_state->view_current->top_left.y - config_state->view_current->top_row)};
+               ce_set_cursor(config_state->view_current->buffer_node->buffer,
+                             &config_state->view_current->cursor,
+                             &click);
+          }
+#ifdef SCROLL_SUPPORT
+          // This feature is currently unreliable and is only known to work for Ryan :)
+          else if(event.bstate & (BUTTON_ALT | BUTTON2_CLICKED)){
+               Point next_line = {0, cursor->y + SCROLL_LINES};
+               if(ce_point_on_buffer(buffer, &next_line)){
+                    Point scroll_location = {0, buffer_view->top_row + SCROLL_LINES};
+                    scroll_view_to_location(buffer_view, &scroll_location);
+                    if(buffer_view->cursor.y < buffer_view->top_row)
+                         ce_move_cursor(buffer, cursor, (Point){0, SCROLL_LINES});
+               }
+          }else if(event.bstate & BUTTON4_TRIPLE_CLICKED){
+               Point next_line = {0, cursor->y - SCROLL_LINES};
+               if(ce_point_on_buffer(buffer, &next_line)){
+                    Point scroll_location = {0, buffer_view->top_row - SCROLL_LINES};
+                    scroll_view_to_location(buffer_view, &scroll_location);
+                    if(buffer_view->cursor.y > buffer_view->top_row + (buffer_view->bottom_right.y - buffer_view->top_left.y))
+                         ce_move_cursor(buffer, cursor, (Point){0, -SCROLL_LINES});
+               }
+          }
+#else
+          (void) buffer;
+          (void) buffer_view;
+          (void) cursor;
 #endif
      }
 }

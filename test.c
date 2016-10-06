@@ -1516,19 +1516,19 @@ TEST(move_cursor_to_beginning_of_word)
 
      cursor = (Point) {0, 0};
      ASSERT(ce_move_cursor_to_beginning_of_word(&buffer, &cursor, false));
-     EXPECT(cursor->x == 0);
-     EXPECT(cursor->y == 0);
+     EXPECT(cursor.x == 0);
+     EXPECT(cursor.y == 0);
 
      cursor = (Point) {2, 0};
      ASSERT(ce_move_cursor_to_beginning_of_word(&buffer, &cursor, false));
-     EXPECT(cursor->x == 0);
-     EXPECT(cursor->y == 0);
+     EXPECT(cursor.x == 0);
+     EXPECT(cursor.y == 0);
 
      // NOTE: on whitespace
      cursor = (Point) {8, 0};
      ASSERT(ce_move_cursor_to_beginning_of_word(&buffer, &cursor, false));
-     EXPECT(cursor->x == 5);
-     EXPECT(cursor->y == 0);
+     EXPECT(cursor.x == 5);
+     EXPECT(cursor.y == 0);
 
      ce_free_buffer(&buffer);
 }

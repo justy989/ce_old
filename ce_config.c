@@ -1258,7 +1258,8 @@ void handle_mouse_event(ConfigState* config_state, Buffer* buffer, BufferState* 
           (void) buffer;
           (void) buffer_view;
 #endif
-          if(enter_insert) enter_insert_mode(config_state, cursor);
+          // if we left insert and haven't switched views, enter insert mode
+          if(enter_insert && config_state->view_current == buffer_view) enter_insert_mode(config_state, cursor);
      }
 }
 

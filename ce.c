@@ -198,8 +198,10 @@ bool ce_insert_char(Buffer* buffer, const Point* location, char c)
 bool ce_append_char(Buffer* buffer, char c)
 {
      Point end = {0, 0};
-     ce_move_cursor_to_end_of_file(buffer, &end);
-     end.x++;
+     if(buffer->line_count){
+          end.y = buffer->line_count - 1;
+          end.x = strlen(buffer->lines[end.y]);
+     }
      return ce_insert_char(buffer, &end, c);
 }
 

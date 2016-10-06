@@ -1156,13 +1156,6 @@ void yank_visual_range(ConfigState* config_state)
 
      ce_sort_points(&a, &b);
 
-     // to avoid modifying a const point, explicitly check start and end before extending the end point
-     if(b == &start){
-          start.x++;
-     }else if(b == &end){
-          end.x++;
-     }
-
      add_yank(config_state, '0', ce_dupe_string(buffer, a, b), YANK_NORMAL);
      add_yank(config_state, '"', ce_dupe_string(buffer, a, b), YANK_NORMAL);
 }
@@ -1181,7 +1174,8 @@ void yank_visual_lines(ConfigState* config_state)
      }
 
      Point start = {0, start_line};
-     Point end = {strlen(buffer->lines[end_line]), end_line};
+     Point end = {strlen(buffer->lines[end_line]) - 1, end_line};
+     if(end.x < 0) end.x = 0;
 
      add_yank(config_state, '0', ce_dupe_string(buffer, &start, &end), YANK_LINE);
      add_yank(config_state, '"', ce_dupe_string(buffer, &start, &end), YANK_LINE);
@@ -1199,13 +1193,6 @@ void remove_visual_range(ConfigState* config_state)
      const Point* b = &end;
 
      ce_sort_points(&a, &b);
-
-     // to avoid modifying a const point, explicitly check start and end before extending the end point
-     if(b == &start){
-          start.x++;
-     }else if(b == &end){
-          end.x++;
-     }
 
      char* removed_str = ce_dupe_string(buffer, a, b);
      int64_t remove_len = ce_compute_length(buffer, a, b);
@@ -1233,7 +1220,8 @@ void remove_visual_lines(ConfigState* config_state)
      }
 
      Point start = {0, start_line};
-     Point end = {strlen(buffer->lines[end_line]), end_line};
+     Point end = {strlen(buffer->lines[end_line]) - 1, end_line};
+     if(end.x < 0) end.x = 0;
 
      char* removed_str = ce_dupe_lines(buffer, start.y, end.y);
      int64_t remove_len = strlen(removed_str);

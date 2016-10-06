@@ -661,6 +661,12 @@ bool ce_find_string(const Buffer* buffer, const Point* location, const char* sea
      return false;
 }
 
+void ce_move_cursor_to_beginning_of_line(const Buffer* buffer, Point* cursor)
+{
+     assert(ce_point_on_buffer(buffer, cursor));
+     cursor->x = 0;
+}
+
 bool ce_move_cursor_to_soft_beginning_of_line(const Buffer* buffer, Point* cursor)
 {
      CE_CHECK_PTR_ARG(buffer);
@@ -718,31 +724,30 @@ int64_t ce_find_delta_to_soft_end_of_line(const Buffer* buffer, const Point* cur
      return i - cursor->x;
 }
 
-// return -1 on failure, delta to move left to the beginning of the word on success
-int64_t ce_find_delta_to_beginning_of_word(const Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
+bool ce_move_cursor_to_beginning_of_word(const Buffer* buffer, Point* cursor, bool punctuation_word_boundaries)
 {
+     /* TODO: do we really care about CE_CHECK_PTR_ARG? */
      CE_CHECK_PTR_ARG(buffer);
-     CE_CHECK_PTR_ARG(location);
+     CE_CHECK_PTR_ARG(cursor);
 
-     if(!ce_point_on_buffer(buffer, location)) return -1;
-     const char* line = buffer->lines[location->y];
-     int i = location->x;
-     if(i == 0) return 0;
-     while(i > 0){
-          if(isblank(line[i-1])){
+     assert(ce_point_on_buffer(buffer, cursor));
+
+     const char* line = buffer->lines[cursor->y];
+     while(cursor->x > 0){
+          if(isblank(line[cursor->x-1])){
                // we are starting at a boundary move to the beginning of the previous word
-               while(isblank(line[i-1]) && i) i--;
+               while(isblank(line[cursor->x-1]) && cursor->x) cursor->x--;
           }
-          else if(punctuation_word_boundaries && ce_ispunct(line[i-1])){
-               while(ce_ispunct(line[i-1]) && i) i--;
+          else if(punctuation_word_boundaries && ce_ispunct(line[cursor->x-1])){
+               while(ce_ispunct(line[cursor->x-1]) && cursor->x) cursor->x--;
                break;
           }
           else{
-               while(!isblank(line[i-1]) && (!punctuation_word_boundaries || !ce_ispunct(line[i-1])) && i) i--;
+               while(!isblank(line[cursor->x-1]) && (!punctuation_word_boundaries || !ce_ispunct(line[cursor->x-1])) && cursor->x) cursor->x--;
                break;
           }
      }
-     return location->x - i;
+     return true;
 }
 
 // return -1 on failure, delta to move right to the end of the word on success

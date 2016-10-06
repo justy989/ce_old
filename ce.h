@@ -266,7 +266,8 @@ void ce_is_string_literal(const char* line, int64_t start_offset, int64_t line_l
 int64_t ce_is_caps_var(const char* line, int64_t start_offset);
 
 // Logging Functions
-#define ce_message(...) fprintf(stderr,__VA_ARGS__); fprintf(stderr,"\n");
+#define ce_message(...) ({fprintf(stderr,__VA_ARGS__);\
+                          fprintf(stderr,"\n");})
 
 // Misc. Utility Functions
 int64_t ce_count_string_lines (const char* string);

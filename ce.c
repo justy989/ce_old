@@ -138,8 +138,6 @@ bool ce_point_on_buffer(const Buffer* buffer, const Point* location)
      if(line) line_len = strlen(line);
 
      if(location->x > line_len){
-          ce_message("%s() %"PRId64", %"PRId64" not in buffer with line %"PRId64" only %"PRId64" characters long",
-                     __FUNCTION__, location->x, location->y, buffer->line_count, line_len);
           return false;
      }
 
@@ -200,8 +198,10 @@ bool ce_insert_char(Buffer* buffer, const Point* location, char c)
 bool ce_append_char(Buffer* buffer, char c)
 {
      Point end = {0, 0};
-     ce_move_cursor_to_end_of_file(buffer, &end);
-     end.x++;
+     if(buffer->line_count){
+          end.y = buffer->line_count - 1;
+          end.x = strlen(buffer->lines[end.y]);
+     }
      return ce_insert_char(buffer, &end, c);
 }
 
@@ -226,7 +226,7 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
 
      // if the whole buffer is empty
      if(!buffer->lines){
-		int64_t line_count = ce_count_string_lines(new_string);
+          int64_t line_count = ce_count_string_lines(new_string);
           ce_alloc_lines(buffer, line_count);
 
           int64_t line = 0;
@@ -598,10 +598,12 @@ bool ce_find_delta_to_match(const Buffer* buffer, const Point* location, Point* 
          iter.y += d ){
 
           // first iteration we want iter.x to be on our matchee, other iterations we want it at eol/bol
-          if(iter.y != location->y) iter.x = d == CE_UP? strlen(buffer->lines[iter.y]) : 0;
+          if(iter.y != location->y) iter.x = (d == CE_UP) ? ce_last_index(buffer->lines[iter.y]) : 0;
 
           // loop over buffer
-          for(; ce_get_char(buffer, &iter, &curr); iter.x +=d){
+          for(; ce_point_on_buffer(buffer, &iter); iter.x +=d){
+               ce_get_char(buffer, &iter, &curr);
+
                // loop over line
                if(curr == match){
                     if(--n_unmatched == 0){
@@ -776,7 +778,6 @@ int64_t ce_find_delta_to_next_word(const Buffer* buffer, const Point* location, 
 {
      // TODO: make this ce_move_cursor_to_next_word. Also, this function appears to be broken.
      // test case: word = blah // put the cursor on the d in word and hit w or put the cursor on = and hit w
-     
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
 
@@ -798,6 +799,7 @@ bool ce_get_char(const Buffer* buffer, const Point* location, char* c)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
+     // NOTE: this assert seems to be pretty useful for debugging
 
      if(!ce_point_on_buffer(buffer, location)) return false;
 
@@ -1641,9 +1643,8 @@ bool ce_move_cursor_to_end_of_file(const Buffer* buffer, Point* cursor)
      if(!buffer->line_count) return false;
 
      int64_t last_line = buffer->line_count - 1;
-     int64_t len = strlen(buffer->lines[last_line]);
 
-     cursor->x = len - 1;
+     cursor->x = ce_last_index(buffer->lines[last_line]);
      cursor->y = last_line;
 
      return true;
@@ -2488,7 +2489,7 @@ int64_t ce_get_indentation_for_next_line(const Buffer* buffer, const Point* loca
 
      // then, check the line for a '{' that is unmatched on location's line + indent if you find one
      char curr;
-     for(Point iter = {strlen(buffer->lines[location->y]), location->y};
+     for(Point iter = {ce_last_index(buffer->lines[location->y]), location->y};
          ce_get_char(buffer, &iter, &curr);
          iter.x--){
           if(curr == '{'){
@@ -2514,7 +2515,7 @@ void ce_sort_points(const Point** a, const Point** b)
      }
 }
 
-bool ce_point_in_range (const Point* p, const Point* start, const Point* end)
+bool ce_point_in_range(const Point* p, const Point* start, const Point* end)
 {
     if( ((p->y == start->y && p->x >= start->x) || (p->y > start->y)) &&
         ((p->y == end->y && p->x <= end->x) || (p->y < end->y )) ){
@@ -2522,4 +2523,14 @@ bool ce_point_in_range (const Point* p, const Point* start, const Point* end)
     }
 
      return false;
+}
+
+int64_t ce_last_index(const char* string)
+{
+     CE_CHECK_PTR_ARG(string);
+
+     int64_t len = strlen(string);
+     if(len) len--;
+
+     return len;
 }

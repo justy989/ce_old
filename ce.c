@@ -3,6 +3,7 @@
 #include <string.h>
 #include <inttypes.h>
 #include <assert.h>
+#include <unistd.h>
 
 Point* g_terminal_dimensions = NULL;
 
@@ -91,6 +92,10 @@ bool ce_load_file(Buffer* buffer, const char* filename)
           fclose(file);
 
           buffer->filename = strdup(filename);
+     }
+
+     if(access(filename, W_OK) != 0){
+          buffer->readonly = true;
      }
 
      free(contents);
@@ -906,6 +911,8 @@ bool ce_join_line(Buffer* buffer, int64_t line){
           return false;
      }
 
+     if(buffer->readonly) return false;
+
      if(line == buffer->line_count - 1) return true; // nothing to do
      char* l1 = buffer->lines[line];
      size_t l1_len = strlen(l1);
@@ -927,6 +934,8 @@ bool ce_remove_line(Buffer* buffer, int64_t line)
           ce_message("%s() specified line %"PRId64" ouside of buffer, which has %"PRId64" lines", __FUNCTION__, line, buffer->line_count);
           return false;
      }
+
+     if(buffer->readonly) return false;
 
      // free the old line
      free(buffer->lines[line]);
@@ -950,6 +959,8 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
+
+     if(buffer->readonly) return false;
 
      if(length == 0) return true;
 

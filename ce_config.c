@@ -371,6 +371,7 @@ BufferNode* new_buffer_from_file(BufferNode* head, const char* filename)
 
 void enter_insert_mode(ConfigState* config_state, Point* cursor)
 {
+     if(config_state->view_current->buffer_node->buffer->readonly) return;
      config_state->vim_mode = VM_INSERT;
      config_state->start_insert = *cursor;
      config_state->original_start_insert = *cursor;
@@ -2675,8 +2676,8 @@ void view_drawer(const BufferNode* head, void* user_data)
      };
 
      // draw the status line
-     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s%s %ld lines, k %s %d, c %ld, %ld, v %ld, %ld -> %ld, %ld t: %ld, %ld",
-              mode_names[config_state->vim_mode], buffer->modified ? "*" : "", buffer->filename, buffer->line_count, keyname(config_state->last_key), config_state->last_key,
+     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s%s%s %ld lines, k %s %d, c %ld, %ld, v %ld, %ld -> %ld, %ld t: %ld, %ld",
+              mode_names[config_state->vim_mode], buffer->modified ? "*" : "", buffer->readonly ? "[RO]" : "", buffer->filename, buffer->line_count, keyname(config_state->last_key), config_state->last_key,
               cursor->x, cursor->y, buffer_view->top_left.x, buffer_view->top_left.y, buffer_view->bottom_right.x, buffer_view->bottom_right.y, g_terminal_dimensions->x, g_terminal_dimensions->y);
      attroff(A_REVERSE);
 

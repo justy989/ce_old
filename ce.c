@@ -1676,31 +1676,36 @@ bool ce_advance_cursor(const Buffer* buffer, Point* cursor, int64_t delta)
      CE_CHECK_PTR_ARG(cursor);
 
      if(!ce_point_on_buffer(buffer, cursor)) return false;
+     if(!delta) return true;
 
-     int64_t line_len = strlen(buffer->lines[cursor->y]);
-     int64_t line_len_left = line_len - cursor->x;
+     Direction d = (delta > 0 ) ? CE_DOWN : CE_UP;
+     delta *= d;
+
+     int64_t line_len = (d == CE_DOWN) ? strlen(buffer->lines[cursor->y]) : 0;
+     int64_t line_len_left = (d == CE_DOWN) ? line_len - cursor->x : cursor->x;
 
      // if the movement fits on this line, go for it
      if(delta < line_len_left){
-          cursor->x += delta;
+          cursor->x += delta*d;
           return true;
      }
 
      delta -= line_len_left;
-     cursor->y++;
-     cursor->x = 0;
+     cursor->y += d;
+     cursor->x = (d == CE_DOWN) ? strlen(buffer->lines[cursor->y]) : 0;
 
      while(true){
-          if(cursor->y >= buffer->line_count) return ce_move_cursor_to_end_of_file(buffer, cursor);
+          if(d == CE_DOWN && cursor->y >= buffer->line_count) return ce_move_cursor_to_end_of_file(buffer, cursor);
+          else if(cursor->y < 0) return ce_move_cursor_to_beginning_of_file(buffer, cursor);
 
           line_len = strlen(buffer->lines[cursor->y]);
 
           if(delta < line_len){
-               cursor->x = delta;
+               cursor->x = (d == CE_DOWN) ? delta : line_len - delta;
                break;
           }
 
-          cursor->y++;
+          cursor->y += d;
           delta -= line_len;
      }
 

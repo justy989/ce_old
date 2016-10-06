@@ -166,11 +166,13 @@ bool ce_load_string    (Buffer* buffer, const char* string);
 bool ce_load_file      (Buffer* buffer, const char* filename);
 
 bool ce_insert_char    (Buffer* buffer, const Point* location, char c);
+bool ce_append_char    (Buffer* buffer, char c);
 bool ce_remove_char    (Buffer* buffer, const Point* location);
 bool ce_set_char       (Buffer* buffer, const Point* location, char c);
 
 bool ce_insert_string  (Buffer* buffer, const Point* location, const char* string);
 bool ce_remove_string  (Buffer* buffer, const Point* location, int64_t length);
+bool ce_prepend_string (Buffer* buffer, int64_t line, const char* string);
 bool ce_append_string  (Buffer* buffer, int64_t line, const char* string);
 
 bool ce_insert_line    (Buffer* buffer, int64_t line, const char* string);
@@ -189,6 +191,7 @@ bool    ce_get_char                      (const Buffer* buffer, const Point* loc
 char    ce_get_char_raw                  (const Buffer* buffer, const Point* location);
 int64_t ce_compute_length                (const Buffer* buffer, const Point* start, const Point* end);
 char*   ce_dupe_string                   (const Buffer* buffer, const Point* start, const Point* end);
+char*   ce_dupe_buffer                   (const Buffer* buffer);
 char*   ce_dupe_line                     (const Buffer* buffer, int64_t line);
 int64_t ce_get_indentation_for_next_line (const Buffer* buffer, const Point* location, int64_t tab_len);
 

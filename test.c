@@ -1659,6 +1659,8 @@ TEST(sanity_compute_length)
      ASSERT(ce_compute_length(&buffer, &start, &end) == (int64_t) strlen(buffer.lines[0]) + 1 + // account for null
                                                         (int64_t) strlen(buffer.lines[1]) + 1 + // account for null
                                                         (int64_t) strlen(buffer.lines[2]) + 1);
+
+     ce_free_buffer(&buffer);
 }
 
 #if 0
@@ -1710,6 +1712,8 @@ TEST(sanity_get_homogenous_adjacents)
      EXPECT(start.y == 0);
      EXPECT(end.x == 12);
      EXPECT(end.y == 0);
+
+     ce_free_buffer(&buffer);
 }
 #endif
 
@@ -1746,6 +1750,8 @@ TEST(sanity_get_word_at_location)
      EXPECT(word_start.x == 4);
      EXPECT(word_end.y == 2);
      EXPECT(word_end.x == 7);
+
+     ce_free_buffer(&buffer);
 }
 
 TEST(get_indentation_for_next_line_open_bracket)
@@ -1781,6 +1787,8 @@ TEST(get_indentation_for_next_line_open_bracket)
 
      cursor = (Point) {0, 5};
      ASSERT(ce_get_indentation_for_next_line(&buffer, &cursor, tab_len) == 0);
+
+     ce_free_buffer(&buffer);
 }
 
 TEST(sanity_sort_points_swap)
@@ -1827,6 +1835,8 @@ TEST(sanity_move_cursor_to_soft_beginning_of_line)
      EXPECT(ce_move_cursor_to_soft_beginning_of_line(&buffer, &cursor) == true);
      ASSERT(cursor.x == 5);
      ASSERT(cursor.y == 0);
+
+     ce_free_buffer(&buffer);
 }
 
 TEST(sanity_move_cursor_to_soft_end_of_line)
@@ -1847,6 +1857,84 @@ TEST(sanity_move_cursor_to_soft_end_of_line)
      EXPECT(ce_move_cursor_to_soft_end_of_line(&buffer, &cursor) == true);
      ASSERT(cursor.x == 9);
      ASSERT(cursor.y == 0);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(sanity_append_char)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS ARE AWESOM");
+
+     ASSERT(ce_append_char(&buffer, 'E'));
+     ASSERT(buffer.line_count == 1);
+     EXPECT(strcmp(buffer.lines[0], "TACOS ARE AWESOME") == 0);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(append_newline)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS ARE AWESOME");
+
+     ASSERT(ce_append_char(&buffer, '\n'));
+     ASSERT(ce_append_char(&buffer, 'Y'));
+     ASSERT(ce_append_char(&buffer, 'O'));
+     ASSERT(buffer.line_count == 2);
+     EXPECT(strcmp(buffer.lines[0], "TACOS ARE AWESOME") == 0);
+     EXPECT(strcmp(buffer.lines[1], "YO") == 0);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(dupe_buffer_one_line)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS ARE AWESOME");
+
+     char* duped = ce_dupe_buffer(&buffer);
+
+     ASSERT(duped);
+     EXPECT(strcmp(duped, "TACOS ARE AWESOME") == 0);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(dupe_buffer_multiline)
+{
+     Buffer buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE");
+     buffer.lines[2] = strdup("AWESOME");
+
+     char* duped = ce_dupe_buffer(&buffer);
+
+     ASSERT(duped);
+     EXPECT(strcmp(duped, "TACOS\nARE\nAWESOME") == 0);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(sanity_prepend_string)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+
+     ce_prepend_string(&buffer, 0, "MY ");
+
+     ASSERT(buffer.line_count == 1);
+     EXPECT(strcmp(buffer.lines[0], "MY TACOS") == 0);
 }
 
 int main()

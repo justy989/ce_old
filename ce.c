@@ -125,13 +125,10 @@ void ce_clear_lines(Buffer* buffer)
 bool ce_point_on_buffer(const Buffer* buffer, const Point* location)
 {
      if(location->y < 0 || location->x < 0){
-          ce_message("%s() %"PRId64", %"PRId64" not in buffer", __FUNCTION__, location->x, location->y);
           return false;
      }
 
      if(location->y >= buffer->line_count){
-          ce_message("%s() %"PRId64", %"PRId64" not in buffer with %"PRId64" lines",
-                     __FUNCTION__, location->x, location->y, buffer->line_count);
           return false;
      }
 
@@ -198,6 +195,14 @@ bool ce_insert_char(Buffer* buffer, const Point* location, char c)
      new_line[new_len - 1] = 0;
      buffer->lines[location->y] = new_line;
      return true;
+}
+
+bool ce_append_char(Buffer* buffer, char c)
+{
+     Point end = {};
+     ce_move_cursor_to_end_of_file(buffer, &end);
+     end.x++;
+     return ce_insert_char(buffer, &end, c);
 }
 
 bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_string)
@@ -326,10 +331,16 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
      return true;
 }
 
+bool ce_prepend_string(Buffer* buffer, int64_t line, const char* new_string)
+{
+     Point beginning_of_line = {0, line};
+     return ce_insert_string(buffer, &beginning_of_line, new_string);
+}
+
 bool ce_append_string(Buffer* buffer, int64_t line, const char* new_string)
 {
      Point end_of_line = {0, line};
-     if(buffer->lines[line]) end_of_line.x = strlen(buffer->lines[line]);
+     if(buffer->line_count > line) end_of_line.x = strlen(buffer->lines[line]);
      return ce_insert_string(buffer, &end_of_line, new_string);
 }
 
@@ -434,6 +445,15 @@ char* ce_dupe_line(const Buffer* buffer, int64_t line)
      duped_line[len - 2] = '\n';
      duped_line[len - 1] = 0;
      return memcpy(duped_line, buffer->lines[line], len - 2);
+}
+
+char* ce_dupe_buffer(const Buffer* buffer)
+{
+     Point start = {};
+     Point end = {};
+     ce_move_cursor_to_end_of_file(buffer, &end);
+     end.x++;
+     return ce_dupe_string(buffer, &start, &end);
 }
 
 // return x delta between location and the located character 'c' if found. return -1 if not found

@@ -962,7 +962,7 @@ void jump_to_next_shell_command_file_destination(BufferNode* head, ConfigState* 
          i += delta, lines_checked++){
           if(i == command_buffer->line_count && forwards){
                i = 0;
-          } else if(i == 0 && !forwards){
+          }else if(i <= 0 && !forwards){
                i = command_buffer->line_count - 1;
           }
 
@@ -1225,6 +1225,36 @@ void remove_visual_lines(ConfigState* config_state)
      config_state->vim_mode = VM_NORMAL;
 }
 
+void iterate_history_input(ConfigState* config_state, bool previous)
+{
+     BufferState* buffer_state = config_state->view_input->buffer_node->buffer->user_data;
+     InputHistory* history = history_from_input_key(config_state);
+     if(!history) return;
+
+     // update the current history node if we are at the tail to save what the user typed
+     // skip this if they haven't typed anything
+     if(history->tail == history->cur &&
+        config_state->view_input->buffer_node->buffer->line_count){
+          input_history_update_current(history, ce_dupe_buffer(config_state->view_input->buffer_node->buffer));
+     }
+
+     bool success = false;
+
+     if(previous){
+          success = input_history_prev(history);
+     }else{
+          success = input_history_next(history);
+     }
+
+     if(success){
+          ce_clear_lines(config_state->view_input->buffer_node->buffer);
+          ce_append_string(config_state->view_input->buffer_node->buffer, 0, history->cur->entry);
+          config_state->view_input->cursor = (Point){0, 0};
+          ce_move_cursor_to_end_of_file(config_state->view_input->buffer_node->buffer, &config_state->view_input->cursor);
+          reset_buffer_commits(&buffer_state->commit_tail);
+     }
+}
+
 bool key_handler(int key, BufferNode* head, void* user_data)
 {
      ConfigState* config_state = user_data;
@@ -1288,7 +1318,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                // when we exit insert mode, do not move the cursor back unless we are at the end of the line
                *cursor = end_cursor;
           } break;
-          case 127: // backspace
+          case 127:
+          case KEY_BACKSPACE: // backspace
                if(buffer->line_count){
                     if(cursor->x <= 0){
                          if(cursor->y){
@@ -1413,6 +1444,18 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     cursor->x++;
                }
           } break;
+          case 14: // Ctrl + n
+               if(config_state->input){
+                    iterate_history_input(config_state, false);
+                    enter_insert_mode(config_state, cursor);
+               }
+               break;
+          case 16: // Ctrl + p
+               if(config_state->input){
+                    iterate_history_input(config_state, true);
+                    enter_insert_mode(config_state, cursor);
+               }
+               break;
           default:
                if(ce_insert_char(buffer, cursor, key)) cursor->x++;
                break;
@@ -1895,10 +1938,11 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           {
                split_view(config_state->view_head, config_state->view_current, true);
           } break;
-          case 17: // Ctrl + q
+          case 'q':
           {
                Point save_cursor = config_state->view_current->cursor;
                config_state->view_current->buffer_node->buffer->cursor = config_state->view_current->cursor;
+
                // if we try to quit the last view, quit !
                if(config_state->view_current == config_state->view_head &&
                   config_state->view_head->next_horizontal == NULL &&
@@ -2481,40 +2525,14 @@ search:
           } break;
           case 14: // Ctrl + n
                if(config_state->input){
-                    InputHistory* history = history_from_input_key(config_state);
-                    if(!history) break;
-
-                    if(input_history_next(history)){
-                         ce_clear_lines(config_state->view_input->buffer_node->buffer);
-                         ce_append_string(config_state->view_input->buffer_node->buffer, 0, history->cur->entry);
-                         config_state->view_input->cursor = (Point){0, 0};
-                         ce_move_cursor_to_end_of_file(config_state->view_input->buffer_node->buffer, &config_state->view_input->cursor);
-                         reset_buffer_commits(&buffer_state->commit_tail);
-                    }
+                    iterate_history_input(config_state, false);
                }else{
                     jump_to_next_shell_command_file_destination(head, config_state, true);
                }
                break;
           case 16: // Ctrl + p
                if(config_state->input){
-                    InputHistory* history = history_from_input_key(config_state);
-                    if(!history) break;
-
-                    // update the current history node if we are at the tail to save what the user typed
-                    // skip this if they haven't typed anything
-                    if(history->tail == history->cur &&
-                       config_state->view_input->buffer_node->buffer->line_count){
-                         input_history_update_current(history,
-                                                      ce_dupe_buffer(config_state->view_input->buffer_node->buffer));
-                    }
-
-                    if(input_history_prev(history)){
-                         ce_clear_lines(config_state->view_input->buffer_node->buffer);
-                         ce_append_string(config_state->view_input->buffer_node->buffer, 0, history->cur->entry);
-                         config_state->view_input->cursor = (Point){0, 0};
-                         ce_move_cursor_to_end_of_file(config_state->view_input->buffer_node->buffer, &config_state->view_input->cursor);
-                         reset_buffer_commits(&buffer_state->commit_tail);
-                    }
+                    iterate_history_input(config_state, true);
                }else{
                     jump_to_next_shell_command_file_destination(head, config_state, false);
                }
@@ -2614,8 +2632,8 @@ void view_drawer(const BufferNode* head, void* user_data)
      };
 
      // draw the status line
-     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s %ld lines, k %d, c %ld, %ld, v %ld, %ld -> %ld, %ld t: %ld, %ld",
-              mode_names[config_state->vim_mode], buffer->filename, buffer->line_count, config_state->last_key,
+     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s %ld lines, k %s %d, c %ld, %ld, v %ld, %ld -> %ld, %ld t: %ld, %ld",
+              mode_names[config_state->vim_mode], buffer->filename, buffer->line_count, keyname(config_state->last_key), config_state->last_key,
               cursor->x, cursor->y, buffer_view->top_left.x, buffer_view->top_left.y, buffer_view->bottom_right.x, buffer_view->bottom_right.y, g_terminal_dimensions->x, g_terminal_dimensions->y);
      attroff(A_REVERSE);
 

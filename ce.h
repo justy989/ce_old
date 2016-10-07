@@ -134,7 +134,7 @@ typedef struct BufferView {
      Point bottom_right;
      int64_t top_row;
      int64_t left_column;
-     BufferNode* buffer_node;
+     Buffer* buffer;
      struct BufferView* next_horizontal;
      struct BufferView* next_vertical;
 } BufferView;
@@ -161,7 +161,7 @@ bool ce_remove_buffer_from_list      (BufferNode* head, BufferNode** node);
 
 
 // Buffer-View Manipulation Functions
-BufferView* ce_split_view         (BufferView* view, BufferNode* buffer_node, bool horizontal);
+BufferView* ce_split_view         (BufferView* view, Buffer* buffer, bool horizontal);
 bool ce_remove_view               (BufferView** head, BufferView* view);
 bool ce_calc_views                (BufferView* head, const Point* top_left, const Point* top_right);
 bool ce_draw_views                (const BufferView* head, const char* highlight_word);

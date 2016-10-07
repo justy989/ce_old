@@ -185,6 +185,7 @@ typedef struct{
      const char* input_message;
      char input_key;
      Buffer input_buffer;
+     Buffer buffer_list_buffer;
      int64_t input_last_error;
      int last_key;
      uint64_t command_multiplier;
@@ -377,7 +378,7 @@ void enter_normal_mode(ConfigState* config_state)
 
 void enter_insert_mode(ConfigState* config_state, Point* cursor)
 {
-     if(config_state->view_current->buffer_node->buffer->readonly) return;
+     if(config_state->view_current->buffer->readonly) return;
      config_state->vim_mode = VM_INSERT;
      config_state->start_insert = *cursor;
      config_state->original_start_insert = *cursor;
@@ -453,8 +454,8 @@ void clear_keys(ConfigState* config_state)
 
 void input_start(ConfigState* config_state, const char* input_message, char input_key)
 {
-     ce_clear_lines(config_state->view_input->buffer_node->buffer);
-     ce_alloc_lines(config_state->view_input->buffer_node->buffer, 1);
+     ce_clear_lines(config_state->view_input->buffer);
+     ce_alloc_lines(config_state->view_input->buffer, 1);
      config_state->view_input->cursor = (Point){0, 0};
      config_state->input_message = input_message;
      config_state->input_key = input_key;
@@ -466,7 +467,7 @@ void input_start(ConfigState* config_state, const char* input_message, char inpu
 #define input_end() ({ \
      config_state->input = false;\
      config_state->view_current = config_state->view_save; \
-     buffer = config_state->view_current->buffer_node->buffer; \
+     buffer = config_state->view_current->buffer; \
      buffer_state = buffer->user_data; \
      buffer_view = config_state->view_current; \
      cursor = &config_state->view_current->cursor; \
@@ -545,17 +546,14 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
      }
 
      // setup input buffer
-     BufferNode* input_buffer_node = calloc(1, sizeof(*input_buffer_node));
-     if(!input_buffer_node) {
-          ce_message("failed to allocate buffer node for input");
-          return false;
-     }
-
-     input_buffer_node->buffer = &config_state->input_buffer;
      ce_alloc_lines(&config_state->input_buffer, 1);
      initialize_buffer(&config_state->input_buffer);
      config_state->input_buffer.name = strdup("input");
-     config_state->view_input->buffer_node = input_buffer_node;
+     config_state->view_input->buffer = &config_state->input_buffer;
+
+     // setup buffer list buffer
+     ce_alloc_lines(&config_state->buffer_list_buffer, 1);
+     config_state->input_buffer.name = strdup("buffer list");
 
      *user_data = config_state;
 
@@ -567,14 +565,14 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
           itr = itr->next;
      }
 
-     config_state->view_head->buffer_node = head;
+     config_state->view_head->buffer = head->buffer;
      config_state->view_current = config_state->view_head;
 
      for(int i = 0; i < argc; ++i){
           BufferNode* node = new_buffer_from_file(head, argv[i]);
 
           // if we loaded a file, set the view to point at the file
-          if(i == 0 && node) config_state->view_current->buffer_node = node;
+          if(i == 0 && node) config_state->view_current->buffer = node->buffer;
      }
 
      input_history_init(&config_state->shell_command_history);
@@ -629,9 +627,10 @@ bool destroyer(BufferNode* head, void* user_data)
           while(itr->prev) itr = itr->prev;
           ce_commits_free(itr);
 
-          free(config_state->view_input->buffer_node);
           free(config_state->view_input);
      }
+
+     ce_free_buffer(&config_state->buffer_list_buffer);
 
      // history
      input_history_free(&config_state->shell_command_history);
@@ -989,7 +988,7 @@ bool is_movement_buffer_full(ConfigState* config_state)
 
 void scroll_view_to_last_line(BufferView* view)
 {
-     view->top_row = view->buffer_node->buffer->line_count - (view->bottom_right.y - view->top_left.y);
+     view->top_row = view->buffer->line_count - (view->bottom_right.y - view->top_left.y);
      if(view->top_row < 0) view->top_row = 0;
 }
 
@@ -1063,7 +1062,7 @@ void jump_to_next_shell_command_file_destination(BufferNode* head, ConfigState* 
 
           BufferNode* node = open_file_buffer(head, file_tmp);
           if(node){
-               config_state->view_current->buffer_node = node;
+               config_state->view_current->buffer = node->buffer;
                Point dst = {0, atoi(line_number_tmp) - 1}; // line numbers are 1 indexed
                ce_set_cursor(node->buffer, &config_state->view_current->cursor, &dst);
 
@@ -1104,8 +1103,8 @@ void jump_to_next_shell_command_file_destination(BufferNode* head, ConfigState* 
 
 bool commit_input_to_history(ConfigState* config_state, InputHistory* history)
 {
-     if(config_state->view_input->buffer_node->buffer->line_count){
-          char* saved = ce_dupe_buffer(config_state->view_input->buffer_node->buffer);
+     if(config_state->view_input->buffer->line_count){
+          char* saved = ce_dupe_buffer(config_state->view_input->buffer);
           if((history->cur->prev && strcmp(saved, history->cur->prev->entry) != 0) ||
              !history->cur->prev){
                history->cur = history->tail;
@@ -1152,7 +1151,7 @@ void view_follow_cursor(BufferView* current_view)
 
 void split_view(BufferView* head_view, BufferView* current_view, bool horizontal)
 {
-     BufferView* new_view = ce_split_view(current_view, current_view->buffer_node, horizontal);
+     BufferView* new_view = ce_split_view(current_view, current_view->buffer, horizontal);
      if(new_view){
           Point top_left = {0, 0};
           Point bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 2}; // account for statusbar
@@ -1234,7 +1233,7 @@ void handle_mouse_event(ConfigState* config_state, Buffer* buffer, BufferState* 
                config_state->view_current = ce_find_view_at_point(config_state->view_head, &click);
                click = (Point) {event.x - (config_state->view_current->top_left.x - config_state->view_current->left_column),
                                 event.y - (config_state->view_current->top_left.y - config_state->view_current->top_row)};
-               ce_set_cursor(config_state->view_current->buffer_node->buffer,
+               ce_set_cursor(config_state->view_current->buffer,
                              &config_state->view_current->cursor,
                              &click);
           }
@@ -1270,14 +1269,14 @@ void half_page_up(BufferView* view)
 {
      int64_t view_height = view->bottom_right.y - view->top_left.y;
      Point delta = { 0, -view_height / 2 };
-     ce_move_cursor(view->buffer_node->buffer, &view->cursor, delta);
+     ce_move_cursor(view->buffer, &view->cursor, delta);
 }
 
 void half_page_down(BufferView* view)
 {
      int64_t view_height = view->bottom_right.y - view->top_left.y;
      Point delta = { 0, view_height / 2 };
-     ce_move_cursor(view->buffer_node->buffer, &view->cursor, delta);
+     ce_move_cursor(view->buffer, &view->cursor, delta);
 }
 
 bool scroll_z_cursor(ConfigState* config_state)
@@ -1308,7 +1307,7 @@ bool scroll_z_cursor(ConfigState* config_state)
 
 void yank_visual_range(ConfigState* config_state)
 {
-     Buffer* buffer = config_state->view_current->buffer_node->buffer;
+     Buffer* buffer = config_state->view_current->buffer;
      Point* cursor = &config_state->view_current->cursor;
      Point start = config_state->visual_start;
      Point end = {cursor->x, cursor->y};
@@ -1324,7 +1323,7 @@ void yank_visual_range(ConfigState* config_state)
 
 void yank_visual_lines(ConfigState* config_state)
 {
-     Buffer* buffer = config_state->view_current->buffer_node->buffer;
+     Buffer* buffer = config_state->view_current->buffer;
      Point* cursor = &config_state->view_current->cursor;
      int64_t start_line = config_state->visual_start.y;
      int64_t end_line = cursor->y;
@@ -1345,7 +1344,7 @@ void yank_visual_lines(ConfigState* config_state)
 void remove_visual_range(ConfigState* config_state)
 {
      Point* cursor = &config_state->view_current->cursor;
-     Buffer* buffer = config_state->view_current->buffer_node->buffer;
+     Buffer* buffer = config_state->view_current->buffer;
      BufferState* buffer_state = buffer->user_data;
      Point start = config_state->visual_start;
      Point end = {cursor->x, cursor->y};
@@ -1369,7 +1368,7 @@ void remove_visual_range(ConfigState* config_state)
 void remove_visual_lines(ConfigState* config_state)
 {
      Point* cursor = &config_state->view_current->cursor;
-     Buffer* buffer = config_state->view_current->buffer_node->buffer;
+     Buffer* buffer = config_state->view_current->buffer;
      BufferState* buffer_state = buffer->user_data;
      int64_t start_line = config_state->visual_start.y;
      int64_t end_line = cursor->y;
@@ -1397,15 +1396,15 @@ void remove_visual_lines(ConfigState* config_state)
 
 void iterate_history_input(ConfigState* config_state, bool previous)
 {
-     BufferState* buffer_state = config_state->view_input->buffer_node->buffer->user_data;
+     BufferState* buffer_state = config_state->view_input->buffer->user_data;
      InputHistory* history = history_from_input_key(config_state);
      if(!history) return;
 
      // update the current history node if we are at the tail to save what the user typed
      // skip this if they haven't typed anything
      if(history->tail == history->cur &&
-        config_state->view_input->buffer_node->buffer->line_count){
-          input_history_update_current(history, ce_dupe_buffer(config_state->view_input->buffer_node->buffer));
+        config_state->view_input->buffer->line_count){
+          input_history_update_current(history, ce_dupe_buffer(config_state->view_input->buffer));
      }
 
      bool success = false;
@@ -1417,10 +1416,10 @@ void iterate_history_input(ConfigState* config_state, bool previous)
      }
 
      if(success){
-          ce_clear_lines(config_state->view_input->buffer_node->buffer);
-          ce_append_string(config_state->view_input->buffer_node->buffer, 0, history->cur->entry);
+          ce_clear_lines(config_state->view_input->buffer);
+          ce_append_string(config_state->view_input->buffer, 0, history->cur->entry);
           config_state->view_input->cursor = (Point){0, 0};
-          ce_move_cursor_to_end_of_file(config_state->view_input->buffer_node->buffer, &config_state->view_input->cursor);
+          ce_move_cursor_to_end_of_file(config_state->view_input->buffer, &config_state->view_input->cursor);
           reset_buffer_commits(&buffer_state->commit_tail);
      }
 }
@@ -1428,7 +1427,7 @@ void iterate_history_input(ConfigState* config_state, bool previous)
 bool key_handler(int key, BufferNode* head, void* user_data)
 {
      ConfigState* config_state = user_data;
-     Buffer* buffer = config_state->view_current->buffer_node->buffer;
+     Buffer* buffer = config_state->view_current->buffer;
      BufferState* buffer_state = buffer->user_data;
      BufferView* buffer_view = config_state->view_current;
      Point* cursor = &config_state->view_current->cursor;
@@ -2099,7 +2098,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 17: // Ctrl + q
           {
                Point save_cursor = config_state->view_current->cursor;
-               config_state->view_current->buffer_node->buffer->cursor = config_state->view_current->cursor;
+               config_state->view_current->buffer->cursor = config_state->view_current->cursor;
 
                // if we try to quit the last view, quit !
                if(config_state->view_current == config_state->view_head &&
@@ -2117,17 +2116,19 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case '':
           {
+#if 0
                // save cursor in buffer
-               config_state->view_current->buffer_node->buffer->cursor = config_state->view_current->cursor;
+               config_state->view_current->buffer->cursor = config_state->view_current->cursor;
 
                // get the next buffer
-               config_state->view_current->buffer_node = config_state->view_current->buffer_node->next;
-               if(!config_state->view_current->buffer_node){
-                    config_state->view_current->buffer_node = head;
+               config_state->view_current->buffer = config_state->view_current->buffer_node->next;
+               if(!config_state->view_current->buffer){
+                    config_state->view_current->buffer = head->buffer;
                }
 
                // load the cursor from the buffer
-               config_state->view_current->cursor = config_state->view_current->buffer_node->buffer->cursor;
+               config_state->view_current->cursor = config_state->view_current->buffer->cursor;
+#endif
           } break;
           case 'u':
                if(buffer_state->commit_tail && buffer_state->commit_tail->commit.type != BCT_NONE){
@@ -2266,7 +2267,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     filename[word_len] = '\0';
 
                     BufferNode* file_buffer = open_file_buffer(head, filename);
-                    if(file_buffer) buffer_view->buffer_node = file_buffer;
+                    if(file_buffer) buffer_view->buffer = file_buffer->buffer;
                     else ce_message("file %s not found", filename);
                } break;
                }
@@ -2296,7 +2297,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                BufferView* next_view = ce_find_view_at_point(config_state->view_head, &point);
                if(next_view){
                     // save cursor
-                    config_state->view_current->buffer_node->buffer->cursor = config_state->view_current->cursor;
+                    config_state->view_current->buffer->cursor = config_state->view_current->cursor;
                     config_state->view_current = next_view;
                     enter_normal_mode(config_state);
                }
@@ -2310,11 +2311,11 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          break;
                     case ':':
                     {
-                         if(config_state->view_input->buffer_node->buffer->line_count){
-                              int64_t line = atoi(config_state->view_input->buffer_node->buffer->lines[0]);
+                         if(config_state->view_input->buffer->line_count){
+                              int64_t line = atoi(config_state->view_input->buffer->lines[0]);
                               if(line > 0){
                                    config_state->view_current->cursor = (Point){0, line - 1};
-                                   ce_move_cursor_to_soft_beginning_of_line(config_state->view_current->buffer_node->buffer,
+                                   ce_move_cursor_to_soft_beginning_of_line(config_state->view_current->buffer,
                                                                             &config_state->view_current->cursor);
                               }
                          }
@@ -2322,27 +2323,27 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     case 6: // Ctrl + f
                          // just grab the first line and load it as a file
                          commit_input_to_history(config_state, &config_state->load_file_history);
-                         for(int64_t i = 0; i < config_state->view_input->buffer_node->buffer->line_count; ++i){
-                              BufferNode* new_node = open_file_buffer(head, config_state->view_input->buffer_node->buffer->lines[i]);
+                         for(int64_t i = 0; i < config_state->view_input->buffer->line_count; ++i){
+                              BufferNode* new_node = open_file_buffer(head, config_state->view_input->buffer->lines[i]);
                               if(i == 0 && new_node){
-                                   config_state->view_current->buffer_node = new_node;
+                                   config_state->view_current->buffer = new_node->buffer;
                                    config_state->view_current->cursor = (Point){0, 0};
                               }
                          }
                          break;
                     case '/':
-                         if(config_state->view_input->buffer_node->buffer->line_count){
+                         if(config_state->view_input->buffer->line_count){
                               commit_input_to_history(config_state, &config_state->search_history);
                               config_state->search_command.direction = CE_DOWN;
-                              add_yank(config_state, '/', strdup(config_state->view_input->buffer_node->buffer->lines[0]), YANK_NORMAL);
+                              add_yank(config_state, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
                               goto search;
                          }
                          break;
                     case '?':
-                         if(config_state->view_input->buffer_node->buffer->line_count){
+                         if(config_state->view_input->buffer->line_count){
                               commit_input_to_history(config_state, &config_state->search_history);
                               config_state->search_command.direction = CE_UP;
-                              add_yank(config_state, '/', strdup(config_state->view_input->buffer_node->buffer->lines[0]), YANK_NORMAL);
+                              add_yank(config_state, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
                               goto search;
                          }
                          break;
@@ -2363,39 +2364,44 @@ bool key_handler(int key, BufferNode* head, void* user_data)
 
                          // if we found an existing command buffer, clear it and use it
                          BufferView* command_view = NULL;
+                         Buffer* command_buffer = NULL;
                          if(command_buffer_node){
-                              ce_clear_lines(command_buffer_node->buffer);
-                              command_buffer_node->buffer->cursor = (Point){0, 0};
-                              command_view = ce_buffer_in_view(config_state->view_head, command_buffer_node->buffer);
+                              command_buffer = command_buffer_node->buffer;
+                              ce_clear_lines(command_buffer);
+                              command_buffer->cursor = (Point){0, 0};
+                              command_view = ce_buffer_in_view(config_state->view_head, command_buffer);
 
                               if(command_view){
                                    command_view->cursor = (Point){0, 0};
                                    command_view->top_row = 0;
                               }else{
-                                   config_state->view_current->buffer_node = command_buffer_node;
+                                   config_state->view_current->buffer = command_buffer_node->buffer;
                                    config_state->view_current->cursor = (Point){0, 0};
                                    config_state->view_current->top_row = 0;
                                    command_view = config_state->view_current;
                               }
                          }else{
                               // create a new one from an empty string
-                              config_state->view_current->buffer_node = new_buffer_from_string(head, "shell_command", NULL);
-                              config_state->view_current->cursor = (Point){0, 0};
-                              config_state->view_current->top_row = 0;
-                              command_buffer_node = config_state->view_current->buffer_node;
-                              command_view = config_state->view_current;
+                              BufferNode* node = new_buffer_from_string(head, "shell_command", NULL);
+                              if(node){
+                                   config_state->view_current->buffer = node->buffer;
+                                   config_state->view_current->cursor = (Point){0, 0};
+                                   config_state->view_current->top_row = 0;
+                                   command_buffer = config_state->view_current->buffer;
+                                   command_view = config_state->view_current;
+                              }
                          }
 
                          assert(command_view);
-                         for(int64_t i = 0; i < config_state->view_input->buffer_node->buffer->line_count; ++i){
+                         for(int64_t i = 0; i < config_state->view_input->buffer->line_count; ++i){
                               // run the command
                               char cmd[BUFSIZ];
-                              snprintf(cmd, BUFSIZ, "%s 2>&1", config_state->view_input->buffer_node->buffer->lines[i]);
+                              snprintf(cmd, BUFSIZ, "%s 2>&1", config_state->view_input->buffer->lines[i]);
                               FILE* pfile = popen(cmd, "r");
 
                               // append the command
-                              snprintf(cmd, BUFSIZ, "+ %s", config_state->view_input->buffer_node->buffer->lines[i]);
-                              ce_append_line(command_buffer_node->buffer, cmd);
+                              snprintf(cmd, BUFSIZ, "+ %s", config_state->view_input->buffer->lines[i]);
+                              ce_append_line(command_buffer, cmd);
 
                               // load one line at a time
                               while(fgets(cmd, BUFSIZ, pfile) != NULL){
@@ -2404,7 +2410,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                                    assert(cmd[cmd_len-1] == NEWLINE);
                                    cmd[cmd_len-1] = 0;
 
-                                   ce_append_line(command_buffer_node->buffer, cmd);
+                                   ce_append_line(command_buffer, cmd);
 
                                    scroll_view_to_last_line(command_view);
                                    command_view->cursor.y = command_view->top_row;
@@ -2417,10 +2423,10 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                               // append the return code
                               int exit_code = pclose(pfile);
                               snprintf(cmd, BUFSIZ, "+ exit %d", WEXITSTATUS(exit_code));
-                              ce_append_line(command_buffer_node->buffer, cmd);
+                              ce_append_line(command_buffer, cmd);
 
                               // add blank for readability
-                              ce_append_line(command_buffer_node->buffer, "");
+                              ce_append_line(command_buffer, "");
 
                               scroll_view_to_last_line(command_view);
                               command_view->cursor.y = command_view->top_row;
@@ -2434,7 +2440,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     BufferView* next_view = ce_find_view_at_point(config_state->view_head, &point);
                     if(next_view){
                          // save cursor
-                         config_state->view_current->buffer_node->buffer->cursor = config_state->view_current->cursor;
+                         config_state->view_current->buffer->cursor = config_state->view_current->cursor;
                          config_state->view_current = next_view;
                          enter_normal_mode(config_state);
                     }
@@ -2448,7 +2454,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                BufferView* next_view = ce_find_view_at_point(config_state->view_head, &point);
                if(next_view){
                     // save cursor
-                    config_state->view_current->buffer_node->buffer->cursor = config_state->view_current->cursor;
+                    config_state->view_current->buffer->cursor = config_state->view_current->cursor;
                     config_state->view_current = next_view;
                     enter_normal_mode(config_state);
                }
@@ -2463,7 +2469,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                BufferView* next_view = ce_find_view_at_point(config_state->view_head, &point);
                if(next_view){
                     // save cursor
-                    config_state->view_current->buffer_node->buffer->cursor = config_state->view_current->cursor;
+                    config_state->view_current->buffer->cursor = config_state->view_current->cursor;
                     config_state->view_current = next_view;
                     enter_normal_mode(config_state);
                }
@@ -2725,13 +2731,13 @@ void view_drawer(const BufferNode* head, void* user_data)
 {
      (void)(head);
      ConfigState* config_state = user_data;
-     Buffer* buffer = config_state->view_current->buffer_node->buffer;
+     Buffer* buffer = config_state->view_current->buffer;
      BufferView* buffer_view = config_state->view_current;
      Point* cursor = &config_state->view_current->cursor;
 
      Point top_left = {0, 0};
      Point bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 2}; // account for statusbar
-     int64_t input_view_height = config_state->view_input->buffer_node->buffer->line_count;
+     int64_t input_view_height = config_state->view_input->buffer->line_count;
      if(input_view_height) input_view_height--;
      Point input_top_left = {0, (g_terminal_dimensions->y - 2) - input_view_height};
      if(input_top_left.y < 1) input_top_left.y = 1; // clamp to growing to 1, account for input message
@@ -2764,7 +2770,7 @@ void view_drawer(const BufferNode* head, void* user_data)
           }
 
           buffer->highlight_start = (Point){0, start_line};
-          buffer->highlight_end = (Point){strlen(config_state->view_current->buffer_node->buffer->lines[end_line]), end_line};
+          buffer->highlight_end = (Point){strlen(config_state->view_current->buffer->lines[end_line]), end_line};
      }else{
           buffer->highlight_start = (Point){0, 0};
           buffer->highlight_end = (Point){-1, 0};

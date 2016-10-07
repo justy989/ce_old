@@ -1490,35 +1490,38 @@ void update_buffer_list_buffer(ConfigState* config_state, const BufferNode* head
      ce_clear_lines(&config_state->buffer_list_buffer);
 
      // calc maxes of things we care about for formatting
-     int64_t buffer_count = 0;
      int64_t max_buffer_lines = 0;
      int64_t max_name_len = 0;
+     int64_t buffer_count = 0;
      const BufferNode* itr = head;
      while(itr){
           if(max_buffer_lines < itr->buffer->line_count) max_buffer_lines = itr->buffer->line_count;
           int64_t name_len = strlen(itr->buffer->name);
           if(max_name_len < name_len) max_name_len = name_len;
-          itr = itr->next;
           buffer_count++;
+          itr = itr->next;
      }
 
-     int64_t max_buffer_count_digits = count_digits(buffer_count);
      int64_t max_buffer_lines_digits = count_digits(max_buffer_lines);
+     if(max_buffer_lines_digits < 5) max_buffer_lines_digits = 5; // account for "lines" string row header
+     if(max_name_len < 11) max_name_len = 11; // account for "buffer name" string row header
 
      // build format string, OMG THIS IS SO UNREADABLE HOLY MOLY BATMAN
      char format_string[BUFSIZ];
-     snprintf(format_string, BUFSIZ, "%%%ldld %%4s%%-%lds %%%ldld lines", max_buffer_count_digits,
-              max_name_len, max_buffer_lines_digits);
+     snprintf(format_string, BUFSIZ, "%%-%lds %%-%lds (%%ld buffers)", max_name_len + 4,
+              max_buffer_lines_digits);
+     snprintf(buffer_info, BUFSIZ, format_string, "buffer name", "lines", buffer_count);
+     ce_append_line(&config_state->buffer_list_buffer, buffer_info);
+     snprintf(format_string, BUFSIZ, "%%4s%%-%lds %%%ldld", max_name_len, max_buffer_lines_digits);
 
-     int64_t index = 1;
      itr = head;
      while(itr){
-          const char* buffer_flag_str = itr->buffer->readonly ? readonly_string(itr->buffer) : modified_string(itr->buffer);
-          snprintf(buffer_info, BUFSIZ, format_string, index, buffer_flag_str, itr->buffer->name,
+          const char* buffer_flag_str = itr->buffer->readonly ? readonly_string(itr->buffer) :
+                                                                modified_string(itr->buffer);
+          snprintf(buffer_info, BUFSIZ, format_string, buffer_flag_str, itr->buffer->name,
                    itr->buffer->line_count);
           ce_append_line(&config_state->buffer_list_buffer, buffer_info);
           itr = itr->next;
-          index++;
      }
 }
 
@@ -2438,6 +2441,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
 
                          // if we found an existing command buffer, clear it and use it
                          Buffer* command_buffer = config_state->shell_command_buffer;
+                         command_buffer->readonly = false;
                          ce_clear_lines(command_buffer);
                          command_buffer->cursor = (Point){0, 0};
                          BufferView* command_view = ce_buffer_in_view(config_state->view_head, command_buffer);
@@ -2453,7 +2457,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          }
 
                          assert(command_view);
-                         command_buffer->readonly = false;
                          for(int64_t i = 0; i < config_state->view_input->buffer->line_count; ++i){
                               // run the command
                               char cmd[BUFSIZ];
@@ -2497,7 +2500,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     } break;
                     }
                }else if(config_state->view_current->buffer == &config_state->buffer_list_buffer){
-                    int64_t line = cursor->y;
+                    int64_t line = cursor->y - 1; // account for buffer list row header
                     BufferNode* itr = head;
 
                     while(line){

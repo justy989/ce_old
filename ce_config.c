@@ -584,6 +584,8 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
      config_state->shell_command_buffer = calloc(1, sizeof(*config_state->shell_command_buffer));
      config_state->shell_command_buffer->name = strdup("shell_output");
      initialize_buffer(config_state->shell_command_buffer);
+     ce_alloc_lines(config_state->shell_command_buffer, 1);
+     config_state->shell_command_buffer->modified = false;
      config_state->shell_command_buffer->readonly = true;
      BufferNode* new_buffer_node = ce_append_buffer_to_list(head, config_state->shell_command_buffer);
      if(!new_buffer_node){
@@ -1550,6 +1552,8 @@ void update_buffer_list_buffer(ConfigState* config_state, const BufferNode* head
           ce_append_line(&config_state->buffer_list_buffer, buffer_info);
           itr = itr->next;
      }
+     config_state->buffer_list_buffer.modified = false;
+     config_state->buffer_list_buffer.readonly = true;
 }
 
 Point get_cursor_on_terminal(const Point* cursor, const BufferView* buffer_view)

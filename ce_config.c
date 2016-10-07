@@ -579,7 +579,7 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
 
      // setup shell command buffer
      config_state->shell_command_buffer = calloc(1, sizeof(*config_state->shell_command_buffer));
-     config_state->shell_command_buffer->name = strdup("shell output");
+     config_state->shell_command_buffer->name = strdup("shell_output");
      initialize_buffer(config_state->shell_command_buffer);
      config_state->shell_command_buffer->readonly = true;
      BufferNode* new_buffer_node = ce_append_buffer_to_list(head, config_state->shell_command_buffer);

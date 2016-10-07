@@ -26,7 +26,7 @@ ce_config.so: ce_config.o ce.o
 	$(CC) -shared $(CFLAGS) $^ -o $@ $(LINK)
 
 clean: clean_config clean_test
-	rm -rf ce messages.txt ce.o valgrind_results.txt *.dSYM
+	rm -rf ce messages buffers shell_output ce.o valgrind_results.txt *.dSYM
 
 clean_config:
 	rm -f ce_config.o ce_config.so ce.o

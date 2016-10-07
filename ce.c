@@ -2104,7 +2104,8 @@ bool ce_remove_view(BufferView** head, BufferView* view)
                tmp->next_horizontal = itr->next_horizontal;
                free(itr);
           }else{
-               ce_message("%s() cannot remove the only existing view", __FUNCTION__);
+               free(itr);
+               *head = NULL;
           }
           return true;
      }

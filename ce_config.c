@@ -206,6 +206,23 @@ typedef struct TabView{
      struct TabView* next;
 } TabView;
 
+void tab_view_remove(TabView** head, TabView* view)
+{
+     if(!*head || !view) return;
+
+     // TODO: free any open views
+     TabView* tmp = *head;
+     if(*head == view){
+          *head = view->next;
+          free(tmp);
+          return;
+     }
+
+     while(tmp->next != view) tmp = tmp->next;
+     tmp->next = view->next;
+     free(view);
+}
+
 typedef struct{
      VimMode vim_mode;
      bool input;
@@ -646,6 +663,8 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
      init_pair(S_PREPROCESSOR_HIGHLIGHTED, COLOR_YELLOW, COLOR_BRIGHT_BLACK);
      init_pair(S_DIFF_ADD_HIGHLIGHTED, COLOR_GREEN, COLOR_BRIGHT_BLACK);
      init_pair(S_DIFF_REMOVE_HIGHLIGHTED, COLOR_RED, COLOR_BRIGHT_BLACK);
+
+     init_pair(S_CURRENT_TAB, COLOR_CYAN, COLOR_BACKGROUND);
 
      // Doesn't work in insert mode :<
      //define_key("h", KEY_LEFT);
@@ -2274,13 +2293,28 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                Point save_cursor_on_terminal = get_cursor_on_terminal(cursor, buffer_view);
                config_state->tab_current->view_current->buffer->cursor = config_state->tab_current->view_current->cursor;
 
-               // if we try to quit the last view, quit !
-               if(config_state->tab_current->view_current == config_state->tab_current->view_head &&
-                  config_state->tab_current->view_head->next_horizontal == NULL &&
-                  config_state->tab_current->view_head->next_vertical == NULL){
-                    return false;
-               }
                if(ce_remove_view(&config_state->tab_current->view_head, config_state->tab_current->view_current)){
+                    // if head is NULL, then we have removed the view head, and there were no other views, head is NULL
+                    if(!config_state->tab_current->view_head){
+                         if(config_state->tab_current->next){
+                              config_state->tab_current->next = config_state->tab_current->next;
+                              TabView* tmp = config_state->tab_current;
+                              config_state->tab_current = config_state->tab_current->next;
+                              tab_view_remove(&config_state->tab_head, tmp);
+                              break;
+                         }else{
+                              if(config_state->tab_current == config_state->tab_head) return false;
+
+                              TabView* itr = config_state->tab_head;
+                              while(itr && itr->next != config_state->tab_current) itr = itr->next;
+                              assert(itr);
+                              assert(itr->next == config_state->tab_current);
+                              tab_view_remove(&config_state->tab_head, config_state->tab_current);
+                              config_state->tab_current = itr;
+                              break;
+                         }
+                    }
+
                     if(config_state->tab_current->view_current == config_state->tab_current->view_previous){
                          config_state->tab_current->view_previous = NULL;
                     }
@@ -3035,24 +3069,34 @@ void view_drawer(const BufferNode* head, void* user_data)
      // draw tab line
      if(config_state->tab_head->next){
           // clear tab line with inverses
-          attron(A_REVERSE);
+          standend();
           move(0, 0);
-          for(int i = 0; i < g_terminal_dimensions->x; ++i) addch(' ');
+          for(int i = 0; i < g_terminal_dimensions->x; ++i) addch(ACS_HLINE);
+          for(int i = 0; i < g_terminal_dimensions->x; ++i){
+               Point p = {i, 0};
+               ce_connect_border_lines(&p);
+          }
 
           TabView* tab_itr = config_state->tab_head;
-          move(0, 0);
+          move(0, 1);
+
+          // draw before current tab
           while(tab_itr && tab_itr != config_state->tab_current){
                printw(" ");
                printw(tab_itr->view_current->buffer->name);
                printw(" ");
                tab_itr = tab_itr->next;
           }
-          standend();
+
+          // draw current tab
           assert(tab_itr == config_state->tab_current);
+          attron(COLOR_PAIR(S_CURRENT_TAB));
           printw(" ");
           printw(tab_itr->view_current->buffer->name);
           printw(" ");
-          attron(A_REVERSE);
+          standend();
+
+          // draw rest of tabs
           tab_itr = tab_itr->next;
           while(tab_itr){
                printw(" ");

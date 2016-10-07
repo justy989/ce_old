@@ -42,6 +42,8 @@ typedef enum {
      S_PREPROCESSOR_HIGHLIGHTED,
      S_DIFF_ADD_HIGHLIGHTED,
      S_DIFF_REMOVE_HIGHLIGHTED,
+
+     S_CURRENT_TAB,
 } Syntax;
 
 #define CE_CHECK_PTR_ARG(arg)                                                 \

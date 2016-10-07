@@ -10,7 +10,7 @@
 #include <errno.h>
 
 #define CE_CONFIG "ce_config.so"
-#define MESSAGE_FILE "messages.txt"
+#define MESSAGE_FILE "messages"
 
 #define NEWLINE 10
 #define COLOR_BACKGROUND -1

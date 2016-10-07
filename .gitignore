@@ -3,6 +3,9 @@ test
 *.o
 *.so
 test_output.txt
+messages
+shell_output
+buffers
 
 #gcov
 *.gcov

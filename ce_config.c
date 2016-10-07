@@ -505,11 +505,11 @@ BufferNode* open_file_buffer(BufferNode* head, const char* filename)
           itr = itr->next;
      }
 
-     if(access(filename, F_OK) == 0){
-          return new_buffer_from_file(head, filename);
-     }
-
      if(!itr){
+          if(access(filename, F_OK) == 0){
+               return new_buffer_from_file(head, filename);
+          }
+
           // clang doesn't support nested functions so we need to deal with global state
           nftw_state.search_filename = filename;
           nftw_state.head = head;

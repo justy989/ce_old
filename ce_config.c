@@ -1802,10 +1802,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case 'A':
           {
-               if(ce_move_cursor_to_end_of_line(buffer, cursor)){
-                    cursor->x++;
-                    enter_insert_mode(config_state, cursor);
-               }
+               cursor->x = strlen(buffer->lines[cursor->y]);
+               enter_insert_mode(config_state, cursor);
           } break;
           case 'm':
           {

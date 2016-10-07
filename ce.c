@@ -2290,12 +2290,10 @@ void draw_view_bottom_right_borders(const BufferView* view)
      // draw bottom border
      // NOTE: accounting for the status bar with -2 here is not what we want going forward.
      //       we need a better way of determining when the view is at the edge of the terminal
-     if(view->bottom_right.y < (g_terminal_dimensions->y - 2)){
-          move(view->bottom_right.y, view->top_left.x);
-          for(int64_t i = view->top_left.x; i <= view->bottom_right.x; ++i){
-               move(view->bottom_right.y, i);
-               addch(ACS_HLINE);
-          }
+     move(view->bottom_right.y, view->top_left.x);
+     for(int64_t i = view->top_left.x; i <= view->bottom_right.x; ++i){
+          move(view->bottom_right.y, i);
+          addch(ACS_HLINE);
      }
 }
 
@@ -2343,7 +2341,7 @@ bool draw_vertical_views(const BufferView* view, bool already_drawn, const char*
      return true;
 }
 
-bool connect_at_point(const Point* location)
+bool ce_connect_border_lines(const Point* location)
 {
      CE_CHECK_PTR_ARG(location);
 
@@ -2393,8 +2391,8 @@ bool connect_borders(const BufferView* view)
      Point bottom_right = {view->bottom_right.x, view->bottom_right.y};
      Point bottom_left = {view->top_left.x, view->bottom_right.y};
 
-     return connect_at_point(&top_left) && connect_at_point(&top_right) &&
-            connect_at_point(&bottom_right) && connect_at_point(&bottom_left);
+     return ce_connect_border_lines(&top_left) && ce_connect_border_lines(&top_right) &&
+            ce_connect_border_lines(&bottom_right) && ce_connect_border_lines(&bottom_left);
 }
 
 bool ce_draw_views(const BufferView* view, const char* highlight_word)

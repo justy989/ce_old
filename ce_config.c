@@ -17,7 +17,7 @@ const char* modified_string(Buffer* buffer)
 
 const char* readonly_string(Buffer* buffer)
 {
-     return buffer->readonly ? "[RO]" : "";
+     return buffer->readonly ? " [RO]" : "";
 }
 
 int64_t count_digits(int64_t n)
@@ -202,7 +202,7 @@ typedef struct TabView{
      BufferView* view_head;
      BufferView* view_current;
      BufferView* view_previous;
-     BufferView* view_insert_save;
+     BufferView* view_input_save;
      struct TabView* next;
 } TabView;
 
@@ -486,7 +486,7 @@ void input_start(ConfigState* config_state, const char* input_message, char inpu
      config_state->view_input->cursor = (Point){0, 0};
      config_state->input_message = input_message;
      config_state->input_key = input_key;
-     config_state->tab_current->view_insert_save = config_state->tab_current->view_current;
+     config_state->tab_current->view_input_save = config_state->tab_current->view_current;
      config_state->tab_current->view_current = config_state->view_input;
      enter_insert_mode(config_state, &config_state->view_input->cursor);
 }
@@ -495,7 +495,7 @@ void input_start(ConfigState* config_state, const char* input_message, char inpu
 //       we should clean this up and make it a function.
 #define input_end() ({ \
      config_state->input = false;\
-     config_state->tab_current->view_current = config_state->tab_current->view_insert_save; \
+     config_state->tab_current->view_current = config_state->tab_current->view_input_save; \
      buffer = config_state->tab_current->view_current->buffer; \
      buffer_state = buffer->user_data; \
      buffer_view = config_state->tab_current->view_current; \
@@ -1557,11 +1557,14 @@ void update_buffer_list_buffer(ConfigState* config_state, const BufferNode* head
 
      // build format string, OMG THIS IS SO UNREADABLE HOLY MOLY BATMAN
      char format_string[BUFSIZ];
-     snprintf(format_string, BUFSIZ, "%%-%"PRId64"s %%-%"PRId64"s (%%"PRId64" buffers)", max_name_len + 4,
+     // build header
+     snprintf(format_string, BUFSIZ, "%%5s %%-%"PRId64"s %%-%"PRId64"s (%%"PRId64" buffers)", max_name_len,
               max_buffer_lines_digits);
-     snprintf(buffer_info, BUFSIZ, format_string, "buffer name", "lines", buffer_count);
+     snprintf(buffer_info, BUFSIZ, format_string, "flags", "buffer name", "lines", buffer_count);
      ce_append_line(&config_state->buffer_list_buffer, buffer_info);
-     snprintf(format_string, BUFSIZ, "%%4s%%-%"PRId64"s %%%"PRId64 PRId64, max_name_len, max_buffer_lines_digits);
+     
+     // build buffer info
+     snprintf(format_string, BUFSIZ, "%%5s %%-%"PRId64"s %%%"PRId64 PRId64, max_name_len, max_buffer_lines_digits);
 
      itr = head;
      while(itr){
@@ -1584,7 +1587,7 @@ Point get_cursor_on_terminal(const Point* cursor, const BufferView* buffer_view)
 void get_terminal_view_rect(TabView* tab_head, Point* top_left, Point* bottom_right)
 {
      *top_left = (Point){0, 0};
-     *bottom_right = (Point){g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 2}; // account for statusbar
+     *bottom_right = (Point){g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 1};
 
      // if we have multiple tabs
      if(tab_head->next){
@@ -2017,7 +2020,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          return true; // no movement yet, wait for one!
                     case MOVEMENT_COMPLETE:
                     {
-                         YankMode yank_mode; 
+                         YankMode yank_mode;
                          switch(config_state->movement_keys[0]){
                          case KEY_UP:
                          case KEY_DOWN:
@@ -2026,7 +2029,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                               yank_mode = YANK_LINE;
                               break;
                          default:
-                              yank_mode = YANK_NORMAL; 
+                              yank_mode = YANK_NORMAL;
                          }
                          if(strchr("wW", config_state->movement_keys[0])){
                               movement_end.x--; // exclude movement_end char
@@ -2919,6 +2922,28 @@ search:
      return true;
 }
 
+void draw_view_statuses(BufferView* view, BufferView* current_view, VimMode vim_mode, int last_key)
+{
+     Buffer* buffer = view->buffer;
+     if(view->next_horizontal) draw_view_statuses(view->next_horizontal, current_view, vim_mode, last_key);
+     if(view->next_vertical) draw_view_statuses(view->next_vertical, current_view, vim_mode, last_key);
+
+     // NOTE: mode names need space at the end for OCD ppl like me
+     static const char* mode_names[] = {
+          "NORMAL ",
+          "INSERT ",
+          "VISUAL ",
+          "VISUAL LINE ",
+          "VISUAL BLOCK ",
+     };
+
+     mvprintw(view->bottom_right.y, view->top_left.x + 1, " %s%s%s%s ",
+              view == current_view ? mode_names[vim_mode] : "",
+              modified_string(buffer), buffer->filename, readonly_string(buffer));
+     int digits_in_line = count_digits(view->cursor.y);
+     mvprintw(view->bottom_right.y, (view->bottom_right.x - (digits_in_line + 4)), " %d ", view->cursor.y + 1);
+}
+
 void view_drawer(const BufferNode* head, void* user_data)
 {
      (void)(head);
@@ -2936,12 +2961,20 @@ void view_drawer(const BufferNode* head, void* user_data)
           update_buffer_list_buffer(config_state, head);
      }
 
-     int64_t input_view_height = config_state->view_input->buffer->line_count;
-     if(input_view_height) input_view_height--;
-     Point input_top_left = {0, (g_terminal_dimensions->y - 2) - input_view_height};
-     if(input_top_left.y < 1) input_top_left.y = 1; // clamp to growing to 1, account for input message
-     Point input_bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 2}; // account for statusbar
+     int64_t input_view_height = 0;
+     Point input_top_left = {};
+     Point input_bottom_right = {};
      if(config_state->input){
+          input_view_height = config_state->view_input->buffer->line_count;
+          if(input_view_height) input_view_height--;
+          input_top_left = (Point){config_state->tab_current->view_input_save->top_left.x,
+                                   (config_state->tab_current->view_input_save->bottom_right.y - input_view_height) - 1};
+          if(input_top_left.y < 1) input_top_left.y = 1; // clamp to growing to 1, account for input message
+          input_bottom_right = config_state->tab_current->view_input_save->bottom_right;
+          if(input_bottom_right.y == g_terminal_dimensions->y - 2){
+               input_top_left.y++;
+               input_bottom_right.y++; // account for bottom status bar
+          }
           ce_calc_views(config_state->view_input, &input_top_left, &input_bottom_right);
      }
 
@@ -2983,43 +3016,29 @@ void view_drawer(const BufferNode* head, void* user_data)
      ce_draw_views(config_state->tab_current->view_head, search);
 
      if(config_state->input){
-          attron(A_REVERSE);
-          move(input_top_left.y - 1, 0);
-          for(int i = 0; i < g_terminal_dimensions->x; ++i) addch(' ');
-          mvprintw(input_top_left.y - 1, 0, "%s (ctrl+n next ctrl+p prev)", config_state->input_message);
-          attroff(A_REVERSE);
+          move(input_top_left.y - 1, input_top_left.x);
+          for(int i = input_top_left.x; i < input_bottom_right.x; ++i) addch(ACS_HLINE);
+          mvprintw(input_top_left.y - 1, input_top_left.x + 1, " %s ", config_state->input_message);
+          // clear input buffer section
           for(int y = input_top_left.y; y <= input_bottom_right.y; ++y){
-               move(y, 0);
-               clrtoeol();
+               move(y, input_top_left.x);
+               for(int x = input_top_left.x; x <= input_bottom_right.x; ++x){
+                    addch(' ');
+               }
           }
           ce_draw_views(config_state->view_input, search);
      }
 
-     attron(A_REVERSE);
-     // draw all blanks for the status line and tab line
-     if(config_state->tab_head->next){
-          move(0, 0);
-          for(int i = 0; i < g_terminal_dimensions->x; ++i) addch(' ');
-     }
-     move(g_terminal_dimensions->y - 1, 0);
-     for(int i = 0; i < g_terminal_dimensions->x; ++i) addch(' ');
-
-     static const char* mode_names[] = {
-          "NORMAL",
-          "INSERT",
-          "VISUAL",
-          "VISUAL LINE",
-          "VISUAL BLOCK",
-     };
-
-     // draw the status line
-     mvprintw(g_terminal_dimensions->y - 1, 0, "%s %s%s%s %ld lines, k %s %d, c %ld, %ld, v %ld, %ld -> %ld, %ld t: %ld, %ld",
-              mode_names[config_state->vim_mode], modified_string(buffer), readonly_string(buffer), buffer->filename, buffer->line_count, keyname(config_state->last_key), config_state->last_key,
-              cursor->x, cursor->y, buffer_view->top_left.x, buffer_view->top_left.y, buffer_view->bottom_right.x, buffer_view->bottom_right.y, g_terminal_dimensions->x, g_terminal_dimensions->y);
+     draw_view_statuses(config_state->tab_current->view_head, config_state->tab_current->view_current,
+                        config_state->vim_mode, config_state->last_key);
 
      // draw tab line
      if(config_state->tab_head->next){
-          // NOTE: relies on A_REVERSE being set from drawing the status line!
+          // clear tab line with inverses
+          attron(A_REVERSE);
+          move(0, 0);
+          for(int i = 0; i < g_terminal_dimensions->x; ++i) addch(' ');
+
           TabView* tab_itr = config_state->tab_head;
           move(0, 0);
           while(tab_itr && tab_itr != config_state->tab_current){

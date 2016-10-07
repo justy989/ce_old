@@ -270,12 +270,13 @@ int64_t ce_is_caps_var(const char* line, int64_t start_offset);
                           fprintf(stderr,"\n");})
 
 // Misc. Utility Functions
-int64_t ce_count_string_lines (const char* string);
-void    ce_sort_points        (const Point** a, const Point** b);
-int     ce_ispunct            (int c);
-int     ce_iswordchar         (int c);
-void*   ce_memrchr            (const void* s, int c, size_t n);
-bool    ce_point_in_range     (const Point* p, const Point* start, const Point* end);
-int64_t ce_last_index         (const char* string);
+int64_t ce_count_string_lines   (const char* string);
+void    ce_sort_points          (const Point** a, const Point** b);
+int     ce_ispunct              (int c);
+int     ce_iswordchar           (int c);
+void*   ce_memrchr              (const void* s, int c, size_t n);
+bool    ce_point_in_range       (const Point* p, const Point* start, const Point* end);
+int64_t ce_last_index           (const char* string);
+bool    ce_connect_border_lines (const Point* location);
 
 #endif

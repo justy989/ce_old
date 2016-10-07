@@ -577,6 +577,7 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
 
      // setup buffer list buffer
      config_state->buffer_list_buffer.name = strdup("buffers");
+     initialize_buffer(&config_state->buffer_list_buffer);
      config_state->buffer_list_buffer.readonly = true;
 
      // setup shell command buffer
@@ -639,6 +640,7 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
      //define_key("k", KEY_UP);
      //define_key("l", KEY_RIGHT);
 
+     define_key(NULL, KEY_BACKSPACE);   // Blow away backspace
      define_key("\x7F", KEY_BACKSPACE); // Backspace  (127) (0x7F) ASCII "DEL" Delete
      define_key("\x15", KEY_NPAGE);     // ctrl + d    (21) (0x15) ASCII "NAK" Negative Acknowledgement
      define_key("\x04", KEY_PPAGE);     // ctrl + u     (4) (0x04) ASCII "EOT" End of Transmission
@@ -2054,7 +2056,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                               insert_loc = (Point){0, cursor->y};
                          }
 
-                         bool res = ce_insert_string(buffer, &insert_loc, save_str);
+                         bool res __attribute__((unused)) = ce_insert_string(buffer, &insert_loc, save_str);
                          assert(res);
                          ce_commit_insert_string(&buffer_state->commit_tail,
                                                  &insert_loc, cursor, &cursor_loc,
@@ -2671,6 +2673,9 @@ search:
                          begin_format_line = cursor->y;
                          end_format_line = buffer->line_count-1;
                          break;
+                    default:
+                         clear_keys(config_state);
+                         return true; 
                     }
 
                     // TODO support undo with clang-format
@@ -2707,7 +2712,7 @@ search:
                          char* line_arg;
                          asprintf(&line_arg, "-lines=%"PRId64":%"PRId64, begin_format_line+1, end_format_line+1);
 
-                         int ret = execlp("clang-format", "clang-format", line_arg, cursor_arg, (char *)NULL);
+                         int ret __attribute__((unused)) = execlp("clang-format", "clang-format", line_arg, cursor_arg, (char *)NULL);
                          assert(ret != -1);
                          exit(1); // we should never reach here
                     }

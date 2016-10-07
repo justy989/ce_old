@@ -4,6 +4,9 @@ LINK=-lncurses
 
 all: ce ce_config.so
 
+release: CFLAGS += -DNDEBUG -O3
+release: all
+
 cov: coverage
 coverage: CFLAGS += -fprofile-arcs -ftest-coverage
 coverage: clean_test test

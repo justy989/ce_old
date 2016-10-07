@@ -152,13 +152,13 @@ const char* random_greeting()
      return greetings[ rand() % (sizeof(greetings) / sizeof(greetings[0]))];
 }
 
+const char* config = CE_CONFIG;
+bool save_messages_on_exit = false;
 int main(int argc, char** argv)
 {
-     const char* config = CE_CONFIG;
      int opt = 0;
      int parsed_args = 1;
      bool done_parsing = false;
-     bool save_messages_on_exit = false;
 
      // TODO: create config parser
      // TODO: pass unhandled main arguments to the config's arg parser?
@@ -319,7 +319,7 @@ int main(int argc, char** argv)
                     ce_insert_string(message_buffer, &insert_loc, message_buffer_buf);
                     continue;
                }
-               bool ret = ce_append_line(message_buffer, message_buffer_buf);
+               bool ret __attribute__((unused)) = ce_append_line(message_buffer, message_buffer_buf);
                assert(ret);
           }
 

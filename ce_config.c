@@ -1522,11 +1522,11 @@ void update_buffer_list_buffer(ConfigState* config_state, const BufferNode* head
 
      // build format string, OMG THIS IS SO UNREADABLE HOLY MOLY BATMAN
      char format_string[BUFSIZ];
-     snprintf(format_string, BUFSIZ, "%%-%lds %%-%lds (%%ld buffers)", max_name_len + 4,
+     snprintf(format_string, BUFSIZ, "%%-%"PRId64"s %%-%"PRId64"s (%%"PRId64" buffers)", max_name_len + 4,
               max_buffer_lines_digits);
      snprintf(buffer_info, BUFSIZ, format_string, "buffer name", "lines", buffer_count);
      ce_append_line(&config_state->buffer_list_buffer, buffer_info);
-     snprintf(format_string, BUFSIZ, "%%4s%%-%lds %%%ldld", max_name_len, max_buffer_lines_digits);
+     snprintf(format_string, BUFSIZ, "%%4s%%-%"PRId64"s %%%"PRId64 PRId64, max_name_len, max_buffer_lines_digits);
 
      itr = head;
      while(itr){

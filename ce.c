@@ -256,6 +256,7 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
           int64_t last_newline = -1;
           for(int64_t i = 0; i <= new_string_length; ++i){
                if(new_string[i] != NEWLINE && new_string[i] != 0) continue;
+               if(line >= line_count) break;
 
                int64_t length = (i - 1) - last_newline;
                char* new_line = realloc(buffer->lines[line], length + 1);
@@ -2022,10 +2023,10 @@ bool ce_commit_redo(Buffer* buffer, BufferCommitNode** tail, Point* cursor)
      return true;
 }
 
-BufferView* ce_split_view(BufferView* view, BufferNode* buffer_node, bool horizontal)
+BufferView* ce_split_view(BufferView* view, Buffer* buffer, bool horizontal)
 {
      CE_CHECK_PTR_ARG(view);
-     CE_CHECK_PTR_ARG(buffer_node);
+     CE_CHECK_PTR_ARG(buffer);
 
      BufferView* itr = view;
 
@@ -2046,10 +2047,10 @@ BufferView* ce_split_view(BufferView* view, BufferNode* buffer_node, bool horizo
           return NULL;
      }
 
-     new_view->buffer_node = buffer_node;
+     new_view->buffer = buffer;
      new_view->bottom_right = *g_terminal_dimensions;
 
-     if(buffer_node->buffer) new_view->cursor = buffer_node->buffer->cursor;
+     if(buffer) new_view->cursor = buffer->cursor;
 
      if(horizontal){
           itr->next_horizontal = new_view;
@@ -2311,7 +2312,7 @@ bool draw_horizontal_views(const BufferView* view, bool already_drawn, const cha
                draw_vertical_views(itr, true, highlight_word);
           }else{
                Point buffer_top_left = {itr->left_column, itr->top_row};
-               ce_draw_buffer(itr->buffer_node->buffer, &itr->top_left, &itr->bottom_right, &buffer_top_left, highlight_word);
+               ce_draw_buffer(itr->buffer, &itr->top_left, &itr->bottom_right, &buffer_top_left, highlight_word);
                draw_view_bottom_right_borders(itr);
           }
 
@@ -2332,7 +2333,7 @@ bool draw_vertical_views(const BufferView* view, bool already_drawn, const char*
                draw_horizontal_views(itr, true, highlight_word);
           }else{
                Point buffer_top_left = {itr->left_column, itr->top_row};
-               ce_draw_buffer(itr->buffer_node->buffer, &itr->top_left, &itr->bottom_right, &buffer_top_left, highlight_word);
+               ce_draw_buffer(itr->buffer, &itr->top_left, &itr->bottom_right, &buffer_top_left, highlight_word);
                draw_view_bottom_right_borders(itr);
           }
 
@@ -2433,7 +2434,7 @@ BufferView* ce_find_view_at_point(BufferView* head, const Point* point)
 
 BufferView* buffer_in_view(BufferView* view, const Buffer* buffer)
 {
-     if(view->buffer_node->buffer == buffer){
+     if(view->buffer == buffer){
           return view;
      }
 

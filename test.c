@@ -264,6 +264,19 @@ TEST(remove_char_empty_line)
      ce_free_buffer(&buffer);
 }
 
+TEST(insert_string_newline_on_empty)
+{
+     Buffer buffer = {};
+
+     Point point = {0, 0};
+     ce_insert_string(&buffer, &point, "\n");
+
+     ASSERT(buffer.line_count == 1);
+     EXPECT(strcmp(buffer.lines[0], "") == 0);
+
+     ce_free_buffer(&buffer);
+}
+
 TEST(insert_string_begin)
 {
      Buffer buffer = {};
@@ -1327,25 +1340,19 @@ TEST(sanity_split_view)
      ASSERT(head);
 
      Buffer buffers[4] = {};
-     BufferNode* nodes[4] = {};
 
      for(int i = 0; i < 4; ++i){
           ASSERT(ce_alloc_lines(buffers + i, 1));
-          nodes[i] = calloc(1, sizeof(*nodes[i]));
-          ASSERT(nodes[i]);
-          nodes[i]->buffer = buffers + i;
      }
 
-     head->buffer_node = nodes[0];
-
      // split views
-     BufferView* horizontal_split_view = ce_split_view(head, nodes[1], true);
+     BufferView* horizontal_split_view = ce_split_view(head, buffers + 1, true);
      ASSERT(head->next_horizontal == horizontal_split_view);
 
-     BufferView* vertical_split_view = ce_split_view(head, nodes[2], false);
+     BufferView* vertical_split_view = ce_split_view(head, buffers + 2, false);
      ASSERT(head->next_vertical == vertical_split_view);
 
-     BufferView* new_horizontal_split_view = ce_split_view(vertical_split_view, nodes[3], true);
+     BufferView* new_horizontal_split_view = ce_split_view(vertical_split_view, buffers + 3, true);
      ASSERT(vertical_split_view->next_horizontal == new_horizontal_split_view);
 
      // calc views
@@ -1401,7 +1408,6 @@ TEST(sanity_split_view)
      ASSERT(ce_free_views(&head));
 
      for(int i = 0; i < 4; ++i){
-          free(nodes[i]);
           ce_free_buffer(buffers + i);
      }
 }

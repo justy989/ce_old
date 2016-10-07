@@ -2555,10 +2555,14 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     config_state->view_current->cursor = itr->buffer->cursor;
                     center_view(config_state->view_current);
                }else if(config_state->view_current->buffer == config_state->shell_command_buffer){
-                    if(config_state->view_last) config_state->view_current = config_state->view_last;
-                    goto_file_destination_in_buffer(head, config_state->shell_command_buffer, cursor->y,
-                                                    config_state->view_head, config_state->view_current,
-                                                    &config_state->last_command_buffer_jump);
+                    BufferView* view_to_change = config_state->view_current;
+                    if(config_state->view_last) view_to_change = config_state->view_last;
+
+                    if(goto_file_destination_in_buffer(head, config_state->shell_command_buffer, cursor->y,
+                                                       config_state->view_head, view_to_change,
+                                                       &config_state->last_command_buffer_jump)){
+                         config_state->view_current = view_to_change;
+                    }
                }else{
                     Point point = {cursor->x - config_state->view_current->left_column + config_state->view_current->top_left.x,
                          config_state->view_current->bottom_right.y + 2}; // account for window separator

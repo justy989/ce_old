@@ -2501,9 +2501,10 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     }
                }else if(config_state->view_current->buffer == &config_state->buffer_list_buffer){
                     int64_t line = cursor->y - 1; // account for buffer list row header
+                    if(line < 0) break;
                     BufferNode* itr = head;
 
-                    while(line){
+                    while(line > 0){
                          itr = itr->next;
                          if(!itr) break;
                          line--;

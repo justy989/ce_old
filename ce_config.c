@@ -2223,7 +2223,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                config_state->buffer_list_buffer.readonly = true;
                config_state->view_current->buffer->cursor = *cursor;
                config_state->view_current->buffer = &config_state->buffer_list_buffer;
-               config_state->view_current->cursor = (Point){0, 0};
+               config_state->view_current->cursor = (Point){0, 1};
           } break;
           case 'u':
                if(buffer_state->commit_tail && buffer_state->commit_tail->commit.type != BCT_NONE){

@@ -206,7 +206,7 @@ typedef struct{
      Buffer* shell_command_buffer; // Allocate so it can be part of the buffer list and get free'd at the end
      Buffer input_buffer;
      Buffer buffer_list_buffer;
-     int64_t input_last_error;
+     int64_t last_command_buffer_jump;
      int last_key;
      uint64_t command_multiplier;
      int command_key;
@@ -227,7 +227,8 @@ typedef struct{
      BufferView* view_head;
      BufferView* view_current;
      BufferView* view_input;
-     BufferView* view_save;
+     BufferView* view_last;
+     BufferView* view_insert_save;
      InputHistory shell_command_history;
      InputHistory search_history;
      InputHistory load_file_history;
@@ -479,19 +480,20 @@ void input_start(ConfigState* config_state, const char* input_message, char inpu
      config_state->view_input->cursor = (Point){0, 0};
      config_state->input_message = input_message;
      config_state->input_key = input_key;
-     config_state->view_save = config_state->view_current;
+     config_state->view_insert_save = config_state->view_current;
      config_state->view_current = config_state->view_input;
      enter_insert_mode(config_state, &config_state->view_input->cursor);
 }
 
+// NOTE: locals like buffer, buffer_state, buffer_view, cursor are updated here, which is why this is a macro,
+//       we should clean this up and make it a function.
 #define input_end() ({ \
      config_state->input = false;\
-     config_state->view_current = config_state->view_save; \
+     config_state->view_current = config_state->view_insert_save; \
      buffer = config_state->view_current->buffer; \
      buffer_state = buffer->user_data; \
      buffer_view = config_state->view_current; \
      cursor = &config_state->view_current->cursor; \
-     config_state->input_last_error = 0; \
  })
 
 #ifndef FTW_STOP
@@ -1055,8 +1057,9 @@ void reset_buffer_commits(BufferCommitNode** tail)
      *tail = new_tail;
 }
 
+// NOTE: modify last_jump if we succeed
 bool goto_file_destination_in_buffer(BufferNode* head, Buffer* buffer, int64_t line, BufferView* head_view,
-                                     BufferView* view)
+                                     BufferView* view, int64_t* last_jump)
 {
      assert(line >= 0);
      assert(line < buffer->line_count);
@@ -1135,6 +1138,7 @@ bool goto_file_destination_in_buffer(BufferNode* head, Buffer* buffer, int64_t l
           center_view(view);
           BufferView* command_view = ce_buffer_in_view(head_view, buffer);
           if(command_view) command_view->top_row = line;
+          *last_jump = line;
           return true;
      }
 
@@ -1147,7 +1151,7 @@ void jump_to_next_shell_command_file_destination(BufferNode* head, ConfigState* 
      Buffer* command_buffer = config_state->shell_command_buffer;
      int64_t lines_checked = 0;
      int64_t delta = forwards ? 1 : -1;
-     for(int64_t i = config_state->input_last_error + delta; lines_checked < command_buffer->line_count;
+     for(int64_t i = config_state->last_command_buffer_jump + delta; lines_checked < command_buffer->line_count;
          i += delta, lines_checked++){
           if(i == command_buffer->line_count && forwards){
                i = 0;
@@ -1156,8 +1160,12 @@ void jump_to_next_shell_command_file_destination(BufferNode* head, ConfigState* 
           }
 
           if(goto_file_destination_in_buffer(head, command_buffer, i, config_state->view_head,
-                                             config_state->view_current)){
-               config_state->input_last_error = i;
+                                             config_state->view_current, &config_state->last_command_buffer_jump)){
+               // NOTE: change the cursor, so when you go back to that buffer, your cursor is on the line we last jumped to
+               command_buffer->cursor.x = 0;
+               command_buffer->cursor.y = i;
+               BufferView* command_view = ce_buffer_in_view(config_state->view_head, command_buffer);
+               if(command_view) command_view->cursor = command_buffer->cursor;
                break;
           }
      }
@@ -1456,11 +1464,11 @@ void remove_visual_lines(ConfigState* config_state)
      enter_normal_mode(config_state);
 }
 
-void iterate_history_input(ConfigState* config_state, bool previous)
+bool iterate_history_input(ConfigState* config_state, bool previous)
 {
      BufferState* buffer_state = config_state->view_input->buffer->user_data;
      InputHistory* history = history_from_input_key(config_state);
-     if(!history) return;
+     if(!history) return false;
 
      // update the current history node if we are at the tail to save what the user typed
      // skip this if they haven't typed anything
@@ -1484,13 +1492,16 @@ void iterate_history_input(ConfigState* config_state, bool previous)
           ce_move_cursor_to_end_of_file(config_state->view_input->buffer, &config_state->view_input->cursor);
           reset_buffer_commits(&buffer_state->commit_tail);
      }
+
+     return success;
 }
 
 void switch_to_view_at_point(ConfigState* config_state, const Point* point)
 {
      BufferView* next_view = ce_find_view_at_point(config_state->view_head, point);
      if(next_view){
-          // save cursor in buffer info
+          // save view and cursor
+          config_state->view_last = config_state->view_current;
           config_state->view_current->buffer->cursor = config_state->view_current->cursor;
           config_state->view_current = next_view;
           enter_normal_mode(config_state);
@@ -1537,6 +1548,13 @@ void update_buffer_list_buffer(ConfigState* config_state, const BufferNode* head
           ce_append_line(&config_state->buffer_list_buffer, buffer_info);
           itr = itr->next;
      }
+}
+
+Point get_cursor_on_terminal(const Point* cursor, const BufferView* buffer_view)
+{
+     Point p = {cursor->x - buffer_view->left_column + buffer_view->top_left.x,
+                cursor->y - buffer_view->top_row + buffer_view->top_left.y};
+     return p;
 }
 
 bool key_handler(int key, BufferNode* head, void* user_data)
@@ -1679,16 +1697,18 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case 14: // Ctrl + n
                if(config_state->input){
-                    iterate_history_input(config_state, false);
-                    if(buffer->line_count && buffer->lines[cursor->y][0]) cursor->x++;
-                    enter_insert_mode(config_state, cursor);
+                    if(iterate_history_input(config_state, false)){
+                         if(buffer->line_count && buffer->lines[cursor->y][0]) cursor->x++;
+                         enter_normal_mode(config_state);
+                    }
                }
                break;
           case 16: // Ctrl + p
                if(config_state->input){
-                    iterate_history_input(config_state, true);
-                    if(buffer->line_count && buffer->lines[cursor->y][0]) cursor->x++;
-                    enter_insert_mode(config_state, cursor);
+                    if(iterate_history_input(config_state, true)){
+                         if(buffer->line_count && buffer->lines[cursor->y][0]) cursor->x++;
+                         enter_normal_mode(config_state);
+                    }
                }
                break;
           default:
@@ -2211,9 +2231,9 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           {
                split_view(config_state->view_head, config_state->view_current, true);
           } break;
-          case KEY_CLOSE:
+          case KEY_CLOSE: // Ctrl + q
           {
-               Point save_cursor = config_state->view_current->cursor;
+               Point save_cursor_on_terminal = get_cursor_on_terminal(cursor, buffer_view);
                config_state->view_current->buffer->cursor = config_state->view_current->cursor;
 
                // if we try to quit the last view, quit !
@@ -2222,12 +2242,17 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                   config_state->view_head->next_vertical == NULL){
                     return false;
                }
-               ce_remove_view(&config_state->view_head, config_state->view_current);
-               BufferView* new_view = ce_find_view_at_point(config_state->view_head, &save_cursor);
-               if(new_view){
-                    config_state->view_current = new_view;
-               }else{
-                    config_state->view_current = config_state->view_head;
+               if(ce_remove_view(&config_state->view_head, config_state->view_current)){
+                    if(config_state->view_current == config_state->view_last) config_state->view_last = NULL;
+                    Point top_left = {0, 0};
+                    Point bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 2}; // account for statusbar
+                    ce_calc_views(config_state->view_head, &top_left, &bottom_right);
+                    BufferView* new_view = ce_find_view_at_point(config_state->view_head, &save_cursor_on_terminal);
+                    if(new_view){
+                         config_state->view_current = new_view;
+                    }else{
+                         config_state->view_current = config_state->view_head;
+                    }
                }
           } break;
           case 2: // Ctrl + b
@@ -2457,6 +2482,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          command_buffer->readonly = false;
                          ce_clear_lines(command_buffer);
                          command_buffer->cursor = (Point){0, 0};
+                         config_state->last_command_buffer_jump = 0;
                          BufferView* command_view = ce_buffer_in_view(config_state->view_head, command_buffer);
 
                          if(command_view){
@@ -2530,10 +2556,13 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     center_view(config_state->view_current);
                }else if(config_state->view_current->buffer == config_state->shell_command_buffer){
                     BufferView* view_to_change = config_state->view_current;
-                    if(view_to_change->next_horizontal) view_to_change = view_to_change->next_horizontal;
-                    else if(view_to_change->next_vertical) view_to_change = view_to_change->next_vertical;
-                    goto_file_destination_in_buffer(head, config_state->shell_command_buffer, cursor->y,
-                                                    config_state->view_head, view_to_change);
+                    if(config_state->view_last) view_to_change = config_state->view_last;
+
+                    if(goto_file_destination_in_buffer(head, config_state->shell_command_buffer, cursor->y,
+                                                       config_state->view_head, view_to_change,
+                                                       &config_state->last_command_buffer_jump)){
+                         config_state->view_current = view_to_change;
+                    }
                }else{
                     Point point = {cursor->x - config_state->view_current->left_column + config_state->view_current->top_left.x,
                          config_state->view_current->bottom_right.y + 2}; // account for window separator
@@ -2826,7 +2855,7 @@ void view_drawer(const BufferNode* head, void* user_data)
      if(input_top_left.y < 1) input_top_left.y = 1; // clamp to growing to 1, account for input message
      Point input_bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 2}; // account for statusbar
      ce_calc_views(config_state->view_head, &top_left, &bottom_right);
-     
+
      if(ce_buffer_in_view(config_state->view_head, &config_state->buffer_list_buffer)){
           update_buffer_list_buffer(config_state, head);
      }
@@ -2905,7 +2934,7 @@ void view_drawer(const BufferNode* head, void* user_data)
      attroff(A_REVERSE);
 
      // reset the cursor
-     move(cursor->y - buffer_view->top_row + buffer_view->top_left.y,
-          cursor->x - buffer_view->left_column + buffer_view->top_left.x);
+     Point terminal_cursor = get_cursor_on_terminal(cursor, buffer_view);
+     move(terminal_cursor.y, terminal_cursor.x);
 }
 

@@ -1036,26 +1036,38 @@ void jump_to_next_shell_command_file_destination(BufferNode* head, ConfigState* 
                i = command_buffer->line_count - 1;
           }
 
-          // format: 'filepath:line:column:'
-          char* first_colon = strchr(command_buffer->lines[i], ':');
-          if(!first_colon) continue;
-
-          int64_t filename_len = first_colon - command_buffer->lines[i];
+          char* file_end = strpbrk(command_buffer->lines[i], ": ");
+          if(!file_end) continue;
+          int64_t filename_len = file_end - command_buffer->lines[i];
           strncpy(file_tmp, command_buffer->lines[i], filename_len);
           file_tmp[filename_len] = 0;
           if(access(file_tmp, F_OK) == -1) continue; // file does not exist
+          char* line_number_begin_delim = NULL;
+          char* line_number_end_delim = NULL;
+          if(*file_end == ' '){
+               // format: 'filepath search_symbol line '
+               char* second_space = strchr(file_end + 1, ' ');
+               if(!second_space) continue;
+               line_number_begin_delim = second_space;
+               line_number_end_delim = strchr(second_space + 1, ' ');
+               if(!line_number_end_delim) continue;
+          }else{
+               // format: 'filepath:line:column:'
+               line_number_begin_delim = file_end;
+               char* second_colon = strchr(line_number_begin_delim + 1, ':');
+               if(!second_colon) continue;
+               line_number_end_delim = second_colon;
+          }
 
-          char* second_colon = strchr(first_colon + 1, ':');
-          if(!second_colon) continue;
-
-          int64_t line_number_len = second_colon - (first_colon + 1);
-          strncpy(line_number_tmp, first_colon + 1, line_number_len);
+          int64_t line_number_len = line_number_end_delim - (line_number_begin_delim + 1);
+          strncpy(line_number_tmp, line_number_begin_delim + 1, line_number_len);
           line_number_tmp[line_number_len] = 0;
 
           bool all_digits = true;
           for(char* c = line_number_tmp; *c; c++){
                if(!isdigit(*c)){
                     all_digits = false;
+                    break;
                }
           }
 
@@ -1068,10 +1080,10 @@ void jump_to_next_shell_command_file_destination(BufferNode* head, ConfigState* 
                ce_set_cursor(node->buffer, &config_state->view_current->cursor, &dst);
 
                // check for optional column number
-               char* third_colon = strchr(second_colon + 1, ':');
+               char* third_colon = strchr(line_number_end_delim + 1, ':');
                if(third_colon){
-                    line_number_len = third_colon - (second_colon + 1);
-                    strncpy(line_number_tmp, second_colon + 1, line_number_len);
+                    line_number_len = third_colon - (line_number_end_delim + 1);
+                    strncpy(line_number_tmp, line_number_end_delim + 1, line_number_len);
                     line_number_tmp[line_number_len] = 0;
 
                     all_digits = true;

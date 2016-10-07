@@ -690,7 +690,7 @@ bool ce_find_string(const Buffer* buffer, const Point* location, const char* sea
      return false;
 }
 
-void ce_move_cursor_to_beginning_of_line(const Buffer* buffer, Point* cursor)
+void ce_move_cursor_to_beginning_of_line(const Buffer* buffer __attribute__((unused)), Point* cursor)
 {
      assert(ce_point_on_buffer(buffer, cursor));
      cursor->x = 0;

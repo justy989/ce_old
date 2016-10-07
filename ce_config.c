@@ -10,8 +10,6 @@
 #define TAB_STRING "     "
 #define SCROLL_LINES 1
 
-static const char* cmd_buffer_name = "shell_command";
-
 const char* modified_string(Buffer* buffer)
 {
      return buffer->modified ? "*" : "";
@@ -205,6 +203,7 @@ typedef struct{
      bool input;
      const char* input_message;
      char input_key;
+     Buffer* shell_command_buffer; // Allocate so it can be part of the buffer list and get free'd at the end
      Buffer input_buffer;
      Buffer buffer_list_buffer;
      int64_t input_last_error;
@@ -517,29 +516,31 @@ int nftw_find_file(const char* fpath, const struct stat *sb, int typeflag, struc
      return FTW_CONTINUE;
 }
 
-BufferNode* open_file_buffer(BufferNode* head, const char* filename)
+Buffer* open_file_buffer(BufferNode* head, const char* filename)
 {
      BufferNode* itr = head;
      while(itr){
           if(!strcmp(itr->buffer->name, filename)){
-               return itr; // already open
+               return itr->buffer; // already open
           }
           itr = itr->next;
      }
 
      if(access(filename, F_OK) == 0){
-          return new_buffer_from_file(head, filename);
+          BufferNode* node = new_buffer_from_file(head, filename);
+          if(node) return node->buffer;
      }
 
-     if(!itr){
-          // clang doesn't support nested functions so we need to deal with global state
-          nftw_state.search_filename = filename;
-          nftw_state.head = head;
-          nftw_state.new_node = NULL;
-          nftw(".", nftw_find_file, 20, FTW_CHDIR);
-          return nftw_state.new_node;
-     }
-     return itr;
+     // clang doesn't support nested functions so we need to deal with global state
+     nftw_state.search_filename = filename;
+     nftw_state.head = head;
+     nftw_state.new_node = NULL;
+     nftw(".", nftw_find_file, 20, FTW_CHDIR);
+     if(nftw_state.new_node) return nftw_state.new_node->buffer;
+
+     ce_message("file %s not found", filename); 
+
+     return NULL;
 }
 
 bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** argv, void** user_data)
@@ -574,8 +575,18 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
 
      // setup buffer list buffer
      config_state->buffer_list_buffer.name = strdup("buffers");
-     config_state->buffer_list_buffer.modified = false;
      config_state->buffer_list_buffer.readonly = true;
+
+     // setup shell command buffer
+     config_state->shell_command_buffer = calloc(1, sizeof(*config_state->shell_command_buffer));
+     config_state->shell_command_buffer->name = strdup("shell output");
+     initialize_buffer(config_state->shell_command_buffer);
+     config_state->shell_command_buffer->readonly = true;
+     BufferNode* new_buffer_node = ce_append_buffer_to_list(head, config_state->shell_command_buffer);
+     if(!new_buffer_node){
+          ce_message("failed to add shell command buffer to list");
+          return false;
+     }
 
      *user_data = config_state;
 
@@ -1030,23 +1041,96 @@ void reset_buffer_commits(BufferCommitNode** tail)
      *tail = new_tail;
 }
 
-// TODO: rather than taking in config_state, I'd like to take in only the parts it needs, if it's too much, config_state is fine
-void jump_to_next_shell_command_file_destination(BufferNode* head, ConfigState* config_state, bool forwards)
+bool goto_file_destination_in_buffer(BufferNode* head, Buffer* buffer, int64_t line, BufferView* head_view,
+                                     BufferView* view)
 {
-     Buffer* command_buffer = NULL;
-     BufferNode* itr = head;
-     while(itr){
-          if(strcmp(itr->buffer->name, cmd_buffer_name) == 0){
-               command_buffer = itr->buffer;
-               break;
-          }
-          itr = itr->next;
-     }
-
-     if(!command_buffer) return;
+     assert(line >= 0);
+     assert(line < buffer->line_count);
 
      char file_tmp[BUFSIZ];
      char line_number_tmp[BUFSIZ];
+     char* file_end = strpbrk(buffer->lines[line], ": ");
+     if(!file_end) return false;
+     int64_t filename_len = file_end - buffer->lines[line];
+     strncpy(file_tmp, buffer->lines[line], filename_len);
+     file_tmp[filename_len] = 0;
+     if(access(file_tmp, F_OK) == -1) return false; // file does not exist
+     char* line_number_begin_delim = NULL;
+     char* line_number_end_delim = NULL;
+     if(*file_end == ' '){
+          // format: 'filepath search_symbol line '
+          char* second_space = strchr(file_end + 1, ' ');
+          if(!second_space) return false;
+          line_number_begin_delim = second_space;
+          line_number_end_delim = strchr(second_space + 1, ' ');
+          if(!line_number_end_delim) return false;
+     }else{
+          // format: 'filepath:line:column:'
+          line_number_begin_delim = file_end;
+          char* second_colon = strchr(line_number_begin_delim + 1, ':');
+          if(!second_colon) return false;
+          line_number_end_delim = second_colon;
+     }
+
+     int64_t line_number_len = line_number_end_delim - (line_number_begin_delim + 1);
+     strncpy(line_number_tmp, line_number_begin_delim + 1, line_number_len);
+     line_number_tmp[line_number_len] = 0;
+
+     bool all_digits = true;
+     for(char* c = line_number_tmp; *c; c++){
+          if(!isdigit(*c)){
+               all_digits = false;
+               break;
+          }
+     }
+
+     if(!all_digits) return false;
+
+     Buffer* new_buffer = open_file_buffer(head, file_tmp);
+     if(new_buffer){
+          view->buffer = new_buffer;
+          Point dst = {0, atoi(line_number_tmp) - 1}; // line numbers are 1 indexed
+          ce_set_cursor(new_buffer, &view->cursor, &dst);
+
+          // check for optional column number
+          char* third_colon = strchr(line_number_end_delim + 1, ':');
+          if(third_colon){
+               line_number_len = third_colon - (line_number_end_delim + 1);
+               strncpy(line_number_tmp, line_number_end_delim + 1, line_number_len);
+               line_number_tmp[line_number_len] = 0;
+
+               all_digits = true;
+               for(char* c = line_number_tmp; *c; c++){
+                    if(!isdigit(*c)){
+                         all_digits = false;
+                         break;
+                    }
+               }
+
+               if(all_digits){
+                    dst.x = atoi(line_number_tmp) - 1; // column numbers are 1 indexed
+                    assert(dst.x >= 0);
+                    ce_set_cursor(new_buffer, &view->cursor, &dst);
+               }else{
+                    ce_move_cursor_to_soft_beginning_of_line(new_buffer, &view->cursor);
+               }
+          }else{
+               ce_move_cursor_to_soft_beginning_of_line(new_buffer, &view->cursor);
+          }
+
+          center_view(view);
+          BufferView* command_view = ce_buffer_in_view(head_view, buffer);
+          if(command_view) command_view->top_row = line;
+          return true;
+     }
+
+     return false;
+}
+
+// TODO: rather than taking in config_state, I'd like to take in only the parts it needs, if it's too much, config_state is fine
+void jump_to_next_shell_command_file_destination(BufferNode* head, ConfigState* config_state, bool forwards)
+{
+     Buffer* command_buffer = config_state->shell_command_buffer;
      int64_t lines_checked = 0;
      int64_t delta = forwards ? 1 : -1;
      for(int64_t i = config_state->input_last_error + delta; lines_checked < command_buffer->line_count;
@@ -1057,78 +1141,8 @@ void jump_to_next_shell_command_file_destination(BufferNode* head, ConfigState* 
                i = command_buffer->line_count - 1;
           }
 
-          char* file_end = strpbrk(command_buffer->lines[i], ": ");
-          if(!file_end) continue;
-          int64_t filename_len = file_end - command_buffer->lines[i];
-          strncpy(file_tmp, command_buffer->lines[i], filename_len);
-          file_tmp[filename_len] = 0;
-          if(access(file_tmp, F_OK) == -1) continue; // file does not exist
-          char* line_number_begin_delim = NULL;
-          char* line_number_end_delim = NULL;
-          if(*file_end == ' '){
-               // format: 'filepath search_symbol line '
-               char* second_space = strchr(file_end + 1, ' ');
-               if(!second_space) continue;
-               line_number_begin_delim = second_space;
-               line_number_end_delim = strchr(second_space + 1, ' ');
-               if(!line_number_end_delim) continue;
-          }else{
-               // format: 'filepath:line:column:'
-               line_number_begin_delim = file_end;
-               char* second_colon = strchr(line_number_begin_delim + 1, ':');
-               if(!second_colon) continue;
-               line_number_end_delim = second_colon;
-          }
-
-          int64_t line_number_len = line_number_end_delim - (line_number_begin_delim + 1);
-          strncpy(line_number_tmp, line_number_begin_delim + 1, line_number_len);
-          line_number_tmp[line_number_len] = 0;
-
-          bool all_digits = true;
-          for(char* c = line_number_tmp; *c; c++){
-               if(!isdigit(*c)){
-                    all_digits = false;
-                    break;
-               }
-          }
-
-          if(!all_digits) continue;
-
-          BufferNode* node = open_file_buffer(head, file_tmp);
-          if(node){
-               config_state->view_current->buffer = node->buffer;
-               Point dst = {0, atoi(line_number_tmp) - 1}; // line numbers are 1 indexed
-               ce_set_cursor(node->buffer, &config_state->view_current->cursor, &dst);
-
-               // check for optional column number
-               char* third_colon = strchr(line_number_end_delim + 1, ':');
-               if(third_colon){
-                    line_number_len = third_colon - (line_number_end_delim + 1);
-                    strncpy(line_number_tmp, line_number_end_delim + 1, line_number_len);
-                    line_number_tmp[line_number_len] = 0;
-
-                    all_digits = true;
-                    for(char* c = line_number_tmp; *c; c++){
-                         if(!isdigit(*c)){
-                              all_digits = false;
-                              break;
-                         }
-                    }
-
-                    if(all_digits){
-                         dst.x = atoi(line_number_tmp) - 1; // column numbers are 1 indexed
-                         assert(dst.x >= 0);
-                         ce_set_cursor(node->buffer, &config_state->view_current->cursor, &dst);
-                    }else{
-                         ce_move_cursor_to_soft_beginning_of_line(node->buffer, &config_state->view_current->cursor);
-                    }
-               }else{
-                    ce_move_cursor_to_soft_beginning_of_line(node->buffer, &config_state->view_current->cursor);
-               }
-
-               center_view(config_state->view_current);
-               BufferView* command_view = ce_buffer_in_view(config_state->view_head, command_buffer);
-               if(command_view) command_view->top_row = i;
+          if(goto_file_destination_in_buffer(head, command_buffer, i, config_state->view_head,
+                                             config_state->view_current)){
                config_state->input_last_error = i;
                break;
           }
@@ -2344,9 +2358,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     strncpy(filename, &buffer->lines[cursor->y][cursor->x], word_len);
                     filename[word_len] = '\0';
 
-                    BufferNode* file_buffer = open_file_buffer(head, filename);
-                    if(file_buffer) buffer_view->buffer = file_buffer->buffer;
-                    else ce_message("file %s not found", filename);
+                    Buffer* file_buffer = open_file_buffer(head, filename);
+                    if(file_buffer) buffer_view->buffer = file_buffer;
                } break;
                }
           } break;
@@ -2396,9 +2409,9 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          // just grab the first line and load it as a file
                          commit_input_to_history(config_state, &config_state->load_file_history);
                          for(int64_t i = 0; i < config_state->view_input->buffer->line_count; ++i){
-                              BufferNode* new_node = open_file_buffer(head, config_state->view_input->buffer->lines[i]);
-                              if(i == 0 && new_node){
-                                   config_state->view_current->buffer = new_node->buffer;
+                              Buffer* new_buffer = open_file_buffer(head, config_state->view_input->buffer->lines[i]);
+                              if(i == 0 && new_buffer){
+                                   config_state->view_current->buffer = new_buffer;
                                    config_state->view_current->cursor = (Point){0, 0};
                               }
                          }
@@ -2421,50 +2434,26 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          break;
                     case 24: // Ctrl + x
                     {
-                         // search for an existing command buffer
-                         BufferNode* command_buffer_node = NULL;
-                         BufferNode* itr = head;
-                         while(itr){
-                              if(strcmp(itr->buffer->name, cmd_buffer_name) == 0){
-                                   command_buffer_node = itr;
-                                   break;
-                              }
-                              itr = itr->next;
-                         }
-
                          commit_input_to_history(config_state, &config_state->shell_command_history);
 
                          // if we found an existing command buffer, clear it and use it
-                         BufferView* command_view = NULL;
-                         Buffer* command_buffer = NULL;
-                         if(command_buffer_node){
-                              command_buffer = command_buffer_node->buffer;
-                              ce_clear_lines(command_buffer);
-                              command_buffer->cursor = (Point){0, 0};
-                              command_view = ce_buffer_in_view(config_state->view_head, command_buffer);
+                         Buffer* command_buffer = config_state->shell_command_buffer;
+                         ce_clear_lines(command_buffer);
+                         command_buffer->cursor = (Point){0, 0};
+                         BufferView* command_view = ce_buffer_in_view(config_state->view_head, command_buffer);
 
-                              if(command_view){
-                                   command_view->cursor = (Point){0, 0};
-                                   command_view->top_row = 0;
-                              }else{
-                                   config_state->view_current->buffer = command_buffer_node->buffer;
-                                   config_state->view_current->cursor = (Point){0, 0};
-                                   config_state->view_current->top_row = 0;
-                                   command_view = config_state->view_current;
-                              }
+                         if(command_view){
+                              command_view->cursor = (Point){0, 0};
+                              command_view->top_row = 0;
                          }else{
-                              // create a new one from an empty string
-                              BufferNode* node = new_buffer_from_string(head, "shell_command", NULL);
-                              if(node){
-                                   config_state->view_current->buffer = node->buffer;
-                                   config_state->view_current->cursor = (Point){0, 0};
-                                   config_state->view_current->top_row = 0;
-                                   command_buffer = config_state->view_current->buffer;
-                                   command_view = config_state->view_current;
-                              }
+                              config_state->view_current->buffer = command_buffer;
+                              config_state->view_current->cursor = (Point){0, 0};
+                              config_state->view_current->top_row = 0;
+                              command_view = config_state->view_current;
                          }
 
                          assert(command_view);
+                         command_buffer->readonly = false;
                          for(int64_t i = 0; i < config_state->view_input->buffer->line_count; ++i){
                               // run the command
                               char cmd[BUFSIZ];
@@ -2503,23 +2492,31 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                               scroll_view_to_last_line(command_view);
                               command_view->cursor.y = command_view->top_row;
                          }
+                         command_buffer->readonly = true;
+                         command_buffer->modified = false;
                     } break;
                     }
                }else if(config_state->view_current->buffer == &config_state->buffer_list_buffer){
                     int64_t line = cursor->y;
                     BufferNode* itr = head;
-                    
+
                     while(line){
-                         itr = itr->next;     
+                         itr = itr->next;
                          if(!itr) break;
                          line--;
                     }
-                    
+
                     if(!itr) break;
-                    
+
                     config_state->view_current->buffer = itr->buffer;
                     config_state->view_current->cursor = itr->buffer->cursor;
                     center_view(config_state->view_current);
+               }else if(config_state->view_current->buffer == config_state->shell_command_buffer){
+                    BufferView* view_to_change = config_state->view_current;
+                    if(view_to_change->next_horizontal) view_to_change = view_to_change->next_horizontal;
+                    else if(view_to_change->next_vertical) view_to_change = view_to_change->next_vertical;
+                    goto_file_destination_in_buffer(head, config_state->shell_command_buffer, cursor->y,
+                                                    config_state->view_head, view_to_change);
                }else{
                     Point point = {cursor->x - config_state->view_current->left_column + config_state->view_current->top_left.x,
                          config_state->view_current->bottom_right.y + 2}; // account for window separator

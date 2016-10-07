@@ -1488,7 +1488,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }
                break;
           case KEY_DC:
-               ce_remove_char(buffer, cursor);
+               // TODO: with our current insert mode undo implementation we can't support this 
+               // ce_remove_char(buffer, cursor);
                break;
           case '\t':
           {
@@ -1801,10 +1802,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case 'A':
           {
-               if(ce_move_cursor_to_end_of_line(buffer, cursor)){
-                    cursor->x++;
-                    enter_insert_mode(config_state, cursor);
-               }
+               cursor->x = strlen(buffer->lines[cursor->y]);
+               enter_insert_mode(config_state, cursor);
           } break;
           case 'm':
           {

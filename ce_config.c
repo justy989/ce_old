@@ -631,6 +631,20 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
      init_pair(S_DIFF_ADD_HIGHLIGHTED, COLOR_GREEN, COLOR_BRIGHT_BLACK);
      init_pair(S_DIFF_REMOVE_HIGHLIGHTED, COLOR_RED, COLOR_BRIGHT_BLACK);
 
+     // Doesn't work in insert mode :<
+     //define_key("h", KEY_LEFT);
+     //define_key("j", KEY_DOWN);
+     //define_key("k", KEY_UP);
+     //define_key("l", KEY_RIGHT);
+
+     define_key("\x7F", KEY_BACKSPACE); // Backspace  (127) (0x7F) ASCII "DEL" Delete
+     define_key("\x15", KEY_NPAGE);     // ctrl + d    (21) (0x15) ASCII "NAK" Negative Acknowledgement
+     define_key("\x04", KEY_PPAGE);     // ctrl + u     (4) (0x04) ASCII "EOT" End of Transmission
+     define_key("\x11", KEY_CLOSE);     // ctrl + q    (17) (0x11) ASCII "DC1" Device Control 1
+     define_key("\x12", KEY_REDO);      // ctrl + r    (18) (0x12) ASCII "DC2" Device Control 2
+     define_key("\x17", KEY_SAVE);      // ctrl + w    (23) (0x17) ASCII "ETB" End of Transmission Block
+     //define_key("\x0A", KEY_ENTER);     // Enter       (10) (0x0A) ASCII "LF"  NL Line Feed, New Line
+
      return true;
 }
 
@@ -1551,7 +1565,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case KEY_MOUSE:
                handle_mouse_event(config_state, buffer, buffer_state, buffer_view, cursor);
                break;
-          case 127: // Temporary fix for Ry-guy
           case KEY_BACKSPACE:
                if(buffer->line_count){
                     if(cursor->x <= 0){
@@ -1791,10 +1804,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case KEY_UP:
           case KEY_DOWN:
-               for(size_t cm = 0; cm < config_state->command_multiplier; cm++){
-                    ce_move_cursor(buffer, cursor, (Point){0, (config_state->command_key == KEY_DOWN) ? 1 : -1});
-               }
-               break;
           case 'j':
           case 'k':
                for(size_t cm = 0; cm < config_state->command_multiplier; cm++){
@@ -1952,23 +1961,25 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     case MOVEMENT_CONTINUE:
                          return true; // no movement yet, wait for one!
                     case MOVEMENT_COMPLETE:
-               {
-                    YankMode yank_mode; 
-                    switch(config_state->movement_keys[0]){
-                    case 'j':
-                    case 'k':
-                         yank_mode = YANK_LINE;
-                         break;
-                    default:
-                         yank_mode = YANK_NORMAL; 
-                    }
-                    if(strchr("wW", config_state->movement_keys[0])){
-                         movement_end.x--; // exclude movement_end char
-                         assert(movement_end.x >= 0);
-                    }
-                    add_yank(config_state, '0', ce_dupe_string(buffer, &movement_start, &movement_end), yank_mode);
-                    add_yank(config_state, '"', ce_dupe_string(buffer, &movement_start, &movement_end), yank_mode);
-               } break;
+                    {
+                         YankMode yank_mode; 
+                         switch(config_state->movement_keys[0]){
+                         case KEY_UP:
+                         case KEY_DOWN:
+                         case 'j':
+                         case 'k':
+                              yank_mode = YANK_LINE;
+                              break;
+                         default:
+                              yank_mode = YANK_NORMAL; 
+                         }
+                         if(strchr("wW", config_state->movement_keys[0])){
+                              movement_end.x--; // exclude movement_end char
+                              assert(movement_end.x >= 0);
+                         }
+                         add_yank(config_state, '0', ce_dupe_string(buffer, &movement_start, &movement_end), yank_mode);
+                         add_yank(config_state, '"', ce_dupe_string(buffer, &movement_start, &movement_end), yank_mode);
+                    } break;
                     case MOVEMENT_INVALID:
                          switch(config_state->movement_keys[0]){
                          case 'y':
@@ -2119,6 +2130,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     YankMode yank_mode;
                     switch(config_state->movement_keys[0]){
                          case 'd':
+                         case KEY_UP:
+                         case KEY_DOWN:
                          case 'j':
                          case 'k':
                              yank_mode = YANK_LINE;
@@ -2178,7 +2191,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                default:
                     break;
                }
-          case 23: // Ctrl + w
+          case KEY_SAVE:
                ce_save_buffer(buffer, buffer->filename);
                break;
           case 'v':
@@ -2198,7 +2211,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           {
                split_view(config_state->view_head, config_state->view_current, true);
           } break;
-          case 17: // Ctrl + q
+          case KEY_CLOSE:
           {
                Point save_cursor = config_state->view_current->cursor;
                config_state->view_current->buffer->cursor = config_state->view_current->cursor;
@@ -2242,7 +2255,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }
           }
           break;
-          case 18:
+          case KEY_REDO:
           {
                if(buffer_state->commit_tail && buffer_state->commit_tail->next){
                     ce_commit_redo(buffer, &buffer_state->commit_tail, cursor);
@@ -2373,11 +2386,11 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     ce_move_cursor(buffer, cursor, delta);
                }
           } break;
-          case 21: // Ctrl + d
+          case KEY_NPAGE:
           {
                half_page_up(config_state->view_current);
           } break;
-          case 4: // Ctrl + u
+          case KEY_PPAGE:
           {
                half_page_down(config_state->view_current);
           } break;

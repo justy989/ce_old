@@ -256,6 +256,7 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
           int64_t last_newline = -1;
           for(int64_t i = 0; i <= new_string_length; ++i){
                if(new_string[i] != NEWLINE && new_string[i] != 0) continue;
+               if(line >= line_count) break;
 
                int64_t length = (i - 1) - last_newline;
                char* new_line = realloc(buffer->lines[line], length + 1);

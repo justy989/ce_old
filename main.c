@@ -196,6 +196,8 @@ int main(int argc, char** argv)
      message_buffer->line_count = 0;
      message_buffer->user_data = NULL;
      ce_alloc_lines(message_buffer, 1);
+     message_buffer->readonly = true;
+     message_buffer->modified = false;
 
      // init buffer list
      BufferNode* buffer_list_head = malloc(sizeof(*buffer_list_head));
@@ -305,6 +307,9 @@ int main(int argc, char** argv)
      char message_buffer_buf[BUFSIZ];
      // main loop
      while(!done){
+          // NOTE: only allow message buffer modifying here
+          message_buffer->readonly = false;
+
           // add new input to message buffer
           while(fgets(message_buffer_buf, BUFSIZ, message_stderr) != NULL){
                if(strlen(message_buffer_buf) == 1) continue;
@@ -317,6 +322,9 @@ int main(int argc, char** argv)
                bool ret = ce_append_line(message_buffer, message_buffer_buf);
                assert(ret);
           }
+
+          message_buffer->readonly = true;
+          message_buffer->modified = false;
 
           // ncurses macro that gets height and width
           getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);
@@ -332,6 +340,7 @@ int main(int argc, char** argv)
 
           int key = getch();
           if(key == '`'){
+               // NOTE: maybe at startup we should do this, so when we crash we revert back to before we did the bad thing?
                if(access(current_config.path, F_OK) != -1){
                     current_config.destroyer(buffer_list_head, user_data);
                     config_close(&current_config);

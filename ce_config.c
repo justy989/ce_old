@@ -206,6 +206,32 @@ typedef struct TabView{
      struct TabView* next;
 } TabView;
 
+TabView* tab_view_insert(TabView* head)
+{
+     // find the tail
+     TabView* itr = head; // if we use tab_current, we *may* be closer to the tail !
+     while(itr->next) itr = itr->next;
+
+     // create the new tab
+     TabView* new_tab = calloc(1, sizeof(*new_tab));
+     if(!new_tab){
+          ce_message("failed to allocate tab");
+          return NULL;
+     }
+
+     // attach to the end of the tail
+     itr->next = new_tab;
+
+     // allocate the view
+     new_tab->view_head = calloc(1, sizeof(*new_tab->view_head));
+     if(!new_tab->view_head){
+          ce_message("failed to allocate new view for tab");
+          return NULL;
+     }
+
+     return new_tab;
+}
+
 void tab_view_remove(TabView** head, TabView* view)
 {
      if(!*head || !view) return;
@@ -2930,22 +2956,8 @@ search:
           } break;
           case 20: // Ctrl + t
           {
-               // find the tail
-               TabView* itr = config_state->tab_head; // if we use tab_current, we *may* be closer to the tail !
-               while(itr->next) itr = itr->next;
-
-               // create the new tab
-               TabView* new_tab = calloc(1, sizeof(*new_tab));
-               if(!new_tab){
-                    ce_message("failed to allocate tab");
-                    break;
-               }
-
-               // attach to the end of the tail
-               itr->next = new_tab;
-
-               // allocate the view
-               new_tab->view_head = calloc(1, sizeof(*new_tab->view_head));
+               TabView* new_tab = tab_view_insert(config_state->tab_head);
+               if(!new_tab) break;
 
                // copy view attributes from the current view
                *new_tab->view_head = *config_state->tab_current->view_current;
@@ -2953,7 +2965,6 @@ search:
                new_tab->view_head->next_vertical = NULL;
                new_tab->view_current = new_tab->view_head;
 
-               // update the current tab
                config_state->tab_current = new_tab;
           } break;
           }
@@ -3119,7 +3130,6 @@ void view_drawer(const BufferNode* head, void* user_data)
           tab_itr = tab_itr->next;
           while(tab_itr){
                printw(tab_itr->view_current->buffer->name);
-               if(tab_itr->next) addch(ACS_VLINE);
                addch(' ');
                tab_itr = tab_itr->next;
           }

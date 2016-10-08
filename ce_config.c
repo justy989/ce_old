@@ -281,6 +281,7 @@ typedef struct{
      InputHistory shell_command_history;
      InputHistory search_history;
      InputHistory load_file_history;
+     Point start_search;
 } ConfigState;
 
 typedef struct MarkNode{
@@ -526,6 +527,7 @@ void input_start(ConfigState* config_state, const char* input_message, char inpu
 {
      ce_clear_lines(config_state->view_input->buffer);
      ce_alloc_lines(config_state->view_input->buffer, 1);
+     config_state->input = true;
      config_state->view_input->cursor = (Point){0, 0};
      config_state->input_message = input_message;
      config_state->input_key = input_key;
@@ -589,7 +591,7 @@ Buffer* open_file_buffer(BufferNode* head, const char* filename)
      nftw(".", nftw_find_file, 20, FTW_CHDIR);
      if(nftw_state.new_node) return nftw_state.new_node->buffer;
 
-     ce_message("file %s not found", filename); 
+     ce_message("file %s not found", filename);
 
      return NULL;
 }
@@ -1611,7 +1613,7 @@ void update_buffer_list_buffer(ConfigState* config_state, const BufferNode* head
               max_buffer_lines_digits);
      snprintf(buffer_info, BUFSIZ, format_string, "flags", "buffer name", "lines", buffer_count);
      ce_append_line(&config_state->buffer_list_buffer, buffer_info);
-     
+
      // build buffer info
      snprintf(format_string, BUFSIZ, "%%5s %%-%"PRId64"s %%%"PRId64 PRId64, max_name_len, max_buffer_lines_digits);
 
@@ -1886,8 +1888,11 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 27: // ESC
           {
                if(config_state->input){
+                    if(config_state->input_key == '/' || config_state->input_key == '?'){
+                         config_state->tab_current->view_input_save->cursor = config_state->start_search;
+                         center_view(config_state->tab_current->view_input_save);
+                    }
                     input_end();
-                    config_state->input = false;
                }
                if(config_state->vim_mode != VM_NORMAL){
                     enter_normal_mode(config_state);
@@ -2581,17 +2586,13 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     case '/':
                          if(config_state->view_input->buffer->line_count){
                               commit_input_to_history(config_state, &config_state->search_history);
-                              config_state->search_command.direction = CE_DOWN;
                               add_yank(config_state, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
-                              goto search;
                          }
                          break;
                     case '?':
                          if(config_state->view_input->buffer->line_count){
                               commit_input_to_history(config_state, &config_state->search_history);
-                              config_state->search_command.direction = CE_UP;
                               add_yank(config_state, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
-                              goto search;
                          }
                          break;
                     case 24: // Ctrl + x
@@ -2737,7 +2738,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case ':':
           {
                if(config_state->input) break;
-               config_state->input = true;
                input_start(config_state, "Goto Line", key);
           }
           break;
@@ -2766,14 +2766,17 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case '/':
           {
                if(config_state->input) break;
-               config_state->input = true;
+               config_state->search_command.direction = CE_DOWN;
+               config_state->start_search = *cursor;
+               ce_message("search from: %ld, %ld", cursor->x, cursor->y);
                input_start(config_state, "Search", key);
                break;
           }
           case '?':
           {
                if(config_state->input) break;
-               config_state->input = true;
+               config_state->search_command.direction = CE_UP;
+               config_state->start_search = *cursor;
                input_start(config_state, "Reverse Search", key);
                break;
           }
@@ -2957,7 +2960,6 @@ search:
           case 24: // Ctrl + x
           {
                if(config_state->input) break;
-               config_state->input = true;
                input_start(config_state, "Shell Command", key);
           } break;
           case 14: // Ctrl + n
@@ -2977,7 +2979,6 @@ search:
           case 6: // Ctrl + f
           {
                if(config_state->input) break;
-               config_state->input = true;
                input_start(config_state, "Load File", key);
           } break;
           case 20: // Ctrl + t
@@ -2995,9 +2996,28 @@ search:
           } break;
           case 'R':
                if(config_state->input) break;
-               config_state->input = true;
                input_start(config_state, "Replace", key);
           break;
+          }
+     }
+
+     // incremental search
+     if(config_state->input && (config_state->input_key == '/' || config_state->input_key == '?')){
+          if(config_state->view_input->buffer->lines == NULL){
+               config_state->tab_current->view_input_save->cursor = config_state->start_search;
+          }else{
+               const char* search_str = config_state->view_input->buffer->lines[0];
+               Point match = {};
+               if(search_str[0] &&
+                  ce_find_string(config_state->tab_current->view_input_save->buffer,
+                                 &config_state->start_search, search_str, &match,
+                                 config_state->search_command.direction)){
+                    ce_set_cursor(config_state->tab_current->view_input_save->buffer,
+                                  &config_state->tab_current->view_input_save->cursor, &match);
+                    center_view(config_state->tab_current->view_input_save);
+               }else{
+                    config_state->tab_current->view_input_save->cursor = config_state->start_search;
+               }
           }
      }
 
@@ -3099,8 +3119,10 @@ void view_drawer(const BufferNode* head, void* user_data)
      standend();
 
      const char* search = NULL;
-     YankNode* yank = find_yank(config_state, '/');
-     if(yank) search = yank->text;
+     if(config_state->input && config_state->view_input->buffer->lines &&
+        config_state->view_input->buffer->lines[0][0]){
+          search = config_state->view_input->buffer->lines[0];
+     }
 
      // NOTE: always draw from the head
      ce_draw_views(config_state->tab_current->view_head, search);

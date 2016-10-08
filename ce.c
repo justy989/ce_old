@@ -425,7 +425,7 @@ char* ce_dupe_string(const Buffer* buffer, const Point* start, const Point* end)
                return NULL;
           }
           memcpy(new_str, buffer->lines[start->y] + start->x, total_len);
-          if(!new_str[total_len-1]) new_str[total_len-1] = '\n';
+          if(start->x != start->y && !new_str[total_len-1]) new_str[total_len-1] = '\n';
           new_str[total_len] = 0;
 
           return new_str;

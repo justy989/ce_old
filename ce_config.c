@@ -2664,16 +2664,20 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     {
                          YankNode* yank = find_yank(config_state, '/');
                          if(!yank) break;
-                         if(!buffer->line_count) break;
                          const char* search_str = yank->text;
-                         char* replace_str = ce_dupe_buffer(config_state->view_input->buffer);
+                         // NOTE: allow empty string to replace search
                          int64_t search_len = strlen(search_str);
+                         if(!search_len) break;
+                         char* replace_str = ce_dupe_buffer(config_state->view_input->buffer);
+                         int64_t replace_len = strlen(replace_str);
                          Point begin = {};
                          Point match = {};
                          int64_t replace_count = 0;
                          while(ce_find_string(buffer, &begin, search_str, &match, CE_DOWN)){
                               if(!ce_remove_string(buffer, &match, search_len)) break;
-                              if(!ce_insert_string(buffer, &match, replace_str)) break;
+                              if(replace_len){
+                                   if(!ce_insert_string(buffer, &match, replace_str)) break;
+                              }
                               ce_commit_change_string(&buffer_state->commit_tail, &match, &match, &match, strdup(replace_str),
                                                       strdup(search_str));
                               begin = match;
@@ -2684,6 +2688,8 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          }else{
                               ce_message("no matches found to replace");
                          }
+                         *cursor = match;
+                         center_view(config_state->tab_current->view_current);
                          free(replace_str);
                     } break;
                     case 1: // Ctrl + a
@@ -3068,7 +3074,9 @@ void draw_view_statuses(BufferView* view, BufferView* current_view, VimMode vim_
      mvprintw(view->bottom_right.y, view->top_left.x + 1, " %s%s%s%s ",
               view == current_view ? mode_names[vim_mode] : "",
               modified_string(buffer), buffer->filename, readonly_string(buffer));
+#ifndef NDEBUG
      if(view == current_view) printw("%s %d ", keyname(last_key), last_key);
+#endif
      int64_t line = view->cursor.y + 1;
      int64_t digits_in_line = count_digits(line);
      mvprintw(view->bottom_right.y, (view->bottom_right.x - (digits_in_line + 3)), " %"PRId64" ", line);
@@ -3144,7 +3152,7 @@ void view_drawer(const BufferNode* head, void* user_data)
           search = config_state->view_input->buffer->lines[0];
      }else{
           YankNode* yank = find_yank(config_state, '/');
-          if(yank) search = yank->text;     
+          if(yank) search = yank->text;
      }
 
      // NOTE: always draw from the head

@@ -667,7 +667,7 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
      init_pair(S_DIFF_ADD_HIGHLIGHTED, COLOR_GREEN, COLOR_BRIGHT_BLACK);
      init_pair(S_DIFF_REMOVE_HIGHLIGHTED, COLOR_RED, COLOR_BRIGHT_BLACK);
 
-     init_pair(S_CURRENT_TAB, COLOR_CYAN, COLOR_BACKGROUND);
+     init_pair(S_CURRENT_TAB, COLOR_BRIGHT_WHITE, COLOR_BACKGROUND);
 
      // Doesn't work in insert mode :<
      //define_key("h", KEY_LEFT);
@@ -2980,11 +2980,15 @@ void draw_view_statuses(BufferView* view, BufferView* current_view, VimMode vim_
           "VISUAL BLOCK ",
      };
 
+     move(view->bottom_right.y, view->top_left.x);
+     for(int i = view->top_left.x; i < view->bottom_right.x; ++i) addch(ACS_HLINE);
+
      mvprintw(view->bottom_right.y, view->top_left.x + 1, " %s%s%s%s ",
               view == current_view ? mode_names[vim_mode] : "",
               modified_string(buffer), buffer->filename, readonly_string(buffer));
-     int digits_in_line = count_digits(view->cursor.y);
-     mvprintw(view->bottom_right.y, (view->bottom_right.x - (digits_in_line + 4)), " %d ", view->cursor.y + 1);
+     int64_t line = view->cursor.y + 1;
+     int64_t digits_in_line = count_digits(line);
+     mvprintw(view->bottom_right.y, (view->bottom_right.x - (digits_in_line + 3)), " %"PRId64" ", line);
 }
 
 void view_drawer(const BufferNode* head, void* user_data)
@@ -3061,6 +3065,8 @@ void view_drawer(const BufferNode* head, void* user_data)
      if(config_state->input){
           move(input_top_left.y - 1, input_top_left.x);
           for(int i = input_top_left.x; i < input_bottom_right.x; ++i) addch(ACS_HLINE);
+          // if we are at the edge of the terminal, draw the inclusing horizontal line. We
+          if(input_bottom_right.x == g_terminal_dimensions->x - 1) addch(ACS_HLINE);
           mvprintw(input_top_left.y - 1, input_top_left.x + 1, " %s ", config_state->input_message);
           // clear input buffer section
           for(int y = input_top_left.y; y <= input_bottom_right.y; ++y){
@@ -3074,6 +3080,11 @@ void view_drawer(const BufferNode* head, void* user_data)
 
      draw_view_statuses(config_state->tab_current->view_head, config_state->tab_current->view_current,
                         config_state->vim_mode, config_state->last_key);
+
+     if(config_state->input){
+          draw_view_statuses(config_state->view_input, config_state->tab_current->view_current,
+                             config_state->vim_mode, config_state->last_key);
+     }
 
      // draw tab line
      if(config_state->tab_head->next){
@@ -3090,27 +3101,26 @@ void view_drawer(const BufferNode* head, void* user_data)
           move(0, 1);
 
           // draw before current tab
+          addch(' ');
           while(tab_itr && tab_itr != config_state->tab_current){
-               printw(" ");
                printw(tab_itr->view_current->buffer->name);
-               printw(" ");
+               addch(' ');
                tab_itr = tab_itr->next;
           }
 
           // draw current tab
           assert(tab_itr == config_state->tab_current);
           attron(COLOR_PAIR(S_CURRENT_TAB));
-          printw(" ");
           printw(tab_itr->view_current->buffer->name);
-          printw(" ");
+          addch(' ');
           standend();
 
           // draw rest of tabs
           tab_itr = tab_itr->next;
           while(tab_itr){
-               printw(" ");
                printw(tab_itr->view_current->buffer->name);
-               printw(" ");
+               if(tab_itr->next) addch(ACS_VLINE);
+               addch(' ');
                tab_itr = tab_itr->next;
           }
      }

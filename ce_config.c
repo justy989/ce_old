@@ -1720,6 +1720,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case 10: // return
           {
+               if(!buffer->lines) ce_alloc_lines(buffer, 1);
                char* start = buffer->lines[cursor->y] + cursor->x;
                int64_t to_end_of_line_len = strlen(start);
 

@@ -2778,7 +2778,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                if(config_state->input) break;
                config_state->search_command.direction = CE_DOWN;
                config_state->start_search = *cursor;
-               ce_message("search from: %ld, %ld", cursor->x, cursor->y);
                input_start(config_state, "Search", key);
                break;
           }

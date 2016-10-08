@@ -3139,8 +3139,8 @@ void view_drawer(const BufferNode* head, void* user_data)
      standend();
 
      const char* search = NULL;
-     if(config_state->input && config_state->view_input->buffer->lines &&
-        config_state->view_input->buffer->lines[0][0]){
+     if(config_state->input && (config_state->input_key == '/' || config_state->input_key == '?') &&
+        config_state->view_input->buffer->lines && config_state->view_input->buffer->lines[0][0]){
           search = config_state->view_input->buffer->lines[0];
      }else{
           YankNode* yank = find_yank(config_state, '/');

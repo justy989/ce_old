@@ -1427,7 +1427,8 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                          inside_highlight = true;
                          set_color(fg_color, inside_highlight);
                     }else{
-                         if(highlight_word && strncmp(buffer_line + c, highlight_word, highlight_word_len) == 0){
+                         if(highlight_word && strncmp(buffer_line + c + buffer_top_left->x, highlight_word,
+                                                      highlight_word_len) == 0){
                               highlighting_left = highlight_word_len;
                               inside_highlight = true;
                               set_color(fg_color, inside_highlight);

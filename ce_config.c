@@ -378,7 +378,7 @@ char* str_from_file_stream(FILE* file){
      return str;
 }
 
-BufferNode* new_buffer_from_string(BufferNode* head, const char* name, const char* str){
+Buffer* new_buffer_from_string(BufferNode* head, const char* name, const char* str){
      Buffer* buffer = calloc(1, sizeof(*buffer));
      if(!buffer){
           ce_message("failed to allocate buffer");
@@ -410,7 +410,7 @@ BufferNode* new_buffer_from_string(BufferNode* head, const char* name, const cha
           return NULL;
      }
 
-     return new_buffer_node;
+     return buffer;
 }
 
 BufferNode* new_buffer_from_file(BufferNode* head, const char* filename)
@@ -2686,6 +2686,15 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          }
                          free(replace_str);
                     } break;
+                    case 1: // Ctrl + a
+                    {
+                         if(!config_state->view_input->buffer->lines ||
+                            !config_state->view_input->buffer->lines[0][0]) break;
+
+                         if(ce_save_buffer(buffer, config_state->view_input->buffer->lines[0])){
+                              buffer->filename = strdup(config_state->view_input->buffer->lines[0]);
+                         }
+                    } break;
                     }
                }else if(config_state->tab_current->view_current->buffer == &config_state->buffer_list_buffer){
                     int64_t line = cursor->y - 1; // account for buffer list row header
@@ -2744,7 +2753,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           break;
           case '#':
           {
-               if(!buffer->lines[cursor->y]) break;
+               if(!buffer->lines || !buffer->lines[cursor->y]) break;
 
                Point word_start, word_end;
                if(!ce_get_word_at_location(buffer, cursor, &word_start, &word_end)) break;
@@ -2755,7 +2764,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case '*':
           {
-               if(!buffer->lines[cursor->y]) break;
+               if(!buffer->lines || !buffer->lines[cursor->y]) break;
 
                Point word_start, word_end;
                if(!ce_get_word_at_location(buffer, cursor, &word_start, &word_end)) break;
@@ -2999,6 +3008,17 @@ search:
                if(config_state->input) break;
                input_start(config_state, "Replace", key);
           break;
+          case 5: // Ctrl + e
+          {
+               Buffer* new_buffer = new_buffer_from_string(head, "unnamed", NULL);
+               ce_alloc_lines(new_buffer, 1);
+               config_state->tab_current->view_current->buffer = new_buffer;
+               *cursor = (Point){0, 0};
+          } break;
+          case 1: // Ctrl + a
+               if(config_state->input) break;
+               input_start(config_state, "Save Buffer As", key);
+          break;
           }
      }
 
@@ -3123,6 +3143,9 @@ void view_drawer(const BufferNode* head, void* user_data)
      if(config_state->input && config_state->view_input->buffer->lines &&
         config_state->view_input->buffer->lines[0][0]){
           search = config_state->view_input->buffer->lines[0];
+     }else{
+          YankNode* yank = find_yank(config_state, '/');
+          if(yank) search = yank->text;     
      }
 
      // NOTE: always draw from the head
@@ -3141,7 +3164,8 @@ void view_drawer(const BufferNode* head, void* user_data)
                     addch(' ');
                }
           }
-          ce_draw_views(config_state->view_input, search);
+
+          ce_draw_views(config_state->view_input, NULL);
      }
 
      draw_view_statuses(config_state->tab_current->view_head, config_state->tab_current->view_current,

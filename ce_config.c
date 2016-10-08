@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #define TAB_STRING "     "
 #define SCROLL_LINES 1
@@ -19,6 +20,16 @@ const char* readonly_string(Buffer* buffer)
 {
      return buffer->readonly ? " [RO]" : "";
 }
+
+typedef struct{
+     char* command;
+     Buffer* output_buffer;
+     BufferNode* buffer_node_head;
+     BufferView* view_head;
+} ShellCommandData;
+
+ShellCommandData shell_command_data;
+pthread_mutex_t draw_lock;
 
 int64_t count_digits(int64_t n)
 {
@@ -88,6 +99,64 @@ void backspace_free(BackspaceNode** head)
           *head = (*head)->next;
           free(tmp);
      }
+}
+
+// NOTE: runs N commands where each command is newline separated
+void* run_shell_commands(void* user_data)
+{
+     char* current_cmd = shell_command_data.command;
+     int64_t current_cmd_len = 0;
+     char tmp[BUFSIZ];
+     bool last_command = false;
+
+     while(true){
+          char* end_cmd = strchr(current_cmd, NEWLINE);
+          if(end_cmd){
+               current_cmd_len = end_cmd - current_cmd;
+               current_cmd[current_cmd_len] = 0; // set newline to NULL terminator
+          }else{
+               current_cmd_len = strlen(current_cmd);
+               last_command = true;
+          }
+          snprintf(tmp, BUFSIZ, "%s 2>&1", current_cmd);
+          FILE* pfile = popen(tmp, "r");
+          if(!pfile){
+               return NULL;
+          }
+
+          // append the command
+          snprintf(tmp, BUFSIZ, "+ %s", current_cmd);
+          ce_append_line(shell_command_data.output_buffer, tmp);
+          ce_append_char(shell_command_data.output_buffer, NEWLINE);
+
+          // load one line at a time
+          while(true){
+               int ch = fgetc(pfile);
+               if(ch == EOF) break;
+               if(!isprint(ch) && ch != NEWLINE) ch = '~';
+               if(!ce_append_char(shell_command_data.output_buffer, ch)){
+                    return NULL;
+               }
+               if(ch == NEWLINE && ce_buffer_in_view(shell_command_data.view_head, shell_command_data.output_buffer)){
+                    view_drawer(shell_command_data.buffer_node_head, user_data);
+               }
+          }
+
+          // append the return code
+          int exit_code = pclose(pfile);
+          snprintf(tmp, BUFSIZ, "+ exit %d", WEXITSTATUS(exit_code));
+          ce_append_line(shell_command_data.output_buffer, tmp);
+
+          // add blank for readability
+          ce_append_line(shell_command_data.output_buffer, "");
+
+          if(last_command) break;
+
+          current_cmd += current_cmd_len + 1;
+     }
+
+     free(shell_command_data.command);
+     return NULL;
 }
 
 // TODO: move this to ce.h
@@ -282,6 +351,7 @@ typedef struct{
      InputHistory search_history;
      InputHistory load_file_history;
      Point start_search;
+     pthread_t shell_command_thread;
 } ConfigState;
 
 typedef struct MarkNode{
@@ -712,6 +782,7 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
      define_key("\x17", KEY_SAVE);      // ctrl + w    (23) (0x17) ASCII "ETB" End of Transmission Block
      //define_key("\x0A", KEY_ENTER);     // Enter       (10) (0x0A) ASCII "LF"  NL Line Feed, New Line
 
+     pthread_mutex_init(&draw_lock, NULL);
      return true;
 }
 
@@ -1658,6 +1729,11 @@ bool key_handler(int key, BufferNode* head, void* user_data)
      config_state->last_key = key;
      Point movement_start, movement_end;
 
+     if(config_state->shell_command_thread != 0 &&
+        pthread_tryjoin_np(config_state->shell_command_thread, NULL) == 0){
+          config_state->shell_command_thread = 0;
+     }
+
      if(config_state->vim_mode == VM_INSERT){
           assert(config_state->command_key == '\0');
           switch(key){
@@ -2598,6 +2674,16 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          break;
                     case 24: // Ctrl + x
                     {
+                         if(config_state->view_input->buffer->line_count == 0){
+                              break;
+                         }
+
+                         if(config_state->shell_command_thread){
+                              if(pthread_cancel(config_state->shell_command_thread) != 0){
+                                   break;
+                              }
+                         }
+
                          commit_input_to_history(config_state, &config_state->shell_command_history);
 
                          // if we found an existing command buffer, clear it and use it
@@ -2618,47 +2704,12 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                               command_view = config_state->tab_current->view_current;
                          }
 
-                         assert(command_view);
-                         for(int64_t i = 0; i < config_state->view_input->buffer->line_count; ++i){
-                              // run the command
-                              char cmd[BUFSIZ];
-                              snprintf(cmd, BUFSIZ, "%s 2>&1", config_state->view_input->buffer->lines[i]);
-                              FILE* pfile = popen(cmd, "r");
+                         shell_command_data.command = ce_dupe_buffer(config_state->view_input->buffer);
+                         shell_command_data.output_buffer = command_buffer;
+                         shell_command_data.buffer_node_head = head;
+                         shell_command_data.view_head = config_state->tab_current->view_head;
 
-                              // append the command
-                              snprintf(cmd, BUFSIZ, "+ %s", config_state->view_input->buffer->lines[i]);
-                              ce_append_line(command_buffer, cmd);
-
-                              // load one line at a time
-                              while(fgets(cmd, BUFSIZ, pfile) != NULL){
-                                   // strip newline
-                                   size_t cmd_len = strlen(cmd);
-                                   assert(cmd[cmd_len-1] == NEWLINE);
-                                   cmd[cmd_len-1] = 0;
-
-                                   ce_append_line(command_buffer, cmd);
-
-                                   scroll_view_to_last_line(command_view);
-                                   command_view->cursor.y = command_view->top_row;
-
-                                   erase();
-                                   view_drawer(head, user_data);
-                                   refresh();
-                              }
-
-                              // append the return code
-                              int exit_code = pclose(pfile);
-                              snprintf(cmd, BUFSIZ, "+ exit %d", WEXITSTATUS(exit_code));
-                              ce_append_line(command_buffer, cmd);
-
-                              // add blank for readability
-                              ce_append_line(command_buffer, "");
-
-                              scroll_view_to_last_line(command_view);
-                              command_view->cursor.y = command_view->top_row;
-                         }
-                         command_buffer->readonly = true;
-                         command_buffer->modified = false;
+                         pthread_create(&config_state->shell_command_thread, NULL, run_shell_commands, user_data);
                     } break;
                     case 'R':
                     {
@@ -3084,6 +3135,11 @@ void draw_view_statuses(BufferView* view, BufferView* current_view, VimMode vim_
 
 void view_drawer(const BufferNode* head, void* user_data)
 {
+     if(pthread_mutex_trylock(&draw_lock) != 0) return;
+
+     // clear all lines in the terminal
+     erase();
+
      (void)(head);
      ConfigState* config_state = user_data;
      Buffer* buffer = config_state->tab_current->view_current->buffer;
@@ -3226,4 +3282,9 @@ void view_drawer(const BufferNode* head, void* user_data)
      // reset the cursor
      Point terminal_cursor = get_cursor_on_terminal(cursor, buffer_view);
      move(terminal_cursor.y, terminal_cursor.x);
+
+     // update the screen with what we drew
+     refresh();
+
+     pthread_mutex_unlock(&draw_lock);
 }

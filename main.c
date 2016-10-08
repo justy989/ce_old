@@ -329,14 +329,8 @@ int main(int argc, char** argv)
           // ncurses macro that gets height and width
           getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);
 
-          // clear all lines
-          erase();
-
           // user-defined or default draw_view()
           current_config.view_drawer(buffer_list_head, user_data);
-
-          // update the terminal with what we drew
-          refresh();
 
           int key = getch();
           if(key == '`'){

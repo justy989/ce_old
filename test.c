@@ -180,6 +180,22 @@ TEST(sanity_insert_char)
      ce_free_buffer(&buffer);
 }
 
+TEST(sanity_insert_char_readonly)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.readonly = true;
+
+     Point point = {2, 0};
+     ce_insert_char_readonly(&buffer, &point, 'R');
+
+     EXPECT(strcmp(buffer.lines[0], "TARCOS") == 0);
+
+     ce_free_buffer(&buffer);
+}
+
 TEST(insert_char_newline_begin)
 {
      Buffer buffer = {};
@@ -286,6 +302,22 @@ TEST(insert_string_begin)
 
      Point point = {0, 0};
      ce_insert_string(&buffer, &point, "AHHH ");
+
+     ASSERT(buffer.line_count == 1);
+     EXPECT(strcmp(buffer.lines[0], "AHHH TACOS") == 0);
+     ce_free_buffer(&buffer);
+}
+
+TEST(insert_string_readonly_begin)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.readonly = true;
+
+     Point point = {0, 0};
+     ce_insert_string_readonly(&buffer, &point, "AHHH ");
 
      ASSERT(buffer.line_count == 1);
      EXPECT(strcmp(buffer.lines[0], "AHHH TACOS") == 0);
@@ -438,6 +470,22 @@ TEST(sanity_append_string)
      buffer.lines[0] = strdup("TACOS");
 
      ce_append_string(&buffer, 0, " ARE AWESOME");
+
+     ASSERT(buffer.line_count == 1);
+     EXPECT(strcmp(buffer.lines[0], "TACOS ARE AWESOME") == 0);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(sanity_append_string_readonly)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.readonly = true;
+
+     ce_append_string_readonly(&buffer, 0, " ARE AWESOME");
 
      ASSERT(buffer.line_count == 1);
      EXPECT(strcmp(buffer.lines[0], "TACOS ARE AWESOME") == 0);
@@ -632,6 +680,23 @@ TEST(remove_string_multiline_blank_end)
      ce_free_buffer(&buffer);
 }
 
+TEST(sanity_insert_line_readonly)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.readonly = true;
+
+     ce_insert_line_readonly(&buffer, 0, "ARE AWESOME");
+
+     EXPECT(buffer.line_count == 2);
+     EXPECT(strcmp(buffer.lines[0], "ARE AWESOME") == 0);
+     EXPECT(strcmp(buffer.lines[1], "TACOS") == 0);
+
+     ce_free_buffer(&buffer);
+}
+
 TEST(sanity_append_line)
 {
      Buffer buffer = {};
@@ -643,6 +708,23 @@ TEST(sanity_append_line)
 
      EXPECT(buffer.line_count == 2);
      // NOTE: I realize my examples are insane, but I'm intoxicated.
+     EXPECT(strcmp(buffer.lines[0], "TACOS") == 0);
+     EXPECT(strcmp(buffer.lines[1], "ARE AWESOME") == 0);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(sanity_append_line_readonly)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.readonly = true;
+
+     ce_append_line_readonly(&buffer, "ARE AWESOME");
+
+     EXPECT(buffer.line_count == 2);
      EXPECT(strcmp(buffer.lines[0], "TACOS") == 0);
      EXPECT(strcmp(buffer.lines[1], "ARE AWESOME") == 0);
 
@@ -685,6 +767,25 @@ TEST(sanity_clear_lines)
 
      ce_free_buffer(&buffer);
 }
+
+TEST(sanity_clear_lines_readonly)
+{
+     Buffer buffer = {};
+     buffer.line_count = 2;
+     buffer.lines = malloc(2 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE AWESOME");
+     buffer.readonly = true;
+
+     ce_clear_lines_readonly(&buffer);
+
+     EXPECT(buffer.line_count == 0);
+     EXPECT(buffer.lines == NULL);
+
+     ce_free_buffer(&buffer);
+}
+
+
 
 TEST(sanity_dupe_string)
 {
@@ -1887,6 +1988,21 @@ TEST(sanity_append_char)
      ce_free_buffer(&buffer);
 }
 
+TEST(sanity_append_char_readonly)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS ARE AWESOM");
+     buffer.readonly = true;
+
+     ASSERT(ce_append_char_readonly(&buffer, 'E'));
+     ASSERT(buffer.line_count == 1);
+     EXPECT(strcmp(buffer.lines[0], "TACOS ARE AWESOME") == 0);
+
+     ce_free_buffer(&buffer);
+}
+
 TEST(append_newline)
 {
      Buffer buffer = {};
@@ -1995,6 +2111,61 @@ TEST(sanity_last_index)
      EXPECT(ce_last_index(short_str) == 4);
      EXPECT(ce_last_index(long_str) == 17);
      EXPECT(ce_last_index(no_str) == 0);
+}
+
+TEST(sanity_get_char_raw)
+{
+     Buffer buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE");
+     buffer.lines[2] = strdup("AWESOME");
+
+     Point point = {2, 0};
+     EXPECT(ce_get_char_raw(&buffer, &point) == 'C');
+
+     point = (Point){1, 1};
+     EXPECT(ce_get_char_raw(&buffer, &point) == 'R');
+
+     point = (Point){4, 2};
+     EXPECT(ce_get_char_raw(&buffer, &point) == 'O');
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(move_cursor_to_beginning_of_file)
+{
+     Buffer buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE");
+     buffer.lines[2] = strdup("AWESOME");
+
+     Point point = {4, 2};
+     ce_move_cursor_to_beginning_of_file(&buffer, &point);
+     EXPECT(point.x == 0);
+     EXPECT(point.y == 0);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(move_cursor_to_beginning_of_line)
+{
+     Buffer buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE");
+     buffer.lines[2] = strdup("AWESOME");
+
+     Point point = {4, 2};
+     ce_move_cursor_to_beginning_of_line(&buffer, &point);
+     EXPECT(point.x == 0);
+     EXPECT(point.y == 2);
+
+     ce_free_buffer(&buffer);
 }
 
 int main()

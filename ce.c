@@ -117,15 +117,14 @@ void ce_free_buffer(Buffer* buffer)
 
      free(buffer->filename);
 
-     ce_clear_lines(buffer);
      buffer->modified = false;
      buffer->readonly = false;
+
+     ce_clear_lines(buffer);
 }
 
-void ce_clear_lines(Buffer* buffer)
+void clear_lines_impl(Buffer* buffer)
 {
-     if(buffer->readonly) return;
-
      if(buffer->lines){
           for(int64_t i = 0; i < buffer->line_count; ++i){
                free(buffer->lines[i]);
@@ -136,6 +135,20 @@ void ce_clear_lines(Buffer* buffer)
           buffer->line_count = 0;
      }
      buffer->modified = true;
+}
+
+void ce_clear_lines(Buffer* buffer)
+{
+     if(buffer->readonly) return;
+
+     clear_lines_impl(buffer);
+}
+
+void ce_clear_lines_readonly(Buffer* buffer)
+{
+     if(!buffer->readonly) return;
+
+     clear_lines_impl(buffer);
 }
 
 bool ce_point_on_buffer(const Buffer* buffer, const Point* location)
@@ -160,12 +173,12 @@ bool ce_point_on_buffer(const Buffer* buffer, const Point* location)
      return true;
 }
 
-bool ce_insert_char(Buffer* buffer, const Point* location, char c)
+bool insert_line_impl(Buffer* buffer, int64_t line, const char* string);
+
+bool insert_char_impl(Buffer* buffer, const Point* location, char c)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
-
-     if(buffer->readonly) return false;
 
      if(buffer->line_count == 0 && location->x == 0 && location->y == 0) ce_alloc_lines(buffer, 1);
 
@@ -177,7 +190,7 @@ bool ce_insert_char(Buffer* buffer, const Point* location, char c)
 
      if(c == NEWLINE){
           // copy the rest of the line to the next line
-          if(!ce_insert_line(buffer, location->y + 1, line + location->x)){
+          if(!insert_line_impl(buffer, location->y + 1, line + location->x)){
                return false;
           }
 
@@ -214,26 +227,44 @@ bool ce_insert_char(Buffer* buffer, const Point* location, char c)
      return true;
 }
 
-bool ce_append_char(Buffer* buffer, char c)
+bool ce_insert_char(Buffer* buffer, const Point* location, char c)
 {
      if(buffer->readonly) return false;
 
+     return insert_char_impl(buffer, location, c);
+}
+
+bool ce_insert_char_readonly(Buffer* buffer, const Point* location, char c)
+{
+     if(!buffer->readonly) return false;
+
+     return insert_char_impl(buffer, location, c);
+}
+
+bool ce_append_char(Buffer* buffer, char c)
+{
      Point end = {0, 0};
      if(buffer->line_count){
           end.y = buffer->line_count - 1;
           end.x = strlen(buffer->lines[end.y]);
      }
+
      return ce_insert_char(buffer, &end, c);
 }
 
-bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_string)
+bool ce_append_char_readonly(Buffer* buffer, char c)
 {
-     CE_CHECK_PTR_ARG(buffer);
-     CE_CHECK_PTR_ARG(location);
-     CE_CHECK_PTR_ARG(new_string);
+     Point end = {0, 0};
+     if(buffer->line_count){
+          end.y = buffer->line_count - 1;
+          end.x = strlen(buffer->lines[end.y]);
+     }
 
-     if(buffer->readonly) return false;
+     return ce_insert_char_readonly(buffer, &end, c);
+}
 
+bool insert_string_impl(Buffer* buffer, const Point* location, const char* new_string)
+{
      if(location->x != 0 && location->y != 0){
           if(!ce_point_on_buffer(buffer, location)){
                return false;
@@ -357,6 +388,28 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
      return true;
 }
 
+bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_string)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+     CE_CHECK_PTR_ARG(new_string);
+
+     if(buffer->readonly) return false;
+
+     return insert_string_impl(buffer, location, new_string);
+}
+
+bool ce_insert_string_readonly(Buffer* buffer, const Point* location, const char* new_string)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+     CE_CHECK_PTR_ARG(new_string);
+
+     if(!buffer->readonly) return false;
+
+     return insert_string_impl(buffer, location, new_string);
+}
+
 bool ce_prepend_string(Buffer* buffer, int64_t line, const char* new_string)
 {
      Point beginning_of_line = {0, line};
@@ -368,6 +421,13 @@ bool ce_append_string(Buffer* buffer, int64_t line, const char* new_string)
      Point end_of_line = {0, line};
      if(buffer->line_count > line) end_of_line.x = strlen(buffer->lines[line]);
      return ce_insert_string(buffer, &end_of_line, new_string);
+}
+
+bool ce_append_string_readonly(Buffer* buffer, int64_t line, const char* new_string)
+{
+     Point end_of_line = {0, line};
+     if(buffer->line_count > line) end_of_line.x = strlen(buffer->lines[line]);
+     return ce_insert_string_readonly(buffer, &end_of_line, new_string);
 }
 
 bool ce_remove_char(Buffer* buffer, const Point* location)
@@ -864,10 +924,12 @@ bool ce_set_char(Buffer* buffer, const Point* location, char c)
      return true;
 }
 
-// NOTE: passing NULL to string causes an empty line to be inserted
-bool ce_insert_line(Buffer* buffer, int64_t line, const char* string)
+bool insert_line_impl(Buffer* buffer, int64_t line, const char* string)
 {
      CE_CHECK_PTR_ARG(buffer);
+
+     // make sure we are only inserting in the middle or at the very end
+     assert(line >= 0 && line <= buffer->line_count);
 
      int64_t new_line_count = buffer->line_count + 1;
      char** new_lines = realloc(buffer->lines, new_line_count * sizeof(char*));
@@ -890,12 +952,41 @@ bool ce_insert_line(Buffer* buffer, int64_t line, const char* string)
      return true;
 }
 
+
+// NOTE: passing NULL to string causes an empty line to be inserted
+bool ce_insert_line(Buffer* buffer, int64_t line, const char* string)
+{
+     CE_CHECK_PTR_ARG(buffer);
+
+     if(buffer->readonly) return false;
+
+     return insert_line_impl(buffer, line, string);
+}
+
+bool ce_insert_line_readonly(Buffer* buffer, int64_t line, const char* string)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(string);
+
+     if(!buffer->readonly) return false;
+
+     return insert_line_impl(buffer, line, string);
+}
+
 bool ce_append_line(Buffer* buffer, const char* string)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(string);
 
      return ce_insert_line(buffer, buffer->line_count, string);
+}
+
+bool ce_append_line_readonly(Buffer* buffer, const char* string)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(string);
+
+     return ce_insert_line_readonly(buffer, buffer->line_count, string);
 }
 
 bool ce_insert_newline(Buffer* buffer, int64_t line)
@@ -1620,7 +1711,7 @@ bool ce_set_cursor(const Buffer* buffer, Point* cursor, const Point* location)
 
      if(dst.y >= buffer->line_count) dst.y = buffer->line_count - 1;
 
-     if(buffer->lines[dst.y]){
+     if(buffer->lines && buffer->lines[dst.y]){
           int64_t line_len = strlen(buffer->lines[dst.y]);
           if(!line_len){
                dst.x = 0;
@@ -1656,7 +1747,7 @@ bool ce_move_cursor(const Buffer* buffer, Point* cursor, Point delta)
 
      if(dst.y >= buffer->line_count) dst.y = buffer->line_count - 1;
 
-     if(buffer->lines[dst.y]){
+     if(buffer->lines && buffer->lines[dst.y]){
           int64_t line_len = strlen(buffer->lines[dst.y]);
           if(!line_len){
                dst.x = 0;

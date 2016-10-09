@@ -293,6 +293,7 @@ typedef struct{
      TabView* tab_current;
      BufferView* view_input;
      InputHistory shell_command_history;
+     InputHistory shell_input_history;
      InputHistory search_history;
      InputHistory load_file_history;
      Point start_search;
@@ -552,6 +553,9 @@ InputHistory* history_from_input_key(ConfigState* config_state)
      case 24: // Ctrl + x
           history = &config_state->shell_command_history;
           break;
+     case 9: // Ctrl + i
+          history = &config_state->shell_input_history;
+          break;
      case 6: // Ctrl + f
           history = &config_state->load_file_history;
           break;
@@ -713,6 +717,7 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
      }
 
      input_history_init(&config_state->shell_command_history);
+     input_history_init(&config_state->shell_input_history);
      input_history_init(&config_state->search_history);
      input_history_init(&config_state->load_file_history);
 
@@ -803,6 +808,7 @@ bool destroyer(BufferNode* head, void* user_data)
 
      // history
      input_history_free(&config_state->shell_command_history);
+     input_history_free(&config_state->shell_input_history);
      input_history_free(&config_state->search_history);
      input_history_free(&config_state->load_file_history);
 
@@ -1291,10 +1297,10 @@ void jump_to_next_shell_command_file_destination(BufferNode* head, ConfigState* 
      }
 }
 
-bool commit_input_to_history(ConfigState* config_state, InputHistory* history)
+bool commit_input_to_history(Buffer* input_buffer, InputHistory* history)
 {
-     if(config_state->view_input->buffer->line_count){
-          char* saved = ce_dupe_buffer(config_state->view_input->buffer);
+     if(input_buffer->line_count){
+          char* saved = ce_dupe_buffer(input_buffer);
           if((history->cur->prev && strcmp(saved, history->cur->prev->entry) != 0) ||
              !history->cur->prev){
                history->cur = history->tail;
@@ -2745,7 +2751,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     } break;
                     case 6: // Ctrl + f
                          // just grab the first line and load it as a file
-                         commit_input_to_history(config_state, &config_state->load_file_history);
+                         commit_input_to_history(config_state->view_input->buffer, &config_state->load_file_history);
                          for(int64_t i = 0; i < config_state->view_input->buffer->line_count; ++i){
                               Buffer* new_buffer = open_file_buffer(head, config_state->view_input->buffer->lines[i]);
                               if(i == 0 && new_buffer){
@@ -2756,13 +2762,13 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          break;
                     case '/':
                          if(config_state->view_input->buffer->line_count){
-                              commit_input_to_history(config_state, &config_state->search_history);
+                              commit_input_to_history(config_state->view_input->buffer, &config_state->search_history);
                               add_yank(config_state, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
                          }
                          break;
                     case '?':
                          if(config_state->view_input->buffer->line_count){
-                              commit_input_to_history(config_state, &config_state->search_history);
+                              commit_input_to_history(config_state->view_input->buffer, &config_state->search_history);
                               add_yank(config_state, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
                          }
                          break;
@@ -2778,7 +2784,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                               }
                          }
 
-                         commit_input_to_history(config_state, &config_state->shell_command_history);
+                         commit_input_to_history(config_state->view_input->buffer, &config_state->shell_command_history);
 
                          // if we found an existing command buffer, clear it and use it
                          Buffer* command_buffer = config_state->shell_command_buffer;
@@ -2854,6 +2860,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          if(!shell_command_data.shell_command_input_fd) break;
                          char* input = ce_dupe_buffer(config_state->view_input->buffer);
                          char* ch = input;
+                         commit_input_to_history(config_state->view_input->buffer, &config_state->shell_input_history);
                          ce_append_string_readonly(config_state->shell_command_buffer,
                                                    config_state->shell_command_buffer->line_count - 1, input);
                          ce_append_char_readonly(config_state->shell_command_buffer, NEWLINE);

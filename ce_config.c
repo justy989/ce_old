@@ -539,6 +539,20 @@ void clear_keys(ConfigState* config_state)
      memset(config_state->movement_keys, 0, sizeof config_state->movement_keys);
 }
 
+// location is {left_column, top_line} for the view
+void scroll_view_to_location(BufferView* buffer_view, const Point* location){
+     // TODO: we should be able to scroll the view above our first line
+     buffer_view->left_column = (location->x >= 0) ? location->x : 0;
+     buffer_view->top_row = (location->y >= 0) ? location->y : 0;
+}
+
+void center_view(BufferView* view)
+{
+     int64_t view_height = view->bottom_right.y - view->top_left.y;
+     Point location = (Point) {0, view->cursor.y - (view_height / 2)};
+     scroll_view_to_location(view, &location);
+}
+
 InputHistory* history_from_input_key(ConfigState* config_state)
 {
      InputHistory* history = NULL;
@@ -581,16 +595,20 @@ void input_start(ConfigState* config_state, const char* input_message, char inpu
      if(history) history->cur = history->tail;
 }
 
-// NOTE: locals like buffer, buffer_state, buffer_view, cursor are updated here, which is why this is a macro,
-//       we should clean this up and make it a function.
-#define input_end() ({ \
-     config_state->input = false;\
+void input_end(ConfigState* config_state)
+{
+     config_state->input = false;
      config_state->tab_current->view_current = config_state->tab_current->view_input_save; \
-     buffer = config_state->tab_current->view_current->buffer; \
-     buffer_state = buffer->user_data; \
-     buffer_view = config_state->tab_current->view_current; \
-     cursor = &config_state->tab_current->view_current->cursor; \
- })
+}
+
+void input_cancel(ConfigState* config_state)
+{
+     if(config_state->input_key == '/' || config_state->input_key == '?'){
+          config_state->tab_current->view_input_save->cursor = config_state->start_search;
+          center_view(config_state->tab_current->view_input_save);
+     }
+     input_end(config_state);
+}
 
 #ifndef FTW_STOP
 #define FTW_STOP 1
@@ -814,20 +832,6 @@ bool destroyer(BufferNode* head, void* user_data)
 
      free(config_state);
      return true;
-}
-
-// location is {left_column, top_line} for the view
-void scroll_view_to_location(BufferView* buffer_view, const Point* location){
-     // TODO: we should be able to scroll the view above our first line
-     buffer_view->left_column = (location->x >= 0) ? location->x : 0;
-     buffer_view->top_row = (location->y >= 0) ? location->y : 0;
-}
-
-void center_view(BufferView* view)
-{
-     int64_t view_height = view->bottom_right.y - view->top_left.y;
-     Point location = (Point) {0, view->cursor.y - (view_height / 2)};
-     scroll_view_to_location(view, &location);
 }
 
 void find_command(int command_key, int find_char, Buffer* buffer, Point* cursor)
@@ -1722,6 +1726,10 @@ void* run_shell_commands(void* user_data)
           char* end_cmd = strchr(current_cmd, NEWLINE);
           if(end_cmd){
                current_cmd_len = end_cmd - current_cmd;
+               if(current_cmd_len <= 1){
+                    current_cmd++;
+                    continue;
+               }
                current_cmd[current_cmd_len] = 0; // set newline to NULL terminator
           }else{
                current_cmd_len = strlen(current_cmd);
@@ -2065,11 +2073,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 27: // ESC
           {
                if(config_state->input){
-                    if(config_state->input_key == '/' || config_state->input_key == '?'){
-                         config_state->tab_current->view_input_save->cursor = config_state->start_search;
-                         center_view(config_state->tab_current->view_input_save);
-                    }
-                    input_end();
+                    input_cancel(config_state);
                }
                if(config_state->vim_mode != VM_NORMAL){
                     enter_normal_mode(config_state);
@@ -2504,6 +2508,11 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case KEY_CLOSE: // Ctrl + q
           {
+               if(config_state->input){
+                    input_cancel(config_state);
+                    break;
+               }
+
                Point save_cursor_on_terminal = get_cursor_on_terminal(cursor, buffer_view);
                config_state->tab_current->view_current->buffer->cursor = config_state->tab_current->view_current->cursor;
 
@@ -2723,18 +2732,48 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                half_page_down(config_state->tab_current->view_current);
           } break;
           case 8: // Ctrl + h
-          {
-               if(config_state->input) break;
-               // TODO: consolidate into function for use with other window movement keys, and for use in insert mode?
-               Point point = {config_state->tab_current->view_current->top_left.x - 2, // account for window separator
-                              cursor->y - config_state->tab_current->view_current->top_row + config_state->tab_current->view_current->top_left.y};
-               if(point.x < 0) point.x += g_terminal_dimensions->x - 1;
-               switch_to_view_at_point(config_state, &point);
-          }
+              if(config_state->input){
+                   // dump input history on cursor line
+                   InputHistory* cur_hist = history_from_input_key(config_state);
+                   if(!cur_hist){
+                        ce_message("no history to dump");
+                        break;
+                   }
+
+                   // start the insertions after the cursor, unless the buffer is empty
+                   assert(config_state->view_input->buffer->line_count);
+                   int lines_added = 1;
+                   bool empty_first_line = !config_state->view_input->buffer->lines[0][0];
+
+                   // insert each line in history
+                   InputHistoryNode* node = cur_hist->head;
+                   while(node && node->entry){
+                        if(ce_insert_line(config_state->view_input->buffer,
+                                          config_state->view_input->cursor.y + lines_added,
+                                          node->entry)){
+                            lines_added += ce_count_string_lines(node->entry);
+                        }else{
+                             break;
+                        }
+                        node = node->next;
+                   }
+
+                   if(empty_first_line) ce_remove_line(config_state->view_input->buffer, 0);
+              }else{
+                   // TODO: consolidate into function for use with other window movement keys, and for use in insert mode?
+                   Point point = {config_state->tab_current->view_current->top_left.x - 2, // account for window separator
+                                  cursor->y - config_state->tab_current->view_current->top_row + config_state->tab_current->view_current->top_left.y};
+                   if(point.x < 0) point.x += g_terminal_dimensions->x - 1;
+                   switch_to_view_at_point(config_state, &point);
+              }
           break;
           case 10: // Ctrl + j
                if(config_state->input){
-                    input_end();
+                    input_end(config_state);
+                    buffer = config_state->tab_current->view_current->buffer;
+                    buffer_state = buffer->user_data;
+                    buffer_view = config_state->tab_current->view_current;
+                    cursor = &config_state->tab_current->view_current->cursor;
                     switch(config_state->input_key) {
                     default:
                          break;

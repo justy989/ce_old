@@ -932,18 +932,33 @@ bool insert_line_impl(Buffer* buffer, int64_t line, const char* string)
 
      // make sure we are only inserting in the middle or at the very end
      assert(line >= 0 && line <= buffer->line_count);
+     int64_t string_line_count = 1;
+     if(string) string_line_count = ce_count_string_lines(string);
 
-     int64_t new_line_count = buffer->line_count + 1;
+     int64_t new_line_count = buffer->line_count + string_line_count;
      char** new_lines = realloc(buffer->lines, new_line_count * sizeof(char*));
      if(!new_lines){
           printf("%s() failed to malloc new lines: %"PRId64"\n", __FUNCTION__, new_line_count);
           return false;
      }
 
-     memmove(new_lines + line + 1, new_lines + line, (buffer->line_count - line) * sizeof(*new_lines));
+     memmove(new_lines + line + string_line_count, new_lines + line, (buffer->line_count - line) * sizeof(*new_lines));
 
      if(string){
-          new_lines[line] = strdup(string);
+          const char* line_start = string;
+          for(int i = 0; i < string_line_count; ++i){
+               const char* line_end = strchr(line_start, NEWLINE);
+               if(line_end){
+                    int64_t current_len = line_end - line_start;
+                    char current_line[current_len + 1];
+                    strncpy(current_line, line_start, current_len);
+                    current_line[current_len] = 0;
+                    new_lines[line + i] = strdup(current_line);
+                    line_start = line_end + 1;
+               }else{
+                    new_lines[line + i] = strdup(line_start);
+               }
+          }
      }else{
           new_lines[line] = strdup("");
      }
@@ -968,7 +983,6 @@ bool ce_insert_line(Buffer* buffer, int64_t line, const char* string)
 bool ce_insert_line_readonly(Buffer* buffer, int64_t line, const char* string)
 {
      CE_CHECK_PTR_ARG(buffer);
-     CE_CHECK_PTR_ARG(string);
 
      if(!buffer->readonly) return false;
 

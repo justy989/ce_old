@@ -690,9 +690,27 @@ TEST(sanity_insert_line_readonly)
 
      ce_insert_line_readonly(&buffer, 0, "ARE AWESOME");
 
-     EXPECT(buffer.line_count == 2);
+     ASSERT(buffer.line_count == 2);
      EXPECT(strcmp(buffer.lines[0], "ARE AWESOME") == 0);
      EXPECT(strcmp(buffer.lines[1], "TACOS") == 0);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(insert_line_multiline)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.readonly = true;
+
+     ce_insert_line_readonly(&buffer, 0, "ARE\nAWESOME");
+
+     ASSERT(buffer.line_count == 3);
+     EXPECT(strcmp(buffer.lines[0], "ARE") == 0);
+     EXPECT(strcmp(buffer.lines[1], "AWESOME") == 0);
+     EXPECT(strcmp(buffer.lines[2], "TACOS") == 0);
 
      ce_free_buffer(&buffer);
 }

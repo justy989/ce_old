@@ -33,6 +33,8 @@ bool ce_alloc_lines(Buffer* buffer, int64_t line_count)
 
      if(buffer->readonly) return false;
 
+     if(buffer->lines) ce_clear_lines(buffer);
+
      if(line_count <= 0){
           ce_message("%s() tried to allocate %"PRId64" lines for a buffer, but we can only allocated > 0 lines", __FUNCTION__, line_count);
           return false;
@@ -62,9 +64,9 @@ bool ce_alloc_lines(Buffer* buffer, int64_t line_count)
 
 bool ce_load_file(Buffer* buffer, const char* filename)
 {
-     if(buffer->readonly) return false;
-
      ce_message("load file '%s'", filename);
+
+     if(buffer->lines) ce_free_buffer(buffer);
 
      // read the entire file
      size_t content_size;

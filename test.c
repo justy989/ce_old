@@ -1617,7 +1617,7 @@ TEST(move_cursor_to_beginning_of_word)
      Buffer buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
-     buffer.lines[0] = strdup("Cats are delicious");
+     buffer.lines[0] = strdup("Cats are delicious. Oh yeah!");
 
      Point cursor;
 
@@ -1631,10 +1631,22 @@ TEST(move_cursor_to_beginning_of_word)
      EXPECT(cursor.x == 0);
      EXPECT(cursor.y == 0);
 
-     // NOTE: on whitespace
+     // on whitespace
      cursor = (Point) {8, 0};
      ASSERT(ce_move_cursor_to_beginning_of_word(&buffer, &cursor, false));
      EXPECT(cursor.x == 5);
+     EXPECT(cursor.y == 0);
+
+     // on a beginning of word already
+     cursor = (Point) {5, 0};
+     ASSERT(ce_move_cursor_to_beginning_of_word(&buffer, &cursor, false));
+     EXPECT(cursor.x == 0);
+     EXPECT(cursor.y == 0);
+
+     // move to punctuation
+     cursor = (Point) {20, 0};
+     ASSERT(ce_move_cursor_to_beginning_of_word(&buffer, &cursor, true));
+     EXPECT(cursor.x == 18);
      EXPECT(cursor.y == 0);
 
      ce_free_buffer(&buffer);

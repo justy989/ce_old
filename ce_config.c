@@ -3191,6 +3191,24 @@ search:
                if(config_state->input) break;
                input_start(config_state, "Shell Command Input", key);
           break;
+          case 15: // Ctrl + o // NOTE: not the best keybinding, but what else is left?!
+          {
+               if(access(buffer->filename, R_OK) != 0){
+                    ce_message("failed to read %s: %s", buffer->filename, strerror(errno));
+                    break;
+               }
+
+               // reload file
+               if(buffer->readonly){
+                    // NOTE: maybe ce_clear_lines shouldn't care about readonly
+                    ce_clear_lines_readonly(buffer);
+               }else{
+                    ce_clear_lines(buffer);
+               }
+
+               ce_load_file(buffer, buffer->filename);
+               ce_clamp_cursor(buffer, &buffer_view->cursor);
+          } break;
           }
      }
 

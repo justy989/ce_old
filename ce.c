@@ -1348,8 +1348,8 @@ int set_color(Syntax syntax, bool highlighted)
 
 static const char non_printable_repr = '~';
 
-bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Point* term_bottom_right,
-                    const Point* buffer_top_left, const char* highlight_word)
+bool ce_draw_buffer(const Buffer* buffer, const Point* cursor,const Point* term_top_left,
+                    const Point* term_bottom_right, const Point* buffer_top_left, const char* highlight_word)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(term_top_left);
@@ -1403,8 +1403,6 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
 
      // do a pass looking for only an ending multiline comment
      for(int64_t i = buffer_top_left->y; i <= last_line; ++i) {
-          move(term_top_left->y + (i - buffer_top_left->y), term_top_left->x);
-
           if(!buffer->lines[i][0]) continue;
           const char* buffer_line = buffer->lines[i];
           int64_t len = strlen(buffer_line);
@@ -1427,6 +1425,8 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
      // TODO: if we found a closing multiline comment, make sure there is a matching opening multiline comment
      size_t highlight_word_len = 0;
      if(highlight_word) highlight_word_len = strlen(highlight_word);
+
+     standend();
 
      for(int64_t i = buffer_top_left->y; i <= last_line; ++i) {
           move(term_top_left->y + (i - buffer_top_left->y), term_top_left->x);
@@ -1451,6 +1451,19 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                bool inside_highlight = false;
                int64_t highlighting_left = 0;
                int fg_color = 0;
+
+               int64_t begin_trailing_whitespace = line_length;
+
+               // NOTE: pre-pass to find trailing whitespace if it exists
+               if(cursor->y != i){
+                    for(int64_t c = line_length - 1; c >= 0; --c){
+                         if(isblank(buffer_line[c])){
+                              begin_trailing_whitespace--;
+                         }else{
+                              break;
+                         }
+                    }
+               }
 
                // NOTE: pre-pass check for comments and strings out of view
                for(int64_t c = 0; c < buffer_top_left->x; ++c){
@@ -1501,7 +1514,6 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                                              if(keyword_left){
                                                   color_left = keyword_left;
                                                   highlight_color = S_PREPROCESSOR;
-
                                              }
                                         }
                                    }
@@ -1549,11 +1561,9 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                               }else{
                                    inside_highlight = false;
                                    set_color(fg_color, inside_highlight);
-
                               }
                          }
                     }
-
 
                     // syntax highlighting
                     if(color_left == 0){
@@ -1617,6 +1627,10 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                                    fg_color = set_color(S_DIFF_REMOVE, inside_highlight);
                               }
                          }
+                    }
+
+                    if(c >= begin_trailing_whitespace){
+                         fg_color = set_color(S_TRAILING_WHITESPACE, inside_highlight);
                     }
 
                     // print each character
@@ -2388,19 +2402,19 @@ bool ce_calc_views(BufferView* view, const Point *top_left, const Point* bottom_
 
 void draw_view_bottom_right_borders(const BufferView* view)
 {
+     attron(COLOR_PAIR(S_BORDERS));
+
      // draw right border
      if(view->bottom_right.x < (g_terminal_dimensions->x - 1)){
-          for(int64_t i = view->top_left.y; i <= view->bottom_right.y; ++i){
+          for(int64_t i = view->top_left.y; i < view->bottom_right.y; ++i){
                move(i, view->bottom_right.x);
                addch(ACS_VLINE);
           }
      }
 
      // draw bottom border
-     // NOTE: accounting for the status bar with -2 here is not what we want going forward.
-     //       we need a better way of determining when the view is at the edge of the terminal
      move(view->bottom_right.y, view->top_left.x);
-     for(int64_t i = view->top_left.x; i <= view->bottom_right.x; ++i){
+     for(int64_t i = view->top_left.x; i < view->bottom_right.x; ++i){
           move(view->bottom_right.y, i);
           addch(ACS_HLINE);
      }
@@ -2419,7 +2433,8 @@ bool draw_horizontal_views(const BufferView* view, bool already_drawn, const cha
                draw_vertical_views(itr, true, highlight_word);
           }else{
                Point buffer_top_left = {itr->left_column, itr->top_row};
-               ce_draw_buffer(itr->buffer, &itr->top_left, &itr->bottom_right, &buffer_top_left, highlight_word);
+               ce_draw_buffer(itr->buffer, &itr->cursor, &itr->top_left, &itr->bottom_right, &buffer_top_left,
+                              highlight_word);
                draw_view_bottom_right_borders(itr);
           }
 
@@ -2440,7 +2455,8 @@ bool draw_vertical_views(const BufferView* view, bool already_drawn, const char*
                draw_horizontal_views(itr, true, highlight_word);
           }else{
                Point buffer_top_left = {itr->left_column, itr->top_row};
-               ce_draw_buffer(itr->buffer, &itr->top_left, &itr->bottom_right, &buffer_top_left, highlight_word);
+               ce_draw_buffer(itr->buffer, &itr->cursor, &itr->top_left, &itr->bottom_right, &buffer_top_left,
+                              highlight_word);
                draw_view_bottom_right_borders(itr);
           }
 
@@ -2459,6 +2475,12 @@ bool ce_connect_border_lines(const Point* location)
      chtype right = mvinch(location->y, location->x + 1);
      chtype top = mvinch(location->y - 1, location->x);
      chtype bottom = mvinch(location->y + 1, location->x);
+
+     // strip out the color info from each adjacent chtype
+     left &= ~A_COLOR;
+     right &= ~A_COLOR;
+     top &= ~A_COLOR;
+     bottom &= ~A_COLOR;
 
      if(left == ACS_HLINE && right == ACS_HLINE && top == ACS_VLINE){
           move(location->y, location->x);
@@ -2508,7 +2530,13 @@ bool ce_draw_views(const BufferView* view, const char* highlight_word)
 {
      CE_CHECK_PTR_ARG(view);
 
-     return draw_horizontal_views(view, false, highlight_word) && connect_borders(view);
+     if(!draw_horizontal_views(view, false, highlight_word)){
+          return false;
+     }
+
+     standend();
+     attron(COLOR_PAIR(S_BORDERS));
+     return connect_borders(view);
 }
 
 BufferView* find_view_at_point(BufferView* view, const Point* point)

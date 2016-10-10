@@ -43,7 +43,15 @@ typedef enum {
      S_DIFF_ADD_HIGHLIGHTED,
      S_DIFF_REMOVE_HIGHLIGHTED,
 
-     S_CURRENT_TAB,
+     S_TRAILING_WHITESPACE,
+
+     S_BORDERS,
+
+     S_TAB_NAME,
+     S_CURRENT_TAB_NAME,
+
+     S_VIEW_STATUS,
+     S_INPUT_STATUS,
 } Syntax;
 
 #define CE_CHECK_PTR_ARG(arg)                                                 \
@@ -209,7 +217,8 @@ bool ce_insert_newline          (Buffer* buffer, int64_t line);
 
 
 // Buffer Inspection Functions
-bool    ce_draw_buffer                   (const Buffer* buffer, const Point* term_top_left, const Point* term_bottom_right, const Point* buffer_top_left,
+bool    ce_draw_buffer                   (const Buffer* buffer, const Point* cursor,const Point* term_top_left,
+                                          const Point* term_bottom_right, const Point* buffer_top_left,
                                           const char* highlight_word);
 bool    ce_save_buffer                   (Buffer* buffer, const char* filename);
 bool    ce_point_on_buffer               (const Buffer* buffer, const Point* location);

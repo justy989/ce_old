@@ -785,7 +785,15 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
      init_pair(S_DIFF_ADD_HIGHLIGHTED, COLOR_GREEN, COLOR_BRIGHT_BLACK);
      init_pair(S_DIFF_REMOVE_HIGHLIGHTED, COLOR_RED, COLOR_BRIGHT_BLACK);
 
-     init_pair(S_CURRENT_TAB, COLOR_BRIGHT_WHITE, COLOR_BACKGROUND);
+     init_pair(S_TRAILING_WHITESPACE, COLOR_FOREGROUND, COLOR_RED);
+
+     init_pair(S_BORDERS, COLOR_WHITE, COLOR_BACKGROUND);
+
+     init_pair(S_TAB_NAME, COLOR_WHITE, COLOR_BACKGROUND);
+     init_pair(S_CURRENT_TAB_NAME, COLOR_FOREGROUND, COLOR_BACKGROUND);
+
+     init_pair(S_VIEW_STATUS, COLOR_CYAN, COLOR_BACKGROUND);
+     init_pair(S_INPUT_STATUS, COLOR_RED, COLOR_BACKGROUND);
 
      // Doesn't work in insert mode :<
      //define_key("h", KEY_LEFT);
@@ -3443,9 +3451,11 @@ void draw_view_statuses(BufferView* view, BufferView* current_view, VimMode vim_
           "VISUAL BLOCK ",
      };
 
+     attron(COLOR_PAIR(S_BORDERS));
      move(view->bottom_right.y, view->top_left.x);
      for(int i = view->top_left.x; i < view->bottom_right.x; ++i) addch(ACS_HLINE);
 
+     attron(COLOR_PAIR(S_VIEW_STATUS));
      mvprintw(view->bottom_right.y, view->top_left.x + 1, " %s%s%s%s ",
               view == current_view ? mode_names[vim_mode] : "",
               modified_string(buffer), buffer->filename, readonly_string(buffer));
@@ -3547,10 +3557,16 @@ void view_drawer(const BufferNode* head, void* user_data)
 
      if(config_state->input){
           move(input_top_left.y - 1, input_top_left.x);
+
+          attron(COLOR_PAIR(S_BORDERS));
           for(int i = input_top_left.x; i < input_bottom_right.x; ++i) addch(ACS_HLINE);
           // if we are at the edge of the terminal, draw the inclusing horizontal line. We
           if(input_bottom_right.x == g_terminal_dimensions->x - 1) addch(ACS_HLINE);
+
+          attron(COLOR_PAIR(S_INPUT_STATUS));
           mvprintw(input_top_left.y - 1, input_top_left.x + 1, " %s ", config_state->input_message);
+
+          standend();
           // clear input buffer section
           for(int y = input_top_left.y; y <= input_bottom_right.y; ++y){
                move(y, input_top_left.x);
@@ -3562,9 +3578,11 @@ void view_drawer(const BufferNode* head, void* user_data)
           ce_draw_views(config_state->view_input, NULL);
      }
 
+     standend();
      draw_view_statuses(config_state->tab_current->view_head, config_state->tab_current->view_current,
                         config_state->vim_mode, config_state->last_key);
 
+     standend();
      if(config_state->input){
           draw_view_statuses(config_state->view_input, config_state->tab_current->view_current,
                              config_state->vim_mode, config_state->last_key);
@@ -3575,6 +3593,7 @@ void view_drawer(const BufferNode* head, void* user_data)
           // clear tab line with inverses
           standend();
           move(0, 0);
+          attron(COLOR_PAIR(S_BORDERS));
           for(int i = 0; i < g_terminal_dimensions->x; ++i) addch(ACS_HLINE);
           for(int i = 0; i < g_terminal_dimensions->x; ++i){
                Point p = {i, 0};
@@ -3585,6 +3604,7 @@ void view_drawer(const BufferNode* head, void* user_data)
           move(0, 1);
 
           // draw before current tab
+          attron(COLOR_PAIR(S_TAB_NAME));
           addch(' ');
           while(tab_itr && tab_itr != config_state->tab_current){
                printw(tab_itr->view_current->buffer->name);
@@ -3594,12 +3614,12 @@ void view_drawer(const BufferNode* head, void* user_data)
 
           // draw current tab
           assert(tab_itr == config_state->tab_current);
-          attron(COLOR_PAIR(S_CURRENT_TAB));
+          attron(COLOR_PAIR(S_CURRENT_TAB_NAME));
           printw(tab_itr->view_current->buffer->name);
           addch(' ');
-          standend();
 
           // draw rest of tabs
+          attron(COLOR_PAIR(S_TAB_NAME));
           tab_itr = tab_itr->next;
           while(tab_itr){
                printw(tab_itr->view_current->buffer->name);

@@ -295,11 +295,11 @@ typedef struct{
           char find_char;
      } find_command;
      struct {
-          Direction direction;
+          Direction_t direction;
      } search_command;
-     Point start_insert;
-     Point original_start_insert;
-     Point visual_start;
+     Point_t start_insert;
+     Point_t original_start_insert;
+     Point_t visual_start;
      struct YankNode* yank_head;
      TabView* tab_head;
      TabView* tab_current;
@@ -308,14 +308,14 @@ typedef struct{
      InputHistory shell_input_history;
      InputHistory search_history;
      InputHistory load_file_history;
-     Point start_search;
+     Point_t start_search;
      pthread_t shell_command_thread;
      pthread_t shell_input_thread;
 } ConfigState;
 
 typedef struct MarkNode{
      char reg_char;
-     Point location;
+     Point_t location;
      struct MarkNode* next;
 } MarkNode;
 
@@ -352,7 +352,7 @@ void add_yank(ConfigState* config, char reg_char, const char* yank_text, YankMod
      node->mode = mode;
 }
 
-Point* find_mark(Buffer_tState* buffer, char mark_char)
+Point_t* find_mark(Buffer_tState* buffer, char mark_char)
 {
      MarkNode* itr = buffer->mark_head;
      while(itr != NULL){
@@ -362,9 +362,9 @@ Point* find_mark(Buffer_tState* buffer, char mark_char)
      return NULL;
 }
 
-void add_mark(Buffer_tState* buffer, char mark_char, const Point* location)
+void add_mark(Buffer_tState* buffer, char mark_char, const Point_t* location)
 {
-     Point* mark_location = find_mark(buffer, mark_char);
+     Point_t* mark_location = find_mark(buffer, mark_char);
      if(!mark_location){
           MarkNode* new_mark = malloc(sizeof(*buffer->mark_head));
           new_mark->reg_char = mark_char;
@@ -476,7 +476,7 @@ void enter_normal_mode(ConfigState* config_state)
      config_state->vim_mode = VM_NORMAL;
 }
 
-void enter_insert_mode(ConfigState* config_state, Point* cursor)
+void enter_insert_mode(ConfigState* config_state, Point_t* cursor)
 {
      if(config_state->tab_current->view_current->buffer->readonly) return;
      config_state->vim_mode = VM_INSERT;
@@ -496,7 +496,7 @@ void enter_visual_line_mode(ConfigState* config_state, Buffer_tView_t* buffer_vi
      config_state->visual_start = buffer_view->cursor;
 }
 
-void commit_insert_mode_changes(ConfigState* config_state, Buffer_t* buffer, Buffer_tState* buffer_state, Point* cursor, Point* end_cursor)
+void commit_insert_mode_changes(ConfigState* config_state, Buffer_t* buffer, Buffer_tState* buffer_state, Point_t* cursor, Point_t* end_cursor)
 {
      if(config_state->start_insert.x == cursor->x &&
         config_state->start_insert.y == cursor->y &&
@@ -508,7 +508,7 @@ void commit_insert_mode_changes(ConfigState* config_state, Buffer_t* buffer, Buf
              config_state->start_insert.y == config_state->original_start_insert.y){
                // TODO: assert cursor is after start_insert
                // exclusively inserts
-               Point last_inserted_char = {cursor->x, cursor->y};
+               Point_t last_inserted_char = {cursor->x, cursor->y};
                ce_advance_cursor(buffer, &last_inserted_char, -1);
                ce_commit_insert_string(&buffer_state->commit_tail,
                                        &config_state->start_insert,
@@ -528,7 +528,7 @@ void commit_insert_mode_changes(ConfigState* config_state, Buffer_t* buffer, Buf
                     backspace_free(&buffer_state->backspace_head);
                }else{
                     // mixture of inserts and backspaces
-                    Point last_inserted_char = {end_cursor->x, end_cursor->y};
+                    Point_t last_inserted_char = {end_cursor->x, end_cursor->y};
                     ce_commit_change_string(&buffer_state->commit_tail,
                                             &config_state->start_insert,
                                             &config_state->original_start_insert,
@@ -552,7 +552,7 @@ void clear_keys(ConfigState* config_state)
 }
 
 // location is {left_column, top_line} for the view
-void scroll_view_to_location(Buffer_tView_t* buffer_view, const Point* location){
+void scroll_view_to_location(Buffer_tView_t* buffer_view, const Point_t* location){
      // TODO: we should be able to scroll the view above our first line
      buffer_view->left_column = (location->x >= 0) ? location->x : 0;
      buffer_view->top_row = (location->y >= 0) ? location->y : 0;
@@ -561,7 +561,7 @@ void scroll_view_to_location(Buffer_tView_t* buffer_view, const Point* location)
 void center_view(Buffer_tView_t* view)
 {
      int64_t view_height = view->bottom_right.y - view->top_left.y;
-     Point location = (Point) {0, view->cursor.y - (view_height / 2)};
+     Point_t location = (Point_t) {0, view->cursor.y - (view_height / 2)};
      scroll_view_to_location(view, &location);
 }
 
@@ -595,7 +595,7 @@ void input_start(ConfigState* config_state, const char* input_message, char inpu
      ce_clear_lines(config_state->view_input->buffer);
      ce_alloc_lines(config_state->view_input->buffer, 1);
      config_state->input = true;
-     config_state->view_input->cursor = (Point){0, 0};
+     config_state->view_input->cursor = (Point_t){0, 0};
      config_state->input_message = input_message;
      config_state->input_key = input_key;
      config_state->tab_current->view_input_save = config_state->tab_current->view_current;
@@ -671,7 +671,7 @@ Buffer_t* open_file_buffer(BufferNode_t* head, const char* filename)
      return NULL;
 }
 
-bool initializer(BufferNode_t* head, Point* terminal_dimensions, int argc, char** argv, void** user_data)
+bool initializer(BufferNode_t* head, Point_t* terminal_dimensions, int argc, char** argv, void** user_data)
 {
      // NOTE: need to set these in this module
      g_terminal_dimensions = terminal_dimensions;
@@ -878,34 +878,34 @@ bool destroyer(BufferNode_t* head, void* user_data)
      return true;
 }
 
-void find_command(int command_key, int find_char, Buffer_t* buffer, Point* cursor)
+void find_command(int command_key, int find_char, Buffer_t* buffer, Point_t* cursor)
 {
      switch(command_key){
      case 'f':
      {
           int64_t x_delta = ce_find_delta_to_char_forward_in_line(buffer, cursor, find_char);
           if(x_delta == -1) break;
-          ce_move_cursor(buffer, cursor, (Point){x_delta, 0});
+          ce_move_cursor(buffer, cursor, (Point_t){x_delta, 0});
      } break;
      case 't':
      {
-          Point search_point = {cursor->x + 1, cursor->y};
+          Point_t search_point = {cursor->x + 1, cursor->y};
           int64_t x_delta = ce_find_delta_to_char_forward_in_line(buffer, &search_point, find_char);
           if(x_delta <= 0) break;
-          ce_move_cursor(buffer, cursor, (Point){x_delta, 0});
+          ce_move_cursor(buffer, cursor, (Point_t){x_delta, 0});
      } break;
      case 'F':
      {
           int64_t x_delta = ce_find_delta_to_char_backward_in_line(buffer, cursor, find_char);
           if(x_delta == -1) break;
-          ce_move_cursor(buffer, cursor, (Point){-x_delta, 0});
+          ce_move_cursor(buffer, cursor, (Point_t){-x_delta, 0});
      } break;
      case 'T':
      {
-          Point search_point = {cursor->x - 1, cursor->y};
+          Point_t search_point = {cursor->x - 1, cursor->y};
           int64_t x_delta = ce_find_delta_to_char_backward_in_line(buffer, &search_point, find_char);
           if(x_delta <= 0) break;
-          ce_move_cursor(buffer, cursor, (Point){-x_delta, 0});
+          ce_move_cursor(buffer, cursor, (Point_t){-x_delta, 0});
      } break;
      default:
           assert(0);
@@ -942,7 +942,7 @@ typedef enum{
 //              - MOVEMENT_CONTINUE: a portion of a generic movement has been provided, and this function should be
 //                                   called again once another key is available
 //              - MOVEMENT_INVALID:  the movement provided by the user is not a generic movement
-movement_state_t try_generic_movement(ConfigState* config_state, Buffer_t* buffer, Point* cursor, Point* movement_start, Point* movement_end)
+movement_state_t try_generic_movement(ConfigState* config_state, Buffer_t* buffer, Point_t* cursor, Point_t* movement_start, Point_t* movement_end)
 {
      *movement_start = *movement_end = *cursor;
 
@@ -957,37 +957,37 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer_t* buffe
           case KEY_LEFT:
           case 'h':
           {
-               ce_move_cursor(buffer, movement_end, (Point){-1, 0});
+               ce_move_cursor(buffer, movement_end, (Point_t){-1, 0});
           } break;
           case KEY_DOWN:
           case 'j':
           {
-               *movement_start = (Point){0, cursor->y};
-               ce_move_cursor(buffer, movement_end, (Point){0, 1});
+               *movement_start = (Point_t){0, cursor->y};
+               ce_move_cursor(buffer, movement_end, (Point_t){0, 1});
                ce_move_cursor_to_end_of_line(buffer, movement_end);
           } break;
           case KEY_UP:
           case 'k':
           {
-               *movement_start = (Point){0, cursor->y};
-               ce_move_cursor(buffer, movement_start, (Point){0, -1});
+               *movement_start = (Point_t){0, cursor->y};
+               ce_move_cursor(buffer, movement_start, (Point_t){0, -1});
                ce_move_cursor_to_end_of_line(buffer, movement_end);
           } break;
           case KEY_RIGHT:
           case 'l':
           {
-               ce_move_cursor(buffer, movement_end, (Point){1, 0});
+               ce_move_cursor(buffer, movement_end, (Point_t){1, 0});
           } break;
           case '0':
           {
                movement_start->x = 0;
-               ce_move_cursor(buffer, movement_end, (Point){-1, 0});
+               ce_move_cursor(buffer, movement_end, (Point_t){-1, 0});
           } break;
           case '^':
           {
-               Point begin_line_cursor = *cursor;
+               Point_t begin_line_cursor = *cursor;
                ce_move_cursor_to_soft_beginning_of_line(buffer, &begin_line_cursor);
-               ce_move_cursor(buffer, &begin_line_cursor, (Point){-1, 0});
+               ce_move_cursor(buffer, &begin_line_cursor, (Point_t){-1, 0});
                if(cursor->x < begin_line_cursor.x) *movement_end = begin_line_cursor;
                else *movement_start = begin_line_cursor;
           } break;
@@ -1144,7 +1144,7 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer_t* buffe
           case 'b':
           case 'B':
                ce_move_cursor_to_beginning_of_word(buffer, movement_start, key0 == 'b');
-               ce_move_cursor(buffer, movement_end, (Point){-1, 0});
+               ce_move_cursor(buffer, movement_end, (Point_t){-1, 0});
                break;
           case 'w':
           case 'W':
@@ -1155,7 +1155,7 @@ movement_state_t try_generic_movement(ConfigState* config_state, Buffer_t* buffe
                break;
           case '%':
           {
-               Point delta;
+               Point_t delta;
                if(!ce_find_delta_to_match(buffer, cursor, &delta)) break;
 
                // TODO: movement across line boundaries
@@ -1282,7 +1282,7 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
      Buffer_t* new_buffer = open_file_buffer(head, file_tmp);
      if(new_buffer){
           view->buffer = new_buffer;
-          Point dst = {0, atoi(line_number_tmp) - 1}; // line numbers are 1 indexed
+          Point_t dst = {0, atoi(line_number_tmp) - 1}; // line numbers are 1 indexed
           ce_set_cursor(new_buffer, &view->cursor, &dst);
 
           // check for optional column number
@@ -1377,8 +1377,8 @@ void split_view(Buffer_tView_t* head_view, Buffer_tView_t* current_view, bool ho
 {
      Buffer_tView_t* new_view = ce_split_view(current_view, current_view->buffer, horizontal);
      if(new_view){
-          Point top_left = {0, 0};
-          Point bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 2}; // account for statusbar
+          Point_t top_left = {0, 0};
+          Point_t bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 2}; // account for statusbar
           ce_calc_views(head_view, &top_left, &bottom_right);
           view_follow_cursor(current_view);
           new_view->cursor = current_view->cursor;
@@ -1387,13 +1387,13 @@ void split_view(Buffer_tView_t* head_view, Buffer_tView_t* current_view, bool ho
      }
 }
 
-void handle_mouse_event(ConfigState* config_state, Buffer_t* buffer, Buffer_tState* buffer_state, Buffer_tView_t* buffer_view, Point* cursor)
+void handle_mouse_event(ConfigState* config_state, Buffer_t* buffer, Buffer_tState* buffer_state, Buffer_tView_t* buffer_view, Point_t* cursor)
 {
      MEVENT event;
      if(getmouse(&event) == OK){
           bool enter_insert;
           if((enter_insert = config_state->vim_mode == VM_INSERT)){
-               Point end_cursor = *cursor;
+               Point_t end_cursor = *cursor;
                ce_clamp_cursor(buffer, &end_cursor);
                enter_normal_mode(config_state);
                commit_insert_mode_changes(config_state, buffer, buffer_state, cursor, &end_cursor);
@@ -1453,9 +1453,9 @@ void handle_mouse_event(ConfigState* config_state, Buffer_t* buffer, Buffer_tSta
                ce_message("%s", "ALL_MOUSE_EVENTS");
 #endif
           if(event.bstate & BUTTON1_PRESSED){ // Left click OSX
-               Point click = {event.x, event.y};
+               Point_t click = {event.x, event.y};
                config_state->tab_current->view_current = ce_find_view_at_point(config_state->tab_current->view_head, &click);
-               click = (Point) {event.x - (config_state->tab_current->view_current->top_left.x - config_state->tab_current->view_current->left_column),
+               click = (Point_t) {event.x - (config_state->tab_current->view_current->top_left.x - config_state->tab_current->view_current->left_column),
                                 event.y - (config_state->tab_current->view_current->top_left.y - config_state->tab_current->view_current->top_row)};
                ce_set_cursor(config_state->tab_current->view_current->buffer,
                              &config_state->tab_current->view_current->cursor,
@@ -1464,20 +1464,20 @@ void handle_mouse_event(ConfigState* config_state, Buffer_t* buffer, Buffer_tSta
 #ifdef SCROLL_SUPPORT
           // This feature is currently unreliable and is only known to work for Ryan :)
           else if(event.bstate & (BUTTON_ALT | BUTTON2_CLICKED)){
-               Point next_line = {0, cursor->y + SCROLL_LINES};
+               Point_t next_line = {0, cursor->y + SCROLL_LINES};
                if(ce_point_on_buffer(buffer, &next_line)){
-                    Point scroll_location = {0, buffer_view->top_row + SCROLL_LINES};
+                    Point_t scroll_location = {0, buffer_view->top_row + SCROLL_LINES};
                     scroll_view_to_location(buffer_view, &scroll_location);
                     if(buffer_view->cursor.y < buffer_view->top_row)
-                         ce_move_cursor(buffer, cursor, (Point){0, SCROLL_LINES});
+                         ce_move_cursor(buffer, cursor, (Point_t){0, SCROLL_LINES});
                }
           }else if(event.bstate & BUTTON4_TRIPLE_CLICKED){
-               Point next_line = {0, cursor->y - SCROLL_LINES};
+               Point_t next_line = {0, cursor->y - SCROLL_LINES};
                if(ce_point_on_buffer(buffer, &next_line)){
-                    Point scroll_location = {0, buffer_view->top_row - SCROLL_LINES};
+                    Point_t scroll_location = {0, buffer_view->top_row - SCROLL_LINES};
                     scroll_view_to_location(buffer_view, &scroll_location);
                     if(buffer_view->cursor.y > buffer_view->top_row + (buffer_view->bottom_right.y - buffer_view->top_left.y))
-                         ce_move_cursor(buffer, cursor, (Point){0, -SCROLL_LINES});
+                         ce_move_cursor(buffer, cursor, (Point_t){0, -SCROLL_LINES});
                }
           }
 #else
@@ -1492,28 +1492,28 @@ void handle_mouse_event(ConfigState* config_state, Buffer_t* buffer, Buffer_tSta
 void half_page_up(Buffer_tView_t* view)
 {
      int64_t view_height = view->bottom_right.y - view->top_left.y;
-     Point delta = { 0, -view_height / 2 };
+     Point_t delta = { 0, -view_height / 2 };
      ce_move_cursor(view->buffer, &view->cursor, delta);
 }
 
 void half_page_down(Buffer_tView_t* view)
 {
      int64_t view_height = view->bottom_right.y - view->top_left.y;
-     Point delta = { 0, view_height / 2 };
+     Point_t delta = { 0, view_height / 2 };
      ce_move_cursor(view->buffer, &view->cursor, delta);
 }
 
 bool scroll_z_cursor(ConfigState* config_state)
 {
      Buffer_tView_t* buffer_view = config_state->tab_current->view_current;
-     Point* cursor = &buffer_view->cursor;
-     Point location;
+     Point_t* cursor = &buffer_view->cursor;
+     Point_t location;
      switch(config_state->movement_keys[0]){
      case MOVEMENT_CONTINUE:
           // no movement yet, wait for one!
           return true;
      case 't':
-          location = (Point){0, cursor->y};
+          location = (Point_t){0, cursor->y};
           scroll_view_to_location(buffer_view, &location);
           break;
      case 'z': {
@@ -1521,7 +1521,7 @@ bool scroll_z_cursor(ConfigState* config_state)
      } break;
      case 'b': {
           // move current line to bottom of view
-          location = (Point){0, cursor->y - buffer_view->bottom_right.y};
+          location = (Point_t){0, cursor->y - buffer_view->bottom_right.y};
           scroll_view_to_location(buffer_view, &location);
      } break;
      }
@@ -1532,12 +1532,12 @@ bool scroll_z_cursor(ConfigState* config_state)
 void yank_visual_range(ConfigState* config_state)
 {
      Buffer_t* buffer = config_state->tab_current->view_current->buffer;
-     Point* cursor = &config_state->tab_current->view_current->cursor;
-     Point start = config_state->visual_start;
-     Point end = {cursor->x, cursor->y};
+     Point_t* cursor = &config_state->tab_current->view_current->cursor;
+     Point_t start = config_state->visual_start;
+     Point_t end = {cursor->x, cursor->y};
 
-     const Point* a = &start;
-     const Point* b = &end;
+     const Point_t* a = &start;
+     const Point_t* b = &end;
 
      ce_sort_points(&a, &b);
 
@@ -1548,7 +1548,7 @@ void yank_visual_range(ConfigState* config_state)
 void yank_visual_lines(ConfigState* config_state)
 {
      Buffer_t* buffer = config_state->tab_current->view_current->buffer;
-     Point* cursor = &config_state->tab_current->view_current->cursor;
+     Point_t* cursor = &config_state->tab_current->view_current->cursor;
      int64_t start_line = config_state->visual_start.y;
      int64_t end_line = cursor->y;
 
@@ -1558,8 +1558,8 @@ void yank_visual_lines(ConfigState* config_state)
           end_line = tmp;
      }
 
-     Point start = {0, start_line};
-     Point end = {ce_last_index(buffer->lines[end_line]), end_line};
+     Point_t start = {0, start_line};
+     Point_t end = {ce_last_index(buffer->lines[end_line]), end_line};
 
      add_yank(config_state, '0', ce_dupe_string(buffer, &start, &end), YANK_LINE);
      add_yank(config_state, '"', ce_dupe_string(buffer, &start, &end), YANK_LINE);
@@ -1567,14 +1567,14 @@ void yank_visual_lines(ConfigState* config_state)
 
 void remove_visual_range(ConfigState* config_state)
 {
-     Point* cursor = &config_state->tab_current->view_current->cursor;
+     Point_t* cursor = &config_state->tab_current->view_current->cursor;
      Buffer_t* buffer = config_state->tab_current->view_current->buffer;
      Buffer_tState* buffer_state = buffer->user_data;
-     Point start = config_state->visual_start;
-     Point end = {cursor->x, cursor->y};
+     Point_t start = config_state->visual_start;
+     Point_t end = {cursor->x, cursor->y};
 
-     const Point* a = &start;
-     const Point* b = &end;
+     const Point_t* a = &start;
+     const Point_t* b = &end;
 
      ce_sort_points(&a, &b);
 
@@ -1591,7 +1591,7 @@ void remove_visual_range(ConfigState* config_state)
 
 void remove_visual_lines(ConfigState* config_state)
 {
-     Point* cursor = &config_state->tab_current->view_current->cursor;
+     Point_t* cursor = &config_state->tab_current->view_current->cursor;
      Buffer_t* buffer = config_state->tab_current->view_current->buffer;
      Buffer_tState* buffer_state = buffer->user_data;
      int64_t start_line = config_state->visual_start.y;
@@ -1603,8 +1603,8 @@ void remove_visual_lines(ConfigState* config_state)
           end_line = tmp;
      }
 
-     Point start = {0, start_line};
-     Point end = {ce_last_index(buffer->lines[end_line]), end_line};
+     Point_t start = {0, start_line};
+     Point_t end = {ce_last_index(buffer->lines[end_line]), end_line};
 
      char* removed_str = ce_dupe_lines(buffer, start.y, end.y);
      int64_t remove_len = strlen(removed_str);
@@ -1642,7 +1642,7 @@ bool iterate_history_input(ConfigState* config_state, bool previous)
      if(success){
           ce_clear_lines(config_state->view_input->buffer);
           ce_append_string(config_state->view_input->buffer, 0, history->cur->entry);
-          config_state->view_input->cursor = (Point){0, 0};
+          config_state->view_input->cursor = (Point_t){0, 0};
           ce_move_cursor_to_end_of_file(config_state->view_input->buffer, &config_state->view_input->cursor);
           reset_buffer_commits(&buffer_state->commit_tail);
      }
@@ -1650,7 +1650,7 @@ bool iterate_history_input(ConfigState* config_state, bool previous)
      return success;
 }
 
-void switch_to_view_at_point(ConfigState* config_state, const Point* point)
+void switch_to_view_at_point(ConfigState* config_state, const Point_t* point)
 {
      Buffer_tView_t* next_view = ce_find_view_at_point(config_state->tab_current->view_head, point);
      if(next_view){
@@ -1709,17 +1709,17 @@ void update_buffer_list_buffer(ConfigState* config_state, const BufferNode_t* he
      config_state->buffer_list_buffer.readonly = true;
 }
 
-Point get_cursor_on_terminal(const Point* cursor, const Buffer_tView_t* buffer_view)
+Point_t get_cursor_on_terminal(const Point_t* cursor, const Buffer_tView_t* buffer_view)
 {
-     Point p = {cursor->x - buffer_view->left_column + buffer_view->top_left.x,
+     Point_t p = {cursor->x - buffer_view->left_column + buffer_view->top_left.x,
                 cursor->y - buffer_view->top_row + buffer_view->top_left.y};
      return p;
 }
 
-void get_terminal_view_rect(TabView* tab_head, Point* top_left, Point* bottom_right)
+void get_terminal_view_rect(TabView* tab_head, Point_t* top_left, Point_t* bottom_right)
 {
-     *top_left = (Point){0, 0};
-     *bottom_right = (Point){g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 1};
+     *top_left = (Point_t){0, 0};
+     *bottom_right = (Point_t){g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 1};
 
      // if we have multiple tabs
      if(tab_head->next){
@@ -1926,14 +1926,14 @@ void* send_shell_input(void* data)
      return NULL;
 }
 
-void indent_line(Buffer_t* buffer, BufferCommitNode_t** commit_tail, int64_t line, Point* cursor)
+void indent_line(Buffer_t* buffer, BufferCommitNode_t** commit_tail, int64_t line, Point_t* cursor)
 {
-     Point loc = {0, line};
+     Point_t loc = {0, line};
      ce_insert_string(buffer, &loc, TAB_STRING);
      ce_commit_insert_string(commit_tail, &loc, cursor, cursor, strdup(TAB_STRING));
 }
 
-void unindent_line(Buffer_t* buffer, BufferCommitNode_t** commit_tail, int64_t line, Point* cursor)
+void unindent_line(Buffer_t* buffer, BufferCommitNode_t** commit_tail, int64_t line, Point_t* cursor)
 {
      // find whitespace prepending line
      int64_t whitespace_count = 0;
@@ -1947,7 +1947,7 @@ void unindent_line(Buffer_t* buffer, BufferCommitNode_t** commit_tail, int64_t l
      }
 
      if(whitespace_count){
-          Point loc = {0, line};
+          Point_t loc = {0, line};
           ce_remove_string(buffer, &loc, whitespace_count);
           ce_commit_remove_string(commit_tail, &loc, cursor, cursor, strdup(TAB_STRING));
      }
@@ -1960,16 +1960,16 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
      Buffer_t* buffer = config_state->tab_current->view_current->buffer;
      Buffer_tState* buffer_state = buffer->user_data;
      Buffer_tView_t* buffer_view = config_state->tab_current->view_current;
-     Point* cursor = &config_state->tab_current->view_current->cursor;
+     Point_t* cursor = &config_state->tab_current->view_current->cursor;
      config_state->last_key = key;
-     Point movement_start, movement_end;
+     Point_t movement_start, movement_end;
 
      if(config_state->vim_mode == VM_INSERT){
           assert(config_state->command_key == '\0');
           switch(key){
           case 27: // ESC
           {
-               Point end_cursor = *cursor;
+               Point_t end_cursor = *cursor;
                ce_clamp_cursor(buffer, &end_cursor);
                enter_normal_mode(config_state);
                commit_insert_mode_changes(config_state, buffer, buffer_state, cursor, &end_cursor);
@@ -1999,7 +1999,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                               }
                          }
                     }else{
-                         Point previous = *cursor;
+                         Point_t previous = *cursor;
                          previous.x--;
                          char c = 0;
                          if(ce_get_char(buffer, &previous, &c)){
@@ -2022,7 +2022,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           case '\t':
           {
                ce_insert_string(buffer, cursor, TAB_STRING);
-               ce_move_cursor(buffer, cursor, (Point){5, 0});
+               ce_move_cursor(buffer, cursor, (Point_t){5, 0});
           } break;
           case 10: // return
           {
@@ -2038,7 +2038,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     cursor->x = 0;
 
                     // indent if necessary
-                    Point prev_line = {0, cursor->y-1};
+                    Point_t prev_line = {0, cursor->y-1};
                     int64_t indent_len = ce_get_indentation_for_next_line(buffer, &prev_line, strlen(TAB_STRING));
                     if(indent_len > 0){
                          char* indent = malloc(indent_len + 1);
@@ -2071,17 +2071,17 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           {
                if(ce_insert_char(buffer, cursor, key)){
 
-                    Point match;
+                    Point_t match;
                     if(ce_find_match(buffer, cursor, &match) && match.y != cursor->y){
 
                          // get the match's sbol (that's the indentation we're matching)
-                         Point sbol_match = {0, match.y};
+                         Point_t sbol_match = {0, match.y};
                          ce_move_cursor_to_soft_beginning_of_line(buffer, &sbol_match);
 
                          int64_t n_deletes = CE_MIN((int64_t) strlen(TAB_STRING), cursor->x - sbol_match.x);
 
                          bool can_unindent = true;
-                         for(Point iter = {0, cursor->y}; ce_point_on_buffer(buffer, &iter) && iter.x < n_deletes; iter.x++)
+                         for(Point_t iter = {0, cursor->y}; ce_point_on_buffer(buffer, &iter) && iter.x < n_deletes; iter.x++)
                               can_unindent &= isblank(ce_get_char_raw(buffer, &iter));
 
                          if(can_unindent){
@@ -2215,8 +2215,8 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           case 'J':
           {
                if(cursor->y == buffer->line_count - 1) break; // nothing to join
-               Point join_loc = {strlen(buffer->lines[cursor->y]), cursor->y};
-               Point end_join_loc = {0, cursor->y+1};
+               Point_t join_loc = {strlen(buffer->lines[cursor->y]), cursor->y};
+               Point_t end_join_loc = {0, cursor->y+1};
                ce_move_cursor_to_soft_beginning_of_line(buffer, &end_join_loc);
                if(!end_join_loc.x) end_join_loc = join_loc;
                else end_join_loc.x--;
@@ -2232,7 +2232,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           case 'j':
           case 'k':
                for(size_t cm = 0; cm < config_state->command_multiplier; cm++){
-                    ce_move_cursor(buffer, cursor, (Point){0, (config_state->command_key == 'j' || config_state->command_key == KEY_DOWN) ? 1 : -1});
+                    ce_move_cursor(buffer, cursor, (Point_t){0, (config_state->command_key == 'j' || config_state->command_key == KEY_DOWN) ? 1 : -1});
                }
           break;
           case 'B':
@@ -2301,7 +2301,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           } break;
           case 'O':
           {
-               Point begin_line = {0, cursor->y};
+               Point_t begin_line = {0, cursor->y};
 
                // indent if necessary
                int64_t indent_len = ce_get_indentation_for_next_line(buffer, cursor, strlen(TAB_STRING));
@@ -2311,7 +2311,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                indent_nl[indent_len + 1] = '\0';
 
                if(ce_insert_string(buffer, &begin_line, indent_nl)){
-                    Point next_cursor = {indent_len, cursor->y};
+                    Point_t next_cursor = {indent_len, cursor->y};
                     ce_commit_insert_string(&buffer_state->commit_tail, &begin_line, cursor, &next_cursor, indent_nl);
                     *cursor = next_cursor;
                     enter_insert_mode(config_state, cursor);
@@ -2319,7 +2319,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           } break;
           case 'o':
           {
-               Point end_of_line = *cursor;
+               Point_t end_of_line = *cursor;
                end_of_line.x = strlen(buffer->lines[cursor->y]);
 
                // indent if necessary
@@ -2330,7 +2330,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                nl_indent[1 + indent_len] = '\0';
 
                if(ce_insert_string(buffer, &end_of_line, nl_indent)){
-                    Point next_cursor = {indent_len, cursor->y+1};
+                    Point_t next_cursor = {indent_len, cursor->y+1};
                     ce_commit_insert_string(&buffer_state->commit_tail, &end_of_line, cursor, &next_cursor, nl_indent);
                     *cursor = next_cursor;
                     enter_insert_mode(config_state, cursor);
@@ -2354,7 +2354,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           } break;
           case '\'':
           {
-               Point* marked_location;
+               Point_t* marked_location;
                char mark = config_state->movement_keys[0];
                switch(mark){
                case MOVEMENT_CONTINUE:
@@ -2435,28 +2435,28 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     {
                          size_t len = strlen(yank->text);
                          char* save_str = malloc(len + 2); // newline and '\0'
-                         Point insert_loc;
-                         Point cursor_loc;
+                         Point_t insert_loc;
+                         Point_t cursor_loc;
                          if(config_state->command_key == 'p'){
                               // TODO: bring this all into a ce_commit_insert_line function
 
                               save_str[0] = '\n'; // prepend a new line to create a line
                               memcpy(save_str + 1, yank->text, len + 1); // also copy the '\0'
 
-                              cursor_loc = (Point){0, cursor->y+1};
+                              cursor_loc = (Point_t){0, cursor->y+1};
 
                               // insert at the end of the current line
-                              insert_loc = (Point){strlen(buffer->lines[cursor->y]), cursor->y};
+                              insert_loc = (Point_t){strlen(buffer->lines[cursor->y]), cursor->y};
                          }
                          else{
                               save_str[len] = '\n'; // append a new line to create a line
                               save_str[len+1] = '\0';
                               memcpy(save_str, yank->text, len);
 
-                              cursor_loc = (Point){0, cursor->y};
+                              cursor_loc = (Point_t){0, cursor->y};
 
                               // insert at the beginning of the current line
-                              insert_loc = (Point){0, cursor->y};
+                              insert_loc = (Point_t){0, cursor->y};
                          }
 
                          bool res __attribute__((unused)) = ce_insert_string(buffer, &insert_loc, save_str);
@@ -2468,7 +2468,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     } break;
                     case YANK_NORMAL:
                     {
-                         Point insert_cursor = *cursor;
+                         Point_t insert_cursor = *cursor;
                          if(config_state->command_key == 'p'){
                               if(strnlen(buffer->lines[cursor->y], 1)){
                                    insert_cursor.x++; // don't increment x for blank lines
@@ -2494,7 +2494,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     yank_visual_lines(config_state);
                     remove_visual_lines(config_state);
                }else{
-                    Point end = *cursor;
+                    Point_t end = *cursor;
                     ce_move_cursor_to_end_of_line(buffer, &end);
                     int64_t n_deletes = strlen(&buffer->lines[cursor->y][cursor->x]);
                     if(n_deletes){
@@ -2533,12 +2533,12 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                                    case 'c':
                                         movement_start = *cursor;
                                         ce_move_cursor_to_soft_beginning_of_line(buffer, &movement_start);
-                                        movement_end = (Point) {ce_last_index(buffer->lines[cursor->y]), cursor->y}; // TODO: causes ce_dupe_string to fail (not on buffer)
+                                        movement_end = (Point_t) {ce_last_index(buffer->lines[cursor->y]), cursor->y}; // TODO: causes ce_dupe_string to fail (not on buffer)
                                         break;
                                    case 'd':
-                                        ce_move_cursor(buffer, cursor, (Point){-cursor->x, 0});
-                                        movement_start = (Point) {0, cursor->y};
-                                        movement_end = (Point) {ce_last_index(buffer->lines[cursor->y]), cursor->y}; // TODO: causes ce_dupe_string to fail (not on buffer)
+                                        ce_move_cursor(buffer, cursor, (Point_t){-cursor->x, 0});
+                                        movement_start = (Point_t) {0, cursor->y};
+                                        movement_end = (Point_t) {ce_last_index(buffer->lines[cursor->y]), cursor->y}; // TODO: causes ce_dupe_string to fail (not on buffer)
                                         break;
                                    default:
                                         // not a valid movement
@@ -2551,7 +2551,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          assert(movement_end.x >= 0);
                     }
 
-                    Point yank_end = movement_end;
+                    Point_t yank_end = movement_end;
                     YankMode yank_mode;
                     switch(config_state->movement_keys[0]){
                          case 'd':
@@ -2643,7 +2643,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     break;
                }
 
-               Point save_cursor_on_terminal = get_cursor_on_terminal(cursor, buffer_view);
+               Point_t save_cursor_on_terminal = get_cursor_on_terminal(cursor, buffer_view);
                config_state->tab_current->view_current->buffer->cursor = config_state->tab_current->view_current->cursor;
 
                if(ce_remove_view(&config_state->tab_current->view_head, config_state->tab_current->view_current)){
@@ -2672,8 +2672,8 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          config_state->tab_current->view_previous = NULL;
                     }
 
-                    Point top_left;
-                    Point bottom_right;
+                    Point_t top_left;
+                    Point_t bottom_right;
                     get_terminal_view_rect(config_state->tab_head, &top_left, &bottom_right);
 
                     ce_calc_views(config_state->tab_current->view_head, &top_left, &bottom_right);
@@ -2691,7 +2691,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                config_state->buffer_list_buffer.readonly = true;
                config_state->tab_current->view_current->buffer->cursor = *cursor;
                config_state->tab_current->view_current->buffer = &config_state->buffer_list_buffer;
-               config_state->tab_current->view_current->cursor = (Point){0, 1};
+               config_state->tab_current->view_current->cursor = (Point_t){0, 1};
           } break;
           case 'u':
                if(buffer_state->commit_tail && buffer_state->commit_tail->commit.type != BCT_NONE){
@@ -2751,21 +2751,21 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           case 'H':
           {
                // move cursor to top line of view
-               Point location = {cursor->x, buffer_view->top_row};
+               Point_t location = {cursor->x, buffer_view->top_row};
                ce_set_cursor(buffer, cursor, &location);
           } break;
           case 'M':
           {
                // move cursor to middle line of view
                int64_t view_height = buffer_view->bottom_right.y - buffer_view->top_left.y;
-               Point location = {cursor->x, buffer_view->top_row + (view_height/2)};
+               Point_t location = {cursor->x, buffer_view->top_row + (view_height/2)};
                ce_set_cursor(buffer, cursor, &location);
           } break;
           case 'L':
           {
                // move cursor to bottom line of view
                int64_t view_height = buffer_view->bottom_right.y - buffer_view->top_left.y;
-               Point location = {cursor->x, buffer_view->top_row + view_height};
+               Point_t location = {cursor->x, buffer_view->top_row + view_height};
                ce_set_cursor(buffer, cursor, &location);
           } break;
           case 'z':
@@ -2780,8 +2780,8 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                case '>':
                     if(config_state->vim_mode == VM_VISUAL_RANGE ||
                        config_state->vim_mode == VM_VISUAL_LINE){
-                         const Point* a = cursor;
-                         const Point* b = &config_state->visual_start;
+                         const Point_t* a = cursor;
+                         const Point_t* b = &config_state->visual_start;
                          ce_sort_points(&a, &b);
                          for(int64_t i = a->y; i <= b->y; ++i){
                               if(!buffer->lines[i][0]) continue;
@@ -2802,8 +2802,8 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                case '<':
                     if(config_state->vim_mode == VM_VISUAL_RANGE ||
                        config_state->vim_mode == VM_VISUAL_LINE){
-                         const Point* a = cursor;
-                         const Point* b = &config_state->visual_start;
+                         const Point_t* a = cursor;
+                         const Point_t* b = &config_state->visual_start;
                          ce_sort_points(&a, &b);
                          for(int64_t i = a->y; i <= b->y; ++i){
                               if(!buffer->lines[i][0]) continue;
@@ -2863,7 +2863,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     // TODO: get word under the cursor and unify with '*' impl
                     int64_t word_len = ce_find_delta_to_end_of_word(buffer, cursor, true)+1;
                     if(buffer->lines[cursor->y][cursor->x+word_len] == '.'){
-                         Point ext_start = {cursor->x+word_len, cursor->y};
+                         Point_t ext_start = {cursor->x+word_len, cursor->y};
                          int64_t extension_len = ce_find_delta_to_end_of_word(buffer, &ext_start, true);
                          if(extension_len != -1) word_len += extension_len+1;
                     }
@@ -2878,7 +2878,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           } break;
           case '%':
           {
-               Point delta;
+               Point_t delta;
                if(ce_find_delta_to_match(buffer, cursor, &delta)){
                     ce_move_cursor(buffer, cursor, delta);
                }
@@ -2921,7 +2921,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                    if(empty_first_line) ce_remove_line(config_state->view_input->buffer, 0);
               }else{
                    // TODO: consolidate into function for use with other window movement keys, and for use in insert mode?
-                   Point point = {config_state->tab_current->view_current->top_left.x - 2, // account for window separator
+                   Point_t point = {config_state->tab_current->view_current->top_left.x - 2, // account for window separator
                                   cursor->y - config_state->tab_current->view_current->top_row + config_state->tab_current->view_current->top_left.y};
                    if(point.x < 0) point.x += g_terminal_dimensions->x - 1;
                    switch_to_view_at_point(config_state, &point);
@@ -2943,7 +2943,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          if(config_state->view_input->buffer->line_count){
                               int64_t line = atoi(config_state->view_input->buffer->lines[0]);
                               if(line > 0){
-                                   config_state->tab_current->view_current->cursor = (Point){0, line - 1};
+                                   config_state->tab_current->view_current->cursor = (Point_t){0, line - 1};
                                    ce_move_cursor_to_soft_beginning_of_line(config_state->tab_current->view_current->buffer,
                                                                             &config_state->tab_current->view_current->cursor);
                               }
@@ -2956,7 +2956,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                               Buffer_t* new_buffer = open_file_buffer(head, config_state->view_input->buffer->lines[i]);
                               if(i == 0 && new_buffer){
                                    config_state->tab_current->view_current->buffer = new_buffer;
-                                   config_state->tab_current->view_current->cursor = (Point){0, 0};
+                                   config_state->tab_current->view_current->cursor = (Point_t){0, 0};
                               }
                          }
                          break;
@@ -2987,16 +2987,16 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
 
                          // if we found an existing command buffer, clear it and use it
                          Buffer_t* command_buffer = config_state->shell_command_buffer;
-                         command_buffer->cursor = (Point){0, 0};
+                         command_buffer->cursor = (Point_t){0, 0};
                          config_state->last_command_buffer_jump = 0;
                          Buffer_tView_t* command_view = ce_buffer_in_view(config_state->tab_current->view_head, command_buffer);
 
                          if(command_view){
-                              command_view->cursor = (Point){0, 0};
+                              command_view->cursor = (Point_t){0, 0};
                               command_view->top_row = 0;
                          }else{
                               config_state->tab_current->view_current->buffer = command_buffer;
-                              config_state->tab_current->view_current->cursor = (Point){0, 0};
+                              config_state->tab_current->view_current->cursor = (Point_t){0, 0};
                               config_state->tab_current->view_current->top_row = 0;
                               command_view = config_state->tab_current->view_current;
                          }
@@ -3042,8 +3042,8 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          if(!search_len) break;
                          char* replace_str = ce_dupe_buffer(config_state->view_input->buffer);
                          int64_t replace_len = strlen(replace_str);
-                         Point begin = {};
-                         Point match = {};
+                         Point_t begin = {};
+                         Point_t match = {};
                          int64_t replace_count = 0;
                          while(ce_find_string(buffer, &begin, search_str, &match, CE_DOWN)){
                               if(!ce_remove_string(buffer, &match, search_len)) break;
@@ -3145,7 +3145,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          config_state->tab_current->view_current = view_to_change;
                     }
                }else{
-                    Point point = {cursor->x - config_state->tab_current->view_current->left_column + config_state->tab_current->view_current->top_left.x,
+                    Point_t point = {cursor->x - config_state->tab_current->view_current->left_column + config_state->tab_current->view_current->top_left.x,
                                    config_state->tab_current->view_current->bottom_right.y + 2}; // account for window separator
                     if(point.y >= g_terminal_dimensions->y - 1) point.y = 0;
                     switch_to_view_at_point(config_state, &point);
@@ -3154,7 +3154,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           case 11: // Ctrl + k
           {
                if(config_state->input) break;
-               Point point = {cursor->x - config_state->tab_current->view_current->left_column + config_state->tab_current->view_current->top_left.x,
+               Point_t point = {cursor->x - config_state->tab_current->view_current->left_column + config_state->tab_current->view_current->top_left.x,
                               config_state->tab_current->view_current->top_left.y - 2}; // account for window separator
                switch_to_view_at_point(config_state, &point);
           }
@@ -3162,7 +3162,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           case 12: // Ctrl + l
           {
                if(config_state->input) break;
-               Point point = {config_state->tab_current->view_current->bottom_right.x + 2, // account for window separator
+               Point_t point = {config_state->tab_current->view_current->bottom_right.x + 2, // account for window separator
                               cursor->y - config_state->tab_current->view_current->top_row + config_state->tab_current->view_current->top_left.y};
                if(point.x >= g_terminal_dimensions->x - 1) point.x = 0;
                switch_to_view_at_point(config_state, &point);
@@ -3178,7 +3178,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           {
                if(!buffer->lines || !buffer->lines[cursor->y]) break;
 
-               Point word_start, word_end;
+               Point_t word_start, word_end;
                if(!ce_get_word_at_location(buffer, cursor, &word_start, &word_end)) break;
                char* search_str = ce_dupe_string(buffer, &word_start, &word_end);
                add_yank(config_state, '/', search_str, YANK_NORMAL);
@@ -3189,7 +3189,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           {
                if(!buffer->lines || !buffer->lines[cursor->y]) break;
 
-               Point word_start, word_end;
+               Point_t word_start, word_end;
                if(!ce_get_word_at_location(buffer, cursor, &word_start, &word_end)) break;
                char* search_str = ce_dupe_string(buffer, &word_start, &word_end);
                add_yank(config_state, '/', search_str, YANK_NORMAL);
@@ -3218,7 +3218,7 @@ search:
                YankNode* yank = find_yank(config_state, '/');
                if(yank){
                     assert(yank->mode == YANK_NORMAL);
-                    Point match;
+                    Point_t match;
                     if(ce_find_string(buffer, cursor, yank->text, &match, config_state->search_command.direction)){
                          ce_set_cursor(buffer, cursor, &match);
                          center_view(config_state->tab_current->view_current);
@@ -3230,7 +3230,7 @@ search:
                YankNode* yank = find_yank(config_state, '/');
                if(yank){
                     assert(yank->mode == YANK_NORMAL);
-                    Point match;
+                    Point_t match;
                     if(ce_find_string(buffer, cursor, yank->text, &match, ce_reverse_direction(config_state->search_command.direction))){
                          ce_set_cursor(buffer, cursor, &match);
                          center_view(config_state->tab_current->view_current);
@@ -3338,7 +3338,7 @@ search:
                          if(cursor_position > 0){
                               cursor_position -= new_line_len+1;
                               if(cursor_position <= 0){
-                                   Point new_cursor_location = {-cursor_position, i};
+                                   Point_t new_cursor_location = {-cursor_position, i};
                                    ce_message("moving cursor to %ld", -cursor_position);
                                    ce_set_cursor(buffer, cursor, &new_cursor_location);
                               }
@@ -3354,7 +3354,7 @@ search:
                     // TODO: use -output-replacements-xml to support undo
                     char* formatted_line = strdup(formatted_line_buf);
                     // save the current line in undo history
-                    Point delete_begin = {0, cursor->y};
+                    Point_t delete_begin = {0, cursor->y};
                     char* save_string = ce_dupe_line(buffer, cursor->y);
                     if(!ce_remove_line(buffer, cursor->y)){
                          ce_message("ce_remove_string failed");
@@ -3435,7 +3435,7 @@ search:
                Buffer_t* new_buffer = new_buffer_from_string(head, "unnamed", NULL);
                ce_alloc_lines(new_buffer, 1);
                config_state->tab_current->view_current->buffer = new_buffer;
-               *cursor = (Point){0, 0};
+               *cursor = (Point_t){0, 0};
           } break;
           case 1: // Ctrl + a
                if(config_state->input) break;
@@ -3472,7 +3472,7 @@ search:
                config_state->tab_current->view_input_save->cursor = config_state->start_search;
           }else{
                const char* search_str = config_state->view_input->buffer->lines[0];
-               Point match = {};
+               Point_t match = {};
                if(search_str[0] &&
                   ce_find_string(config_state->tab_current->view_input_save->buffer,
                                  &config_state->start_search, search_str, &match,
@@ -3541,10 +3541,10 @@ void view_drawer(const BufferNode_t* head, void* user_data)
      ConfigState* config_state = user_data;
      Buffer_t* buffer = config_state->tab_current->view_current->buffer;
      Buffer_tView_t* buffer_view = config_state->tab_current->view_current;
-     Point* cursor = &config_state->tab_current->view_current->cursor;
+     Point_t* cursor = &config_state->tab_current->view_current->cursor;
 
-     Point top_left;
-     Point bottom_right;
+     Point_t top_left;
+     Point_t bottom_right;
      get_terminal_view_rect(config_state->tab_head, &top_left, &bottom_right);
      ce_calc_views(config_state->tab_current->view_head, &top_left, &bottom_right);
 
@@ -3553,12 +3553,12 @@ void view_drawer(const BufferNode_t* head, void* user_data)
      }
 
      int64_t input_view_height = 0;
-     Point input_top_left = {};
-     Point input_bottom_right = {};
+     Point_t input_top_left = {};
+     Point_t input_bottom_right = {};
      if(config_state->input){
           input_view_height = config_state->view_input->buffer->line_count;
           if(input_view_height) input_view_height--;
-          input_top_left = (Point){config_state->tab_current->view_input_save->top_left.x,
+          input_top_left = (Point_t){config_state->tab_current->view_input_save->top_left.x,
                                    (config_state->tab_current->view_input_save->bottom_right.y - input_view_height) - 1};
           if(input_top_left.y < 1) input_top_left.y = 1; // clamp to growing to 1, account for input message
           input_bottom_right = config_state->tab_current->view_input_save->bottom_right;
@@ -3573,8 +3573,8 @@ void view_drawer(const BufferNode_t* head, void* user_data)
 
      // setup highlight
      if(config_state->vim_mode == VM_VISUAL_RANGE){
-          const Point* start = &config_state->visual_start;
-          const Point* end = &config_state->tab_current->view_current->cursor;
+          const Point_t* start = &config_state->visual_start;
+          const Point_t* end = &config_state->tab_current->view_current->cursor;
 
           ce_sort_points(&start, &end);
 
@@ -3590,11 +3590,11 @@ void view_drawer(const BufferNode_t* head, void* user_data)
                end_line = tmp;
           }
 
-          buffer->highlight_start = (Point){0, start_line};
-          buffer->highlight_end = (Point){strlen(config_state->tab_current->view_current->buffer->lines[end_line]), end_line};
+          buffer->highlight_start = (Point_t){0, start_line};
+          buffer->highlight_end = (Point_t){strlen(config_state->tab_current->view_current->buffer->lines[end_line]), end_line};
      }else{
-          buffer->highlight_start = (Point){0, 0};
-          buffer->highlight_end = (Point){-1, 0};
+          buffer->highlight_start = (Point_t){0, 0};
+          buffer->highlight_end = (Point_t){-1, 0};
      }
 
      const char* search = NULL;
@@ -3647,7 +3647,7 @@ void view_drawer(const BufferNode_t* head, void* user_data)
           attron(COLOR_PAIR(S_BORDERS));
           for(int i = 0; i < g_terminal_dimensions->x; ++i) addch(ACS_HLINE);
           for(int i = 0; i < g_terminal_dimensions->x; ++i){
-               Point p = {i, 0};
+               Point_t p = {i, 0};
                ce_connect_border_lines(&p);
           }
 
@@ -3680,7 +3680,7 @@ void view_drawer(const BufferNode_t* head, void* user_data)
      }
 
      // reset the cursor
-     Point terminal_cursor = get_cursor_on_terminal(cursor, buffer_view);
+     Point_t terminal_cursor = get_cursor_on_terminal(cursor, buffer_view);
      move(terminal_cursor.y, terminal_cursor.x);
 
      // update the screen with what we drew

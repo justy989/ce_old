@@ -156,13 +156,13 @@ TEST(point_on_buffer)
      buffer.lines[0] = strdup("TA");
      buffer.lines[1] = strdup("TA");
 
-     Point point = {1, 1};
+     Point_t point = {1, 1};
      EXPECT(ce_point_on_buffer(&buffer, &point));
 
-     point = (Point){1, 2};
+     point = (Point_t){1, 2};
      EXPECT(!ce_point_on_buffer(&buffer, &point));
 
-     point = (Point){3, 1};
+     point = (Point_t){3, 1};
      EXPECT(!ce_point_on_buffer(&buffer, &point));
 
      ce_free_buffer(&buffer);
@@ -175,7 +175,7 @@ TEST(sanity_insert_char)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
 
-     Point point = {2, 0};
+     Point_t point = {2, 0};
      ce_insert_char(&buffer, &point, 'R');
 
      EXPECT(strcmp(buffer.lines[0], "TARCOS") == 0);
@@ -191,7 +191,7 @@ TEST(sanity_insert_char_readonly)
      buffer.lines[0] = strdup("TACOS");
      buffer.readonly = true;
 
-     Point point = {2, 0};
+     Point_t point = {2, 0};
      ce_insert_char_readonly(&buffer, &point, 'R');
 
      EXPECT(strcmp(buffer.lines[0], "TARCOS") == 0);
@@ -206,7 +206,7 @@ TEST(insert_char_newline_begin)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
 
-     Point point = {0, 0};
+     Point_t point = {0, 0};
      ce_insert_char(&buffer, &point, '\n');
 
      ASSERT(buffer.line_count == 2);
@@ -223,7 +223,7 @@ TEST(insert_char_newline_end)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
 
-     Point point = {5, 0};
+     Point_t point = {5, 0};
      ce_insert_char(&buffer, &point, '\n');
 
      ASSERT(buffer.line_count == 2);
@@ -240,7 +240,7 @@ TEST(insert_char_newline_middle)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
 
-     Point point = {2, 0};
+     Point_t point = {2, 0};
      ce_insert_char(&buffer, &point, '\n');
 
      ASSERT(buffer.line_count == 2);
@@ -257,7 +257,7 @@ TEST(sanity_remove_char)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
 
-     Point point = {2, 0};
+     Point_t point = {2, 0};
      ce_remove_char(&buffer, &point);
 
      EXPECT(buffer.line_count == 1);
@@ -274,7 +274,7 @@ TEST(remove_char_empty_line)
      buffer.lines[0] = strdup("TACOS");
      buffer.lines[1] = strdup("");
 
-     Point point = {0, 1};
+     Point_t point = {0, 1};
      ce_remove_char(&buffer, &point);
 
      EXPECT(buffer.line_count == 1);
@@ -287,7 +287,7 @@ TEST(insert_string_newline_on_empty)
 {
      Buffer_t buffer = {};
 
-     Point point = {0, 0};
+     Point_t point = {0, 0};
      ce_insert_string(&buffer, &point, "\n");
 
      ASSERT(buffer.line_count == 1);
@@ -303,7 +303,7 @@ TEST(insert_string_begin)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
 
-     Point point = {0, 0};
+     Point_t point = {0, 0};
      ce_insert_string(&buffer, &point, "AHHH ");
 
      ASSERT(buffer.line_count == 1);
@@ -319,7 +319,7 @@ TEST(insert_string_readonly_begin)
      buffer.lines[0] = strdup("TACOS");
      buffer.readonly = true;
 
-     Point point = {0, 0};
+     Point_t point = {0, 0};
      ce_insert_string_readonly(&buffer, &point, "AHHH ");
 
      ASSERT(buffer.line_count == 1);
@@ -334,7 +334,7 @@ TEST(insert_string_mid)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
 
-     Point point = {2, 0};
+     Point_t point = {2, 0};
      ce_insert_string(&buffer, &point, " AHHH ");
 
      ASSERT(buffer.line_count == 1);
@@ -349,7 +349,7 @@ TEST(insert_string_end)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
 
-     Point point = {5, 0};
+     Point_t point = {5, 0};
      ce_insert_string(&buffer, &point, " AHHH");
 
      ASSERT(buffer.line_count == 1);
@@ -364,7 +364,7 @@ TEST(insert_string_multiline_begin)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
 
-     Point point = {0, 0};
+     Point_t point = {0, 0};
      ce_insert_string(&buffer, &point, "AH\nHH ");
 
      ASSERT(buffer.line_count == 2);
@@ -382,7 +382,7 @@ TEST(insert_string_multiline_mid)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
 
-     Point point = {2, 0};
+     Point_t point = {2, 0};
      ce_insert_string(&buffer, &point, " IN\nTHE\nMID\n ");
 
      ASSERT(buffer.line_count == 4);
@@ -401,7 +401,7 @@ TEST(insert_string_multiline_end)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
 
-     Point point = {5, 0};
+     Point_t point = {5, 0};
      ce_insert_string(&buffer, &point, " AH\nHH ");
 
      ASSERT(buffer.line_count == 2);
@@ -418,7 +418,7 @@ TEST(insert_string_multiline_blank_begin)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
 
-     Point point = {0, 0};
+     Point_t point = {0, 0};
      ce_insert_string(&buffer, &point, "\n\n");
 
      ASSERT(buffer.line_count == 3);
@@ -436,7 +436,7 @@ TEST(insert_string_multiline_blank_mid)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
 
-     Point point = {2, 0};
+     Point_t point = {2, 0};
      ce_insert_string(&buffer, &point, "\n\n");
 
      ASSERT(buffer.line_count == 3);
@@ -454,7 +454,7 @@ TEST(insert_string_multiline_blank_end)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
 
-     Point point = {5, 0};
+     Point_t point = {5, 0};
      ce_insert_string(&buffer, &point, "\n\n");
 
      ASSERT(buffer.line_count == 3);
@@ -519,7 +519,7 @@ TEST(remove_string_begin)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
 
-     Point point = {0, 0};
+     Point_t point = {0, 0};
      ce_remove_string(&buffer, &point, 2);
 
      ASSERT(buffer.line_count == 1);
@@ -535,7 +535,7 @@ TEST(remove_string_mid)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
 
-     Point point = {1, 0};
+     Point_t point = {1, 0};
      ce_remove_string(&buffer, &point, 2);
 
      ASSERT(buffer.line_count == 1);
@@ -551,7 +551,7 @@ TEST(remove_string_end)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
 
-     Point point = {3, 0};
+     Point_t point = {3, 0};
      ce_remove_string(&buffer, &point, 2);
 
      ASSERT(buffer.line_count == 1);
@@ -569,7 +569,7 @@ TEST(remove_string_multiline_begin)
      buffer.lines[1] = strdup("ARE");
      buffer.lines[2] = strdup("AWESOME");
 
-     Point point = {0, 0};
+     Point_t point = {0, 0};
      ce_remove_string(&buffer, &point, 7);
 
      ASSERT(buffer.line_count == 2);
@@ -588,7 +588,7 @@ TEST(remove_string_multiline_mid)
      buffer.lines[1] = strdup("ARE");
      buffer.lines[2] = strdup("AWESOME");
 
-     Point point = {1, 0};
+     Point_t point = {1, 0};
      ce_remove_string(&buffer, &point, 7);
 
      ASSERT(buffer.line_count == 2);
@@ -607,7 +607,7 @@ TEST(remove_string_multiline_end)
      buffer.lines[1] = strdup("ARE");
      buffer.lines[2] = strdup("AWESOMT");
 
-     Point point = {2, 1};
+     Point_t point = {2, 1};
      ce_remove_string(&buffer, &point, 9);
 
      ASSERT(buffer.line_count == 2);
@@ -628,7 +628,7 @@ TEST(remove_string_multiline_blank_begin)
      buffer.lines[3] = strdup("ARE");
      buffer.lines[4] = strdup("AWESOME");
 
-     Point point = {0, 0};
+     Point_t point = {0, 0};
      ce_remove_string(&buffer, &point, 5);
 
      ASSERT(buffer.line_count == 3);
@@ -650,7 +650,7 @@ TEST(remove_string_multiline_blank_mid)
      buffer.lines[3] = strdup("ARE");
      buffer.lines[4] = strdup("AWESOME");
 
-     Point point = {0, 1};
+     Point_t point = {0, 1};
      ce_remove_string(&buffer, &point, 4);
 
      ASSERT(buffer.line_count == 3);
@@ -672,7 +672,7 @@ TEST(remove_string_multiline_blank_end)
      buffer.lines[3] = strdup("");
      buffer.lines[4] = strdup("");
 
-     Point point = {3, 2};
+     Point_t point = {3, 2};
      ce_remove_string(&buffer, &point, 7);
 
      ASSERT(buffer.line_count == 3);
@@ -815,8 +815,8 @@ TEST(sanity_dupe_string)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
 
-     Point start = {1, 0};
-     Point end = {3, 0};
+     Point_t start = {1, 0};
+     Point_t end = {3, 0};
      char* str = ce_dupe_string(&buffer, &start, &end);
 
      EXPECT(strcmp(str, "ACO") == 0);
@@ -834,8 +834,8 @@ TEST(dupe_string_multiline)
      buffer.lines[1] = strdup("ARE");
      buffer.lines[2] = strdup("AWESOME");
 
-     Point start = {1, 0};
-     Point end = {3, 2};
+     Point_t start = {1, 0};
+     Point_t end = {3, 2};
      char* str = ce_dupe_string(&buffer, &start, &end);
 
      EXPECT(strcmp(str, "ACOS\nARE\nAWES") == 0);
@@ -853,8 +853,8 @@ TEST(dupe_string_multiline_on_line_boundry)
      buffer.lines[1] = strdup("ARE");
      buffer.lines[2] = strdup("AWESOME");
 
-     Point start = {1, 0};
-     Point end = {3, 1};
+     Point_t start = {1, 0};
+     Point_t end = {3, 1};
      char* str = ce_dupe_string(&buffer, &start, &end);
 
      EXPECT(strcmp(str, "ACOS\nARE\n") == 0);
@@ -888,7 +888,7 @@ TEST(sanity_get_char)
      buffer.lines[0] = strdup("TACOS");
 
      char ch = 0;
-     Point point = {2, 0};
+     Point_t point = {2, 0};
      ce_get_char(&buffer, &point, &ch);
 
      EXPECT(ch == 'C');
@@ -903,7 +903,7 @@ TEST(sanity_set_char)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
 
-     Point point = {2, 0};
+     Point_t point = {2, 0};
      ce_set_char(&buffer, &point, 'R');
 
      ASSERT(buffer.line_count == 1);
@@ -920,8 +920,8 @@ TEST(sanity_find_match_same_line)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TA COS ARE TA COS");
 
-     Point point = {2, 0};
-     Point delta = {};
+     Point_t point = {2, 0};
+     Point_t delta = {};
      ce_find_match(&buffer, &point, &delta);
 
      EXPECT(delta.x == 11);
@@ -938,8 +938,8 @@ TEST(sanity_find_match_next_line)
      buffer.lines[0] = strdup("TACOS ARE AWESOME");
      buffer.lines[1] = strdup("TACOS ARE REVOLUTIONARY");
 
-     Point point = {6, 0};
-     Point delta = {};
+     Point_t point = {6, 0};
+     Point_t delta = {};
      ce_find_match(&buffer, &point, &delta);
 
      EXPECT(delta.x == 6);
@@ -956,8 +956,8 @@ TEST(find_match_same_line)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS ARE AWESOME");
 
-     Point point = {2, 0};
-     Point match = {};
+     Point_t point = {2, 0};
+     Point_t match = {};
      ce_find_string(&buffer, &point, "ARE", &match, CE_DOWN);
 
      EXPECT(match.x == 6);
@@ -975,8 +975,8 @@ TEST(find_match_next_line)
      buffer.lines[1] = strdup("ARE SO");
      buffer.lines[2] = strdup("AWESOME");
 
-     Point point = {2, 0};
-     Point delta = {};
+     Point_t point = {2, 0};
+     Point_t delta = {};
      ce_find_string(&buffer, &point, "SO", &delta, CE_DOWN);
 
      EXPECT(delta.x == 4);
@@ -994,7 +994,7 @@ TEST(clamp_cursor_horizontal)
      buffer.lines[1] = strdup("ARE SO");
      buffer.lines[2] = strdup("AWESOME");
 
-     Point cursor = {50, 0};
+     Point_t cursor = {50, 0};
      ce_clamp_cursor(&buffer, &cursor);
 
      EXPECT(cursor.x == 4);
@@ -1012,7 +1012,7 @@ TEST(clamp_cursor_vertical)
      buffer.lines[1] = strdup("ARE SO");
      buffer.lines[2] = strdup("AWESOME");
 
-     Point cursor = {4, 50};
+     Point_t cursor = {4, 50};
      ce_clamp_cursor(&buffer, &cursor);
 
      EXPECT(cursor.x == 4);
@@ -1030,8 +1030,8 @@ TEST(sanity_move_cursor)
      buffer.lines[1] = strdup("ARE SO");
      buffer.lines[2] = strdup("AWESOME");
 
-     Point cursor = {2, 0};
-     ce_move_cursor(&buffer, &cursor, (Point){2, 1});
+     Point_t cursor = {2, 0};
+     ce_move_cursor(&buffer, &cursor, (Point_t){2, 1});
 
      EXPECT(cursor.x == 4);
      EXPECT(cursor.y == 1);
@@ -1048,8 +1048,8 @@ TEST(sanity_set_cursor)
      buffer.lines[1] = strdup("ARE SO");
      buffer.lines[2] = strdup("AWESOME");
 
-     Point cursor = {2, 0};
-     Point delta = {4, 2};
+     Point_t cursor = {2, 0};
+     Point_t delta = {4, 2};
      ce_set_cursor(&buffer, &cursor, &delta);
 
      EXPECT(cursor.x == 4);
@@ -1067,7 +1067,7 @@ TEST(advance_cursor_same_line)
      buffer.lines[1] = strdup("ARE SO");
      buffer.lines[2] = strdup("AWESOME");
 
-     Point cursor = {1, 0};
+     Point_t cursor = {1, 0};
      ce_advance_cursor(&buffer, &cursor, 3);
 
      EXPECT(cursor.x == 4);
@@ -1085,7 +1085,7 @@ TEST(advance_cursor_next_line)
      buffer.lines[1] = strdup("ARE SO");
      buffer.lines[2] = strdup("AWESOME");
 
-     Point cursor = {1, 0};
+     Point_t cursor = {1, 0};
      ce_advance_cursor(&buffer, &cursor, 6);
 
      EXPECT(cursor.x == 2);
@@ -1103,7 +1103,7 @@ TEST(move_cursor_to_end_of_file)
      buffer.lines[1] = strdup("ARE SO");
      buffer.lines[2] = strdup("AWESOME");
 
-     Point cursor = {1, 0};
+     Point_t cursor = {1, 0};
      ce_move_cursor_to_end_of_file(&buffer, &cursor);
 
      EXPECT(cursor.x == 6);
@@ -1122,12 +1122,12 @@ TEST(commit_insert_char_undo_redo)
      BufferCommitNode_t* tail = calloc(1, sizeof(*tail));
      ASSERT(tail != NULL);
 
-     Point start = {2, 0};
-     Point undo = {2, 0};
-     Point redo = {3, 0};
+     Point_t start = {2, 0};
+     Point_t undo = {2, 0};
+     Point_t redo = {3, 0};
      ce_commit_insert_char(&tail, &start, &undo, &redo, 'C');
 
-     Point cursor = {};
+     Point_t cursor = {};
      ce_commit_undo(&buffer, &tail, &cursor);
 
      EXPECT(cursor.x == 2);
@@ -1156,12 +1156,12 @@ TEST(commit_insert_string_undo_redo)
      BufferCommitNode_t* tail = calloc(1, sizeof(*tail));
      ASSERT(tail != NULL);
 
-     Point start = {5, 0};
-     Point undo = {5, 0};
-     Point redo = {9, 0};
+     Point_t start = {5, 0};
+     Point_t undo = {5, 0};
+     Point_t redo = {9, 0};
      ce_commit_insert_string(&tail, &start, &undo, &redo, strdup(" ARE"));
 
-     Point cursor = {};
+     Point_t cursor = {};
      ce_commit_undo(&buffer, &tail, &cursor);
 
      EXPECT(cursor.x == 5);
@@ -1190,12 +1190,12 @@ TEST(commit_remove_char_undo_redo)
      BufferCommitNode_t* tail = calloc(1, sizeof(*tail));
      ASSERT(tail != NULL);
 
-     Point start = {2, 0};
-     Point undo = {2, 0};
-     Point redo = {2, 0};
+     Point_t start = {2, 0};
+     Point_t undo = {2, 0};
+     Point_t redo = {2, 0};
      ce_commit_remove_char(&tail, &start, &undo, &redo, 'C');
 
-     Point cursor = {};
+     Point_t cursor = {};
      ce_commit_undo(&buffer, &tail, &cursor);
 
      EXPECT(cursor.x == 2);
@@ -1224,12 +1224,12 @@ TEST(commit_remove_string_undo_redo)
      BufferCommitNode_t* tail = calloc(1, sizeof(*tail));
      ASSERT(tail != NULL);
 
-     Point start = {5, 0};
-     Point undo = {9, 0};
-     Point redo = {5, 0};
+     Point_t start = {5, 0};
+     Point_t undo = {9, 0};
+     Point_t redo = {5, 0};
      ce_commit_remove_string(&tail, &start, &undo, &redo, strdup(" ARE"));
 
-     Point cursor = {};
+     Point_t cursor = {};
      ce_commit_undo(&buffer, &tail, &cursor);
 
      EXPECT(cursor.x == 9);
@@ -1258,12 +1258,12 @@ TEST(commit_change_char_undo_redo)
      BufferCommitNode_t* tail = calloc(1, sizeof(*tail));
      ASSERT(tail != NULL);
 
-     Point start = {2, 0};
-     Point undo = {2, 0};
-     Point redo = {2, 0};
+     Point_t start = {2, 0};
+     Point_t undo = {2, 0};
+     Point_t redo = {2, 0};
      ce_commit_change_char(&tail, &start, &undo, &redo, 'L', 'C');
 
-     Point cursor = {};
+     Point_t cursor = {};
      ce_commit_undo(&buffer, &tail, &cursor);
 
      EXPECT(cursor.x == 2);
@@ -1292,12 +1292,12 @@ TEST(commit_change_string_undo_redo)
      BufferCommitNode_t* tail = calloc(1, sizeof(*tail));
      ASSERT(tail != NULL);
 
-     Point start = {5, 0};
-     Point undo = {9, 0};
-     Point redo = {5, 0};
+     Point_t start = {5, 0};
+     Point_t undo = {9, 0};
+     Point_t redo = {5, 0};
      ce_commit_change_string(&tail, &start, &undo, &redo, strdup(" BE"), strdup(" ARE"));
 
-     Point cursor = {};
+     Point_t cursor = {};
      ce_commit_undo(&buffer, &tail, &cursor);
 
      EXPECT(cursor.x == 9);
@@ -1400,19 +1400,19 @@ TEST(sanity_follow_cursor)
      int64_t view_width = 3;
      int64_t view_height = 4;
 
-     Point cursor = {0, 0};
+     Point_t cursor = {0, 0};
 
      ce_follow_cursor(&cursor, &left_column, &top_row, view_width, view_height, false, false);
      EXPECT(left_column == 0);
      EXPECT(top_row == 0);
 
-     cursor = (Point){3, 0};
+     cursor = (Point_t){3, 0};
      ce_follow_cursor(&cursor, &left_column, &top_row, view_width, view_height, false, false);
      EXPECT(left_column == 1);
      EXPECT(top_row == 0);
 
      left_column = 0;
-     cursor = (Point){0, 4};
+     cursor = (Point_t){0, 4};
      ce_follow_cursor(&cursor, &left_column, &top_row, view_width, view_height, false, false);
      EXPECT(left_column == 0);
      EXPECT(top_row == 1);
@@ -1476,8 +1476,8 @@ TEST(sanity_split_view)
      ASSERT(vertical_split_view->next_horizontal == new_horizontal_split_view);
 
      // calc views
-     Point top_left = {0, 0};
-     Point bottom_right = {16, 9};
+     Point_t top_left = {0, 0};
+     Point_t bottom_right = {16, 9};
      ASSERT(ce_calc_views(head, &top_left, &bottom_right));
 
      EXPECT(head->top_left.x == 0);
@@ -1501,7 +1501,7 @@ TEST(sanity_split_view)
      EXPECT(new_horizontal_split_view->bottom_right.y == 9);
 
      // find view at point
-     Point find_point = {7, 9};
+     Point_t find_point = {7, 9};
      Buffer_tView_t* found_view = ce_find_view_at_point(head, &find_point);
      EXPECT(found_view == new_horizontal_split_view);
 
@@ -1536,14 +1536,14 @@ TEST(sanity_move_cursor_to_end_of_line)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("Cats are delicious");
 
-     Point cursor;
+     Point_t cursor;
 
-     cursor = (Point) {0, 0};
+     cursor = (Point_t) {0, 0};
      ce_move_cursor_to_end_of_line(&buffer, &cursor);
      ASSERT(cursor.x == (int64_t) strlen(buffer.lines[0])-1);
      ASSERT(cursor.y == 0);
 
-     cursor = (Point) {5, 0};
+     cursor = (Point_t) {5, 0};
      ce_move_cursor_to_end_of_line(&buffer, &cursor);
      ASSERT(cursor.x == (int64_t) strlen(buffer.lines[0])-1);
      ASSERT(cursor.y == 0);
@@ -1558,15 +1558,15 @@ TEST(find_delta_to_soft_end_of_line)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("Cats are delicious   ");
 
-     Point cursor;
+     Point_t cursor;
 
-     cursor = (Point) {0, 0};
+     cursor = (Point_t) {0, 0};
      ASSERT(ce_find_delta_to_soft_end_of_line(&buffer, &cursor) == (int64_t) strlen(buffer.lines[0]) - 1 - 3);
 
-     cursor = (Point) {5, 0};
+     cursor = (Point_t) {5, 0};
      ASSERT(ce_find_delta_to_soft_end_of_line(&buffer, &cursor) == (int64_t) strlen(buffer.lines[0]) - 1 - 5 - 3);
 
-     cursor = (Point) {19, 0};
+     cursor = (Point_t) {19, 0};
      ASSERT(ce_find_delta_to_soft_end_of_line(&buffer, &cursor) == -2);
 
      ce_free_buffer(&buffer);
@@ -1579,12 +1579,12 @@ TEST(find_delta_to_soft_beginning_of_line)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("   Cats are delicious");
 
-     Point cursor;
+     Point_t cursor;
 
-     cursor = (Point) {0, 0};
+     cursor = (Point_t) {0, 0};
      ASSERT(ce_find_delta_to_soft_beginning_of_line(&buffer, &cursor) == 3);
 
-     cursor = (Point) {5, 0};
+     cursor = (Point_t) {5, 0};
      ASSERT(ce_find_delta_to_soft_beginning_of_line(&buffer, &cursor) == -2);
 
      ce_free_buffer(&buffer);
@@ -1597,12 +1597,12 @@ TEST(find_delta_to_soft_char_forward_in_line)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("Cats are delicious");
 
-     Point cursor;
+     Point_t cursor;
 
-     cursor = (Point) {0, 0};
+     cursor = (Point_t) {0, 0};
      ASSERT(ce_find_delta_to_char_forward_in_line(&buffer, &cursor, 'd') == 9);
 
-     cursor = (Point) {12, 0};
+     cursor = (Point_t) {12, 0};
      ASSERT(ce_find_delta_to_char_forward_in_line(&buffer, &cursor, 'd') == -1);
 
      ce_free_buffer(&buffer);
@@ -1615,12 +1615,12 @@ TEST(find_delta_to_soft_char_backward_in_line)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("Cats are delicious");
 
-     Point cursor;
+     Point_t cursor;
 
-     cursor = (Point) {0, 0};
+     cursor = (Point_t) {0, 0};
      ASSERT(ce_find_delta_to_char_backward_in_line(&buffer, &cursor, 'd') == -1);
 
-     cursor = (Point) {12, 0};
+     cursor = (Point_t) {12, 0};
      ASSERT(ce_find_delta_to_char_backward_in_line(&buffer, &cursor, 'd') == 3);
 
      ce_free_buffer(&buffer);
@@ -1634,32 +1634,32 @@ TEST(move_cursor_to_beginning_of_word)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("Cats are delicious. Oh yeah!");
 
-     Point cursor;
+     Point_t cursor;
 
-     cursor = (Point) {0, 0};
+     cursor = (Point_t) {0, 0};
      ASSERT(ce_move_cursor_to_beginning_of_word(&buffer, &cursor, false));
      EXPECT(cursor.x == 0);
      EXPECT(cursor.y == 0);
 
-     cursor = (Point) {2, 0};
+     cursor = (Point_t) {2, 0};
      ASSERT(ce_move_cursor_to_beginning_of_word(&buffer, &cursor, false));
      EXPECT(cursor.x == 0);
      EXPECT(cursor.y == 0);
 
      // on whitespace
-     cursor = (Point) {8, 0};
+     cursor = (Point_t) {8, 0};
      ASSERT(ce_move_cursor_to_beginning_of_word(&buffer, &cursor, false));
      EXPECT(cursor.x == 5);
      EXPECT(cursor.y == 0);
 
      // on a beginning of word already
-     cursor = (Point) {5, 0};
+     cursor = (Point_t) {5, 0};
      ASSERT(ce_move_cursor_to_beginning_of_word(&buffer, &cursor, false));
      EXPECT(cursor.x == 0);
      EXPECT(cursor.y == 0);
 
      // move to punctuation
-     cursor = (Point) {20, 0};
+     cursor = (Point_t) {20, 0};
      ASSERT(ce_move_cursor_to_beginning_of_word(&buffer, &cursor, true));
      EXPECT(cursor.x == 18);
      EXPECT(cursor.y == 0);
@@ -1674,16 +1674,16 @@ TEST(find_delta_to_end_of_word)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("Cats are delicious");
 
-     Point cursor;
+     Point_t cursor;
 
-     cursor = (Point) {0, 0};
+     cursor = (Point_t) {0, 0};
      ASSERT(ce_find_delta_to_end_of_word(&buffer, &cursor, false) == 3);
 
-     cursor = (Point) {2, 0};
+     cursor = (Point_t) {2, 0};
      ASSERT(ce_find_delta_to_end_of_word(&buffer, &cursor, false) == 1);
 
      // NOTE: on whitespace
-     cursor = (Point) {8, 0};
+     cursor = (Point_t) {8, 0};
      ASSERT(ce_find_delta_to_end_of_word(&buffer, &cursor, false) == 9);
 
      ce_free_buffer(&buffer);
@@ -1696,15 +1696,15 @@ TEST(find_delta_to_end_of_next_word)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("Cats are delicious");
 
-     Point cursor;
+     Point_t cursor;
 
-     cursor = (Point) {0, 0};
+     cursor = (Point_t) {0, 0};
      ASSERT(ce_find_delta_to_next_word(&buffer, &cursor, false) == 5);
 
-     cursor = (Point) {2, 0};
+     cursor = (Point_t) {2, 0};
      ASSERT(ce_find_delta_to_next_word(&buffer, &cursor, false) == 3);
 
-     cursor = (Point) {12, 0};
+     cursor = (Point_t) {12, 0};
      ASSERT(ce_find_delta_to_next_word(&buffer, &cursor, false) == 6);
 
      ce_free_buffer(&buffer);
@@ -1717,10 +1717,10 @@ TEST(find_delta_to_match_single_line)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("Cats {are} delicious");
 
-     Point cursor;
-     Point delta;
+     Point_t cursor;
+     Point_t delta;
 
-     cursor = (Point) {5, 0};
+     cursor = (Point_t) {5, 0};
      ASSERT(ce_find_delta_to_match(&buffer, &cursor, &delta));
      EXPECT(delta.x == 4);
      EXPECT(delta.y == 0);
@@ -1737,17 +1737,17 @@ TEST(find_delta_to_match_multiline)
      buffer.lines[1] = strdup("     cat.cook();");
      buffer.lines[2] = strdup("}");
 
-     Point cursor;
-     Point delta;
+     Point_t cursor;
+     Point_t delta;
 
      // {}
-     cursor = (Point) {17, 0};
+     cursor = (Point_t) {17, 0};
      ASSERT(ce_find_delta_to_match(&buffer, &cursor, &delta));
      EXPECT(delta.x == -17);
      EXPECT(delta.y == 2);
 
      // ()
-     cursor = (Point) {2, 0};
+     cursor = (Point_t) {2, 0};
      ASSERT(ce_find_delta_to_match(&buffer, &cursor, &delta));
      EXPECT(delta.x == 14);
      EXPECT(delta.y == 0);
@@ -1775,27 +1775,27 @@ TEST(sanity_compute_length)
      buffer.lines[1] = strdup("This forever has been true");
      buffer.lines[2] = strdup("We should eat them all.");
 
-     Point start;
-     Point end;
+     Point_t start;
+     Point_t end;
 
-     start = (Point) {0, 0};
-     end = (Point) {1, 0};
+     start = (Point_t) {0, 0};
+     end = (Point_t) {1, 0};
      ASSERT(ce_compute_length(&buffer, &start, &end) == 2);
 
-     start = (Point) {0, 0};
-     end = (Point) {18, 0};
+     start = (Point_t) {0, 0};
+     end = (Point_t) {18, 0};
      ASSERT(ce_compute_length(&buffer, &start, &end) == 19);
 
-     start = (Point) {0, 0};
-     end = (Point) {0, 1};
+     start = (Point_t) {0, 0};
+     end = (Point_t) {0, 1};
      ASSERT(ce_compute_length(&buffer, &start, &end) == 20);
 
-     start = (Point) {0, 0};
-     end = (Point) {1, 1};
+     start = (Point_t) {0, 0};
+     end = (Point_t) {1, 1};
      ASSERT(ce_compute_length(&buffer, &start, &end) == 21);
 
-     start = (Point) {0, 0};
-     end = (Point) {strlen(buffer.lines[2]), 2};
+     start = (Point_t) {0, 0};
+     end = (Point_t) {strlen(buffer.lines[2]), 2};
      ASSERT(ce_compute_length(&buffer, &start, &end) == (int64_t) strlen(buffer.lines[0]) + 1 + // account for null
                                                         (int64_t) strlen(buffer.lines[1]) + 1 + // account for null
                                                         (int64_t) strlen(buffer.lines[2]) + 1);
@@ -1812,8 +1812,8 @@ TEST(sanity_get_homogenous_adjacents)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("0123....    ");
 
-     Point start, end;
-     start = end = (Point) {1, 0};
+     Point_t start, end;
+     start = end = (Point_t) {1, 0};
 
      ASSERT(ce_get_homogenous_adjacents(&buffer, &start, &end, isblank));
      EXPECT(start.x == 1);
@@ -1821,7 +1821,7 @@ TEST(sanity_get_homogenous_adjacents)
      EXPECT(end.x == 1);
      EXPECT(end.y == 0);
 
-     start = end = (Point) {1, 0};
+     start = end = (Point_t) {1, 0};
 
      ASSERT(ce_get_homogenous_adjacents(&buffer, &start, &end, ce_ispunct));
      EXPECT(start.x == 1);
@@ -1829,7 +1829,7 @@ TEST(sanity_get_homogenous_adjacents)
      EXPECT(end.x == 1);
      EXPECT(end.y == 0);
 
-     start = end = (Point) {1, 0};
+     start = end = (Point_t) {1, 0};
 
      ASSERT(ce_get_homogenous_adjacents(&buffer, &start, &end, ce_iswordchar));
      EXPECT(start.x == 0);
@@ -1837,7 +1837,7 @@ TEST(sanity_get_homogenous_adjacents)
      EXPECT(end.x == 4);
      EXPECT(end.y == 0);
 
-     start = end = (Point) {5, 0};
+     start = end = (Point_t) {5, 0};
 
      ASSERT(ce_get_homogenous_adjacents(&buffer, &start, &end, ce_ispunct));
      EXPECT(start.x == 4);
@@ -1845,7 +1845,7 @@ TEST(sanity_get_homogenous_adjacents)
      EXPECT(end.x == 8);
      EXPECT(end.y == 0);
 
-     start = end = (Point) {9, 0};
+     start = end = (Point_t) {9, 0};
 
      ASSERT(ce_get_homogenous_adjacents(&buffer, &start, &end, ce_ispunct));
      EXPECT(start.x == 8);
@@ -1866,8 +1866,8 @@ TEST(sanity_get_word_at_location)
      buffer.lines[1] = strdup("0123     9ABC EFG");
      buffer.lines[2] = strdup("0123.... 9ABC EFG");
 
-     Point word_start, word_end;
-     Point cursor = {6, 0};
+     Point_t word_start, word_end;
+     Point_t cursor = {6, 0};
 
      ASSERT(ce_get_word_at_location(&buffer, &cursor, &word_start, &word_end));
      EXPECT(word_start.y == 0);
@@ -1875,7 +1875,7 @@ TEST(sanity_get_word_at_location)
      EXPECT(word_end.y == 0);
      EXPECT(word_end.x == 7);
 
-     cursor = (Point) {6, 1};
+     cursor = (Point_t) {6, 1};
 
      ASSERT(ce_get_word_at_location(&buffer, &cursor, &word_start, &word_end));
      EXPECT(word_start.y == 1);
@@ -1883,7 +1883,7 @@ TEST(sanity_get_word_at_location)
      EXPECT(word_end.y == 1);
      EXPECT(word_end.x == 8);
 
-     cursor = (Point) {6, 2};
+     cursor = (Point_t) {6, 2};
 
      ASSERT(ce_get_word_at_location(&buffer, &cursor, &word_start, &word_end));
      EXPECT(word_start.y == 2);
@@ -1908,24 +1908,24 @@ TEST(get_indentation_for_next_line_open_bracket)
      buffer.lines[4] = strdup("     return true;");
      buffer.lines[5] = strdup("}");
 
-     Point cursor;
+     Point_t cursor;
 
-     cursor = (Point) {5, 0};
+     cursor = (Point_t) {5, 0};
      ASSERT(ce_get_indentation_for_next_line(&buffer, &cursor, tab_len) == 5);
 
-     cursor = (Point) {7, 1};
+     cursor = (Point_t) {7, 1};
      ASSERT(ce_get_indentation_for_next_line(&buffer, &cursor, tab_len) == 10);
 
-     cursor = (Point) {4, 2};
+     cursor = (Point_t) {4, 2};
      ASSERT(ce_get_indentation_for_next_line(&buffer, &cursor, tab_len) == 10);
 
-     cursor = (Point) {2, 3};
+     cursor = (Point_t) {2, 3};
      ASSERT(ce_get_indentation_for_next_line(&buffer, &cursor, tab_len) == 7); // un-aligned!
 
-     cursor = (Point) {1, 4};
+     cursor = (Point_t) {1, 4};
      ASSERT(ce_get_indentation_for_next_line(&buffer, &cursor, tab_len) == 5);
 
-     cursor = (Point) {0, 5};
+     cursor = (Point_t) {0, 5};
      ASSERT(ce_get_indentation_for_next_line(&buffer, &cursor, tab_len) == 0);
 
      ce_free_buffer(&buffer);
@@ -1934,27 +1934,27 @@ TEST(get_indentation_for_next_line_open_bracket)
 TEST(sanity_sort_points_swap)
 {
      // swap case
-     const Point start = {500, 500};
-     const Point end = {250, 250};
-     const Point* p_start = &start;
-     const Point* p_end = &end;
+     const Point_t start = {500, 500};
+     const Point_t end = {250, 250};
+     const Point_t* p_start = &start;
+     const Point_t* p_end = &end;
 
      ce_sort_points ( &p_start, &p_end );
-     ASSERT(memcmp(p_start, &end, sizeof(Point)) == 0);
-     ASSERT(memcmp(p_end, &start, sizeof(Point)) == 0);
+     ASSERT(memcmp(p_start, &end, sizeof(Point_t)) == 0);
+     ASSERT(memcmp(p_end, &start, sizeof(Point_t)) == 0);
 }
 
 TEST(sanity_sort_points_no_swap)
 {
      // no swap case
-     const Point start = {250, 250};
-     const Point end = {500, 500};
-     const Point* p_start = &start;
-     const Point* p_end = &end;
+     const Point_t start = {250, 250};
+     const Point_t end = {500, 500};
+     const Point_t* p_start = &start;
+     const Point_t* p_end = &end;
 
      ce_sort_points ( &p_start, &p_end );
-     ASSERT(memcmp(p_start, &start, sizeof(Point)) == 0);
-     ASSERT(memcmp(p_end, &end, sizeof(Point)) == 0);
+     ASSERT(memcmp(p_start, &start, sizeof(Point_t)) == 0);
+     ASSERT(memcmp(p_end, &end, sizeof(Point_t)) == 0);
 }
 
 TEST(sanity_move_cursor_to_soft_beginning_of_line)
@@ -1964,14 +1964,14 @@ TEST(sanity_move_cursor_to_soft_beginning_of_line)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("     Wow, cats are more delicious than I anticipated.");
 
-     Point cursor;
+     Point_t cursor;
 
-     cursor = (Point) {0, 0};
+     cursor = (Point_t) {0, 0};
      EXPECT(ce_move_cursor_to_soft_beginning_of_line(&buffer, &cursor) == true);
      ASSERT(cursor.x == 5);
      ASSERT(cursor.y == 0);
 
-     cursor = (Point) {13, 0};
+     cursor = (Point_t) {13, 0};
      EXPECT(ce_move_cursor_to_soft_beginning_of_line(&buffer, &cursor) == true);
      ASSERT(cursor.x == 5);
      ASSERT(cursor.y == 0);
@@ -1986,14 +1986,14 @@ TEST(sanity_move_cursor_to_soft_end_of_line)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("     Meow.     ");
 
-     Point cursor;
+     Point_t cursor;
 
-     cursor = (Point) {0, 0};
+     cursor = (Point_t) {0, 0};
      EXPECT(ce_move_cursor_to_soft_end_of_line(&buffer, &cursor) == true);
      ASSERT(cursor.x == 9);
      ASSERT(cursor.y == 0);
 
-     cursor = (Point) {13, 0};
+     cursor = (Point_t) {13, 0};
      EXPECT(ce_move_cursor_to_soft_end_of_line(&buffer, &cursor) == true);
      ASSERT(cursor.x == 9);
      ASSERT(cursor.y == 0);
@@ -2120,10 +2120,10 @@ TEST(dupe_lines)
 
 TEST(sanity_point_in_line)
 {
-     Point start = {1, 1};
-     Point end = {3, 3};
-     Point a = {0, 0};
-     Point b = {2, 2};
+     Point_t start = {1, 1};
+     Point_t end = {3, 3};
+     Point_t a = {0, 0};
+     Point_t b = {2, 2};
 
      EXPECT(ce_point_in_range(&a, &start, &end) == false);
      EXPECT(ce_point_in_range(&b, &start, &end) == true);
@@ -2149,13 +2149,13 @@ TEST(sanity_get_char_raw)
      buffer.lines[1] = strdup("ARE");
      buffer.lines[2] = strdup("AWESOME");
 
-     Point point = {2, 0};
+     Point_t point = {2, 0};
      EXPECT(ce_get_char_raw(&buffer, &point) == 'C');
 
-     point = (Point){1, 1};
+     point = (Point_t){1, 1};
      EXPECT(ce_get_char_raw(&buffer, &point) == 'R');
 
-     point = (Point){4, 2};
+     point = (Point_t){4, 2};
      EXPECT(ce_get_char_raw(&buffer, &point) == 'O');
 
      ce_free_buffer(&buffer);
@@ -2170,7 +2170,7 @@ TEST(move_cursor_to_beginning_of_file)
      buffer.lines[1] = strdup("ARE");
      buffer.lines[2] = strdup("AWESOME");
 
-     Point point = {4, 2};
+     Point_t point = {4, 2};
      ce_move_cursor_to_beginning_of_file(&buffer, &point);
      EXPECT(point.x == 0);
      EXPECT(point.y == 0);
@@ -2187,7 +2187,7 @@ TEST(move_cursor_to_beginning_of_line)
      buffer.lines[1] = strdup("ARE");
      buffer.lines[2] = strdup("AWESOME");
 
-     Point point = {4, 2};
+     Point_t point = {4, 2};
      ce_move_cursor_to_beginning_of_line(&buffer, &point);
      EXPECT(point.x == 0);
      EXPECT(point.y == 2);
@@ -2215,7 +2215,7 @@ void segv_handler(int signo)
 
 int main()
 {
-     Point terminal_dimensions = {17, 10};
+     Point_t terminal_dimensions = {17, 10};
      g_terminal_dimensions = &terminal_dimensions;
 
      struct sigaction sa = {};

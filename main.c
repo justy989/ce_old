@@ -46,7 +46,7 @@ typedef struct{
      int64_t start_line;
      int last_key;
      bool split;
-     Point cursor;
+     Point_t cursor;
 } DefaultConfigState;
 
 typedef struct Config{
@@ -213,7 +213,7 @@ int main(int argc, char** argv)
      buffer_list_head->buffer = message_buffer;
      buffer_list_head->next = NULL;
 
-     Point terminal_dimensions = {};
+     Point_t terminal_dimensions = {};
      getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);
      g_terminal_dimensions = &terminal_dimensions;
 
@@ -320,7 +320,7 @@ int main(int argc, char** argv)
                if(strlen(message_buffer_buf) == 1) continue;
                message_buffer_buf[strlen(message_buffer_buf)-1] = '\0';
                if(message_buffer->lines[0][0] == '\0'){
-                    Point insert_loc = {0, 0};
+                    Point_t insert_loc = {0, 0};
                     ce_insert_string(message_buffer, &insert_loc, message_buffer_buf);
                     continue;
                }

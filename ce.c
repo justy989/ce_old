@@ -2266,12 +2266,12 @@ bool ce_commit_redo(Buffer_t* buffer, BufferCommitNode_t** tail, Point_t* cursor
      return true;
 }
 
-Buffer_tView_t* ce_split_view(Buffer_tView_t* view, Buffer_t* buffer, bool horizontal)
+BufferView_t* ce_split_view(BufferView_t* view, Buffer_t* buffer, bool horizontal)
 {
      CE_CHECK_PTR_ARG(view);
      CE_CHECK_PTR_ARG(buffer);
 
-     Buffer_tView_t* itr = view;
+     BufferView_t* itr = view;
 
      // loop to the end of the list
      if(horizontal){
@@ -2284,7 +2284,7 @@ Buffer_tView_t* ce_split_view(Buffer_tView_t* view, Buffer_t* buffer, bool horiz
           }
      }
 
-     Buffer_tView_t* new_view = calloc(1, sizeof(*new_view));
+     BufferView_t* new_view = calloc(1, sizeof(*new_view));
      if(!new_view){
           ce_message("%s() failed to allocate buffer view", __FUNCTION__);
           return NULL;
@@ -2304,29 +2304,29 @@ Buffer_tView_t* ce_split_view(Buffer_tView_t* view, Buffer_t* buffer, bool horiz
      return new_view;
 }
 
-Buffer_tView_t* find_connecting_view(Buffer_tView_t* start, Buffer_tView_t* match)
+BufferView_t* find_connecting_view(BufferView_t* start, BufferView_t* match)
 {
      if(start->next_horizontal){
           if(start->next_horizontal == match) return start;
-          Buffer_tView_t* result = find_connecting_view(start->next_horizontal, match);
+          BufferView_t* result = find_connecting_view(start->next_horizontal, match);
           if(result) return result;
      }
 
      if(start->next_vertical){
           if(start->next_vertical == match) return start;
-          Buffer_tView_t* result = find_connecting_view(start->next_vertical, match);
+          BufferView_t* result = find_connecting_view(start->next_vertical, match);
           if(result) return result;
      }
 
      return NULL;
 }
 
-bool ce_remove_view(Buffer_tView_t** head, Buffer_tView_t* view)
+bool ce_remove_view(BufferView_t** head, BufferView_t* view)
 {
      CE_CHECK_PTR_ARG(head);
      CE_CHECK_PTR_ARG(view);
 
-     Buffer_tView_t* itr = *head;
+     BufferView_t* itr = *head;
 
      if(view == *head){
           // patch up view pointers
@@ -2340,7 +2340,7 @@ bool ce_remove_view(Buffer_tView_t** head, Buffer_tView_t* view)
                    itr->next_vertical){
                // we have to choose which becomes head, so we choose vertical
                *head = itr->next_vertical;
-               Buffer_tView_t* tmp = *head;
+               BufferView_t* tmp = *head;
                // loop to the end of vertical's horizontal
                while(tmp->next_horizontal) tmp = tmp->next_horizontal;
                // tack on old head's next_horizontal to the end of new head's last horizontal
@@ -2368,7 +2368,7 @@ bool ce_remove_view(Buffer_tView_t** head, Buffer_tView_t* view)
                //       let's us not lose track of windows
                // bandage up the windows !
                if(view->next_vertical){
-                    Buffer_tView_t* tmp = view->next_horizontal;
+                    BufferView_t* tmp = view->next_horizontal;
                     // find the last vertical in new node
                     while(tmp->next_vertical) tmp = tmp->next_vertical;
                     // tack on the current view's next vertical to the end of the new node's verticals
@@ -2387,7 +2387,7 @@ bool ce_remove_view(Buffer_tView_t** head, Buffer_tView_t* view)
                // patch up view pointers
                itr->next_horizontal = view->next_vertical;
                if(view->next_horizontal){
-                    Buffer_tView_t* itr = view->next_vertical;
+                    BufferView_t* itr = view->next_vertical;
                     // find the last vertical in new node
                     while(itr->next_horizontal) itr = itr->next_horizontal;
                     // tack on the current view's next vertical to the end of the new node's verticals
@@ -2406,7 +2406,7 @@ bool ce_remove_view(Buffer_tView_t** head, Buffer_tView_t* view)
 }
 
 // NOTE: recursive function for free-ing splits
-bool free_buffer_views(Buffer_tView_t* head)
+bool free_buffer_views(BufferView_t* head)
 {
      CE_CHECK_PTR_ARG(head);
 
@@ -2418,7 +2418,7 @@ bool free_buffer_views(Buffer_tView_t* head)
      return true;
 }
 
-bool ce_free_views(Buffer_tView_t** head)
+bool ce_free_views(BufferView_t** head)
 {
      CE_CHECK_PTR_ARG(head);
 
@@ -2430,12 +2430,12 @@ bool ce_free_views(Buffer_tView_t** head)
      return true;
 }
 
-bool calc_vertical_views(Buffer_tView_t* view, const Point_t* top_left, const Point_t* bottom_right, bool already_calculated);
+bool calc_vertical_views(BufferView_t* view, const Point_t* top_left, const Point_t* bottom_right, bool already_calculated);
 
-bool calc_horizontal_views(Buffer_tView_t* view, const Point_t* top_left, const Point_t* bottom_right, bool already_calculated)
+bool calc_horizontal_views(BufferView_t* view, const Point_t* top_left, const Point_t* bottom_right, bool already_calculated)
 {
      int64_t view_count = 0;
-     Buffer_tView_t* itr = view;
+     BufferView_t* itr = view;
      while(itr){
           itr = itr->next_horizontal;
           view_count++;
@@ -2473,10 +2473,10 @@ bool calc_horizontal_views(Buffer_tView_t* view, const Point_t* top_left, const 
      return true;
 }
 
-bool calc_vertical_views(Buffer_tView_t* view, const Point_t* top_left, const Point_t* bottom_right, bool already_calculated)
+bool calc_vertical_views(BufferView_t* view, const Point_t* top_left, const Point_t* bottom_right, bool already_calculated)
 {
      int64_t view_count = 0;
-     Buffer_tView_t* itr = view;
+     BufferView_t* itr = view;
      while(itr){
           itr = itr->next_vertical;
           view_count++;
@@ -2514,14 +2514,14 @@ bool calc_vertical_views(Buffer_tView_t* view, const Point_t* top_left, const Po
      return true;
 }
 
-bool ce_calc_views(Buffer_tView_t* view, const Point_t *top_left, const Point_t* bottom_right)
+bool ce_calc_views(BufferView_t* view, const Point_t *top_left, const Point_t* bottom_right)
 {
      CE_CHECK_PTR_ARG(view);
 
      return calc_horizontal_views(view, top_left, bottom_right, false);
 }
 
-void draw_view_bottom_right_borders(const Buffer_tView_t* view)
+void draw_view_bottom_right_borders(const BufferView_t* view)
 {
      attron(COLOR_PAIR(S_BORDERS));
 
@@ -2541,11 +2541,11 @@ void draw_view_bottom_right_borders(const Buffer_tView_t* view)
      }
 }
 
-bool draw_vertical_views(const Buffer_tView_t* view, bool already_drawn, const char* highlight_word);
+bool draw_vertical_views(const BufferView_t* view, bool already_drawn, const char* highlight_word);
 
-bool draw_horizontal_views(const Buffer_tView_t* view, bool already_drawn, const char* highlight_word)
+bool draw_horizontal_views(const BufferView_t* view, bool already_drawn, const char* highlight_word)
 {
-     const Buffer_tView_t* itr = view;
+     const BufferView_t* itr = view;
      while(itr){
           // if this is the first view and we haven't already drawn it
           // or if this is any view other than the first view
@@ -2567,9 +2567,9 @@ bool draw_horizontal_views(const Buffer_tView_t* view, bool already_drawn, const
      return true;
 }
 
-bool draw_vertical_views(const Buffer_tView_t* view, bool already_drawn, const char* highlight_word)
+bool draw_vertical_views(const BufferView_t* view, bool already_drawn, const char* highlight_word)
 {
-     const Buffer_tView_t* itr = view;
+     const BufferView_t* itr = view;
      while(itr){
           // if this is the first view and we haven't already drawn it
           // or if this is any view other than the first view
@@ -2633,7 +2633,7 @@ bool ce_connect_border_lines(const Point_t* location)
      return true;
 }
 
-bool connect_borders(const Buffer_tView_t* view)
+bool connect_borders(const BufferView_t* view)
 {
      CE_CHECK_PTR_ARG(view);
 
@@ -2649,7 +2649,7 @@ bool connect_borders(const Buffer_tView_t* view)
             ce_connect_border_lines(&bottom_right) && ce_connect_border_lines(&bottom_left);
 }
 
-bool ce_draw_views(const Buffer_tView_t* view, const char* highlight_word)
+bool ce_draw_views(const BufferView_t* view, const char* highlight_word)
 {
      CE_CHECK_PTR_ARG(view);
 
@@ -2661,14 +2661,14 @@ bool ce_draw_views(const Buffer_tView_t* view, const char* highlight_word)
      return connect_borders(view);
 }
 
-Buffer_tView_t* find_view_at_point(Buffer_tView_t* view, const Point_t* point)
+BufferView_t* find_view_at_point(BufferView_t* view, const Point_t* point)
 {
      if(point->x >= view->top_left.x && point->x <= view->bottom_right.x &&
         point->y >= view->top_left.y && point->y <= view->bottom_right.y){
           return view;
      }
 
-     Buffer_tView_t* result = NULL;
+     BufferView_t* result = NULL;
 
      if(view->next_horizontal){
           result = find_view_at_point(view->next_horizontal, point);
@@ -2681,7 +2681,7 @@ Buffer_tView_t* find_view_at_point(Buffer_tView_t* view, const Point_t* point)
      return result;
 }
 
-Buffer_tView_t* ce_find_view_at_point(Buffer_tView_t* head, const Point_t* point)
+BufferView_t* ce_find_view_at_point(BufferView_t* head, const Point_t* point)
 {
      CE_CHECK_PTR_ARG(head);
      CE_CHECK_PTR_ARG(point);
@@ -2689,13 +2689,13 @@ Buffer_tView_t* ce_find_view_at_point(Buffer_tView_t* head, const Point_t* point
      return find_view_at_point(head, point);
 }
 
-Buffer_tView_t* buffer_in_view(Buffer_tView_t* view, const Buffer_t* buffer)
+BufferView_t* buffer_in_view(BufferView_t* view, const Buffer_t* buffer)
 {
      if(view->buffer == buffer){
           return view;
      }
 
-     Buffer_tView_t* result = NULL;
+     BufferView_t* result = NULL;
 
      if(view->next_horizontal){
           result = buffer_in_view(view->next_horizontal, buffer);
@@ -2708,7 +2708,7 @@ Buffer_tView_t* buffer_in_view(Buffer_tView_t* view, const Buffer_t* buffer)
      return result;
 }
 
-Buffer_tView_t* ce_buffer_in_view(Buffer_tView_t* head, const Buffer_t* buffer)
+BufferView_t* ce_buffer_in_view(BufferView_t* head, const Buffer_t* buffer)
 {
      CE_CHECK_PTR_ARG(head);
      CE_CHECK_PTR_ARG(buffer);

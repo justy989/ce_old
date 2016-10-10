@@ -142,16 +142,16 @@ typedef struct BufferCommitNode_t {
 // []
 // --
 // []
-typedef struct Buffer_tView_t {
+typedef struct BufferView_t {
      Point_t cursor;
      Point_t top_left;
      Point_t bottom_right;
      int64_t top_row;
      int64_t left_column;
      Buffer_t* buffer;
-     struct Buffer_tView_t* next_horizontal;
-     struct Buffer_tView_t* next_vertical;
-} Buffer_tView_t;
+     struct BufferView_t* next_horizontal;
+     struct BufferView_t* next_vertical;
+} BufferView_t;
 
 typedef enum {
      CT_NONE,
@@ -175,13 +175,13 @@ bool ce_remove_buffer_from_list      (BufferNode_t* head, BufferNode_t** node);
 
 
 // Buffer_t-View Manipulation Functions
-Buffer_tView_t* ce_split_view         (Buffer_tView_t* view, Buffer_t* buffer, bool horizontal);
-bool ce_remove_view               (Buffer_tView_t** head, Buffer_tView_t* view);
-bool ce_calc_views                (Buffer_tView_t* head, const Point_t* top_left, const Point_t* top_right);
-bool ce_draw_views                (const Buffer_tView_t* head, const char* highlight_word);
-bool ce_free_views                (Buffer_tView_t** view);
-Buffer_tView_t* ce_find_view_at_point (Buffer_tView_t* head, const Point_t* point);
-Buffer_tView_t* ce_buffer_in_view(Buffer_tView_t* head, const Buffer_t* buffer);
+BufferView_t* ce_split_view         (BufferView_t* view, Buffer_t* buffer, bool horizontal);
+bool ce_remove_view               (BufferView_t** head, BufferView_t* view);
+bool ce_calc_views                (BufferView_t* head, const Point_t* top_left, const Point_t* top_right);
+bool ce_draw_views                (const BufferView_t* head, const char* highlight_word);
+bool ce_free_views                (BufferView_t** view);
+BufferView_t* ce_find_view_at_point (BufferView_t* head, const Point_t* point);
+BufferView_t* ce_buffer_in_view(BufferView_t* head, const Buffer_t* buffer);
 
 
 // Buffer_t Manipulation Functions

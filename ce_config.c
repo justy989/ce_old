@@ -27,8 +27,8 @@ typedef struct{
      int64_t command_count;
      Buffer_t* output_buffer;
      BufferNode_t* buffer_node_head;
-     Buffer_tView_t* view_head;
-     Buffer_tView_t* view_current;
+     BufferView_t* view_head;
+     BufferView_t* view_current;
      int shell_command_input_fd;
      int shell_command_output_fd;
      void* user_data;
@@ -225,10 +225,10 @@ typedef struct YankNode{
 } YankNode;
 
 typedef struct TabView{
-     Buffer_tView_t* view_head;
-     Buffer_tView_t* view_current;
-     Buffer_tView_t* view_previous;
-     Buffer_tView_t* view_input_save;
+     BufferView_t* view_head;
+     BufferView_t* view_current;
+     BufferView_t* view_previous;
+     BufferView_t* view_input_save;
      struct TabView* next;
 } TabView;
 
@@ -303,7 +303,7 @@ typedef struct{
      struct YankNode* yank_head;
      TabView* tab_head;
      TabView* tab_current;
-     Buffer_tView_t* view_input;
+     BufferView_t* view_input;
      InputHistory shell_command_history;
      InputHistory shell_input_history;
      InputHistory search_history;
@@ -484,13 +484,13 @@ void enter_insert_mode(ConfigState* config_state, Point_t* cursor)
      config_state->original_start_insert = *cursor;
 }
 
-void enter_visual_range_mode(ConfigState* config_state, Buffer_tView_t* buffer_view)
+void enter_visual_range_mode(ConfigState* config_state, BufferView_t* buffer_view)
 {
      config_state->vim_mode = VM_VISUAL_RANGE;
      config_state->visual_start = buffer_view->cursor;
 }
 
-void enter_visual_line_mode(ConfigState* config_state, Buffer_tView_t* buffer_view)
+void enter_visual_line_mode(ConfigState* config_state, BufferView_t* buffer_view)
 {
      config_state->vim_mode = VM_VISUAL_LINE;
      config_state->visual_start = buffer_view->cursor;
@@ -552,13 +552,13 @@ void clear_keys(ConfigState* config_state)
 }
 
 // location is {left_column, top_line} for the view
-void scroll_view_to_location(Buffer_tView_t* buffer_view, const Point_t* location){
+void scroll_view_to_location(BufferView_t* buffer_view, const Point_t* location){
      // TODO: we should be able to scroll the view above our first line
      buffer_view->left_column = (location->x >= 0) ? location->x : 0;
      buffer_view->top_row = (location->y >= 0) ? location->y : 0;
 }
 
-void center_view(Buffer_tView_t* view)
+void center_view(BufferView_t* view)
 {
      int64_t view_height = view->bottom_right.y - view->top_left.y;
      Point_t location = (Point_t) {0, view->cursor.y - (view_height / 2)};
@@ -1209,7 +1209,7 @@ bool is_movement_buffer_full(ConfigState* config_state)
      return n_movement_keys == max_movement_keys;
 }
 
-void scroll_view_to_last_line(Buffer_tView_t* view)
+void scroll_view_to_last_line(BufferView_t* view)
 {
      view->top_row = view->buffer->line_count - (view->bottom_right.y - view->top_left.y);
      if(view->top_row < 0) view->top_row = 0;
@@ -1232,8 +1232,8 @@ void reset_buffer_commits(BufferCommitNode_t** tail)
 }
 
 // NOTE: modify last_jump if we succeed
-bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64_t line, Buffer_tView_t* head_view,
-                                     Buffer_tView_t* view, int64_t* last_jump)
+bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64_t line, BufferView_t* head_view,
+                                     BufferView_t* view, int64_t* last_jump)
 {
      if(!buffer->line_count) return false;
 
@@ -1312,7 +1312,7 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
           }
 
           center_view(view);
-          Buffer_tView_t* command_view = ce_buffer_in_view(head_view, buffer);
+          BufferView_t* command_view = ce_buffer_in_view(head_view, buffer);
           if(command_view) command_view->top_row = line;
           *last_jump = line;
           return true;
@@ -1340,7 +1340,7 @@ void jump_to_next_shell_command_file_destination(BufferNode_t* head, ConfigState
                // NOTE: change the cursor, so when you go back to that buffer, your cursor is on the line we last jumped to
                command_buffer->cursor.x = 0;
                command_buffer->cursor.y = i;
-               Buffer_tView_t* command_view = ce_buffer_in_view(config_state->tab_current->view_head, command_buffer);
+               BufferView_t* command_view = ce_buffer_in_view(config_state->tab_current->view_head, command_buffer);
                if(command_view) command_view->cursor = command_buffer->cursor;
                break;
           }
@@ -1364,7 +1364,7 @@ bool commit_input_to_history(Buffer_t* input_buffer, InputHistory* history)
      return true;
 }
 
-void view_follow_cursor(Buffer_tView_t* current_view)
+void view_follow_cursor(BufferView_t* current_view)
 {
      ce_follow_cursor(&current_view->cursor, &current_view->left_column, &current_view->top_row,
                       current_view->bottom_right.x - current_view->top_left.x,
@@ -1373,9 +1373,9 @@ void view_follow_cursor(Buffer_tView_t* current_view)
                       current_view->bottom_right.y == (g_terminal_dimensions->y - 2));
 }
 
-void split_view(Buffer_tView_t* head_view, Buffer_tView_t* current_view, bool horizontal)
+void split_view(BufferView_t* head_view, BufferView_t* current_view, bool horizontal)
 {
-     Buffer_tView_t* new_view = ce_split_view(current_view, current_view->buffer, horizontal);
+     BufferView_t* new_view = ce_split_view(current_view, current_view->buffer, horizontal);
      if(new_view){
           Point_t top_left = {0, 0};
           Point_t bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 2}; // account for statusbar
@@ -1387,7 +1387,7 @@ void split_view(Buffer_tView_t* head_view, Buffer_tView_t* current_view, bool ho
      }
 }
 
-void handle_mouse_event(ConfigState* config_state, Buffer_t* buffer, Buffer_tState* buffer_state, Buffer_tView_t* buffer_view, Point_t* cursor)
+void handle_mouse_event(ConfigState* config_state, Buffer_t* buffer, Buffer_tState* buffer_state, BufferView_t* buffer_view, Point_t* cursor)
 {
      MEVENT event;
      if(getmouse(&event) == OK){
@@ -1489,14 +1489,14 @@ void handle_mouse_event(ConfigState* config_state, Buffer_t* buffer, Buffer_tSta
      }
 }
 
-void half_page_up(Buffer_tView_t* view)
+void half_page_up(BufferView_t* view)
 {
      int64_t view_height = view->bottom_right.y - view->top_left.y;
      Point_t delta = { 0, -view_height / 2 };
      ce_move_cursor(view->buffer, &view->cursor, delta);
 }
 
-void half_page_down(Buffer_tView_t* view)
+void half_page_down(BufferView_t* view)
 {
      int64_t view_height = view->bottom_right.y - view->top_left.y;
      Point_t delta = { 0, view_height / 2 };
@@ -1505,7 +1505,7 @@ void half_page_down(Buffer_tView_t* view)
 
 bool scroll_z_cursor(ConfigState* config_state)
 {
-     Buffer_tView_t* buffer_view = config_state->tab_current->view_current;
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
      Point_t* cursor = &buffer_view->cursor;
      Point_t location;
      switch(config_state->movement_keys[0]){
@@ -1652,7 +1652,7 @@ bool iterate_history_input(ConfigState* config_state, bool previous)
 
 void switch_to_view_at_point(ConfigState* config_state, const Point_t* point)
 {
-     Buffer_tView_t* next_view = ce_find_view_at_point(config_state->tab_current->view_head, point);
+     BufferView_t* next_view = ce_find_view_at_point(config_state->tab_current->view_head, point);
      if(next_view){
           // save view and cursor
           config_state->tab_current->view_previous = config_state->tab_current->view_current;
@@ -1709,7 +1709,7 @@ void update_buffer_list_buffer(ConfigState* config_state, const BufferNode_t* he
      config_state->buffer_list_buffer.readonly = true;
 }
 
-Point_t get_cursor_on_terminal(const Point_t* cursor, const Buffer_tView_t* buffer_view)
+Point_t get_cursor_on_terminal(const Point_t* cursor, const BufferView_t* buffer_view)
 {
      Point_t p = {cursor->x - buffer_view->left_column + buffer_view->top_left.x,
                 cursor->y - buffer_view->top_row + buffer_view->top_left.y};
@@ -1760,10 +1760,10 @@ pid_t bidirectional_popen(const char* cmd, int* in_fd, int* out_fd)
      return pid;
 }
 
-void redraw_if_shell_command_buffer_in_view(Buffer_tView_t* view_head, Buffer_t* shell_command_buffer,
+void redraw_if_shell_command_buffer_in_view(BufferView_t* view_head, Buffer_t* shell_command_buffer,
                                             BufferNode_t* head_buffer_node, void* user_data)
 {
-     Buffer_tView_t* command_view = ce_buffer_in_view(view_head, shell_command_buffer);
+     BufferView_t* command_view = ce_buffer_in_view(view_head, shell_command_buffer);
      if(command_view && shell_command_buffer->line_count > command_view->top_row &&
          shell_command_buffer->line_count <
         (command_view->top_row + (command_view->bottom_right.y - command_view->top_left.y))){
@@ -1959,7 +1959,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
      ConfigState* config_state = user_data;
      Buffer_t* buffer = config_state->tab_current->view_current->buffer;
      Buffer_tState* buffer_state = buffer->user_data;
-     Buffer_tView_t* buffer_view = config_state->tab_current->view_current;
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
      Point_t* cursor = &config_state->tab_current->view_current->cursor;
      config_state->last_key = key;
      Point_t movement_start, movement_end;
@@ -2677,7 +2677,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     get_terminal_view_rect(config_state->tab_head, &top_left, &bottom_right);
 
                     ce_calc_views(config_state->tab_current->view_head, &top_left, &bottom_right);
-                    Buffer_tView_t* new_view = ce_find_view_at_point(config_state->tab_current->view_head, &save_cursor_on_terminal);
+                    BufferView_t* new_view = ce_find_view_at_point(config_state->tab_current->view_head, &save_cursor_on_terminal);
                     if(new_view){
                          config_state->tab_current->view_current = new_view;
                     }else{
@@ -2989,7 +2989,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          Buffer_t* command_buffer = config_state->shell_command_buffer;
                          command_buffer->cursor = (Point_t){0, 0};
                          config_state->last_command_buffer_jump = 0;
-                         Buffer_tView_t* command_view = ce_buffer_in_view(config_state->tab_current->view_head, command_buffer);
+                         BufferView_t* command_view = ce_buffer_in_view(config_state->tab_current->view_head, command_buffer);
 
                          if(command_view){
                               command_view->cursor = (Point_t){0, 0};
@@ -3136,7 +3136,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     config_state->tab_current->view_current->cursor = itr->buffer->cursor;
                     center_view(config_state->tab_current->view_current);
                }else if(config_state->tab_current->view_current->buffer == config_state->shell_command_buffer){
-                    Buffer_tView_t* view_to_change = config_state->tab_current->view_current;
+                    BufferView_t* view_to_change = config_state->tab_current->view_current;
                     if(config_state->tab_current->view_previous) view_to_change = config_state->tab_current->view_previous;
 
                     if(goto_file_destination_in_buffer(head, config_state->shell_command_buffer, cursor->y,
@@ -3492,7 +3492,7 @@ search:
      return true;
 }
 
-void draw_view_statuses(Buffer_tView_t* view, Buffer_tView_t* current_view, VimMode vim_mode, int last_key)
+void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, VimMode vim_mode, int last_key)
 {
      Buffer_t* buffer = view->buffer;
      if(view->next_horizontal) draw_view_statuses(view->next_horizontal, current_view, vim_mode, last_key);
@@ -3540,7 +3540,7 @@ void view_drawer(const BufferNode_t* head, void* user_data)
      (void)(head);
      ConfigState* config_state = user_data;
      Buffer_t* buffer = config_state->tab_current->view_current->buffer;
-     Buffer_tView_t* buffer_view = config_state->tab_current->view_current;
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
      Point_t* cursor = &config_state->tab_current->view_current->cursor;
 
      Point_t top_left;

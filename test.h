@@ -1,7 +1,7 @@
 #ifndef TEST_HPP
 #define TEST_HPP
 
-typedef void test_func(bool*);
+typedef void test_func_t(bool*);
 
 // NOTE: we currently rely on __COUNTER__ being 0 to start! We can deal with this in the future if we want to
 //       use this for other projects!
@@ -11,7 +11,7 @@ typedef void test_func(bool*);
 
 #define TEST(name)                                    \
      void name(bool* _test_failed);                   \
-     test_func* GLOBAL_TEST_FUNC(__COUNTER__) = name; \
+     test_func_t* GLOBAL_TEST_FUNC(__COUNTER__) = name; \
      void name(bool* _test_failed)
 
 #define EXPECT(cond)                                                                              \

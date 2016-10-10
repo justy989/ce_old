@@ -32,7 +32,7 @@ typedef struct{
      int shell_command_input_fd;
      int shell_command_output_fd;
      void* user_data;
-} ShellCommandData;
+} ShellCommandData_t;
 
 typedef struct{
      char** input;
@@ -40,9 +40,9 @@ typedef struct{
      Buffer_t* shell_command_buffer;
      int shell_command_input_fd;
      int shell_command_output_fd;
-} ShellInputData;
+} ShellInputData_t;
 
-ShellCommandData shell_command_data;
+ShellCommandData_t shell_command_data;
 pthread_mutex_t draw_lock;
 pthread_mutex_t shell_buffer_lock;
 
@@ -59,14 +59,14 @@ int64_t count_digits(int64_t n)
 
 void view_drawer(const BufferNode_t* head, void* user_data);
 
-typedef struct BackspaceNode{
+typedef struct BackspaceNode_t{
      char c;
-     struct BackspaceNode* next;
-} BackspaceNode;
+     struct BackspaceNode_t* next;
+} BackspaceNode_t;
 
-BackspaceNode* backspace_push(BackspaceNode** head, char c)
+BackspaceNode_t* backspace_push(BackspaceNode_t** head, char c)
 {
-     BackspaceNode* new_node = malloc(sizeof(*new_node));
+     BackspaceNode_t* new_node = malloc(sizeof(*new_node));
      if(!new_node){
           ce_message("%s() failed to malloc node", __FUNCTION__);
           return NULL;
@@ -80,10 +80,10 @@ BackspaceNode* backspace_push(BackspaceNode** head, char c)
 }
 
 // string is allocated and returned, it is the user's responsibility to free it
-char* backspace_get_string(BackspaceNode* head)
+char* backspace_get_string(BackspaceNode_t* head)
 {
      int64_t len = 0;
-     BackspaceNode* itr = head;
+     BackspaceNode_t* itr = head;
      while(itr){
           len++;
           itr = itr->next;
@@ -107,31 +107,31 @@ char* backspace_get_string(BackspaceNode* head)
      return str;
 }
 
-void backspace_free(BackspaceNode** head)
+void backspace_free(BackspaceNode_t** head)
 {
      while(*head){
-          BackspaceNode* tmp = *head;
+          BackspaceNode_t* tmp = *head;
           *head = (*head)->next;
           free(tmp);
      }
 }
 
 // TODO: move this to ce.h
-typedef struct InputHistoryNode {
+typedef struct InputHistoryNode_t {
      char* entry;
-     struct InputHistoryNode* next;
-     struct InputHistoryNode* prev;
-} InputHistoryNode;
+     struct InputHistoryNode_t* next;
+     struct InputHistoryNode_t* prev;
+} InputHistoryNode_t;
 
 typedef struct {
-     InputHistoryNode* head;
-     InputHistoryNode* tail;
-     InputHistoryNode* cur;
-} InputHistory;
+     InputHistoryNode_t* head;
+     InputHistoryNode_t* tail;
+     InputHistoryNode_t* cur;
+} InputHistory_t;
 
-bool input_history_init(InputHistory* history)
+bool input_history_init(InputHistory_t* history)
 {
-     InputHistoryNode* node = calloc(1, sizeof(*node));
+     InputHistoryNode_t* node = calloc(1, sizeof(*node));
      if(!node){
           ce_message("%s() failed to malloc input history node", __FUNCTION__);
           return false;
@@ -144,12 +144,12 @@ bool input_history_init(InputHistory* history)
      return true;
 }
 
-bool input_history_commit_current(InputHistory* history)
+bool input_history_commit_current(InputHistory_t* history)
 {
      assert(history->tail);
      assert(history->cur);
 
-     InputHistoryNode* node = calloc(1, sizeof(*node));
+     InputHistoryNode_t* node = calloc(1, sizeof(*node));
      if(!node){
           ce_message("%s() failed to malloc input history node", __FUNCTION__);
           return false;
@@ -164,7 +164,7 @@ bool input_history_commit_current(InputHistory* history)
      return true;
 }
 
-bool input_history_update_current(InputHistory* history, char* duped)
+bool input_history_update_current(InputHistory_t* history, char* duped)
 {
      if(!history->cur) return false;
      if(history->cur->entry) free(history->cur->entry);
@@ -172,11 +172,11 @@ bool input_history_update_current(InputHistory* history, char* duped)
      return true;
 }
 
-void input_history_free(InputHistory* history)
+void input_history_free(InputHistory_t* history)
 {
      while(history->head){
           free(history->head->entry);
-          InputHistoryNode* tmp = history->head;
+          InputHistoryNode_t* tmp = history->head;
           history->head = history->head->next;
           free(tmp);
      }
@@ -185,7 +185,7 @@ void input_history_free(InputHistory* history)
      history->cur = NULL;
 }
 
-bool input_history_next(InputHistory* history)
+bool input_history_next(InputHistory_t* history)
 {
      if(!history->cur) return false;
      if(!history->cur->next) return false;
@@ -194,7 +194,7 @@ bool input_history_next(InputHistory* history)
      return true;
 }
 
-bool input_history_prev(InputHistory* history)
+bool input_history_prev(InputHistory_t* history)
 {
      if(!history->cur) return false;
      if(!history->cur->prev) return false;
@@ -209,37 +209,37 @@ typedef enum{
      VM_VISUAL_RANGE,
      VM_VISUAL_LINE,
      VM_VISUAL_BLOCK,
-} VimMode;
+} VimMode_t;
 
 // TODO: move yank stuff to ce.h
 typedef enum{
      YANK_NORMAL,
      YANK_LINE,
-} YankMode;
+} YankMode_t;
 
-typedef struct YankNode{
+typedef struct YankNode_t{
      char reg_char;
      const char* text;
-     YankMode mode;
-     struct YankNode* next;
-} YankNode;
+     YankMode_t mode;
+     struct YankNode_t* next;
+} YankNode_t;
 
-typedef struct TabView{
+typedef struct TabView_t{
      BufferView_t* view_head;
      BufferView_t* view_current;
      BufferView_t* view_previous;
      BufferView_t* view_input_save;
-     struct TabView* next;
-} TabView;
+     struct TabView_t* next;
+} TabView_t;
 
-TabView* tab_view_insert(TabView* head)
+TabView_t* tab_view_insert(TabView_t* head)
 {
      // find the tail
-     TabView* itr = head; // if we use tab_current, we *may* be closer to the tail !
+     TabView_t* itr = head; // if we use tab_current, we *may* be closer to the tail !
      while(itr->next) itr = itr->next;
 
      // create the new tab
-     TabView* new_tab = calloc(1, sizeof(*new_tab));
+     TabView_t* new_tab = calloc(1, sizeof(*new_tab));
      if(!new_tab){
           ce_message("failed to allocate tab");
           return NULL;
@@ -258,12 +258,12 @@ TabView* tab_view_insert(TabView* head)
      return new_tab;
 }
 
-void tab_view_remove(TabView** head, TabView* view)
+void tab_view_remove(TabView_t** head, TabView_t* view)
 {
      if(!*head || !view) return;
 
      // TODO: free any open views
-     TabView* tmp = *head;
+     TabView_t* tmp = *head;
      if(*head == view){
           *head = view->next;
           free(tmp);
@@ -276,7 +276,7 @@ void tab_view_remove(TabView** head, TabView* view)
 }
 
 typedef struct{
-     VimMode vim_mode;
+     VimMode_t vim_mode;
      bool input;
      const char* input_message;
      char input_key;
@@ -300,33 +300,33 @@ typedef struct{
      Point_t start_insert;
      Point_t original_start_insert;
      Point_t visual_start;
-     struct YankNode* yank_head;
-     TabView* tab_head;
-     TabView* tab_current;
+     struct YankNode_t* yank_head;
+     TabView_t* tab_head;
+     TabView_t* tab_current;
      BufferView_t* view_input;
-     InputHistory shell_command_history;
-     InputHistory shell_input_history;
-     InputHistory search_history;
-     InputHistory load_file_history;
+     InputHistory_t shell_command_history;
+     InputHistory_t shell_input_history;
+     InputHistory_t search_history;
+     InputHistory_t load_file_history;
      Point_t start_search;
      pthread_t shell_command_thread;
      pthread_t shell_input_thread;
-} ConfigState;
+} ConfigState_t;
 
-typedef struct MarkNode{
+typedef struct MarkNode_t{
      char reg_char;
      Point_t location;
-     struct MarkNode* next;
-} MarkNode;
+     struct MarkNode_t* next;
+} MarkNode_t;
 
 typedef struct{
      BufferCommitNode_t* commit_tail;
-     BackspaceNode* backspace_head;
-     struct MarkNode* mark_head;
-} Buffer_tState;
+     BackspaceNode_t* backspace_head;
+     struct MarkNode_t* mark_head;
+} BufferState_t;
 
-YankNode* find_yank(ConfigState* config, char reg_char){
-     YankNode* itr = config->yank_head;
+YankNode_t* find_yank(ConfigState_t* config, char reg_char){
+     YankNode_t* itr = config->yank_head;
      while(itr != NULL){
           if(itr->reg_char == reg_char) return itr;
           itr = itr->next;
@@ -336,13 +336,13 @@ YankNode* find_yank(ConfigState* config, char reg_char){
 
 // for now the yanked string is user allocated. eventually will probably
 // want to change this interface so that everything is hidden
-void add_yank(ConfigState* config, char reg_char, const char* yank_text, YankMode mode){
-     YankNode* node = find_yank(config, reg_char);
+void add_yank(ConfigState_t* config, char reg_char, const char* yank_text, YankMode_t mode){
+     YankNode_t* node = find_yank(config, reg_char);
      if(node != NULL){
           free((void*)node->text);
      }
      else{
-          YankNode* new_yank = malloc(sizeof(*config->yank_head));
+          YankNode_t* new_yank = malloc(sizeof(*config->yank_head));
           new_yank->reg_char = reg_char;
           new_yank->next = config->yank_head;
           node = new_yank;
@@ -352,9 +352,9 @@ void add_yank(ConfigState* config, char reg_char, const char* yank_text, YankMod
      node->mode = mode;
 }
 
-Point_t* find_mark(Buffer_tState* buffer, char mark_char)
+Point_t* find_mark(BufferState_t* buffer, char mark_char)
 {
-     MarkNode* itr = buffer->mark_head;
+     MarkNode_t* itr = buffer->mark_head;
      while(itr != NULL){
           if(itr->reg_char == mark_char) return &itr->location;
           itr = itr->next;
@@ -362,11 +362,11 @@ Point_t* find_mark(Buffer_tState* buffer, char mark_char)
      return NULL;
 }
 
-void add_mark(Buffer_tState* buffer, char mark_char, const Point_t* location)
+void add_mark(BufferState_t* buffer, char mark_char, const Point_t* location)
 {
      Point_t* mark_location = find_mark(buffer, mark_char);
      if(!mark_location){
-          MarkNode* new_mark = malloc(sizeof(*buffer->mark_head));
+          MarkNode_t* new_mark = malloc(sizeof(*buffer->mark_head));
           new_mark->reg_char = mark_char;
           new_mark->next = buffer->mark_head;
           buffer->mark_head = new_mark;
@@ -376,7 +376,7 @@ void add_mark(Buffer_tState* buffer, char mark_char, const Point_t* location)
 }
 
 bool initialize_buffer(Buffer_t* buffer){
-     Buffer_tState* buffer_state = calloc(1, sizeof(*buffer_state));
+     BufferState_t* buffer_state = calloc(1, sizeof(*buffer_state));
      if(!buffer_state){
           ce_message("failed to allocate buffer state.");
           return false;
@@ -471,12 +471,12 @@ BufferNode_t* new_buffer_from_file(BufferNode_t* head, const char* filename)
      return new_buffer_node;
 }
 
-void enter_normal_mode(ConfigState* config_state)
+void enter_normal_mode(ConfigState_t* config_state)
 {
      config_state->vim_mode = VM_NORMAL;
 }
 
-void enter_insert_mode(ConfigState* config_state, Point_t* cursor)
+void enter_insert_mode(ConfigState_t* config_state, Point_t* cursor)
 {
      if(config_state->tab_current->view_current->buffer->readonly) return;
      config_state->vim_mode = VM_INSERT;
@@ -484,19 +484,19 @@ void enter_insert_mode(ConfigState* config_state, Point_t* cursor)
      config_state->original_start_insert = *cursor;
 }
 
-void enter_visual_range_mode(ConfigState* config_state, BufferView_t* buffer_view)
+void enter_visual_range_mode(ConfigState_t* config_state, BufferView_t* buffer_view)
 {
      config_state->vim_mode = VM_VISUAL_RANGE;
      config_state->visual_start = buffer_view->cursor;
 }
 
-void enter_visual_line_mode(ConfigState* config_state, BufferView_t* buffer_view)
+void enter_visual_line_mode(ConfigState_t* config_state, BufferView_t* buffer_view)
 {
      config_state->vim_mode = VM_VISUAL_LINE;
      config_state->visual_start = buffer_view->cursor;
 }
 
-void commit_insert_mode_changes(ConfigState* config_state, Buffer_t* buffer, Buffer_tState* buffer_state, Point_t* cursor, Point_t* end_cursor)
+void commit_insert_mode_changes(ConfigState_t* config_state, Buffer_t* buffer, BufferState_t* buffer_state, Point_t* cursor, Point_t* end_cursor)
 {
      if(config_state->start_insert.x == cursor->x &&
         config_state->start_insert.y == cursor->y &&
@@ -543,7 +543,7 @@ void commit_insert_mode_changes(ConfigState* config_state, Buffer_t* buffer, Buf
      }
 }
 
-void clear_keys(ConfigState* config_state)
+void clear_keys(ConfigState_t* config_state)
 {
      config_state->command_multiplier = 0;
      config_state->command_key = '\0';
@@ -565,9 +565,9 @@ void center_view(BufferView_t* view)
      scroll_view_to_location(view, &location);
 }
 
-InputHistory* history_from_input_key(ConfigState* config_state)
+InputHistory_t* history_from_input_key(ConfigState_t* config_state)
 {
-     InputHistory* history = NULL;
+     InputHistory_t* history = NULL;
 
      switch(config_state->input_key){
      default:
@@ -590,7 +590,7 @@ InputHistory* history_from_input_key(ConfigState* config_state)
      return history;
 }
 
-void input_start(ConfigState* config_state, const char* input_message, char input_key)
+void input_start(ConfigState_t* config_state, const char* input_message, char input_key)
 {
      ce_clear_lines(config_state->view_input->buffer);
      ce_alloc_lines(config_state->view_input->buffer, 1);
@@ -603,17 +603,17 @@ void input_start(ConfigState* config_state, const char* input_message, char inpu
      enter_insert_mode(config_state, &config_state->view_input->cursor);
 
      // reset input history back to tail
-     InputHistory* history = history_from_input_key(config_state);
+     InputHistory_t* history = history_from_input_key(config_state);
      if(history) history->cur = history->tail;
 }
 
-void input_end(ConfigState* config_state)
+void input_end(ConfigState_t* config_state)
 {
      config_state->input = false;
      config_state->tab_current->view_current = config_state->tab_current->view_input_save; \
 }
 
-void input_cancel(ConfigState* config_state)
+void input_cancel(ConfigState_t* config_state)
 {
      if(config_state->input_key == '/' || config_state->input_key == '?'){
           config_state->tab_current->view_input_save->cursor = config_state->start_search;
@@ -631,8 +631,8 @@ typedef struct {
      const char* search_filename;
      BufferNode_t* head;
      BufferNode_t* new_node;
-} NftwState;
-__thread NftwState nftw_state;
+} NftwState_t;
+__thread NftwState_t nftw_state;
 
 int nftw_find_file(const char* fpath, const struct stat *sb, int typeflag, struct FTW *ftwbuf)
 {
@@ -677,7 +677,7 @@ bool initializer(BufferNode_t* head, Point_t* terminal_dimensions, int argc, cha
      g_terminal_dimensions = terminal_dimensions;
 
      // setup the config's state
-     ConfigState* config_state = calloc(1, sizeof(*config_state));
+     ConfigState_t* config_state = calloc(1, sizeof(*config_state));
      if(!config_state){
           ce_message("failed to allocate config state");
           return false;
@@ -820,7 +820,7 @@ bool initializer(BufferNode_t* head, Point_t* terminal_dimensions, int argc, cha
 bool destroyer(BufferNode_t* head, void* user_data)
 {
      while(head){
-          Buffer_tState* buffer_state = head->buffer->user_data;
+          BufferState_t* buffer_state = head->buffer->user_data;
           BufferCommitNode_t* itr = buffer_state->commit_tail;
           while(itr->prev) itr = itr->prev;
           ce_commits_free(itr);
@@ -829,8 +829,8 @@ bool destroyer(BufferNode_t* head, void* user_data)
           head = head->next;
      }
 
-     ConfigState* config_state = user_data;
-     TabView* tab_itr = config_state->tab_head;
+     ConfigState_t* config_state = user_data;
+     TabView_t* tab_itr = config_state->tab_head;
      while(tab_itr){
           if(tab_itr->view_head){
                ce_free_views(&tab_itr->view_head);
@@ -840,7 +840,7 @@ bool destroyer(BufferNode_t* head, void* user_data)
 
      tab_itr = config_state->tab_head;
      while(tab_itr){
-          TabView* tmp = tab_itr;
+          TabView_t* tmp = tab_itr;
           tab_itr = tab_itr->next;
           free(tmp);
      }
@@ -848,7 +848,7 @@ bool destroyer(BufferNode_t* head, void* user_data)
      // input buffer
      {
           ce_free_buffer(&config_state->input_buffer);
-          Buffer_tState* buffer_state = config_state->input_buffer.user_data;
+          BufferState_t* buffer_state = config_state->input_buffer.user_data;
           BufferCommitNode_t* itr = buffer_state->commit_tail;
           while(itr->prev) itr = itr->prev;
           ce_commits_free(itr);
@@ -942,7 +942,7 @@ typedef enum{
 //              - MOVEMENT_CONTINUE: a portion of a generic movement has been provided, and this function should be
 //                                   called again once another key is available
 //              - MOVEMENT_INVALID:  the movement provided by the user is not a generic movement
-movement_state_t try_generic_movement(ConfigState* config_state, Buffer_t* buffer, Point_t* cursor, Point_t* movement_start, Point_t* movement_end)
+movement_state_t try_generic_movement(ConfigState_t* config_state, Buffer_t* buffer, Point_t* cursor, Point_t* movement_start, Point_t* movement_end)
 {
      *movement_start = *movement_end = *cursor;
 
@@ -1202,7 +1202,7 @@ static size_t movement_buffer_len(const int* mov_buf, size_t size)
      return len;
 }
 
-bool is_movement_buffer_full(ConfigState* config_state)
+bool is_movement_buffer_full(ConfigState_t* config_state)
 {
      size_t max_movement_keys = sizeof config_state->movement_keys;
      size_t n_movement_keys = movement_buffer_len(config_state->movement_keys, max_movement_keys);
@@ -1322,7 +1322,7 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
 }
 
 // TODO: rather than taking in config_state, I'd like to take in only the parts it needs, if it's too much, config_state is fine
-void jump_to_next_shell_command_file_destination(BufferNode_t* head, ConfigState* config_state, bool forwards)
+void jump_to_next_shell_command_file_destination(BufferNode_t* head, ConfigState_t* config_state, bool forwards)
 {
      Buffer_t* command_buffer = config_state->shell_command_buffer;
      int64_t lines_checked = 0;
@@ -1347,7 +1347,7 @@ void jump_to_next_shell_command_file_destination(BufferNode_t* head, ConfigState
      }
 }
 
-bool commit_input_to_history(Buffer_t* input_buffer, InputHistory* history)
+bool commit_input_to_history(Buffer_t* input_buffer, InputHistory_t* history)
 {
      if(input_buffer->line_count){
           char* saved = ce_dupe_buffer(input_buffer);
@@ -1387,7 +1387,7 @@ void split_view(BufferView_t* head_view, BufferView_t* current_view, bool horizo
      }
 }
 
-void handle_mouse_event(ConfigState* config_state, Buffer_t* buffer, Buffer_tState* buffer_state, BufferView_t* buffer_view, Point_t* cursor)
+void handle_mouse_event(ConfigState_t* config_state, Buffer_t* buffer, BufferState_t* buffer_state, BufferView_t* buffer_view, Point_t* cursor)
 {
      MEVENT event;
      if(getmouse(&event) == OK){
@@ -1503,7 +1503,7 @@ void half_page_down(BufferView_t* view)
      ce_move_cursor(view->buffer, &view->cursor, delta);
 }
 
-bool scroll_z_cursor(ConfigState* config_state)
+bool scroll_z_cursor(ConfigState_t* config_state)
 {
      BufferView_t* buffer_view = config_state->tab_current->view_current;
      Point_t* cursor = &buffer_view->cursor;
@@ -1529,7 +1529,7 @@ bool scroll_z_cursor(ConfigState* config_state)
      return false;
 }
 
-void yank_visual_range(ConfigState* config_state)
+void yank_visual_range(ConfigState_t* config_state)
 {
      Buffer_t* buffer = config_state->tab_current->view_current->buffer;
      Point_t* cursor = &config_state->tab_current->view_current->cursor;
@@ -1545,7 +1545,7 @@ void yank_visual_range(ConfigState* config_state)
      add_yank(config_state, '"', ce_dupe_string(buffer, a, b), YANK_NORMAL);
 }
 
-void yank_visual_lines(ConfigState* config_state)
+void yank_visual_lines(ConfigState_t* config_state)
 {
      Buffer_t* buffer = config_state->tab_current->view_current->buffer;
      Point_t* cursor = &config_state->tab_current->view_current->cursor;
@@ -1565,11 +1565,11 @@ void yank_visual_lines(ConfigState* config_state)
      add_yank(config_state, '"', ce_dupe_string(buffer, &start, &end), YANK_LINE);
 }
 
-void remove_visual_range(ConfigState* config_state)
+void remove_visual_range(ConfigState_t* config_state)
 {
      Point_t* cursor = &config_state->tab_current->view_current->cursor;
      Buffer_t* buffer = config_state->tab_current->view_current->buffer;
-     Buffer_tState* buffer_state = buffer->user_data;
+     BufferState_t* buffer_state = buffer->user_data;
      Point_t start = config_state->visual_start;
      Point_t end = {cursor->x, cursor->y};
 
@@ -1589,11 +1589,11 @@ void remove_visual_range(ConfigState* config_state)
      enter_normal_mode(config_state);
 }
 
-void remove_visual_lines(ConfigState* config_state)
+void remove_visual_lines(ConfigState_t* config_state)
 {
      Point_t* cursor = &config_state->tab_current->view_current->cursor;
      Buffer_t* buffer = config_state->tab_current->view_current->buffer;
-     Buffer_tState* buffer_state = buffer->user_data;
+     BufferState_t* buffer_state = buffer->user_data;
      int64_t start_line = config_state->visual_start.y;
      int64_t end_line = cursor->y;
 
@@ -1618,10 +1618,10 @@ void remove_visual_lines(ConfigState* config_state)
      enter_normal_mode(config_state);
 }
 
-bool iterate_history_input(ConfigState* config_state, bool previous)
+bool iterate_history_input(ConfigState_t* config_state, bool previous)
 {
-     Buffer_tState* buffer_state = config_state->view_input->buffer->user_data;
-     InputHistory* history = history_from_input_key(config_state);
+     BufferState_t* buffer_state = config_state->view_input->buffer->user_data;
+     InputHistory_t* history = history_from_input_key(config_state);
      if(!history) return false;
 
      // update the current history node if we are at the tail to save what the user typed
@@ -1650,7 +1650,7 @@ bool iterate_history_input(ConfigState* config_state, bool previous)
      return success;
 }
 
-void switch_to_view_at_point(ConfigState* config_state, const Point_t* point)
+void switch_to_view_at_point(ConfigState_t* config_state, const Point_t* point)
 {
      BufferView_t* next_view = ce_find_view_at_point(config_state->tab_current->view_head, point);
      if(next_view){
@@ -1662,7 +1662,7 @@ void switch_to_view_at_point(ConfigState* config_state, const Point_t* point)
      }
 }
 
-void update_buffer_list_buffer(ConfigState* config_state, const BufferNode_t* head)
+void update_buffer_list_buffer(ConfigState_t* config_state, const BufferNode_t* head)
 {
      char buffer_info[BUFSIZ];
      config_state->buffer_list_buffer.readonly = false;
@@ -1716,7 +1716,7 @@ Point_t get_cursor_on_terminal(const Point_t* cursor, const BufferView_t* buffer
      return p;
 }
 
-void get_terminal_view_rect(TabView* tab_head, Point_t* top_left, Point_t* bottom_right)
+void get_terminal_view_rect(TabView_t* tab_head, Point_t* top_left, Point_t* bottom_right)
 {
      *top_left = (Point_t){0, 0};
      *bottom_right = (Point_t){g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 1};
@@ -1881,7 +1881,7 @@ clean_exit:
 
 void* send_shell_input(void* data)
 {
-     ShellInputData* shell_input_data = data;
+     ShellInputData_t* shell_input_data = data;
      struct timeval tv = {};
      fd_set out_fd_set;
 
@@ -1956,9 +1956,9 @@ void unindent_line(Buffer_t* buffer, BufferCommitNode_t** commit_tail, int64_t l
 
 bool key_handler(int key, BufferNode_t* head, void* user_data)
 {
-     ConfigState* config_state = user_data;
+     ConfigState_t* config_state = user_data;
      Buffer_t* buffer = config_state->tab_current->view_current->buffer;
-     Buffer_tState* buffer_state = buffer->user_data;
+     BufferState_t* buffer_state = buffer->user_data;
      BufferView_t* buffer_view = config_state->tab_current->view_current;
      Point_t* cursor = &config_state->tab_current->view_current->cursor;
      config_state->last_key = key;
@@ -2387,7 +2387,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          return true; // no movement yet, wait for one!
                     case MOVEMENT_COMPLETE:
                     {
-                         YankMode yank_mode;
+                         YankMode_t yank_mode;
                          switch(config_state->movement_keys[0]){
                          case KEY_UP:
                          case KEY_DOWN:
@@ -2421,7 +2421,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           case 'P':
           case 'p':
           {
-               YankNode* yank = find_yank(config_state, '"');
+               YankNode_t* yank = find_yank(config_state, '"');
                if(yank){
                     // NOTE: unsure why this isn't plug and play !
                     if(config_state->vim_mode == VM_VISUAL_RANGE){
@@ -2552,7 +2552,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     }
 
                     Point_t yank_end = movement_end;
-                    YankMode yank_mode;
+                    YankMode_t yank_mode;
                     switch(config_state->movement_keys[0]){
                          case 'd':
                          case KEY_UP:
@@ -2651,14 +2651,14 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     if(!config_state->tab_current->view_head){
                          if(config_state->tab_current->next){
                               config_state->tab_current->next = config_state->tab_current->next;
-                              TabView* tmp = config_state->tab_current;
+                              TabView_t* tmp = config_state->tab_current;
                               config_state->tab_current = config_state->tab_current->next;
                               tab_view_remove(&config_state->tab_head, tmp);
                               break;
                          }else{
                               if(config_state->tab_current == config_state->tab_head) return false;
 
-                              TabView* itr = config_state->tab_head;
+                              TabView_t* itr = config_state->tab_head;
                               while(itr && itr->next != config_state->tab_current) itr = itr->next;
                               assert(itr);
                               assert(itr->next == config_state->tab_current);
@@ -2845,11 +2845,11 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                case 'T':
                     if(config_state->tab_current == config_state->tab_head){
                          // find tail
-                         TabView* itr = config_state->tab_head;
+                         TabView_t* itr = config_state->tab_head;
                          while(itr->next) itr = itr->next;
                          config_state->tab_current = itr;
                     }else{
-                         TabView* itr = config_state->tab_head;
+                         TabView_t* itr = config_state->tab_head;
                          while(itr && itr->next != config_state->tab_current) itr = itr->next;
 
                          // what if we don't find our current tab and hit the end of the list?!
@@ -2894,7 +2894,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           case 8: // Ctrl + h
               if(config_state->input){
                    // dump input history on cursor line
-                   InputHistory* cur_hist = history_from_input_key(config_state);
+                   InputHistory_t* cur_hist = history_from_input_key(config_state);
                    if(!cur_hist){
                         ce_message("no history to dump");
                         break;
@@ -2906,7 +2906,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                    bool empty_first_line = !config_state->view_input->buffer->lines[0][0];
 
                    // insert each line in history
-                   InputHistoryNode* node = cur_hist->head;
+                   InputHistoryNode_t* node = cur_hist->head;
                    while(node && node->entry){
                         if(ce_insert_line(config_state->view_input->buffer,
                                           config_state->view_input->cursor.y + lines_added,
@@ -3034,7 +3034,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     } break;
                     case 'R':
                     {
-                         YankNode* yank = find_yank(config_state, '/');
+                         YankNode_t* yank = find_yank(config_state, '/');
                          if(!yank) break;
                          const char* search_str = yank->text;
                          // NOTE: allow empty string to replace search
@@ -3087,7 +3087,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          Buffer_t* input_buffer = config_state->view_input->buffer;
                          commit_input_to_history(input_buffer, &config_state->shell_input_history);
 
-                         ShellInputData* shell_input_data = malloc(sizeof(*shell_input_data));
+                         ShellInputData_t* shell_input_data = malloc(sizeof(*shell_input_data));
                          if(!shell_input_data){
                               ce_message("failed to allocate shell input data");
                               break;
@@ -3215,7 +3215,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           case 'n':
 search:
           {
-               YankNode* yank = find_yank(config_state, '/');
+               YankNode_t* yank = find_yank(config_state, '/');
                if(yank){
                     assert(yank->mode == YANK_NORMAL);
                     Point_t match;
@@ -3227,7 +3227,7 @@ search:
           } break;
           case 'N':
           {
-               YankNode* yank = find_yank(config_state, '/');
+               YankNode_t* yank = find_yank(config_state, '/');
                if(yank){
                     assert(yank->mode == YANK_NORMAL);
                     Point_t match;
@@ -3415,7 +3415,7 @@ search:
           } break;
           case 20: // Ctrl + t
           {
-               TabView* new_tab = tab_view_insert(config_state->tab_head);
+               TabView_t* new_tab = tab_view_insert(config_state->tab_head);
                if(!new_tab) break;
 
                // copy view attributes from the current view
@@ -3492,7 +3492,7 @@ search:
      return true;
 }
 
-void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, VimMode vim_mode, int last_key)
+void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, VimMode_t vim_mode, int last_key)
 {
      Buffer_t* buffer = view->buffer;
      if(view->next_horizontal) draw_view_statuses(view->next_horizontal, current_view, vim_mode, last_key);
@@ -3538,7 +3538,7 @@ void view_drawer(const BufferNode_t* head, void* user_data)
      erase();
 
      (void)(head);
-     ConfigState* config_state = user_data;
+     ConfigState_t* config_state = user_data;
      Buffer_t* buffer = config_state->tab_current->view_current->buffer;
      BufferView_t* buffer_view = config_state->tab_current->view_current;
      Point_t* cursor = &config_state->tab_current->view_current->cursor;
@@ -3602,7 +3602,7 @@ void view_drawer(const BufferNode_t* head, void* user_data)
         config_state->view_input->buffer->lines && config_state->view_input->buffer->lines[0][0]){
           search = config_state->view_input->buffer->lines[0];
      }else{
-          YankNode* yank = find_yank(config_state, '/');
+          YankNode_t* yank = find_yank(config_state, '/');
           if(yank) search = yank->text;
      }
 
@@ -3651,7 +3651,7 @@ void view_drawer(const BufferNode_t* head, void* user_data)
                ce_connect_border_lines(&p);
           }
 
-          TabView* tab_itr = config_state->tab_head;
+          TabView_t* tab_itr = config_state->tab_head;
           move(0, 1);
 
           // draw before current tab

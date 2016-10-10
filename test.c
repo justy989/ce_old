@@ -6,7 +6,7 @@
 
 TEST(sanity_alloc_and_free)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      ce_alloc_lines(&buffer, 3);
 
      ASSERT(buffer.lines);
@@ -19,7 +19,7 @@ TEST(sanity_load_string)
 {
      const char* str = "TACOS";
 
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      ce_load_string(&buffer, str);
 
      ASSERT(buffer.lines);
@@ -33,7 +33,7 @@ TEST(load_string_multiline)
 {
      const char* str = "TACOS\nARE\nTHE\nBEST";
 
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      ce_load_string(&buffer, str);
 
      ASSERT(buffer.lines);
@@ -53,7 +53,7 @@ TEST(load_one_line_file)
      const char* tmp_file = "/tmp/ce_one_line_file.txt";
      sprintf(cmd, "echo 'TACOS' > %s", tmp_file);
      system(cmd);
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      ce_load_file(&buffer, tmp_file);
      sprintf(cmd, "rm %s", tmp_file);
      system(cmd);
@@ -72,7 +72,7 @@ TEST(load_multiline_file)
      const char* tmp_file = "/tmp/ce_multiline_file.txt";
      sprintf(cmd, "echo 'TACOS\nARE\nTHE\nBEST' > %s", tmp_file);
      system(cmd);
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      ce_load_file(&buffer, tmp_file);
      sprintf(cmd, "rm %s", tmp_file);
      system(cmd);
@@ -91,7 +91,7 @@ TEST(save_buffer_one_line)
 {
      const char* tmp_file = "/tmp/ce_one_line_file.txt";
 
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.filename = strdup(tmp_file);
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
@@ -100,7 +100,7 @@ TEST(save_buffer_one_line)
      ce_save_buffer(&buffer, tmp_file);
 
      // NOTE: not sure how else to validate this
-     Buffer other_buffer = {};
+     Buffer_t other_buffer = {};
      ce_load_file(&other_buffer, tmp_file);
 
      char cmd[128];
@@ -119,7 +119,7 @@ TEST(save_buffer_multiline_line)
 {
      const char* tmp_file = "/tmp/ce_multiline_file.txt";
 
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.filename = strdup(tmp_file);
      buffer.line_count = 3;
      buffer.lines = malloc(3 * sizeof(char*));
@@ -130,7 +130,7 @@ TEST(save_buffer_multiline_line)
      ce_save_buffer(&buffer, tmp_file);
 
      // NOTE: not sure how else to validate this
-     Buffer other_buffer = {};
+     Buffer_t other_buffer = {};
      ce_load_file(&other_buffer, tmp_file);
 
      char cmd[128];
@@ -149,7 +149,7 @@ TEST(save_buffer_multiline_line)
 
 TEST(point_on_buffer)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
 
      buffer.line_count = 2;
      buffer.lines = malloc(2 * sizeof(char*));
@@ -170,7 +170,7 @@ TEST(point_on_buffer)
 
 TEST(sanity_insert_char)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -185,7 +185,7 @@ TEST(sanity_insert_char)
 
 TEST(sanity_insert_char_readonly)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -201,7 +201,7 @@ TEST(sanity_insert_char_readonly)
 
 TEST(insert_char_newline_begin)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -218,7 +218,7 @@ TEST(insert_char_newline_begin)
 
 TEST(insert_char_newline_end)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -235,7 +235,7 @@ TEST(insert_char_newline_end)
 
 TEST(insert_char_newline_middle)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -252,7 +252,7 @@ TEST(insert_char_newline_middle)
 
 TEST(sanity_remove_char)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -268,7 +268,7 @@ TEST(sanity_remove_char)
 
 TEST(remove_char_empty_line)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 2;
      buffer.lines = malloc(2 * sizeof(char**));
      buffer.lines[0] = strdup("TACOS");
@@ -285,7 +285,7 @@ TEST(remove_char_empty_line)
 
 TEST(insert_string_newline_on_empty)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
 
      Point point = {0, 0};
      ce_insert_string(&buffer, &point, "\n");
@@ -298,7 +298,7 @@ TEST(insert_string_newline_on_empty)
 
 TEST(insert_string_begin)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -313,7 +313,7 @@ TEST(insert_string_begin)
 
 TEST(insert_string_readonly_begin)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -329,7 +329,7 @@ TEST(insert_string_readonly_begin)
 
 TEST(insert_string_mid)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -344,7 +344,7 @@ TEST(insert_string_mid)
 
 TEST(insert_string_end)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -359,7 +359,7 @@ TEST(insert_string_end)
 
 TEST(insert_string_multiline_begin)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -377,7 +377,7 @@ TEST(insert_string_multiline_begin)
 
 TEST(insert_string_multiline_mid)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -396,7 +396,7 @@ TEST(insert_string_multiline_mid)
 
 TEST(insert_string_multiline_end)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -413,7 +413,7 @@ TEST(insert_string_multiline_end)
 
 TEST(insert_string_multiline_blank_begin)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -431,7 +431,7 @@ TEST(insert_string_multiline_blank_begin)
 
 TEST(insert_string_multiline_blank_mid)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -449,7 +449,7 @@ TEST(insert_string_multiline_blank_mid)
 
 TEST(insert_string_multiline_blank_end)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -467,7 +467,7 @@ TEST(insert_string_multiline_blank_end)
 
 TEST(sanity_append_string)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -482,7 +482,7 @@ TEST(sanity_append_string)
 
 TEST(sanity_append_string_readonly)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -498,7 +498,7 @@ TEST(sanity_append_string_readonly)
 
 TEST(sanity_append_string_multiline)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -514,7 +514,7 @@ TEST(sanity_append_string_multiline)
 
 TEST(remove_string_begin)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -530,7 +530,7 @@ TEST(remove_string_begin)
 
 TEST(remove_string_mid)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -546,7 +546,7 @@ TEST(remove_string_mid)
 
 TEST(remove_string_end)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -562,7 +562,7 @@ TEST(remove_string_end)
 
 TEST(remove_string_multiline_begin)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 3;
      buffer.lines = malloc(3 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -581,7 +581,7 @@ TEST(remove_string_multiline_begin)
 
 TEST(remove_string_multiline_mid)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 3;
      buffer.lines = malloc(3 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -600,7 +600,7 @@ TEST(remove_string_multiline_mid)
 
 TEST(remove_string_multiline_end)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 3;
      buffer.lines = malloc(3 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -619,7 +619,7 @@ TEST(remove_string_multiline_end)
 
 TEST(remove_string_multiline_blank_begin)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 5;
      buffer.lines = malloc(5 * sizeof(char*));
      buffer.lines[0] = strdup("");
@@ -641,7 +641,7 @@ TEST(remove_string_multiline_blank_begin)
 
 TEST(remove_string_multiline_blank_mid)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 5;
      buffer.lines = malloc(5 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -663,7 +663,7 @@ TEST(remove_string_multiline_blank_mid)
 
 TEST(remove_string_multiline_blank_end)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 5;
      buffer.lines = malloc(5 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -685,7 +685,7 @@ TEST(remove_string_multiline_blank_end)
 
 TEST(sanity_insert_line_readonly)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -702,7 +702,7 @@ TEST(sanity_insert_line_readonly)
 
 TEST(insert_line_multiline)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -720,7 +720,7 @@ TEST(insert_line_multiline)
 
 TEST(sanity_append_line)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -737,7 +737,7 @@ TEST(sanity_append_line)
 
 TEST(sanity_append_line_readonly)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -755,7 +755,7 @@ TEST(sanity_append_line_readonly)
 #if 0
 TEST(sanity_join_line)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -775,7 +775,7 @@ TEST(sanity_join_line)
 
 TEST(sanity_clear_lines)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 2;
      buffer.lines = malloc(2 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -791,7 +791,7 @@ TEST(sanity_clear_lines)
 
 TEST(sanity_clear_lines_readonly)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 2;
      buffer.lines = malloc(2 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -810,7 +810,7 @@ TEST(sanity_clear_lines_readonly)
 
 TEST(sanity_dupe_string)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -827,7 +827,7 @@ TEST(sanity_dupe_string)
 
 TEST(dupe_string_multiline)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 3;
      buffer.lines = malloc(3 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -846,7 +846,7 @@ TEST(dupe_string_multiline)
 
 TEST(dupe_string_multiline_on_line_boundry)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 3;
      buffer.lines = malloc(3 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -865,7 +865,7 @@ TEST(dupe_string_multiline_on_line_boundry)
 
 TEST(dupe_line)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 3;
      buffer.lines = malloc(3 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -882,7 +882,7 @@ TEST(dupe_line)
 
 TEST(sanity_get_char)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -898,7 +898,7 @@ TEST(sanity_get_char)
 
 TEST(sanity_set_char)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -915,7 +915,7 @@ TEST(sanity_set_char)
 #if 0 // NOTE: unsure why I can't get ce_find_match to work here
 TEST(sanity_find_match_same_line)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TA COS ARE TA COS");
@@ -932,7 +932,7 @@ TEST(sanity_find_match_same_line)
 
 TEST(sanity_find_match_next_line)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 2;
      buffer.lines = malloc(2 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS ARE AWESOME");
@@ -951,7 +951,7 @@ TEST(sanity_find_match_next_line)
 
 TEST(find_match_same_line)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS ARE AWESOME");
@@ -968,7 +968,7 @@ TEST(find_match_same_line)
 
 TEST(find_match_next_line)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 3;
      buffer.lines = malloc(3 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -987,7 +987,7 @@ TEST(find_match_next_line)
 
 TEST(clamp_cursor_horizontal)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 3;
      buffer.lines = malloc(3 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -1005,7 +1005,7 @@ TEST(clamp_cursor_horizontal)
 
 TEST(clamp_cursor_vertical)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 3;
      buffer.lines = malloc(3 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -1023,7 +1023,7 @@ TEST(clamp_cursor_vertical)
 
 TEST(sanity_move_cursor)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 3;
      buffer.lines = malloc(3 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -1041,7 +1041,7 @@ TEST(sanity_move_cursor)
 
 TEST(sanity_set_cursor)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 3;
      buffer.lines = malloc(3 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -1060,7 +1060,7 @@ TEST(sanity_set_cursor)
 
 TEST(advance_cursor_same_line)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 3;
      buffer.lines = malloc(3 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -1078,7 +1078,7 @@ TEST(advance_cursor_same_line)
 
 TEST(advance_cursor_next_line)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 3;
      buffer.lines = malloc(3 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -1096,7 +1096,7 @@ TEST(advance_cursor_next_line)
 
 TEST(move_cursor_to_end_of_file)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 3;
      buffer.lines = malloc(3 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -1114,12 +1114,12 @@ TEST(move_cursor_to_end_of_file)
 
 TEST(commit_insert_char_undo_redo)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
 
-     BufferCommitNode* tail = calloc(1, sizeof(*tail));
+     BufferCommitNode_t* tail = calloc(1, sizeof(*tail));
      ASSERT(tail != NULL);
 
      Point start = {2, 0};
@@ -1148,12 +1148,12 @@ TEST(commit_insert_char_undo_redo)
 
 TEST(commit_insert_string_undo_redo)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS ARE AWESOME");
 
-     BufferCommitNode* tail = calloc(1, sizeof(*tail));
+     BufferCommitNode_t* tail = calloc(1, sizeof(*tail));
      ASSERT(tail != NULL);
 
      Point start = {5, 0};
@@ -1182,12 +1182,12 @@ TEST(commit_insert_string_undo_redo)
 
 TEST(commit_remove_char_undo_redo)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TAOS");
 
-     BufferCommitNode* tail = calloc(1, sizeof(*tail));
+     BufferCommitNode_t* tail = calloc(1, sizeof(*tail));
      ASSERT(tail != NULL);
 
      Point start = {2, 0};
@@ -1216,12 +1216,12 @@ TEST(commit_remove_char_undo_redo)
 
 TEST(commit_remove_string_undo_redo)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS AWESOME");
 
-     BufferCommitNode* tail = calloc(1, sizeof(*tail));
+     BufferCommitNode_t* tail = calloc(1, sizeof(*tail));
      ASSERT(tail != NULL);
 
      Point start = {5, 0};
@@ -1250,12 +1250,12 @@ TEST(commit_remove_string_undo_redo)
 
 TEST(commit_change_char_undo_redo)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TALOS");
 
-     BufferCommitNode* tail = calloc(1, sizeof(*tail));
+     BufferCommitNode_t* tail = calloc(1, sizeof(*tail));
      ASSERT(tail != NULL);
 
      Point start = {2, 0};
@@ -1284,12 +1284,12 @@ TEST(commit_change_char_undo_redo)
 
 TEST(commit_change_string_undo_redo)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS BE AWESOME");
 
-     BufferCommitNode* tail = calloc(1, sizeof(*tail));
+     BufferCommitNode_t* tail = calloc(1, sizeof(*tail));
      ASSERT(tail != NULL);
 
      Point start = {5, 0};
@@ -1420,19 +1420,19 @@ TEST(sanity_follow_cursor)
 
 TEST(sanity_buffer_list)
 {
-     BufferNode* head = calloc(1, sizeof(*head));
+     BufferNode_t* head = calloc(1, sizeof(*head));
      ASSERT(head);
 
-     Buffer one;
-     Buffer two;
-     Buffer three;
+     Buffer_t one;
+     Buffer_t two;
+     Buffer_t three;
 
      head->buffer = &one;
 
-     BufferNode* two_node = ce_append_buffer_to_list(head, &two);
+     BufferNode_t* two_node = ce_append_buffer_to_list(head, &two);
      ASSERT(two_node != NULL);
 
-     BufferNode* three_node = ce_append_buffer_to_list(head, &three);
+     BufferNode_t* three_node = ce_append_buffer_to_list(head, &three);
      ASSERT(three_node != NULL);
 
      ASSERT(head->buffer == &one);
@@ -1458,21 +1458,21 @@ TEST(sanity_buffer_list)
 
 TEST(sanity_split_view)
 {
-     BufferView_t* head = calloc(1, sizeof(*head));
+     Buffer_tView_t* head = calloc(1, sizeof(*head));
      ASSERT(head);
 
-     Buffer buffers[4] = {};
+     Buffer_t buffers[4] = {};
 
      head->buffer = buffers + 0;
 
      // split views
-     BufferView_t* horizontal_split_view = ce_split_view(head, buffers + 1, true);
+     Buffer_tView_t* horizontal_split_view = ce_split_view(head, buffers + 1, true);
      ASSERT(head->next_horizontal == horizontal_split_view);
 
-     BufferView_t* vertical_split_view = ce_split_view(head, buffers + 2, false);
+     Buffer_tView_t* vertical_split_view = ce_split_view(head, buffers + 2, false);
      ASSERT(head->next_vertical == vertical_split_view);
 
-     BufferView_t* new_horizontal_split_view = ce_split_view(vertical_split_view, buffers + 3, true);
+     Buffer_tView_t* new_horizontal_split_view = ce_split_view(vertical_split_view, buffers + 3, true);
      ASSERT(vertical_split_view->next_horizontal == new_horizontal_split_view);
 
      // calc views
@@ -1502,7 +1502,7 @@ TEST(sanity_split_view)
 
      // find view at point
      Point find_point = {7, 9};
-     BufferView_t* found_view = ce_find_view_at_point(head, &find_point);
+     Buffer_tView_t* found_view = ce_find_view_at_point(head, &find_point);
      EXPECT(found_view == new_horizontal_split_view);
 
      // find view by buffer
@@ -1531,7 +1531,7 @@ TEST(sanity_split_view)
 // TODO: this function should point us to the last character. not the newline.
 TEST(sanity_move_cursor_to_end_of_line)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("Cats are delicious");
@@ -1553,7 +1553,7 @@ TEST(sanity_move_cursor_to_end_of_line)
 
 TEST(find_delta_to_soft_end_of_line)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("Cats are delicious   ");
@@ -1574,7 +1574,7 @@ TEST(find_delta_to_soft_end_of_line)
 
 TEST(find_delta_to_soft_beginning_of_line)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("   Cats are delicious");
@@ -1592,7 +1592,7 @@ TEST(find_delta_to_soft_beginning_of_line)
 
 TEST(find_delta_to_soft_char_forward_in_line)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("Cats are delicious");
@@ -1610,7 +1610,7 @@ TEST(find_delta_to_soft_char_forward_in_line)
 
 TEST(find_delta_to_soft_char_backward_in_line)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("Cats are delicious");
@@ -1629,7 +1629,7 @@ TEST(find_delta_to_soft_char_backward_in_line)
 // TODO: vim's WORDS
 TEST(move_cursor_to_beginning_of_word)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("Cats are delicious. Oh yeah!");
@@ -1669,7 +1669,7 @@ TEST(move_cursor_to_beginning_of_word)
 
 TEST(find_delta_to_end_of_word)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("Cats are delicious");
@@ -1691,7 +1691,7 @@ TEST(find_delta_to_end_of_word)
 
 TEST(find_delta_to_end_of_next_word)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("Cats are delicious");
@@ -1712,7 +1712,7 @@ TEST(find_delta_to_end_of_next_word)
 
 TEST(find_delta_to_match_single_line)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("Cats {are} delicious");
@@ -1730,7 +1730,7 @@ TEST(find_delta_to_match_single_line)
 
 TEST(find_delta_to_match_multiline)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 3;
      buffer.lines = malloc(3 * sizeof(char*));
      buffer.lines[0] = strdup("if(cat.is_dead()){");
@@ -1768,7 +1768,7 @@ TEST(sanity_ce_memrchr)
 
 TEST(sanity_compute_length)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 3;
      buffer.lines = malloc(3 * sizeof(char*));
      buffer.lines[0] = strdup("Cats are delicious");
@@ -1807,7 +1807,7 @@ TEST(sanity_compute_length)
 // This currently fails because the first character isn't checked by is_homogenous?
 TEST(sanity_get_homogenous_adjacents)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("0123....    ");
@@ -1859,7 +1859,7 @@ TEST(sanity_get_homogenous_adjacents)
 
 TEST(sanity_get_word_at_location)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 3;
      buffer.lines = malloc(3 * sizeof(char*));
      buffer.lines[0] = strdup("0123 567 9ABC EFG");
@@ -1898,7 +1898,7 @@ TEST(get_indentation_for_next_line_open_bracket)
 {
      const size_t tab_len = 5;
 
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 6;
      buffer.lines = malloc(6 * sizeof(char*));
      buffer.lines[0] = strdup("int is_delicious_cat(cat_t cat){");
@@ -1959,7 +1959,7 @@ TEST(sanity_sort_points_no_swap)
 
 TEST(sanity_move_cursor_to_soft_beginning_of_line)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("     Wow, cats are more delicious than I anticipated.");
@@ -1981,7 +1981,7 @@ TEST(sanity_move_cursor_to_soft_beginning_of_line)
 
 TEST(sanity_move_cursor_to_soft_end_of_line)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("     Meow.     ");
@@ -2003,7 +2003,7 @@ TEST(sanity_move_cursor_to_soft_end_of_line)
 
 TEST(sanity_append_char)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS ARE AWESOM");
@@ -2017,7 +2017,7 @@ TEST(sanity_append_char)
 
 TEST(sanity_append_char_readonly)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS ARE AWESOM");
@@ -2032,7 +2032,7 @@ TEST(sanity_append_char_readonly)
 
 TEST(append_newline)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS ARE AWESOME");
@@ -2049,7 +2049,7 @@ TEST(append_newline)
 
 TEST(dupe_buffer_one_line)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS ARE AWESOME");
@@ -2064,7 +2064,7 @@ TEST(dupe_buffer_one_line)
 
 TEST(dupe_buffer_multiline)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 3;
      buffer.lines = malloc(3 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -2081,7 +2081,7 @@ TEST(dupe_buffer_multiline)
 
 TEST(sanity_prepend_string)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -2096,7 +2096,7 @@ TEST(sanity_prepend_string)
 
 TEST(dupe_lines)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 5;
      buffer.lines = malloc(5 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -2142,7 +2142,7 @@ TEST(sanity_last_index)
 
 TEST(sanity_get_char_raw)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 3;
      buffer.lines = malloc(3 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -2163,7 +2163,7 @@ TEST(sanity_get_char_raw)
 
 TEST(move_cursor_to_beginning_of_file)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 3;
      buffer.lines = malloc(3 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
@@ -2180,7 +2180,7 @@ TEST(move_cursor_to_beginning_of_file)
 
 TEST(move_cursor_to_beginning_of_line)
 {
-     Buffer buffer = {};
+     Buffer_t buffer = {};
      buffer.line_count = 3;
      buffer.lines = malloc(3 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");

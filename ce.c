@@ -27,7 +27,7 @@ int64_t ce_count_string_lines(const char* string)
      return line_count;
 }
 
-bool ce_alloc_lines(Buffer* buffer, int64_t line_count)
+bool ce_alloc_lines(Buffer_t* buffer, int64_t line_count)
 {
      CE_CHECK_PTR_ARG(buffer);
 
@@ -62,7 +62,7 @@ bool ce_alloc_lines(Buffer* buffer, int64_t line_count)
      return true;
 }
 
-bool ce_load_file(Buffer* buffer, const char* filename)
+bool ce_load_file(Buffer_t* buffer, const char* filename)
 {
      ce_message("load file '%s'", filename);
 
@@ -105,13 +105,13 @@ bool ce_load_file(Buffer* buffer, const char* filename)
      return true;
 }
 
-bool ce_load_string(Buffer* buffer, const char* str)
+bool ce_load_string(Buffer_t* buffer, const char* str)
 {
      Point start = {0, 0};
      return ce_insert_string(buffer, &start, str);
 }
 
-void ce_free_buffer(Buffer* buffer)
+void ce_free_buffer(Buffer_t* buffer)
 {
      if(!buffer){
           return;
@@ -125,7 +125,7 @@ void ce_free_buffer(Buffer* buffer)
      ce_clear_lines(buffer);
 }
 
-void clear_lines_impl(Buffer* buffer)
+void clear_lines_impl(Buffer_t* buffer)
 {
      if(buffer->lines){
           for(int64_t i = 0; i < buffer->line_count; ++i){
@@ -139,21 +139,21 @@ void clear_lines_impl(Buffer* buffer)
      buffer->modified = true;
 }
 
-void ce_clear_lines(Buffer* buffer)
+void ce_clear_lines(Buffer_t* buffer)
 {
      if(buffer->readonly) return;
 
      clear_lines_impl(buffer);
 }
 
-void ce_clear_lines_readonly(Buffer* buffer)
+void ce_clear_lines_readonly(Buffer_t* buffer)
 {
      if(!buffer->readonly) return;
 
      clear_lines_impl(buffer);
 }
 
-bool ce_point_on_buffer(const Buffer* buffer, const Point* location)
+bool ce_point_on_buffer(const Buffer_t* buffer, const Point* location)
 {
      if(location->y < 0 || location->x < 0){
           return false;
@@ -175,9 +175,9 @@ bool ce_point_on_buffer(const Buffer* buffer, const Point* location)
      return true;
 }
 
-bool insert_line_impl(Buffer* buffer, int64_t line, const char* string);
+bool insert_line_impl(Buffer_t* buffer, int64_t line, const char* string);
 
-bool insert_char_impl(Buffer* buffer, const Point* location, char c)
+bool insert_char_impl(Buffer_t* buffer, const Point* location, char c)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -229,21 +229,21 @@ bool insert_char_impl(Buffer* buffer, const Point* location, char c)
      return true;
 }
 
-bool ce_insert_char(Buffer* buffer, const Point* location, char c)
+bool ce_insert_char(Buffer_t* buffer, const Point* location, char c)
 {
      if(buffer->readonly) return false;
 
      return insert_char_impl(buffer, location, c);
 }
 
-bool ce_insert_char_readonly(Buffer* buffer, const Point* location, char c)
+bool ce_insert_char_readonly(Buffer_t* buffer, const Point* location, char c)
 {
      if(!buffer->readonly) return false;
 
      return insert_char_impl(buffer, location, c);
 }
 
-bool ce_append_char(Buffer* buffer, char c)
+bool ce_append_char(Buffer_t* buffer, char c)
 {
      Point end = {0, 0};
      if(buffer->line_count){
@@ -254,7 +254,7 @@ bool ce_append_char(Buffer* buffer, char c)
      return ce_insert_char(buffer, &end, c);
 }
 
-bool ce_append_char_readonly(Buffer* buffer, char c)
+bool ce_append_char_readonly(Buffer_t* buffer, char c)
 {
      Point end = {0, 0};
      if(buffer->line_count){
@@ -265,7 +265,7 @@ bool ce_append_char_readonly(Buffer* buffer, char c)
      return ce_insert_char_readonly(buffer, &end, c);
 }
 
-bool insert_string_impl(Buffer* buffer, const Point* location, const char* new_string)
+bool insert_string_impl(Buffer_t* buffer, const Point* location, const char* new_string)
 {
      if(location->x != 0 && location->y != 0){
           if(!ce_point_on_buffer(buffer, location)){
@@ -390,7 +390,7 @@ bool insert_string_impl(Buffer* buffer, const Point* location, const char* new_s
      return true;
 }
 
-bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_string)
+bool ce_insert_string(Buffer_t* buffer, const Point* location, const char* new_string)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -401,7 +401,7 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
      return insert_string_impl(buffer, location, new_string);
 }
 
-bool ce_insert_string_readonly(Buffer* buffer, const Point* location, const char* new_string)
+bool ce_insert_string_readonly(Buffer_t* buffer, const Point* location, const char* new_string)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -412,27 +412,27 @@ bool ce_insert_string_readonly(Buffer* buffer, const Point* location, const char
      return insert_string_impl(buffer, location, new_string);
 }
 
-bool ce_prepend_string(Buffer* buffer, int64_t line, const char* new_string)
+bool ce_prepend_string(Buffer_t* buffer, int64_t line, const char* new_string)
 {
      Point beginning_of_line = {0, line};
      return ce_insert_string(buffer, &beginning_of_line, new_string);
 }
 
-bool ce_append_string(Buffer* buffer, int64_t line, const char* new_string)
+bool ce_append_string(Buffer_t* buffer, int64_t line, const char* new_string)
 {
      Point end_of_line = {0, line};
      if(buffer->line_count > line) end_of_line.x = strlen(buffer->lines[line]);
      return ce_insert_string(buffer, &end_of_line, new_string);
 }
 
-bool ce_append_string_readonly(Buffer* buffer, int64_t line, const char* new_string)
+bool ce_append_string_readonly(Buffer_t* buffer, int64_t line, const char* new_string)
 {
      Point end_of_line = {0, line};
      if(buffer->line_count > line) end_of_line.x = strlen(buffer->lines[line]);
      return ce_insert_string_readonly(buffer, &end_of_line, new_string);
 }
 
-bool ce_remove_char(Buffer* buffer, const Point* location)
+bool ce_remove_char(Buffer_t* buffer, const Point* location)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -470,7 +470,7 @@ bool ce_remove_char(Buffer* buffer, const Point* location)
      return true;
 }
 
-char* ce_dupe_string(const Buffer* buffer, const Point* start, const Point* end)
+char* ce_dupe_string(const Buffer_t* buffer, const Point* start, const Point* end)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(start);
@@ -523,7 +523,7 @@ char* ce_dupe_string(const Buffer* buffer, const Point* start, const Point* end)
      return new_str;
 }
 
-char* ce_dupe_line(const Buffer* buffer, int64_t line)
+char* ce_dupe_line(const Buffer_t* buffer, int64_t line)
 {
      if(buffer->line_count <= line){
           ce_message("%s() specified line (%"PRId64") above buffer line count (%"PRId64")",
@@ -538,7 +538,7 @@ char* ce_dupe_line(const Buffer* buffer, int64_t line)
      return memcpy(duped_line, buffer->lines[line], len - 2);
 }
 
-char* ce_dupe_lines(const Buffer* buffer, int64_t start_line, int64_t end_line)
+char* ce_dupe_lines(const Buffer_t* buffer, int64_t start_line, int64_t end_line)
 {
      if(start_line < 0){
           ce_message("%s() specified start line (%"PRId64") less than 0",
@@ -597,7 +597,7 @@ char* ce_dupe_lines(const Buffer* buffer, int64_t start_line, int64_t end_line)
      return duped_line;
 }
 
-char* ce_dupe_buffer(const Buffer* buffer)
+char* ce_dupe_buffer(const Buffer_t* buffer)
 {
      Point start = {0, 0};
      Point end = {0, 0};
@@ -606,7 +606,7 @@ char* ce_dupe_buffer(const Buffer* buffer)
 }
 
 // return x delta between location and the located character 'c' if found. return -1 if not found
-int64_t ce_find_delta_to_char_forward_in_line(const Buffer* buffer, const Point* location, char c)
+int64_t ce_find_delta_to_char_forward_in_line(const Buffer_t* buffer, const Point* location, char c)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -620,7 +620,7 @@ int64_t ce_find_delta_to_char_forward_in_line(const Buffer* buffer, const Point*
 }
 
 // return -x delta between location and the located character 'c' if found. return -1 if not found
-int64_t ce_find_delta_to_char_backward_in_line(const Buffer* buffer, const Point* location, char c)
+int64_t ce_find_delta_to_char_backward_in_line(const Buffer_t* buffer, const Point* location, char c)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -634,7 +634,7 @@ int64_t ce_find_delta_to_char_backward_in_line(const Buffer* buffer, const Point
 }
 
 // returns the delta to the matching character; return success
-bool ce_find_delta_to_match(const Buffer* buffer, const Point* location, Point* delta)
+bool ce_find_delta_to_match(const Buffer_t* buffer, const Point* location, Point* delta)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -710,7 +710,7 @@ bool ce_find_delta_to_match(const Buffer* buffer, const Point* location, Point* 
      return false;
 }
 
-bool ce_find_match(const Buffer* buffer, const Point* location, Point* match)
+bool ce_find_match(const Buffer_t* buffer, const Point* location, Point* match)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -726,7 +726,7 @@ bool ce_find_match(const Buffer* buffer, const Point* location, Point* match)
 }
 
 // returns Point at the next matching string; return success
-bool ce_find_string(const Buffer* buffer, const Point* location, const char* search_str, Point* match, Direction direction)
+bool ce_find_string(const Buffer_t* buffer, const Point* location, const char* search_str, Point* match, Direction direction)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -752,13 +752,13 @@ bool ce_find_string(const Buffer* buffer, const Point* location, const char* sea
      return false;
 }
 
-void ce_move_cursor_to_beginning_of_line(const Buffer* buffer __attribute__((unused)), Point* cursor)
+void ce_move_cursor_to_beginning_of_line(const Buffer_t* buffer __attribute__((unused)), Point* cursor)
 {
      assert(ce_point_on_buffer(buffer, cursor));
      cursor->x = 0;
 }
 
-bool ce_move_cursor_to_soft_beginning_of_line(const Buffer* buffer, Point* cursor)
+bool ce_move_cursor_to_soft_beginning_of_line(const Buffer_t* buffer, Point* cursor)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
@@ -770,7 +770,7 @@ bool ce_move_cursor_to_soft_beginning_of_line(const Buffer* buffer, Point* curso
      return true;
 }
 
-bool ce_move_cursor_to_soft_end_of_line(const Buffer* buffer, Point* cursor)
+bool ce_move_cursor_to_soft_end_of_line(const Buffer_t* buffer, Point* cursor)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
@@ -790,7 +790,7 @@ int ce_ispunct(int c)
 
 // delta to move to the soft beginning of line (sbol)
 // if there is not a sbol, returns eol
-int64_t ce_find_delta_to_soft_beginning_of_line(const Buffer* buffer, const Point* cursor)
+int64_t ce_find_delta_to_soft_beginning_of_line(const Buffer_t* buffer, const Point* cursor)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
@@ -804,7 +804,7 @@ int64_t ce_find_delta_to_soft_beginning_of_line(const Buffer* buffer, const Poin
 
 // delta to move to the soft end of line (seol)
 // if there is not a seol, returns bol
-int64_t ce_find_delta_to_soft_end_of_line(const Buffer* buffer, const Point* cursor)
+int64_t ce_find_delta_to_soft_end_of_line(const Buffer_t* buffer, const Point* cursor)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
@@ -815,7 +815,7 @@ int64_t ce_find_delta_to_soft_end_of_line(const Buffer* buffer, const Point* cur
      return i - cursor->x;
 }
 
-bool ce_move_cursor_to_beginning_of_word(const Buffer* buffer, Point* cursor, bool punctuation_word_boundaries)
+bool ce_move_cursor_to_beginning_of_word(const Buffer_t* buffer, Point* cursor, bool punctuation_word_boundaries)
 {
      /* TODO: do we really care about CE_CHECK_PTR_ARG? */
      CE_CHECK_PTR_ARG(buffer);
@@ -842,7 +842,7 @@ bool ce_move_cursor_to_beginning_of_word(const Buffer* buffer, Point* cursor, bo
 }
 
 // return -1 on failure, delta to move right to the end of the word on success
-int64_t ce_find_delta_to_end_of_word(const Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
+int64_t ce_find_delta_to_end_of_word(const Buffer_t* buffer, const Point* location, bool punctuation_word_boundaries)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -870,7 +870,7 @@ int64_t ce_find_delta_to_end_of_word(const Buffer* buffer, const Point* location
 }
 
 // return -1 on failure, delta to move right to the beginning of the next word on success
-int64_t ce_find_delta_to_next_word(const Buffer* buffer, const Point* location, bool punctuation_word_boundaries)
+int64_t ce_find_delta_to_next_word(const Buffer_t* buffer, const Point* location, bool punctuation_word_boundaries)
 {
      // TODO: make this ce_move_cursor_to_next_word. Also, this function appears to be broken.
      // test case: word = blah // put the cursor on the d in word and hit w or put the cursor on = and hit w
@@ -891,7 +891,7 @@ int64_t ce_find_delta_to_next_word(const Buffer* buffer, const Point* location, 
      return cur_x - location->x;
 }
 
-bool ce_get_char(const Buffer* buffer, const Point* location, char* c)
+bool ce_get_char(const Buffer_t* buffer, const Point* location, char* c)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -904,7 +904,7 @@ bool ce_get_char(const Buffer* buffer, const Point* location, char* c)
      return true;
 }
 
-char ce_get_char_raw(const Buffer* buffer, const Point* location)
+char ce_get_char_raw(const Buffer_t* buffer, const Point* location)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -912,7 +912,7 @@ char ce_get_char_raw(const Buffer* buffer, const Point* location)
      return buffer->lines[location->y][location->x];
 }
 
-bool ce_set_char(Buffer* buffer, const Point* location, char c)
+bool ce_set_char(Buffer_t* buffer, const Point* location, char c)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -928,7 +928,7 @@ bool ce_set_char(Buffer* buffer, const Point* location, char c)
      return true;
 }
 
-bool insert_line_impl(Buffer* buffer, int64_t line, const char* string)
+bool insert_line_impl(Buffer_t* buffer, int64_t line, const char* string)
 {
      CE_CHECK_PTR_ARG(buffer);
 
@@ -973,7 +973,7 @@ bool insert_line_impl(Buffer* buffer, int64_t line, const char* string)
 
 
 // NOTE: passing NULL to string causes an empty line to be inserted
-bool ce_insert_line(Buffer* buffer, int64_t line, const char* string)
+bool ce_insert_line(Buffer_t* buffer, int64_t line, const char* string)
 {
      CE_CHECK_PTR_ARG(buffer);
 
@@ -982,7 +982,7 @@ bool ce_insert_line(Buffer* buffer, int64_t line, const char* string)
      return insert_line_impl(buffer, line, string);
 }
 
-bool ce_insert_line_readonly(Buffer* buffer, int64_t line, const char* string)
+bool ce_insert_line_readonly(Buffer_t* buffer, int64_t line, const char* string)
 {
      CE_CHECK_PTR_ARG(buffer);
 
@@ -991,7 +991,7 @@ bool ce_insert_line_readonly(Buffer* buffer, int64_t line, const char* string)
      return insert_line_impl(buffer, line, string);
 }
 
-bool ce_append_line(Buffer* buffer, const char* string)
+bool ce_append_line(Buffer_t* buffer, const char* string)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(string);
@@ -999,7 +999,7 @@ bool ce_append_line(Buffer* buffer, const char* string)
      return ce_insert_line(buffer, buffer->line_count, string);
 }
 
-bool ce_append_line_readonly(Buffer* buffer, const char* string)
+bool ce_append_line_readonly(Buffer_t* buffer, const char* string)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(string);
@@ -1007,13 +1007,13 @@ bool ce_append_line_readonly(Buffer* buffer, const char* string)
      return ce_insert_line_readonly(buffer, buffer->line_count, string);
 }
 
-bool ce_insert_newline(Buffer* buffer, int64_t line)
+bool ce_insert_newline(Buffer_t* buffer, int64_t line)
 {
      return ce_insert_line(buffer, line, NULL);
 }
 
 // appends line + 1 to line
-bool ce_join_line(Buffer* buffer, int64_t line){
+bool ce_join_line(Buffer_t* buffer, int64_t line){
      CE_CHECK_PTR_ARG(buffer);
 
      if(line >= buffer->line_count || line < 0){
@@ -1037,7 +1037,7 @@ bool ce_join_line(Buffer* buffer, int64_t line){
      return ce_remove_line(buffer, line+1);
 }
 
-bool ce_remove_line(Buffer* buffer, int64_t line)
+bool ce_remove_line(Buffer_t* buffer, int64_t line)
 {
      CE_CHECK_PTR_ARG(buffer);
 
@@ -1066,7 +1066,7 @@ bool ce_remove_line(Buffer* buffer, int64_t line)
      return true;
 }
 
-bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
+bool ce_remove_string(Buffer_t* buffer, const Point* location, int64_t length)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -1140,7 +1140,7 @@ bool ce_remove_string(Buffer* buffer, const Point* location, int64_t length)
      return true;
 }
 
-bool ce_save_buffer(Buffer* buffer, const char* filename)
+bool ce_save_buffer(Buffer_t* buffer, const char* filename)
 {
      // save file loaded
      FILE* file = fopen(filename, "w");
@@ -1410,7 +1410,7 @@ int set_color(Syntax syntax, bool highlighted)
 
 static const char non_printable_repr = '~';
 
-bool ce_draw_buffer(const Buffer* buffer, const Point* cursor,const Point* term_top_left,
+bool ce_draw_buffer(const Buffer_t* buffer, const Point* cursor,const Point* term_top_left,
                     const Point* term_bottom_right, const Point* buffer_top_left, const char* highlight_word)
 {
      CE_CHECK_PTR_ARG(buffer);
@@ -1774,7 +1774,7 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* cursor,const Point* term_
      return true;
 }
 
-BufferNode* ce_append_buffer_to_list(BufferNode* head, Buffer* buffer)
+BufferNode_t* ce_append_buffer_to_list(BufferNode_t* head, Buffer_t* buffer)
 {
      CE_CHECK_PTR_ARG(head);
      CE_CHECK_PTR_ARG(buffer);
@@ -1784,9 +1784,9 @@ BufferNode* ce_append_buffer_to_list(BufferNode* head, Buffer* buffer)
           head = head->next;
      }
 
-     BufferNode* new = malloc(sizeof(BufferNode));
+     BufferNode_t* new = malloc(sizeof(BufferNode_t));
      if(!new){
-          ce_message("%s() failed to alloc new BufferNode for '%s'", __FUNCTION__, buffer->filename);
+          ce_message("%s() failed to alloc new BufferNode_t for '%s'", __FUNCTION__, buffer->filename);
           return NULL;
      }
 
@@ -1797,12 +1797,12 @@ BufferNode* ce_append_buffer_to_list(BufferNode* head, Buffer* buffer)
      return new;
 }
 
-bool ce_remove_buffer_from_list(BufferNode* head, BufferNode** node)
+bool ce_remove_buffer_from_list(BufferNode_t* head, BufferNode_t** node)
 {
      CE_CHECK_PTR_ARG(head);
      CE_CHECK_PTR_ARG(node);
 
-     BufferNode* tmp = head;
+     BufferNode_t* tmp = head;
      while(head){
           if(head == *node){
                tmp->next = head->next;
@@ -1818,7 +1818,7 @@ bool ce_remove_buffer_from_list(BufferNode* head, BufferNode** node)
      return false;
 }
 
-bool ce_move_cursor_to_end_of_line(const Buffer* buffer, Point* cursor)
+bool ce_move_cursor_to_end_of_line(const Buffer_t* buffer, Point* cursor)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
@@ -1830,7 +1830,7 @@ bool ce_move_cursor_to_end_of_line(const Buffer* buffer, Point* cursor)
      return true;
 }
 
-bool ce_set_cursor(const Buffer* buffer, Point* cursor, const Point* location)
+bool ce_set_cursor(const Buffer_t* buffer, Point* cursor, const Point* location)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
@@ -1868,12 +1868,12 @@ bool ce_set_cursor(const Buffer* buffer, Point* cursor, const Point* location)
 }
 
 // modifies cursor and also returns a pointer to cursor for convience
-Point* ce_clamp_cursor(const Buffer* buffer, Point* cursor){
+Point* ce_clamp_cursor(const Buffer_t* buffer, Point* cursor){
      ce_move_cursor(buffer, cursor, (Point){0,0});
      return cursor;
 }
 
-bool ce_move_cursor(const Buffer* buffer, Point* cursor, Point delta)
+bool ce_move_cursor(const Buffer_t* buffer, Point* cursor, Point delta)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
@@ -1908,7 +1908,7 @@ bool ce_move_cursor(const Buffer* buffer, Point* cursor, Point delta)
      return true;
 }
 
-bool ce_advance_cursor(const Buffer* buffer, Point* cursor, int64_t delta)
+bool ce_advance_cursor(const Buffer_t* buffer, Point* cursor, int64_t delta)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
@@ -1950,7 +1950,7 @@ bool ce_advance_cursor(const Buffer* buffer, Point* cursor, int64_t delta)
      return true;
 }
 
-bool ce_move_cursor_to_end_of_file(const Buffer* buffer, Point* cursor)
+bool ce_move_cursor_to_end_of_file(const Buffer_t* buffer, Point* cursor)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
@@ -1965,7 +1965,7 @@ bool ce_move_cursor_to_end_of_file(const Buffer* buffer, Point* cursor)
      return true;
 }
 
-bool ce_move_cursor_to_beginning_of_file(const Buffer* buffer, Point* cursor)
+bool ce_move_cursor_to_beginning_of_file(const Buffer_t* buffer, Point* cursor)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
@@ -2012,14 +2012,14 @@ bool ce_follow_cursor(const Point* cursor, int64_t* left_column, int64_t* top_ro
      return true;
 }
 
-bool ce_commit_insert_char(BufferCommitNode** tail, const Point* start, const Point* undo_cursor, const Point* redo_cursor, char c)
+bool ce_commit_insert_char(BufferCommitNode_t** tail, const Point* start, const Point* undo_cursor, const Point* redo_cursor, char c)
 {
      CE_CHECK_PTR_ARG(tail);
      CE_CHECK_PTR_ARG(start);
      CE_CHECK_PTR_ARG(undo_cursor);
      CE_CHECK_PTR_ARG(redo_cursor);
 
-     BufferCommit change;
+     BufferCommit_t change;
      change.type = BCT_INSERT_CHAR;
      change.start = *start;
      change.undo_cursor = *undo_cursor;
@@ -2029,7 +2029,7 @@ bool ce_commit_insert_char(BufferCommitNode** tail, const Point* start, const Po
      return ce_commit_change(tail, &change);
 }
 
-bool ce_commit_insert_string(BufferCommitNode** tail, const Point* start, const Point* undo_cursor, const Point* redo_cursor,  char* string)
+bool ce_commit_insert_string(BufferCommitNode_t** tail, const Point* start, const Point* undo_cursor, const Point* redo_cursor,  char* string)
 {
      CE_CHECK_PTR_ARG(tail);
      CE_CHECK_PTR_ARG(start);
@@ -2037,7 +2037,7 @@ bool ce_commit_insert_string(BufferCommitNode** tail, const Point* start, const 
      CE_CHECK_PTR_ARG(redo_cursor);
      CE_CHECK_PTR_ARG(string);
 
-     BufferCommit change;
+     BufferCommit_t change;
      change.type = BCT_INSERT_STRING;
      change.start = *start;
      change.undo_cursor = *undo_cursor;
@@ -2047,14 +2047,14 @@ bool ce_commit_insert_string(BufferCommitNode** tail, const Point* start, const 
      return ce_commit_change(tail, &change);
 }
 
-bool ce_commit_remove_char(BufferCommitNode** tail, const Point* start, const Point* undo_cursor, const Point* redo_cursor, char c)
+bool ce_commit_remove_char(BufferCommitNode_t** tail, const Point* start, const Point* undo_cursor, const Point* redo_cursor, char c)
 {
      CE_CHECK_PTR_ARG(tail);
      CE_CHECK_PTR_ARG(start);
      CE_CHECK_PTR_ARG(undo_cursor);
      CE_CHECK_PTR_ARG(redo_cursor);
 
-     BufferCommit change;
+     BufferCommit_t change;
      change.type = BCT_REMOVE_CHAR;
      change.start = *start;
      change.undo_cursor = *undo_cursor;
@@ -2064,7 +2064,7 @@ bool ce_commit_remove_char(BufferCommitNode** tail, const Point* start, const Po
      return ce_commit_change(tail, &change);
 }
 
-bool ce_commit_remove_string(BufferCommitNode** tail, const Point* start, const Point* undo_cursor, const Point* redo_cursor,  char* string)
+bool ce_commit_remove_string(BufferCommitNode_t** tail, const Point* start, const Point* undo_cursor, const Point* redo_cursor,  char* string)
 {
      CE_CHECK_PTR_ARG(tail);
      CE_CHECK_PTR_ARG(start);
@@ -2072,7 +2072,7 @@ bool ce_commit_remove_string(BufferCommitNode** tail, const Point* start, const 
      CE_CHECK_PTR_ARG(redo_cursor);
      CE_CHECK_PTR_ARG(string);
 
-     BufferCommit change;
+     BufferCommit_t change;
      change.type = BCT_REMOVE_STRING;
      change.start = *start;
      change.undo_cursor = *undo_cursor;
@@ -2082,14 +2082,14 @@ bool ce_commit_remove_string(BufferCommitNode** tail, const Point* start, const 
      return ce_commit_change(tail, &change);
 }
 
-bool ce_commit_change_char(BufferCommitNode** tail, const Point* start, const Point* undo_cursor, const Point* redo_cursor, char c, char prev_c)
+bool ce_commit_change_char(BufferCommitNode_t** tail, const Point* start, const Point* undo_cursor, const Point* redo_cursor, char c, char prev_c)
 {
      CE_CHECK_PTR_ARG(tail);
      CE_CHECK_PTR_ARG(start);
      CE_CHECK_PTR_ARG(undo_cursor);
      CE_CHECK_PTR_ARG(redo_cursor);
 
-     BufferCommit change;
+     BufferCommit_t change;
      change.type = BCT_CHANGE_CHAR;
      change.start = *start;
      change.undo_cursor = *undo_cursor;
@@ -2100,7 +2100,7 @@ bool ce_commit_change_char(BufferCommitNode** tail, const Point* start, const Po
      return ce_commit_change(tail, &change);
 }
 
-bool ce_commit_change_string(BufferCommitNode** tail, const Point* start, const Point* undo_cursor, const Point* redo_cursor, char* new_string,  char* prev_string)
+bool ce_commit_change_string(BufferCommitNode_t** tail, const Point* start, const Point* undo_cursor, const Point* redo_cursor, char* new_string,  char* prev_string)
 {
      CE_CHECK_PTR_ARG(tail);
      CE_CHECK_PTR_ARG(start);
@@ -2109,7 +2109,7 @@ bool ce_commit_change_string(BufferCommitNode** tail, const Point* start, const 
      CE_CHECK_PTR_ARG(new_string);
      CE_CHECK_PTR_ARG(prev_string);
 
-     BufferCommit change;
+     BufferCommit_t change;
      change.type = BCT_CHANGE_STRING;
      change.start = *start;
      change.undo_cursor = *undo_cursor;
@@ -2120,7 +2120,7 @@ bool ce_commit_change_string(BufferCommitNode** tail, const Point* start, const 
      return ce_commit_change(tail, &change);
 }
 
-void free_commit(BufferCommitNode* node)
+void free_commit(BufferCommitNode_t* node)
 {
      if(node->commit.type == BCT_INSERT_STRING ||
         node->commit.type == BCT_REMOVE_STRING){
@@ -2133,12 +2133,12 @@ void free_commit(BufferCommitNode* node)
      free(node);
 }
 
-bool ce_commit_change(BufferCommitNode** tail, const BufferCommit* commit)
+bool ce_commit_change(BufferCommitNode_t** tail, const BufferCommit_t* commit)
 {
      CE_CHECK_PTR_ARG(tail);
      CE_CHECK_PTR_ARG(commit);
 
-     BufferCommitNode* new_node = calloc(1, sizeof(*new_node));
+     BufferCommitNode_t* new_node = calloc(1, sizeof(*new_node));
      if(!new_node){
           ce_message("%s() failed to allocate new change", __FUNCTION__);
           return false;
@@ -2157,10 +2157,10 @@ bool ce_commit_change(BufferCommitNode** tail, const BufferCommit* commit)
      return true;
 }
 
-bool ce_commits_free(BufferCommitNode* tail)
+bool ce_commits_free(BufferCommitNode_t* tail)
 {
      while(tail){
-          BufferCommitNode* tmp = tail;
+          BufferCommitNode_t* tmp = tail;
           tail = tail->next;
           free_commit(tmp);
      }
@@ -2168,7 +2168,7 @@ bool ce_commits_free(BufferCommitNode* tail)
      return true;
 }
 
-bool ce_commit_undo(Buffer* buffer, BufferCommitNode** tail, Point* cursor)
+bool ce_commit_undo(Buffer_t* buffer, BufferCommitNode_t** tail, Point* cursor)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(tail);
@@ -2179,12 +2179,12 @@ bool ce_commit_undo(Buffer* buffer, BufferCommitNode** tail, Point* cursor)
           return false;
      }
 
-     BufferCommitNode* undo_commit = *tail;
-     BufferCommit* commit = &undo_commit->commit;
+     BufferCommitNode_t* undo_commit = *tail;
+     BufferCommit_t* commit = &undo_commit->commit;
 
      switch(commit->type){
      default:
-          ce_message("unsupported BufferCommitType: %d", commit->type);
+          ce_message("unsupported BufferCommitType_t: %d", commit->type);
           return false;
      case BCT_NONE:
           ce_message("%s() empty undo history", __FUNCTION__);
@@ -2216,7 +2216,7 @@ bool ce_commit_undo(Buffer* buffer, BufferCommitNode** tail, Point* cursor)
      return true;
 }
 
-bool ce_commit_redo(Buffer* buffer, BufferCommitNode** tail, Point* cursor)
+bool ce_commit_redo(Buffer_t* buffer, BufferCommitNode_t** tail, Point* cursor)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(tail);
@@ -2234,12 +2234,12 @@ bool ce_commit_redo(Buffer* buffer, BufferCommitNode** tail, Point* cursor)
 
      *tail = (*tail)->next;
 
-     BufferCommitNode* undo_commit = *tail;
-     BufferCommit* commit = &undo_commit->commit;
+     BufferCommitNode_t* undo_commit = *tail;
+     BufferCommit_t* commit = &undo_commit->commit;
 
      switch(commit->type){
      default:
-          ce_message("unsupported BufferCommitType: %d", commit->type);
+          ce_message("unsupported BufferCommitType_t: %d", commit->type);
           return false;
      case BCT_INSERT_CHAR:
           ce_insert_char(buffer, &commit->start, commit->c);
@@ -2266,12 +2266,12 @@ bool ce_commit_redo(Buffer* buffer, BufferCommitNode** tail, Point* cursor)
      return true;
 }
 
-BufferView_t* ce_split_view(BufferView_t* view, Buffer* buffer, bool horizontal)
+Buffer_tView_t* ce_split_view(Buffer_tView_t* view, Buffer_t* buffer, bool horizontal)
 {
      CE_CHECK_PTR_ARG(view);
      CE_CHECK_PTR_ARG(buffer);
 
-     BufferView_t* itr = view;
+     Buffer_tView_t* itr = view;
 
      // loop to the end of the list
      if(horizontal){
@@ -2284,7 +2284,7 @@ BufferView_t* ce_split_view(BufferView_t* view, Buffer* buffer, bool horizontal)
           }
      }
 
-     BufferView_t* new_view = calloc(1, sizeof(*new_view));
+     Buffer_tView_t* new_view = calloc(1, sizeof(*new_view));
      if(!new_view){
           ce_message("%s() failed to allocate buffer view", __FUNCTION__);
           return NULL;
@@ -2304,29 +2304,29 @@ BufferView_t* ce_split_view(BufferView_t* view, Buffer* buffer, bool horizontal)
      return new_view;
 }
 
-BufferView_t* find_connecting_view(BufferView_t* start, BufferView_t* match)
+Buffer_tView_t* find_connecting_view(Buffer_tView_t* start, Buffer_tView_t* match)
 {
      if(start->next_horizontal){
           if(start->next_horizontal == match) return start;
-          BufferView_t* result = find_connecting_view(start->next_horizontal, match);
+          Buffer_tView_t* result = find_connecting_view(start->next_horizontal, match);
           if(result) return result;
      }
 
      if(start->next_vertical){
           if(start->next_vertical == match) return start;
-          BufferView_t* result = find_connecting_view(start->next_vertical, match);
+          Buffer_tView_t* result = find_connecting_view(start->next_vertical, match);
           if(result) return result;
      }
 
      return NULL;
 }
 
-bool ce_remove_view(BufferView_t** head, BufferView_t* view)
+bool ce_remove_view(Buffer_tView_t** head, Buffer_tView_t* view)
 {
      CE_CHECK_PTR_ARG(head);
      CE_CHECK_PTR_ARG(view);
 
-     BufferView_t* itr = *head;
+     Buffer_tView_t* itr = *head;
 
      if(view == *head){
           // patch up view pointers
@@ -2340,7 +2340,7 @@ bool ce_remove_view(BufferView_t** head, BufferView_t* view)
                    itr->next_vertical){
                // we have to choose which becomes head, so we choose vertical
                *head = itr->next_vertical;
-               BufferView_t* tmp = *head;
+               Buffer_tView_t* tmp = *head;
                // loop to the end of vertical's horizontal
                while(tmp->next_horizontal) tmp = tmp->next_horizontal;
                // tack on old head's next_horizontal to the end of new head's last horizontal
@@ -2368,7 +2368,7 @@ bool ce_remove_view(BufferView_t** head, BufferView_t* view)
                //       let's us not lose track of windows
                // bandage up the windows !
                if(view->next_vertical){
-                    BufferView_t* tmp = view->next_horizontal;
+                    Buffer_tView_t* tmp = view->next_horizontal;
                     // find the last vertical in new node
                     while(tmp->next_vertical) tmp = tmp->next_vertical;
                     // tack on the current view's next vertical to the end of the new node's verticals
@@ -2387,7 +2387,7 @@ bool ce_remove_view(BufferView_t** head, BufferView_t* view)
                // patch up view pointers
                itr->next_horizontal = view->next_vertical;
                if(view->next_horizontal){
-                    BufferView_t* itr = view->next_vertical;
+                    Buffer_tView_t* itr = view->next_vertical;
                     // find the last vertical in new node
                     while(itr->next_horizontal) itr = itr->next_horizontal;
                     // tack on the current view's next vertical to the end of the new node's verticals
@@ -2406,7 +2406,7 @@ bool ce_remove_view(BufferView_t** head, BufferView_t* view)
 }
 
 // NOTE: recursive function for free-ing splits
-bool free_buffer_views(BufferView_t* head)
+bool free_buffer_views(Buffer_tView_t* head)
 {
      CE_CHECK_PTR_ARG(head);
 
@@ -2418,7 +2418,7 @@ bool free_buffer_views(BufferView_t* head)
      return true;
 }
 
-bool ce_free_views(BufferView_t** head)
+bool ce_free_views(Buffer_tView_t** head)
 {
      CE_CHECK_PTR_ARG(head);
 
@@ -2430,12 +2430,12 @@ bool ce_free_views(BufferView_t** head)
      return true;
 }
 
-bool calc_vertical_views(BufferView_t* view, const Point* top_left, const Point* bottom_right, bool already_calculated);
+bool calc_vertical_views(Buffer_tView_t* view, const Point* top_left, const Point* bottom_right, bool already_calculated);
 
-bool calc_horizontal_views(BufferView_t* view, const Point* top_left, const Point* bottom_right, bool already_calculated)
+bool calc_horizontal_views(Buffer_tView_t* view, const Point* top_left, const Point* bottom_right, bool already_calculated)
 {
      int64_t view_count = 0;
-     BufferView_t* itr = view;
+     Buffer_tView_t* itr = view;
      while(itr){
           itr = itr->next_horizontal;
           view_count++;
@@ -2473,10 +2473,10 @@ bool calc_horizontal_views(BufferView_t* view, const Point* top_left, const Poin
      return true;
 }
 
-bool calc_vertical_views(BufferView_t* view, const Point* top_left, const Point* bottom_right, bool already_calculated)
+bool calc_vertical_views(Buffer_tView_t* view, const Point* top_left, const Point* bottom_right, bool already_calculated)
 {
      int64_t view_count = 0;
-     BufferView_t* itr = view;
+     Buffer_tView_t* itr = view;
      while(itr){
           itr = itr->next_vertical;
           view_count++;
@@ -2514,14 +2514,14 @@ bool calc_vertical_views(BufferView_t* view, const Point* top_left, const Point*
      return true;
 }
 
-bool ce_calc_views(BufferView_t* view, const Point *top_left, const Point* bottom_right)
+bool ce_calc_views(Buffer_tView_t* view, const Point *top_left, const Point* bottom_right)
 {
      CE_CHECK_PTR_ARG(view);
 
      return calc_horizontal_views(view, top_left, bottom_right, false);
 }
 
-void draw_view_bottom_right_borders(const BufferView_t* view)
+void draw_view_bottom_right_borders(const Buffer_tView_t* view)
 {
      attron(COLOR_PAIR(S_BORDERS));
 
@@ -2541,11 +2541,11 @@ void draw_view_bottom_right_borders(const BufferView_t* view)
      }
 }
 
-bool draw_vertical_views(const BufferView_t* view, bool already_drawn, const char* highlight_word);
+bool draw_vertical_views(const Buffer_tView_t* view, bool already_drawn, const char* highlight_word);
 
-bool draw_horizontal_views(const BufferView_t* view, bool already_drawn, const char* highlight_word)
+bool draw_horizontal_views(const Buffer_tView_t* view, bool already_drawn, const char* highlight_word)
 {
-     const BufferView_t* itr = view;
+     const Buffer_tView_t* itr = view;
      while(itr){
           // if this is the first view and we haven't already drawn it
           // or if this is any view other than the first view
@@ -2567,9 +2567,9 @@ bool draw_horizontal_views(const BufferView_t* view, bool already_drawn, const c
      return true;
 }
 
-bool draw_vertical_views(const BufferView_t* view, bool already_drawn, const char* highlight_word)
+bool draw_vertical_views(const Buffer_tView_t* view, bool already_drawn, const char* highlight_word)
 {
-     const BufferView_t* itr = view;
+     const Buffer_tView_t* itr = view;
      while(itr){
           // if this is the first view and we haven't already drawn it
           // or if this is any view other than the first view
@@ -2633,7 +2633,7 @@ bool ce_connect_border_lines(const Point* location)
      return true;
 }
 
-bool connect_borders(const BufferView_t* view)
+bool connect_borders(const Buffer_tView_t* view)
 {
      CE_CHECK_PTR_ARG(view);
 
@@ -2649,7 +2649,7 @@ bool connect_borders(const BufferView_t* view)
             ce_connect_border_lines(&bottom_right) && ce_connect_border_lines(&bottom_left);
 }
 
-bool ce_draw_views(const BufferView_t* view, const char* highlight_word)
+bool ce_draw_views(const Buffer_tView_t* view, const char* highlight_word)
 {
      CE_CHECK_PTR_ARG(view);
 
@@ -2661,14 +2661,14 @@ bool ce_draw_views(const BufferView_t* view, const char* highlight_word)
      return connect_borders(view);
 }
 
-BufferView_t* find_view_at_point(BufferView_t* view, const Point* point)
+Buffer_tView_t* find_view_at_point(Buffer_tView_t* view, const Point* point)
 {
      if(point->x >= view->top_left.x && point->x <= view->bottom_right.x &&
         point->y >= view->top_left.y && point->y <= view->bottom_right.y){
           return view;
      }
 
-     BufferView_t* result = NULL;
+     Buffer_tView_t* result = NULL;
 
      if(view->next_horizontal){
           result = find_view_at_point(view->next_horizontal, point);
@@ -2681,7 +2681,7 @@ BufferView_t* find_view_at_point(BufferView_t* view, const Point* point)
      return result;
 }
 
-BufferView_t* ce_find_view_at_point(BufferView_t* head, const Point* point)
+Buffer_tView_t* ce_find_view_at_point(Buffer_tView_t* head, const Point* point)
 {
      CE_CHECK_PTR_ARG(head);
      CE_CHECK_PTR_ARG(point);
@@ -2689,13 +2689,13 @@ BufferView_t* ce_find_view_at_point(BufferView_t* head, const Point* point)
      return find_view_at_point(head, point);
 }
 
-BufferView_t* buffer_in_view(BufferView_t* view, const Buffer* buffer)
+Buffer_tView_t* buffer_in_view(Buffer_tView_t* view, const Buffer_t* buffer)
 {
      if(view->buffer == buffer){
           return view;
      }
 
-     BufferView_t* result = NULL;
+     Buffer_tView_t* result = NULL;
 
      if(view->next_horizontal){
           result = buffer_in_view(view->next_horizontal, buffer);
@@ -2708,7 +2708,7 @@ BufferView_t* buffer_in_view(BufferView_t* view, const Buffer* buffer)
      return result;
 }
 
-BufferView_t* ce_buffer_in_view(BufferView_t* head, const Buffer* buffer)
+Buffer_tView_t* ce_buffer_in_view(Buffer_tView_t* head, const Buffer_t* buffer)
 {
      CE_CHECK_PTR_ARG(head);
      CE_CHECK_PTR_ARG(buffer);
@@ -2726,7 +2726,7 @@ void* ce_memrchr(const void* s, int c, size_t n)
      return NULL;
 }
 
-int64_t ce_compute_length(const Buffer* buffer, const Point* start, const Point* end)
+int64_t ce_compute_length(const Buffer_t* buffer, const Point* start, const Point* end)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(start);
@@ -2760,7 +2760,7 @@ int ce_iswordchar(int c)
 
 // given a buffer, two points, and a function ptr, return a range of characters that match defined criteria
 // NOTE: start is inclusive, end is inclusive
-bool ce_get_homogenous_adjacents(const Buffer* buffer, Point* start, Point* end, int (*is_homogenous)(int))
+bool ce_get_homogenous_adjacents(const Buffer_t* buffer, Point* start, Point* end, int (*is_homogenous)(int))
 {
      assert(memcmp(start, end, sizeof *start) == 0);
 
@@ -2785,7 +2785,7 @@ bool ce_get_homogenous_adjacents(const Buffer* buffer, Point* start, Point* end,
 }
 
 // word_start is inclusive, word_end is exclusive
-bool ce_get_word_at_location(const Buffer* buffer, const Point* location, Point* word_start, Point* word_end)
+bool ce_get_word_at_location(const Buffer_t* buffer, const Point* location, Point* word_start, Point* word_end)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
@@ -2812,7 +2812,7 @@ bool ce_get_word_at_location(const Buffer* buffer, const Point* location, Point*
      return true;
 }
 
-int64_t ce_get_indentation_for_next_line(const Buffer* buffer, const Point* location, int64_t tab_len)
+int64_t ce_get_indentation_for_next_line(const Buffer_t* buffer, const Point* location, int64_t tab_len)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);

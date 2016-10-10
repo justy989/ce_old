@@ -191,7 +191,7 @@ int main(int argc, char** argv)
      }
 
      // init message buffer
-     Buffer* message_buffer = malloc(sizeof(*message_buffer));
+     Buffer_t* message_buffer = malloc(sizeof(*message_buffer));
      if(!message_buffer){
           printf("failed to allocate message buffer: %s\n", strerror(errno));
           return -1;
@@ -205,7 +205,7 @@ int main(int argc, char** argv)
      message_buffer->modified = false;
 
      // init buffer list
-     BufferNode* buffer_list_head = malloc(sizeof(*buffer_list_head));
+     BufferNode_t* buffer_list_head = malloc(sizeof(*buffer_list_head));
      if(!buffer_list_head){
           printf("failed to allocate buffer list: %s\n", strerror(errno));
           return -1;
@@ -382,8 +382,8 @@ int main(int argc, char** argv)
 
      // free our buffers
      // TODO: I think we want to move this into the config
-     BufferNode* itr = buffer_list_head;
-     BufferNode* tmp;
+     BufferNode_t* itr = buffer_list_head;
+     BufferNode_t* tmp;
      while(itr){
           tmp = itr;
           itr = itr->next;

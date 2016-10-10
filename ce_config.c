@@ -12,12 +12,12 @@
 #define TAB_STRING "     "
 #define SCROLL_LINES 1
 
-const char* modified_string(Buffer* buffer)
+const char* modified_string(Buffer_t* buffer)
 {
      return buffer->modified ? "*" : "";
 }
 
-const char* readonly_string(Buffer* buffer)
+const char* readonly_string(Buffer_t* buffer)
 {
      return buffer->readonly ? " [RO]" : "";
 }
@@ -25,10 +25,10 @@ const char* readonly_string(Buffer* buffer)
 typedef struct{
      char** commands;
      int64_t command_count;
-     Buffer* output_buffer;
-     BufferNode* buffer_node_head;
-     BufferView_t* view_head;
-     BufferView_t* view_current;
+     Buffer_t* output_buffer;
+     BufferNode_t* buffer_node_head;
+     Buffer_tView_t* view_head;
+     Buffer_tView_t* view_current;
      int shell_command_input_fd;
      int shell_command_output_fd;
      void* user_data;
@@ -37,7 +37,7 @@ typedef struct{
 typedef struct{
      char** input;
      int64_t input_count;
-     Buffer* shell_command_buffer;
+     Buffer_t* shell_command_buffer;
      int shell_command_input_fd;
      int shell_command_output_fd;
 } ShellInputData;
@@ -57,7 +57,7 @@ int64_t count_digits(int64_t n)
      return count;
 }
 
-void view_drawer(const BufferNode* head, void* user_data);
+void view_drawer(const BufferNode_t* head, void* user_data);
 
 typedef struct BackspaceNode{
      char c;
@@ -225,10 +225,10 @@ typedef struct YankNode{
 } YankNode;
 
 typedef struct TabView{
-     BufferView_t* view_head;
-     BufferView_t* view_current;
-     BufferView_t* view_previous;
-     BufferView_t* view_input_save;
+     Buffer_tView_t* view_head;
+     Buffer_tView_t* view_current;
+     Buffer_tView_t* view_previous;
+     Buffer_tView_t* view_input_save;
      struct TabView* next;
 } TabView;
 
@@ -280,9 +280,9 @@ typedef struct{
      bool input;
      const char* input_message;
      char input_key;
-     Buffer* shell_command_buffer; // Allocate so it can be part of the buffer list and get free'd at the end
-     Buffer input_buffer;
-     Buffer buffer_list_buffer;
+     Buffer_t* shell_command_buffer; // Allocate so it can be part of the buffer list and get free'd at the end
+     Buffer_t input_buffer;
+     Buffer_t buffer_list_buffer;
      int64_t last_command_buffer_jump;
      int last_key;
      uint64_t command_multiplier;
@@ -303,7 +303,7 @@ typedef struct{
      struct YankNode* yank_head;
      TabView* tab_head;
      TabView* tab_current;
-     BufferView_t* view_input;
+     Buffer_tView_t* view_input;
      InputHistory shell_command_history;
      InputHistory shell_input_history;
      InputHistory search_history;
@@ -320,10 +320,10 @@ typedef struct MarkNode{
 } MarkNode;
 
 typedef struct{
-     BufferCommitNode* commit_tail;
+     BufferCommitNode_t* commit_tail;
      BackspaceNode* backspace_head;
      struct MarkNode* mark_head;
-} BufferState;
+} Buffer_tState;
 
 YankNode* find_yank(ConfigState* config, char reg_char){
      YankNode* itr = config->yank_head;
@@ -352,7 +352,7 @@ void add_yank(ConfigState* config, char reg_char, const char* yank_text, YankMod
      node->mode = mode;
 }
 
-Point* find_mark(BufferState* buffer, char mark_char)
+Point* find_mark(Buffer_tState* buffer, char mark_char)
 {
      MarkNode* itr = buffer->mark_head;
      while(itr != NULL){
@@ -362,7 +362,7 @@ Point* find_mark(BufferState* buffer, char mark_char)
      return NULL;
 }
 
-void add_mark(BufferState* buffer, char mark_char, const Point* location)
+void add_mark(Buffer_tState* buffer, char mark_char, const Point* location)
 {
      Point* mark_location = find_mark(buffer, mark_char);
      if(!mark_location){
@@ -375,14 +375,14 @@ void add_mark(BufferState* buffer, char mark_char, const Point* location)
      *mark_location = *location;
 }
 
-bool initialize_buffer(Buffer* buffer){
-     BufferState* buffer_state = calloc(1, sizeof(*buffer_state));
+bool initialize_buffer(Buffer_t* buffer){
+     Buffer_tState* buffer_state = calloc(1, sizeof(*buffer_state));
      if(!buffer_state){
           ce_message("failed to allocate buffer state.");
           return false;
      }
 
-     BufferCommitNode* tail = calloc(1, sizeof(*tail));
+     BufferCommitNode_t* tail = calloc(1, sizeof(*tail));
      if(!tail){
           ce_message("failed to allocate commit history for buffer");
           free(buffer_state);
@@ -407,8 +407,8 @@ char* str_from_file_stream(FILE* file){
      return str;
 }
 
-Buffer* new_buffer_from_string(BufferNode* head, const char* name, const char* str){
-     Buffer* buffer = calloc(1, sizeof(*buffer));
+Buffer_t* new_buffer_from_string(BufferNode_t* head, const char* name, const char* str){
+     Buffer_t* buffer = calloc(1, sizeof(*buffer));
      if(!buffer){
           ce_message("failed to allocate buffer");
           return NULL;
@@ -431,7 +431,7 @@ Buffer* new_buffer_from_string(BufferNode* head, const char* name, const char* s
           ce_load_string(buffer, str);
      }
 
-     BufferNode* new_buffer_node = ce_append_buffer_to_list(head, buffer);
+     BufferNode_t* new_buffer_node = ce_append_buffer_to_list(head, buffer);
      if(!new_buffer_node){
           free(buffer->name);
           free(buffer->user_data);
@@ -442,9 +442,9 @@ Buffer* new_buffer_from_string(BufferNode* head, const char* name, const char* s
      return buffer;
 }
 
-BufferNode* new_buffer_from_file(BufferNode* head, const char* filename)
+BufferNode_t* new_buffer_from_file(BufferNode_t* head, const char* filename)
 {
-     Buffer* buffer = calloc(1, sizeof(*buffer));
+     Buffer_t* buffer = calloc(1, sizeof(*buffer));
      if(!buffer){
           ce_message("failed to allocate buffer");
           return NULL;
@@ -460,7 +460,7 @@ BufferNode* new_buffer_from_file(BufferNode* head, const char* filename)
           free(buffer);
      }
 
-     BufferNode* new_buffer_node = ce_append_buffer_to_list(head, buffer);
+     BufferNode_t* new_buffer_node = ce_append_buffer_to_list(head, buffer);
      if(!new_buffer_node){
           free(buffer->filename);
           free(buffer->user_data);
@@ -484,19 +484,19 @@ void enter_insert_mode(ConfigState* config_state, Point* cursor)
      config_state->original_start_insert = *cursor;
 }
 
-void enter_visual_range_mode(ConfigState* config_state, BufferView_t* buffer_view)
+void enter_visual_range_mode(ConfigState* config_state, Buffer_tView_t* buffer_view)
 {
      config_state->vim_mode = VM_VISUAL_RANGE;
      config_state->visual_start = buffer_view->cursor;
 }
 
-void enter_visual_line_mode(ConfigState* config_state, BufferView_t* buffer_view)
+void enter_visual_line_mode(ConfigState* config_state, Buffer_tView_t* buffer_view)
 {
      config_state->vim_mode = VM_VISUAL_LINE;
      config_state->visual_start = buffer_view->cursor;
 }
 
-void commit_insert_mode_changes(ConfigState* config_state, Buffer* buffer, BufferState* buffer_state, Point* cursor, Point* end_cursor)
+void commit_insert_mode_changes(ConfigState* config_state, Buffer_t* buffer, Buffer_tState* buffer_state, Point* cursor, Point* end_cursor)
 {
      if(config_state->start_insert.x == cursor->x &&
         config_state->start_insert.y == cursor->y &&
@@ -552,13 +552,13 @@ void clear_keys(ConfigState* config_state)
 }
 
 // location is {left_column, top_line} for the view
-void scroll_view_to_location(BufferView_t* buffer_view, const Point* location){
+void scroll_view_to_location(Buffer_tView_t* buffer_view, const Point* location){
      // TODO: we should be able to scroll the view above our first line
      buffer_view->left_column = (location->x >= 0) ? location->x : 0;
      buffer_view->top_row = (location->y >= 0) ? location->y : 0;
 }
 
-void center_view(BufferView_t* view)
+void center_view(Buffer_tView_t* view)
 {
      int64_t view_height = view->bottom_right.y - view->top_left.y;
      Point location = (Point) {0, view->cursor.y - (view_height / 2)};
@@ -629,8 +629,8 @@ void input_cancel(ConfigState* config_state)
 
 typedef struct {
      const char* search_filename;
-     BufferNode* head;
-     BufferNode* new_node;
+     BufferNode_t* head;
+     BufferNode_t* new_node;
 } NftwState;
 __thread NftwState nftw_state;
 
@@ -644,9 +644,9 @@ int nftw_find_file(const char* fpath, const struct stat *sb, int typeflag, struc
      return FTW_CONTINUE;
 }
 
-Buffer* open_file_buffer(BufferNode* head, const char* filename)
+Buffer_t* open_file_buffer(BufferNode_t* head, const char* filename)
 {
-     BufferNode* itr = head;
+     BufferNode_t* itr = head;
      while(itr){
           if(!strcmp(itr->buffer->name, filename)){
                return itr->buffer; // already open
@@ -655,7 +655,7 @@ Buffer* open_file_buffer(BufferNode* head, const char* filename)
      }
 
      if(access(filename, F_OK) == 0){
-          BufferNode* node = new_buffer_from_file(head, filename);
+          BufferNode_t* node = new_buffer_from_file(head, filename);
           if(node) return node->buffer;
      }
 
@@ -671,7 +671,7 @@ Buffer* open_file_buffer(BufferNode* head, const char* filename)
      return NULL;
 }
 
-bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** argv, void** user_data)
+bool initializer(BufferNode_t* head, Point* terminal_dimensions, int argc, char** argv, void** user_data)
 {
      // NOTE: need to set these in this module
      g_terminal_dimensions = terminal_dimensions;
@@ -718,7 +718,7 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
      bool found_shell_command_buffer = false;
 
      // if we reload, the shell command buffer may already exist, don't recreate it
-     BufferNode* itr = head;
+     BufferNode_t* itr = head;
      while(itr){
           if(strcmp(itr->buffer->name, "shell_output") == 0){
                found_shell_command_buffer = true;
@@ -734,7 +734,7 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
           config_state->shell_command_buffer->readonly = true;
           initialize_buffer(config_state->shell_command_buffer);
           ce_alloc_lines(config_state->shell_command_buffer, 1);
-          BufferNode* new_buffer_node = ce_append_buffer_to_list(head, config_state->shell_command_buffer);
+          BufferNode_t* new_buffer_node = ce_append_buffer_to_list(head, config_state->shell_command_buffer);
           if(!new_buffer_node){
                ce_message("failed to add shell command buffer to list");
                return false;
@@ -754,7 +754,7 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
      config_state->tab_current->view_current = config_state->tab_current->view_head;
 
      for(int i = 0; i < argc; ++i){
-          BufferNode* node = new_buffer_from_file(head, argv[i]);
+          BufferNode_t* node = new_buffer_from_file(head, argv[i]);
 
           // if we loaded a file, set the view to point at the file
           if(i == 0 && node) config_state->tab_current->view_current->buffer = node->buffer;
@@ -817,11 +817,11 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
      return true;
 }
 
-bool destroyer(BufferNode* head, void* user_data)
+bool destroyer(BufferNode_t* head, void* user_data)
 {
      while(head){
-          BufferState* buffer_state = head->buffer->user_data;
-          BufferCommitNode* itr = buffer_state->commit_tail;
+          Buffer_tState* buffer_state = head->buffer->user_data;
+          BufferCommitNode_t* itr = buffer_state->commit_tail;
           while(itr->prev) itr = itr->prev;
           ce_commits_free(itr);
           free(buffer_state);
@@ -848,8 +848,8 @@ bool destroyer(BufferNode* head, void* user_data)
      // input buffer
      {
           ce_free_buffer(&config_state->input_buffer);
-          BufferState* buffer_state = config_state->input_buffer.user_data;
-          BufferCommitNode* itr = buffer_state->commit_tail;
+          Buffer_tState* buffer_state = config_state->input_buffer.user_data;
+          BufferCommitNode_t* itr = buffer_state->commit_tail;
           while(itr->prev) itr = itr->prev;
           ce_commits_free(itr);
 
@@ -878,7 +878,7 @@ bool destroyer(BufferNode* head, void* user_data)
      return true;
 }
 
-void find_command(int command_key, int find_char, Buffer* buffer, Point* cursor)
+void find_command(int command_key, int find_char, Buffer_t* buffer, Point* cursor)
 {
      switch(command_key){
      case 'f':
@@ -942,7 +942,7 @@ typedef enum{
 //              - MOVEMENT_CONTINUE: a portion of a generic movement has been provided, and this function should be
 //                                   called again once another key is available
 //              - MOVEMENT_INVALID:  the movement provided by the user is not a generic movement
-movement_state_t try_generic_movement(ConfigState* config_state, Buffer* buffer, Point* cursor, Point* movement_start, Point* movement_end)
+movement_state_t try_generic_movement(ConfigState* config_state, Buffer_t* buffer, Point* cursor, Point* movement_start, Point* movement_end)
 {
      *movement_start = *movement_end = *cursor;
 
@@ -1209,20 +1209,20 @@ bool is_movement_buffer_full(ConfigState* config_state)
      return n_movement_keys == max_movement_keys;
 }
 
-void scroll_view_to_last_line(BufferView_t* view)
+void scroll_view_to_last_line(Buffer_tView_t* view)
 {
      view->top_row = view->buffer->line_count - (view->bottom_right.y - view->top_left.y);
      if(view->top_row < 0) view->top_row = 0;
 }
 
 // NOTE: clear commits then create the initial required entry to restart
-void reset_buffer_commits(BufferCommitNode** tail)
+void reset_buffer_commits(BufferCommitNode_t** tail)
 {
-     BufferCommitNode* node = *tail;
+     BufferCommitNode_t* node = *tail;
      while(node->prev) node = node->prev;
      ce_commits_free(node);
 
-     BufferCommitNode* new_tail = calloc(1, sizeof(*new_tail));
+     BufferCommitNode_t* new_tail = calloc(1, sizeof(*new_tail));
      if(!new_tail){
           ce_message("failed to allocate commit history for buffer");
           return;
@@ -1232,8 +1232,8 @@ void reset_buffer_commits(BufferCommitNode** tail)
 }
 
 // NOTE: modify last_jump if we succeed
-bool goto_file_destination_in_buffer(BufferNode* head, Buffer* buffer, int64_t line, BufferView_t* head_view,
-                                     BufferView_t* view, int64_t* last_jump)
+bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64_t line, Buffer_tView_t* head_view,
+                                     Buffer_tView_t* view, int64_t* last_jump)
 {
      if(!buffer->line_count) return false;
 
@@ -1279,7 +1279,7 @@ bool goto_file_destination_in_buffer(BufferNode* head, Buffer* buffer, int64_t l
 
      if(!all_digits) return false;
 
-     Buffer* new_buffer = open_file_buffer(head, file_tmp);
+     Buffer_t* new_buffer = open_file_buffer(head, file_tmp);
      if(new_buffer){
           view->buffer = new_buffer;
           Point dst = {0, atoi(line_number_tmp) - 1}; // line numbers are 1 indexed
@@ -1312,7 +1312,7 @@ bool goto_file_destination_in_buffer(BufferNode* head, Buffer* buffer, int64_t l
           }
 
           center_view(view);
-          BufferView_t* command_view = ce_buffer_in_view(head_view, buffer);
+          Buffer_tView_t* command_view = ce_buffer_in_view(head_view, buffer);
           if(command_view) command_view->top_row = line;
           *last_jump = line;
           return true;
@@ -1322,9 +1322,9 @@ bool goto_file_destination_in_buffer(BufferNode* head, Buffer* buffer, int64_t l
 }
 
 // TODO: rather than taking in config_state, I'd like to take in only the parts it needs, if it's too much, config_state is fine
-void jump_to_next_shell_command_file_destination(BufferNode* head, ConfigState* config_state, bool forwards)
+void jump_to_next_shell_command_file_destination(BufferNode_t* head, ConfigState* config_state, bool forwards)
 {
-     Buffer* command_buffer = config_state->shell_command_buffer;
+     Buffer_t* command_buffer = config_state->shell_command_buffer;
      int64_t lines_checked = 0;
      int64_t delta = forwards ? 1 : -1;
      for(int64_t i = config_state->last_command_buffer_jump + delta; lines_checked < command_buffer->line_count;
@@ -1340,14 +1340,14 @@ void jump_to_next_shell_command_file_destination(BufferNode* head, ConfigState* 
                // NOTE: change the cursor, so when you go back to that buffer, your cursor is on the line we last jumped to
                command_buffer->cursor.x = 0;
                command_buffer->cursor.y = i;
-               BufferView_t* command_view = ce_buffer_in_view(config_state->tab_current->view_head, command_buffer);
+               Buffer_tView_t* command_view = ce_buffer_in_view(config_state->tab_current->view_head, command_buffer);
                if(command_view) command_view->cursor = command_buffer->cursor;
                break;
           }
      }
 }
 
-bool commit_input_to_history(Buffer* input_buffer, InputHistory* history)
+bool commit_input_to_history(Buffer_t* input_buffer, InputHistory* history)
 {
      if(input_buffer->line_count){
           char* saved = ce_dupe_buffer(input_buffer);
@@ -1364,7 +1364,7 @@ bool commit_input_to_history(Buffer* input_buffer, InputHistory* history)
      return true;
 }
 
-void view_follow_cursor(BufferView_t* current_view)
+void view_follow_cursor(Buffer_tView_t* current_view)
 {
      ce_follow_cursor(&current_view->cursor, &current_view->left_column, &current_view->top_row,
                       current_view->bottom_right.x - current_view->top_left.x,
@@ -1373,9 +1373,9 @@ void view_follow_cursor(BufferView_t* current_view)
                       current_view->bottom_right.y == (g_terminal_dimensions->y - 2));
 }
 
-void split_view(BufferView_t* head_view, BufferView_t* current_view, bool horizontal)
+void split_view(Buffer_tView_t* head_view, Buffer_tView_t* current_view, bool horizontal)
 {
-     BufferView_t* new_view = ce_split_view(current_view, current_view->buffer, horizontal);
+     Buffer_tView_t* new_view = ce_split_view(current_view, current_view->buffer, horizontal);
      if(new_view){
           Point top_left = {0, 0};
           Point bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 2}; // account for statusbar
@@ -1387,7 +1387,7 @@ void split_view(BufferView_t* head_view, BufferView_t* current_view, bool horizo
      }
 }
 
-void handle_mouse_event(ConfigState* config_state, Buffer* buffer, BufferState* buffer_state, BufferView_t* buffer_view, Point* cursor)
+void handle_mouse_event(ConfigState* config_state, Buffer_t* buffer, Buffer_tState* buffer_state, Buffer_tView_t* buffer_view, Point* cursor)
 {
      MEVENT event;
      if(getmouse(&event) == OK){
@@ -1489,14 +1489,14 @@ void handle_mouse_event(ConfigState* config_state, Buffer* buffer, BufferState* 
      }
 }
 
-void half_page_up(BufferView_t* view)
+void half_page_up(Buffer_tView_t* view)
 {
      int64_t view_height = view->bottom_right.y - view->top_left.y;
      Point delta = { 0, -view_height / 2 };
      ce_move_cursor(view->buffer, &view->cursor, delta);
 }
 
-void half_page_down(BufferView_t* view)
+void half_page_down(Buffer_tView_t* view)
 {
      int64_t view_height = view->bottom_right.y - view->top_left.y;
      Point delta = { 0, view_height / 2 };
@@ -1505,7 +1505,7 @@ void half_page_down(BufferView_t* view)
 
 bool scroll_z_cursor(ConfigState* config_state)
 {
-     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Buffer_tView_t* buffer_view = config_state->tab_current->view_current;
      Point* cursor = &buffer_view->cursor;
      Point location;
      switch(config_state->movement_keys[0]){
@@ -1531,7 +1531,7 @@ bool scroll_z_cursor(ConfigState* config_state)
 
 void yank_visual_range(ConfigState* config_state)
 {
-     Buffer* buffer = config_state->tab_current->view_current->buffer;
+     Buffer_t* buffer = config_state->tab_current->view_current->buffer;
      Point* cursor = &config_state->tab_current->view_current->cursor;
      Point start = config_state->visual_start;
      Point end = {cursor->x, cursor->y};
@@ -1547,7 +1547,7 @@ void yank_visual_range(ConfigState* config_state)
 
 void yank_visual_lines(ConfigState* config_state)
 {
-     Buffer* buffer = config_state->tab_current->view_current->buffer;
+     Buffer_t* buffer = config_state->tab_current->view_current->buffer;
      Point* cursor = &config_state->tab_current->view_current->cursor;
      int64_t start_line = config_state->visual_start.y;
      int64_t end_line = cursor->y;
@@ -1568,8 +1568,8 @@ void yank_visual_lines(ConfigState* config_state)
 void remove_visual_range(ConfigState* config_state)
 {
      Point* cursor = &config_state->tab_current->view_current->cursor;
-     Buffer* buffer = config_state->tab_current->view_current->buffer;
-     BufferState* buffer_state = buffer->user_data;
+     Buffer_t* buffer = config_state->tab_current->view_current->buffer;
+     Buffer_tState* buffer_state = buffer->user_data;
      Point start = config_state->visual_start;
      Point end = {cursor->x, cursor->y};
 
@@ -1592,8 +1592,8 @@ void remove_visual_range(ConfigState* config_state)
 void remove_visual_lines(ConfigState* config_state)
 {
      Point* cursor = &config_state->tab_current->view_current->cursor;
-     Buffer* buffer = config_state->tab_current->view_current->buffer;
-     BufferState* buffer_state = buffer->user_data;
+     Buffer_t* buffer = config_state->tab_current->view_current->buffer;
+     Buffer_tState* buffer_state = buffer->user_data;
      int64_t start_line = config_state->visual_start.y;
      int64_t end_line = cursor->y;
 
@@ -1620,7 +1620,7 @@ void remove_visual_lines(ConfigState* config_state)
 
 bool iterate_history_input(ConfigState* config_state, bool previous)
 {
-     BufferState* buffer_state = config_state->view_input->buffer->user_data;
+     Buffer_tState* buffer_state = config_state->view_input->buffer->user_data;
      InputHistory* history = history_from_input_key(config_state);
      if(!history) return false;
 
@@ -1652,7 +1652,7 @@ bool iterate_history_input(ConfigState* config_state, bool previous)
 
 void switch_to_view_at_point(ConfigState* config_state, const Point* point)
 {
-     BufferView_t* next_view = ce_find_view_at_point(config_state->tab_current->view_head, point);
+     Buffer_tView_t* next_view = ce_find_view_at_point(config_state->tab_current->view_head, point);
      if(next_view){
           // save view and cursor
           config_state->tab_current->view_previous = config_state->tab_current->view_current;
@@ -1662,7 +1662,7 @@ void switch_to_view_at_point(ConfigState* config_state, const Point* point)
      }
 }
 
-void update_buffer_list_buffer(ConfigState* config_state, const BufferNode* head)
+void update_buffer_list_buffer(ConfigState* config_state, const BufferNode_t* head)
 {
      char buffer_info[BUFSIZ];
      config_state->buffer_list_buffer.readonly = false;
@@ -1672,7 +1672,7 @@ void update_buffer_list_buffer(ConfigState* config_state, const BufferNode* head
      int64_t max_buffer_lines = 0;
      int64_t max_name_len = 0;
      int64_t buffer_count = 0;
-     const BufferNode* itr = head;
+     const BufferNode_t* itr = head;
      while(itr){
           if(max_buffer_lines < itr->buffer->line_count) max_buffer_lines = itr->buffer->line_count;
           int64_t name_len = strlen(itr->buffer->name);
@@ -1709,7 +1709,7 @@ void update_buffer_list_buffer(ConfigState* config_state, const BufferNode* head
      config_state->buffer_list_buffer.readonly = true;
 }
 
-Point get_cursor_on_terminal(const Point* cursor, const BufferView_t* buffer_view)
+Point get_cursor_on_terminal(const Point* cursor, const Buffer_tView_t* buffer_view)
 {
      Point p = {cursor->x - buffer_view->left_column + buffer_view->top_left.x,
                 cursor->y - buffer_view->top_row + buffer_view->top_left.y};
@@ -1760,10 +1760,10 @@ pid_t bidirectional_popen(const char* cmd, int* in_fd, int* out_fd)
      return pid;
 }
 
-void redraw_if_shell_command_buffer_in_view(BufferView_t* view_head, Buffer* shell_command_buffer,
-                                            BufferNode* head_buffer_node, void* user_data)
+void redraw_if_shell_command_buffer_in_view(Buffer_tView_t* view_head, Buffer_t* shell_command_buffer,
+                                            BufferNode_t* head_buffer_node, void* user_data)
 {
-     BufferView_t* command_view = ce_buffer_in_view(view_head, shell_command_buffer);
+     Buffer_tView_t* command_view = ce_buffer_in_view(view_head, shell_command_buffer);
      if(command_view && shell_command_buffer->line_count > command_view->top_row &&
          shell_command_buffer->line_count <
         (command_view->top_row + (command_view->bottom_right.y - command_view->top_left.y))){
@@ -1926,14 +1926,14 @@ void* send_shell_input(void* data)
      return NULL;
 }
 
-void indent_line(Buffer* buffer, BufferCommitNode** commit_tail, int64_t line, Point* cursor)
+void indent_line(Buffer_t* buffer, BufferCommitNode_t** commit_tail, int64_t line, Point* cursor)
 {
      Point loc = {0, line};
      ce_insert_string(buffer, &loc, TAB_STRING);
      ce_commit_insert_string(commit_tail, &loc, cursor, cursor, strdup(TAB_STRING));
 }
 
-void unindent_line(Buffer* buffer, BufferCommitNode** commit_tail, int64_t line, Point* cursor)
+void unindent_line(Buffer_t* buffer, BufferCommitNode_t** commit_tail, int64_t line, Point* cursor)
 {
      // find whitespace prepending line
      int64_t whitespace_count = 0;
@@ -1954,12 +1954,12 @@ void unindent_line(Buffer* buffer, BufferCommitNode** commit_tail, int64_t line,
 
 }
 
-bool key_handler(int key, BufferNode* head, void* user_data)
+bool key_handler(int key, BufferNode_t* head, void* user_data)
 {
      ConfigState* config_state = user_data;
-     Buffer* buffer = config_state->tab_current->view_current->buffer;
-     BufferState* buffer_state = buffer->user_data;
-     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Buffer_t* buffer = config_state->tab_current->view_current->buffer;
+     Buffer_tState* buffer_state = buffer->user_data;
+     Buffer_tView_t* buffer_view = config_state->tab_current->view_current;
      Point* cursor = &config_state->tab_current->view_current->cursor;
      config_state->last_key = key;
      Point movement_start, movement_end;
@@ -2677,7 +2677,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     get_terminal_view_rect(config_state->tab_head, &top_left, &bottom_right);
 
                     ce_calc_views(config_state->tab_current->view_head, &top_left, &bottom_right);
-                    BufferView_t* new_view = ce_find_view_at_point(config_state->tab_current->view_head, &save_cursor_on_terminal);
+                    Buffer_tView_t* new_view = ce_find_view_at_point(config_state->tab_current->view_head, &save_cursor_on_terminal);
                     if(new_view){
                          config_state->tab_current->view_current = new_view;
                     }else{
@@ -2871,7 +2871,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     strncpy(filename, &buffer->lines[cursor->y][cursor->x], word_len);
                     filename[word_len] = '\0';
 
-                    Buffer* file_buffer = open_file_buffer(head, filename);
+                    Buffer_t* file_buffer = open_file_buffer(head, filename);
                     if(file_buffer) buffer_view->buffer = file_buffer;
                } break;
                }
@@ -2953,7 +2953,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          // just grab the first line and load it as a file
                          commit_input_to_history(config_state->view_input->buffer, &config_state->load_file_history);
                          for(int64_t i = 0; i < config_state->view_input->buffer->line_count; ++i){
-                              Buffer* new_buffer = open_file_buffer(head, config_state->view_input->buffer->lines[i]);
+                              Buffer_t* new_buffer = open_file_buffer(head, config_state->view_input->buffer->lines[i]);
                               if(i == 0 && new_buffer){
                                    config_state->tab_current->view_current->buffer = new_buffer;
                                    config_state->tab_current->view_current->cursor = (Point){0, 0};
@@ -2986,10 +2986,10 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          commit_input_to_history(config_state->view_input->buffer, &config_state->shell_command_history);
 
                          // if we found an existing command buffer, clear it and use it
-                         Buffer* command_buffer = config_state->shell_command_buffer;
+                         Buffer_t* command_buffer = config_state->shell_command_buffer;
                          command_buffer->cursor = (Point){0, 0};
                          config_state->last_command_buffer_jump = 0;
-                         BufferView_t* command_view = ce_buffer_in_view(config_state->tab_current->view_head, command_buffer);
+                         Buffer_tView_t* command_view = ce_buffer_in_view(config_state->tab_current->view_head, command_buffer);
 
                          if(command_view){
                               command_view->cursor = (Point){0, 0};
@@ -3084,7 +3084,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                               pthread_join(config_state->shell_input_thread, NULL);
                          }
 
-                         Buffer* input_buffer = config_state->view_input->buffer;
+                         Buffer_t* input_buffer = config_state->view_input->buffer;
                          commit_input_to_history(input_buffer, &config_state->shell_input_history);
 
                          ShellInputData* shell_input_data = malloc(sizeof(*shell_input_data));
@@ -3122,7 +3122,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                }else if(config_state->tab_current->view_current->buffer == &config_state->buffer_list_buffer){
                     int64_t line = cursor->y - 1; // account for buffer list row header
                     if(line < 0) break;
-                    BufferNode* itr = head;
+                    BufferNode_t* itr = head;
 
                     while(line > 0){
                          itr = itr->next;
@@ -3136,7 +3136,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     config_state->tab_current->view_current->cursor = itr->buffer->cursor;
                     center_view(config_state->tab_current->view_current);
                }else if(config_state->tab_current->view_current->buffer == config_state->shell_command_buffer){
-                    BufferView_t* view_to_change = config_state->tab_current->view_current;
+                    Buffer_tView_t* view_to_change = config_state->tab_current->view_current;
                     if(config_state->tab_current->view_previous) view_to_change = config_state->tab_current->view_previous;
 
                     if(goto_file_destination_in_buffer(head, config_state->shell_command_buffer, cursor->y,
@@ -3432,14 +3432,14 @@ search:
           break;
           case 5: // Ctrl + e
           {
-               Buffer* new_buffer = new_buffer_from_string(head, "unnamed", NULL);
+               Buffer_t* new_buffer = new_buffer_from_string(head, "unnamed", NULL);
                ce_alloc_lines(new_buffer, 1);
                config_state->tab_current->view_current->buffer = new_buffer;
                *cursor = (Point){0, 0};
           } break;
           case 1: // Ctrl + a
                if(config_state->input) break;
-               input_start(config_state, "Save Buffer As", key);
+               input_start(config_state, "Save Buffer_t As", key);
           break;
           case 9: // Ctrl + i
                if(config_state->input) break;
@@ -3492,9 +3492,9 @@ search:
      return true;
 }
 
-void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, VimMode vim_mode, int last_key)
+void draw_view_statuses(Buffer_tView_t* view, Buffer_tView_t* current_view, VimMode vim_mode, int last_key)
 {
-     Buffer* buffer = view->buffer;
+     Buffer_t* buffer = view->buffer;
      if(view->next_horizontal) draw_view_statuses(view->next_horizontal, current_view, vim_mode, last_key);
      if(view->next_vertical) draw_view_statuses(view->next_vertical, current_view, vim_mode, last_key);
 
@@ -3523,7 +3523,7 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, VimMode 
      mvprintw(view->bottom_right.y, (view->bottom_right.x - (digits_in_line + 3)), " %"PRId64" ", line);
 }
 
-void view_drawer(const BufferNode* head, void* user_data)
+void view_drawer(const BufferNode_t* head, void* user_data)
 {
      // grab the draw lock so we can draw
      if(pthread_mutex_trylock(&draw_lock) != 0) return;
@@ -3539,8 +3539,8 @@ void view_drawer(const BufferNode* head, void* user_data)
 
      (void)(head);
      ConfigState* config_state = user_data;
-     Buffer* buffer = config_state->tab_current->view_current->buffer;
-     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Buffer_t* buffer = config_state->tab_current->view_current->buffer;
+     Buffer_tView_t* buffer_view = config_state->tab_current->view_current;
      Point* cursor = &config_state->tab_current->view_current->cursor;
 
      Point top_left;

@@ -1356,6 +1356,8 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* cursor,const Point* term_
      CE_CHECK_PTR_ARG(term_bottom_right);
      CE_CHECK_PTR_ARG(buffer_top_left);
 
+     if(!buffer->line_count) return true;
+
      if(!g_terminal_dimensions){
           ce_message("%s() unknown terminal dimensions", __FUNCTION__);
           return false;
@@ -2534,7 +2536,6 @@ bool ce_draw_views(const BufferView* view, const char* highlight_word)
           return false;
      }
 
-     standend();
      attron(COLOR_PAIR(S_BORDERS));
      return connect_borders(view);
 }

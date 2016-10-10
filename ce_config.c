@@ -790,7 +790,7 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
      init_pair(S_BORDERS, COLOR_WHITE, COLOR_BACKGROUND);
 
      init_pair(S_TAB_NAME, COLOR_WHITE, COLOR_BACKGROUND);
-     init_pair(S_CURRENT_TAB_NAME, COLOR_FOREGROUND, COLOR_BACKGROUND);
+     init_pair(S_CURRENT_TAB_NAME, COLOR_CYAN, COLOR_BACKGROUND);
 
      init_pair(S_VIEW_STATUS, COLOR_CYAN, COLOR_BACKGROUND);
      init_pair(S_INPUT_STATUS, COLOR_RED, COLOR_BACKGROUND);
@@ -1232,6 +1232,8 @@ void reset_buffer_commits(BufferCommitNode** tail)
 bool goto_file_destination_in_buffer(BufferNode* head, Buffer* buffer, int64_t line, BufferView* head_view,
                                      BufferView* view, int64_t* last_jump)
 {
+     if(!buffer->line_count) return false;
+
      assert(line >= 0);
      assert(line < buffer->line_count);
 
@@ -3541,8 +3543,6 @@ void view_drawer(const BufferNode* head, void* user_data)
           buffer->highlight_end = (Point){-1, 0};
      }
 
-     standend();
-
      const char* search = NULL;
      if(config_state->input && (config_state->input_key == '/' || config_state->input_key == '?') &&
         config_state->view_input->buffer->lines && config_state->view_input->buffer->lines[0][0]){
@@ -3578,11 +3578,9 @@ void view_drawer(const BufferNode* head, void* user_data)
           ce_draw_views(config_state->view_input, NULL);
      }
 
-     standend();
      draw_view_statuses(config_state->tab_current->view_head, config_state->tab_current->view_current,
                         config_state->vim_mode, config_state->last_key);
 
-     standend();
      if(config_state->input){
           draw_view_statuses(config_state->view_input, config_state->tab_current->view_current,
                              config_state->vim_mode, config_state->last_key);
@@ -3591,7 +3589,6 @@ void view_drawer(const BufferNode* head, void* user_data)
      // draw tab line
      if(config_state->tab_head->next){
           // clear tab line with inverses
-          standend();
           move(0, 0);
           attron(COLOR_PAIR(S_BORDERS));
           for(int i = 0; i < g_terminal_dimensions->x; ++i) addch(ACS_HLINE);
@@ -3627,8 +3624,6 @@ void view_drawer(const BufferNode* head, void* user_data)
                tab_itr = tab_itr->next;
           }
      }
-
-     standend();
 
      // reset the cursor
      Point terminal_cursor = get_cursor_on_terminal(cursor, buffer_view);

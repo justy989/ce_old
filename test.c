@@ -2197,17 +2197,17 @@ TEST(move_cursor_to_beginning_of_line)
 
 void segv_handler(int signo)
 {
-	void *array[10];
-	size_t size;
-	char **strings;
-	size_t i;
+     void *array[10];
+     size_t size;
+     char **strings;
+     size_t i;
 
-	size = backtrace(array, 10);
-	strings = backtrace_symbols(array, size);
+     size = backtrace(array, 10);
+     strings = backtrace_symbols(array, size);
 
-	printf("SIGSEV\n");
-	printf("%zd frames.\n", size);
-	for (i = 0; i < size; i++) printf ("%s\n", strings[i]);
+     printf("SIGSEV\n");
+     printf("%zd frames.\n", size);
+     for (i = 0; i < size; i++) printf ("%s\n", strings[i]);
      printf("\n");
 
      exit(signo);

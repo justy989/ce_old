@@ -1163,53 +1163,10 @@ bool ce_save_buffer(Buffer* buffer, const char* filename)
      return true;
 }
 
-int64_t ce_is_c_keyword(const char* line, int64_t start_offset)
+int64_t match_keyword(const char* line, int64_t start_offset, const char** keywords, int64_t keyword_count)
 {
-     static const char* keywords [] = {
-          "__thread",
-          "auto",
-          "bool",
-          "break",
-          "case",
-          "char",
-          "const",
-          "continue",
-          "default",
-          "do",
-          "double",
-          "else",
-          "enum",
-          "extern",
-          "false",
-          "float",
-          "for",
-          "goto",
-          "if",
-          "inline",
-          "int",
-          "register",
-          "return",
-          "short",
-          "signed",
-          "sizeof",
-          "static",
-          "struct",
-          "switch",
-          "true",
-          "typedef",
-          "typeof",
-          "union",
-          "unsigned",
-          "void",
-          "volatile",
-          "while",
-     };
-
-     static const int keyword_count = sizeof(keywords) / sizeof(keywords[0]);
-
      int64_t highlighting_left = 0;
      for(int64_t k = 0; k < keyword_count; ++k){
-          // NOTE: I wish we could strlen at compile time ! Can we?
           int64_t keyword_len = strlen(keywords[k]);
           if(strncmp(line + start_offset, keywords[k], keyword_len) == 0){
                char pre_char = 0;
@@ -1225,6 +1182,109 @@ int64_t ce_is_c_keyword(const char* line, int64_t start_offset)
      }
 
      return highlighting_left;
+}
+
+int64_t ce_is_c_keyword(const char* line, int64_t start_offset)
+{
+     static const char* keywords [] = {
+          "__thread",
+          "auto",
+          "case",
+          "default",
+          "do",
+          "else",
+          "enum",
+          "extern",
+          "false",
+          "for",
+          "if",
+          "inline",
+          "register",
+          "sizeof",
+          "static",
+          "struct",
+          "switch",
+          "true",
+          "typedef",
+          "typeof",
+          "union",
+          "volatile",
+          "while",
+     };
+
+     static const int keyword_count = sizeof(keywords) / sizeof(keywords[0]);
+
+     return match_keyword(line, start_offset, keywords, keyword_count);
+}
+
+int64_t ce_is_c_control(const char* line, int64_t start_offset)
+{
+     static const char* keywords [] = {
+          "break",
+          "const",
+          "continue",
+          "goto",
+          "return",
+
+          // c++
+          "try",
+          "catch",
+     };
+
+     static const int keyword_count = sizeof(keywords) / sizeof(keywords[0]);
+
+     return match_keyword(line, start_offset, keywords, keyword_count);
+}
+
+int iscidentifier(int c)
+{
+     return isalnum(c) || c == '_';
+}
+
+int64_t ce_is_c_typename(const char* line, int64_t start_offset)
+{
+     // NOTE: simple rules for now:
+     //       -if it is one of the c standard type names
+     //       -ends in _t
+
+     static const char* keywords [] = {
+          "bool",
+          "char",
+          "double",
+          "float",
+          "int",
+          "long",
+          "short",
+          "signed",
+          "unsigned",
+          "void",
+     };
+
+     static const int keyword_count = sizeof(keywords) / sizeof(keywords[0]);
+
+     int64_t match = match_keyword(line, start_offset, keywords, keyword_count);
+     if(match) return match;
+
+     if(start_offset > 0 && iscidentifier(line[start_offset - 1])) return 0; // weed out middle of words
+
+     // try valid identifier ending in '_t'
+     const char* itr = line + start_offset;
+     int64_t count = 0;
+     for(char ch = *itr; iscidentifier(ch); ++itr){
+          ch = *itr;
+          count++;
+     }
+
+     if(!count) return 0;
+
+     // we overcounted on the last iteration!
+     count--;
+
+     // reset itr before checking the final 2 characters
+     itr = line + start_offset;
+     if(count >= 2 && itr[count-2] == '_' && itr[count-1] == 't') return count;
+
+     return 0;
 }
 
 int64_t ce_is_preprocessor(const char* line, int64_t start_offset)
@@ -1504,21 +1564,42 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* cursor,const Point* term_
                     }else{
                          if(!inside_string){
                               if(!inside_comment && !inside_multiline_comment){
-                                   int64_t keyword_left = ce_is_c_keyword(buffer_line, c);
+
+                                   int64_t keyword_left = ce_is_c_control(buffer_line, c);
                                    if(keyword_left){
                                         color_left = keyword_left;
-                                        highlight_color = S_KEYWORD;
-                                   }else{
+                                        highlight_color = S_CONTROL;
+                                   }
+
+                                   if(!keyword_left){
+                                        keyword_left = ce_is_c_typename(buffer_line, c);
+                                        if(keyword_left){
+                                             color_left = keyword_left;
+                                             highlight_color = S_TYPE;
+                                        }
+                                   }
+
+                                   if(!keyword_left){
+                                        keyword_left = ce_is_c_keyword(buffer_line, c);
+                                        if(keyword_left){
+                                             color_left = keyword_left;
+                                             highlight_color = S_KEYWORD;
+                                        }
+                                   }
+
+                                   if(!keyword_left){
                                         keyword_left = ce_is_caps_var(buffer_line, c);
                                         if(keyword_left){
                                              color_left = keyword_left;
                                              highlight_color = S_CONSTANT;
-                                        }else{
-                                             keyword_left = ce_is_preprocessor(buffer_line, c);
-                                             if(keyword_left){
-                                                  color_left = keyword_left;
-                                                  highlight_color = S_PREPROCESSOR;
-                                             }
+                                        }
+                                   }
+
+                                   if(!keyword_left){
+                                        keyword_left = ce_is_preprocessor(buffer_line, c);
+                                        if(keyword_left){
+                                             color_left = keyword_left;
+                                             highlight_color = S_PREPROCESSOR;
                                         }
                                    }
                               }
@@ -1573,16 +1654,33 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* cursor,const Point* term_
                     if(color_left == 0){
                          if(!inside_string){
                               if(!inside_comment && !inside_multiline_comment){
-                                   color_left = ce_is_c_keyword(line_to_print, c);
-                              }
-
-                              if(color_left){
-                                   fg_color = set_color(S_KEYWORD, inside_highlight);
-                              }else{
-                                   color_left = ce_is_caps_var(line_to_print, c);
+                                   color_left = ce_is_c_control(line_to_print, c);
                                    if(color_left){
-                                        fg_color = set_color(S_CONSTANT, inside_highlight);
-                                   }else{
+                                        fg_color = set_color(S_CONTROL, inside_highlight);
+                                   }
+
+                                   if(!color_left){
+                                        color_left = ce_is_c_typename(line_to_print, c);
+                                        if(color_left){
+                                             fg_color = set_color(S_TYPE, inside_highlight);
+                                        }
+                                   }
+
+                                   if(!color_left){
+                                        color_left = ce_is_c_keyword(line_to_print, c);
+                                        if(color_left){
+                                             fg_color = set_color(S_KEYWORD, inside_highlight);
+                                        }
+                                   }
+
+                                   if(!color_left){
+                                        color_left = ce_is_caps_var(line_to_print, c);
+                                        if(color_left){
+                                             fg_color = set_color(S_CONSTANT, inside_highlight);
+                                        }
+                                   }
+
+                                   if(!color_left){
                                         color_left = ce_is_preprocessor(line_to_print, c);
                                         if(color_left){
                                              fg_color = set_color(S_PREPROCESSOR, inside_highlight);

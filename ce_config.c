@@ -1933,17 +1933,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
      config_state->last_key = key;
      Point movement_start, movement_end;
 
-     // try to join any running shell command threads
-     if(config_state->shell_command_thread != 0 &&
-        pthread_tryjoin_np(config_state->shell_command_thread, NULL) == 0){
-          config_state->shell_command_thread = 0;
-     }
-
-     if(config_state->shell_input_thread != 0 &&
-        pthread_tryjoin_np(config_state->shell_input_thread, NULL) == 0){
-          config_state->shell_input_thread = 0;
-     }
-
      if(config_state->vim_mode == VM_INSERT){
           assert(config_state->command_key == '\0');
           switch(key){
@@ -2921,9 +2910,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          }
 
                          if(config_state->shell_command_thread){
-                              if(pthread_cancel(config_state->shell_command_thread) != 0){
-                                   break;
-                              }
+                              pthread_cancel(config_state->shell_command_thread);
                               pthread_join(config_state->shell_command_thread, NULL);
                          }
 
@@ -3024,9 +3011,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          if(!shell_command_data.shell_command_input_fd) break;
 
                          if(config_state->shell_input_thread){
-                              if(pthread_cancel(config_state->shell_input_thread) != 0){
-                                   break;
-                              }
+                              pthread_cancel(config_state->shell_input_thread);
                               pthread_join(config_state->shell_input_thread, NULL);
                          }
 

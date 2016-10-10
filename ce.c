@@ -917,6 +917,8 @@ bool ce_set_char(Buffer* buffer, const Point* location, char c)
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
 
+     if(buffer->readonly) return false;
+
      if(!ce_point_on_buffer(buffer, location)) return false;
 
      if(c == NEWLINE) return ce_insert_string(buffer, location, "\n");

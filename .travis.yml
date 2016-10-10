@@ -6,7 +6,7 @@ compiler: clang
 sudo: required
 # install gdb and allow cores to dump
 install:
- - if [[ -n $(uname -a | grep Darwin) ]]; then /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"; fi
+ - if [[ -n $(uname -a | grep Darwin) ]]; then sudo /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"; fi
  - if [[ -n $(uname -a | grep Darwin) ]]; then sudo brew install gdb; else sudo apt-get install gdb; fi
  - ulimit -c unlimited -S
  - make all

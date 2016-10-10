@@ -171,11 +171,11 @@ typedef void ce_view_drawer (const BufferNode_t*, void*);
 
 // Buffer_t-List Manipulation Functions
 BufferNode_t* ce_append_buffer_to_list (BufferNode_t* head, Buffer_t* buffer); // NOTE: we may want to consider taking tail rather than head
-bool ce_remove_buffer_from_list      (BufferNode_t* head, BufferNode_t** node);
+bool ce_remove_buffer_from_list        (BufferNode_t* head, BufferNode_t** node);
 
 
 // Buffer_t-View Manipulation Functions
-BufferView_t* ce_split_view         (BufferView_t* view, Buffer_t* buffer, bool horizontal);
+BufferView_t* ce_split_view       (BufferView_t* view, Buffer_t* buffer, bool horizontal);
 bool ce_remove_view               (BufferView_t** head, BufferView_t* view);
 bool ce_calc_views                (BufferView_t* head, const Point_t* top_left, const Point_t* top_right);
 bool ce_draw_views                (const BufferView_t* head, const char* highlight_word);
@@ -253,7 +253,7 @@ bool ce_get_homogenous_adjacents (const Buffer_t* buffer, Point_t* start, Point_
 
 
 // Cursor Movement Functions
-Point_t* ce_clamp_cursor                          (const Buffer_t* buffer, Point_t* cursor);
+Point_t* ce_clamp_cursor                        (const Buffer_t* buffer, Point_t* cursor);
 bool   ce_advance_cursor                        (const Buffer_t* buffer, Point_t* cursor, int64_t delta);
 bool   ce_move_cursor                           (const Buffer_t* buffer, Point_t* cursor, Point_t delta);
 bool   ce_set_cursor                            (const Buffer_t* buffer, Point_t* cursor, const Point_t* location);
@@ -283,11 +283,13 @@ bool ce_commit_change        (BufferCommitNode_t** tail, const BufferCommit_t* c
 bool ce_commits_free         (BufferCommitNode_t* tail);
 
 // Syntax
-int64_t ce_is_c_keyword(const char* line, int64_t start_offset);
-int64_t ce_is_preprocessor(const char* line, int64_t start_offset);
-CommentType_t ce_is_comment(const char* line, int64_t start_offset);
-void ce_is_string_literal(const char* line, int64_t start_offset, int64_t line_len, bool* inside_string, char* last_quote_char);
-int64_t ce_is_caps_var(const char* line, int64_t start_offset);
+int64_t ce_is_c_keyword     (const char* line, int64_t start_offset);
+int64_t ce_is_c_contrl      (const char* line, int64_t start_offset);
+int64_t ce_is_preprocessor  (const char* line, int64_t start_offset);
+int64_t ce_is_c_typename    (const char* line, int64_t start_offset);
+CommentType_t ce_is_comment (const char* line, int64_t start_offset);
+void ce_is_string_literal   (const char* line, int64_t start_offset, int64_t line_len, bool* inside_string, char* last_quote_char);
+int64_t ce_is_caps_var      (const char* line, int64_t start_offset);
 
 // Logging Functions
 #define ce_message(...) ({fprintf(stderr,__VA_ARGS__);\

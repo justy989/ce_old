@@ -1463,10 +1463,6 @@ TEST(sanity_split_view)
 
      Buffer buffers[4] = {};
 
-     for(int i = 0; i < 4; ++i){
-          ASSERT(ce_alloc_lines(buffers + i, 1));
-     }
-
      head->buffer = buffers + 0;
 
      // split views
@@ -1530,10 +1526,6 @@ TEST(sanity_split_view)
 
      // free views
      ASSERT(ce_free_views(&head));
-
-     for(int i = 0; i < 4; ++i){
-          ce_free_buffer(buffers + i);
-     }
 }
 
 // TODO: this function should point us to the last character. not the newline.

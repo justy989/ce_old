@@ -1458,7 +1458,7 @@ TEST(sanity_buffer_list)
 
 TEST(sanity_split_view)
 {
-     BufferView* head = calloc(1, sizeof(*head));
+     BufferView_t* head = calloc(1, sizeof(*head));
      ASSERT(head);
 
      Buffer buffers[4] = {};
@@ -1466,13 +1466,13 @@ TEST(sanity_split_view)
      head->buffer = buffers + 0;
 
      // split views
-     BufferView* horizontal_split_view = ce_split_view(head, buffers + 1, true);
+     BufferView_t* horizontal_split_view = ce_split_view(head, buffers + 1, true);
      ASSERT(head->next_horizontal == horizontal_split_view);
 
-     BufferView* vertical_split_view = ce_split_view(head, buffers + 2, false);
+     BufferView_t* vertical_split_view = ce_split_view(head, buffers + 2, false);
      ASSERT(head->next_vertical == vertical_split_view);
 
-     BufferView* new_horizontal_split_view = ce_split_view(vertical_split_view, buffers + 3, true);
+     BufferView_t* new_horizontal_split_view = ce_split_view(vertical_split_view, buffers + 3, true);
      ASSERT(vertical_split_view->next_horizontal == new_horizontal_split_view);
 
      // calc views
@@ -1502,7 +1502,7 @@ TEST(sanity_split_view)
 
      // find view at point
      Point find_point = {7, 9};
-     BufferView* found_view = ce_find_view_at_point(head, &find_point);
+     BufferView_t* found_view = ce_find_view_at_point(head, &find_point);
      EXPECT(found_view == new_horizontal_split_view);
 
      // find view by buffer

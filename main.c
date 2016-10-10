@@ -42,23 +42,16 @@ WANTS:
 
 #include "ce.h"
 
-typedef struct{
-     int64_t start_line;
-     int last_key;
-     bool split;
-     Point_t cursor;
-} DefaultConfigState;
-
-typedef struct Config{
+typedef struct Config_t{
      char* path;
      void* so_handle;
      ce_initializer* initializer;
      ce_destroyer* destroyer;
      ce_key_handler* key_handler;
      ce_view_drawer* view_drawer;
-} Config;
+} Config_t;
 
-bool config_open(Config* config, const char* path)
+bool config_open(Config_t* config, const char* path)
 {
      ce_message("load config: '%s'", path);
 
@@ -87,14 +80,14 @@ bool config_open(Config* config, const char* path)
      return true;
 }
 
-void config_close(Config* config)
+void config_close(Config_t* config)
 {
      if(!config->so_handle) return;
      free(config->path);
      if(dlclose(config->so_handle)) ce_message("dlclose() failed with error %s", dlerror());
 }
 
-bool config_revert(Config* config, const char* filepath, const char* stable_config_contents, size_t stable_config_size)
+bool config_revert(Config_t* config, const char* filepath, const char* stable_config_contents, size_t stable_config_size)
 {
      ce_message("overwriting '%s' back to stable config", filepath);
      FILE* file = fopen(filepath, "wb");
@@ -222,7 +215,7 @@ int main(int argc, char** argv)
      bool done = false;
      bool stable_sigsegvd = false;
 
-     Config current_config;
+     Config_t current_config;
      if(!config_open(&current_config, config)){
           return -1;
      }

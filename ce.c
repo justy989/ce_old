@@ -1727,7 +1727,7 @@ bool ce_move_cursor_to_end_of_line(const Buffer* buffer, Point* cursor)
 
      if(!ce_point_on_buffer(buffer, cursor)) return false;
 
-     cursor->x = strlen(buffer->lines[cursor->y])-1; 
+     cursor->x = strlen(buffer->lines[cursor->y])-1;
      if(cursor->x < 0) cursor->x = 0;
      return true;
 }
@@ -1737,6 +1737,14 @@ bool ce_set_cursor(const Buffer* buffer, Point* cursor, const Point* location)
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
      CE_CHECK_PTR_ARG(location);
+
+     assert(cursor->x >= 0);
+     assert(cursor->y >= 0);
+
+     if(!buffer->line_count){
+          *cursor = (Point){0, 0};
+          return false;
+     }
 
      Point dst = *location;
 
@@ -1771,6 +1779,11 @@ bool ce_move_cursor(const Buffer* buffer, Point* cursor, Point delta)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
+
+     if(!buffer->line_count){
+          *cursor = (Point){0, 0};
+          return true;
+     }
 
      Point dst = *cursor;
      dst.x += delta.x;
@@ -1871,6 +1884,9 @@ bool ce_follow_cursor(const Point* cursor, int64_t* left_column, int64_t* top_ro
      CE_CHECK_PTR_ARG(cursor);
      CE_CHECK_PTR_ARG(top_row);
 
+     assert(cursor->x >= 0);
+     assert(cursor->y >= 0);
+
      if(!at_terminal_width_edge) view_width--;
      if(!at_terminal_height_edge) view_height--;
 
@@ -1891,6 +1907,9 @@ bool ce_follow_cursor(const Point* cursor, int64_t* left_column, int64_t* top_ro
           right_column = cursor->x;
           *left_column = right_column - view_width;
      }
+
+     if(*top_row < 0) *top_row = 0;
+     if(*left_column < 0) *left_column = 0;
 
      return true;
 }
@@ -2436,6 +2455,8 @@ bool draw_horizontal_views(const BufferView* view, bool already_drawn, const cha
           if(((!already_drawn && itr == view) || (itr != view)) && itr->next_vertical){
                draw_vertical_views(itr, true, highlight_word);
           }else{
+               assert(itr->left_column >= 0);
+               assert(itr->top_row >= 0);
                Point buffer_top_left = {itr->left_column, itr->top_row};
                ce_draw_buffer(itr->buffer, &itr->cursor, &itr->top_left, &itr->bottom_right, &buffer_top_left,
                               highlight_word);

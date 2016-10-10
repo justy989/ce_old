@@ -528,8 +528,7 @@ void commit_insert_mode_changes(ConfigState* config_state, Buffer* buffer, Buffe
                     backspace_free(&buffer_state->backspace_head);
                }else{
                     // mixture of inserts and backspaces
-                    Point last_inserted_char = {cursor->x, cursor->y};
-                    ce_advance_cursor(buffer, &last_inserted_char, -1);
+                    Point last_inserted_char = {end_cursor->x, end_cursor->y};
                     ce_commit_change_string(&buffer_state->commit_tail,
                                             &config_state->start_insert,
                                             &config_state->original_start_insert,
@@ -2083,7 +2082,15 @@ bool key_handler(int key, BufferNode* head, void* user_data)
 
                          if(can_unindent){
                               cursor->x -= n_deletes;
-                              ce_remove_string(buffer, cursor, n_deletes);
+                              if(ce_remove_string(buffer, cursor, n_deletes)){
+                                   if(config_state->start_insert.y == cursor->y &&
+                                      config_state->start_insert.x > cursor->x){
+                                        config_state->start_insert.x = cursor->x;
+                                        for(int i = 0; i < n_deletes; ++i){
+                                             backspace_push(&buffer_state->backspace_head, ' ');
+                                        }
+                                   }
+                              }
                          }
                     }
 

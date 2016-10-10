@@ -3,7 +3,10 @@ os:
  - linux
  - osx
 compiler: clang
+sudo: required
 install:
+ - /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+ - sudo brew install gdb
  - ulimit -c unlimited -S
  - make all
 script: make test

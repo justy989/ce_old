@@ -1923,6 +1923,34 @@ void* send_shell_input(void* data)
      return NULL;
 }
 
+void indent_line(Buffer* buffer, BufferCommitNode** commit_tail, int64_t line, Point* cursor)
+{
+     Point loc = {0, line};
+     ce_insert_string(buffer, &loc, TAB_STRING);
+     ce_commit_insert_string(commit_tail, &loc, cursor, cursor, strdup(TAB_STRING));
+}
+
+void unindent_line(Buffer* buffer, BufferCommitNode** commit_tail, int64_t line, Point* cursor)
+{
+     // find whitespace prepending line
+     int64_t whitespace_count = 0;
+     const int64_t tab_len = strlen(TAB_STRING);
+     for(int i = 0; i < tab_len; ++i){
+          if(isblank(buffer->lines[line][i])){
+               whitespace_count++;
+          }else{
+               break;
+          }
+     }
+
+     if(whitespace_count){
+          Point loc = {0, line};
+          ce_remove_string(buffer, &loc, whitespace_count);
+          ce_commit_remove_string(commit_tail, &loc, cursor, cursor, strdup(TAB_STRING));
+     }
+
+}
+
 bool key_handler(int key, BufferNode* head, void* user_data)
 {
      ConfigState* config_state = user_data;
@@ -2739,11 +2767,41 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     // no movement yet, wait for one!
                     return true;
                case '>':
-               {
-                    Point loc = {0, cursor->y};
-                    ce_insert_string(buffer, &loc, TAB_STRING);
-                    ce_commit_insert_string(&buffer_state->commit_tail, &loc, cursor, cursor, strdup(TAB_STRING));
-               } break;
+                    if(config_state->vim_mode == VM_VISUAL_RANGE ||
+                       config_state->vim_mode == VM_VISUAL_LINE){
+                         const Point* a = cursor;
+                         const Point* b = &config_state->visual_start;
+                         ce_sort_points(&a, &b);
+                         for(int64_t i = a->y; i <= b->y; ++i){
+                              if(!buffer->lines[i][0]) continue;
+                              indent_line(buffer, &buffer_state->commit_tail, i, cursor);
+                         }
+                    }else{
+                         indent_line(buffer, &buffer_state->commit_tail, cursor->y, cursor);
+                    }
+                    break;
+               }
+          } break;
+          case '<':
+          {
+               switch(config_state->movement_keys[0]){
+               case MOVEMENT_CONTINUE:
+                    // no movement yet, wait for one!
+                    return true;
+               case '<':
+                    if(config_state->vim_mode == VM_VISUAL_RANGE ||
+                       config_state->vim_mode == VM_VISUAL_LINE){
+                         const Point* a = cursor;
+                         const Point* b = &config_state->visual_start;
+                         ce_sort_points(&a, &b);
+                         for(int64_t i = a->y; i <= b->y; ++i){
+                              if(!buffer->lines[i][0]) continue;
+                              unindent_line(buffer, &buffer_state->commit_tail, i, cursor);
+                         }
+                    }else{
+                         unindent_line(buffer, &buffer_state->commit_tail, cursor->y, cursor);
+                    }
+                    break;
                }
           } break;
           case 'g':

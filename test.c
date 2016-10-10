@@ -1464,6 +1464,8 @@ TEST(sanity_split_view)
           ASSERT(ce_alloc_lines(buffers + i, 1));
      }
 
+     head->buffer = buffers + 0;
+
      // split views
      BufferView* horizontal_split_view = ce_split_view(head, buffers + 1, true);
      ASSERT(head->next_horizontal == horizontal_split_view);

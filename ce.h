@@ -158,7 +158,7 @@ typedef enum {
      CT_SINGLE_LINE,
      CT_BEGIN_MULTILINE,
      CT_END_MULTILINE,
-} CommentType;
+} CommentType_t;
 
 extern Point* g_terminal_dimensions;
 
@@ -285,7 +285,7 @@ bool ce_commits_free         (BufferCommitNode* tail);
 // Syntax
 int64_t ce_is_c_keyword(const char* line, int64_t start_offset);
 int64_t ce_is_preprocessor(const char* line, int64_t start_offset);
-CommentType ce_is_comment(const char* line, int64_t start_offset);
+CommentType_t ce_is_comment(const char* line, int64_t start_offset);
 void ce_is_string_literal(const char* line, int64_t start_offset, int64_t line_len, bool* inside_string, char* last_quote_char);
 int64_t ce_is_caps_var(const char* line, int64_t start_offset);
 

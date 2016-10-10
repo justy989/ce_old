@@ -1323,7 +1323,7 @@ int64_t ce_is_preprocessor(const char* line, int64_t start_offset)
      return highlighting_left;
 }
 
-CommentType ce_is_comment(const char* line, int64_t start_offset)
+CommentType_t ce_is_comment(const char* line, int64_t start_offset)
 {
      char ch = line[start_offset];
 
@@ -1531,7 +1531,7 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* cursor,const Point* term_
 
                // NOTE: pre-pass check for comments and strings out of view
                for(int64_t c = 0; c < buffer_top_left->x; ++c){
-                    CommentType comment_type = ce_is_comment(buffer_line, c);
+                    CommentType_t comment_type = ce_is_comment(buffer_line, c);
                     switch(comment_type){
                     default:
                          break;
@@ -1689,7 +1689,7 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* cursor,const Point* term_
                               }
                          }
 
-                         CommentType comment_type = ce_is_comment(line_to_print, c);
+                         CommentType_t comment_type = ce_is_comment(line_to_print, c);
                          switch(comment_type){
                          default:
                               break;
@@ -1745,7 +1745,7 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* cursor,const Point* term_
 
                // NOTE: post pass after the line to see if multiline comments begin or end
                for(int64_t c = min; c < line_length; ++c){
-                    CommentType comment_type = ce_is_comment(buffer_line, c);
+                    CommentType_t comment_type = ce_is_comment(buffer_line, c);
                     switch(comment_type){
                     default:
                          break;

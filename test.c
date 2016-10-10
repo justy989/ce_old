@@ -1,3 +1,6 @@
+#include <execinfo.h>
+#include <signal.h>
+
 #include "ce.h"
 #include "test.h"
 
@@ -2200,10 +2203,35 @@ TEST(move_cursor_to_beginning_of_line)
      ce_free_buffer(&buffer);
 }
 
+void segv_handler(int signo)
+{
+	void *array[10];
+	size_t size;
+	char **strings;
+	size_t i;
+
+	size = backtrace(array, 10);
+	strings = backtrace_symbols(array, size);
+
+	printf("SIGSEV\n");
+	printf("%zd frames.\n", size);
+	for (i = 0; i < size; i++) printf ("%s\n", strings[i]);
+     printf("\n");
+
+     exit(signo);
+}
+
 int main()
 {
      Point terminal_dimensions = {17, 10};
      g_terminal_dimensions = &terminal_dimensions;
+
+     struct sigaction sa = {};
+     sa.sa_handler = segv_handler;
+     sigemptyset(&sa.sa_mask);
+     if(sigaction(SIGSEGV, &sa, NULL) == -1){
+          // TODO: handle error
+     }
 
      RUN_TESTS();
 }

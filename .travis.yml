@@ -4,14 +4,5 @@ os:
  - osx
 compiler: clang
 sudo: required
-# install gdb and allow cores to dump
-install:
- - if [[ -n $(uname -a | grep Darwin) ]]; then sudo /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"; fi
- - if [[ -n $(uname -a | grep Darwin) ]]; then sudo brew install gdb; else sudo apt-get install gdb; fi
- - ulimit -c unlimited -S
- - make all
+install: make all
 script: make test
-# dump a backtrace on failure
-after_failure:
- - COREFILE=$(find . -maxdepth 1 -name "core*" | head -n 1) # find core file
- - if [[ -f "$COREFILE" ]]; then gdb -c "$COREFILE" example -ex "thread apply all bt" -ex "set pagination 0" -batch; fi

@@ -3,6 +3,5 @@ os:
  - linux
  - osx
 compiler: clang
-sudo: required
 install: make all
 script: make test

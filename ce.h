@@ -169,12 +169,12 @@ typedef bool ce_key_handler (int, BufferNode_t*, void*);
 typedef void ce_view_drawer (const BufferNode_t*, void*);
 
 
-// Buffer_t-List Manipulation Functions
+// BufferList Manipulation Functions
 BufferNode_t* ce_append_buffer_to_list (BufferNode_t* head, Buffer_t* buffer); // NOTE: we may want to consider taking tail rather than head
 bool ce_remove_buffer_from_list        (BufferNode_t* head, BufferNode_t** node);
 
 
-// Buffer_t-View Manipulation Functions
+// BufferView Manipulation Functions
 BufferView_t* ce_split_view       (BufferView_t* view, Buffer_t* buffer, bool horizontal);
 bool ce_remove_view               (BufferView_t** head, BufferView_t* view);
 bool ce_calc_views                (BufferView_t* head, const Point_t* top_left, const Point_t* top_right);
@@ -220,7 +220,7 @@ bool ce_join_line               (Buffer_t* buffer, int64_t line);
 bool ce_insert_newline          (Buffer_t* buffer, int64_t line);
 
 
-// Buffer_t Inspection Functions
+// Buffer Inspection Functions
 bool    ce_draw_buffer                   (const Buffer_t* buffer, const Point_t* cursor,const Point_t* term_top_left,
                                           const Point_t* term_bottom_right, const Point_t* buffer_top_left,
                                           const char* highlight_word);

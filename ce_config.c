@@ -3439,7 +3439,7 @@ search:
           } break;
           case 1: // Ctrl + a
                if(config_state->input) break;
-               input_start(config_state, "Save Buffer_t As", key);
+               input_start(config_state, "Save Buffer As", key);
           break;
           case 9: // Ctrl + i
                if(config_state->input) break;

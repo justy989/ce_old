@@ -1,4 +1,4 @@
-# ce
+# ce: a c language terminal editor
 
 [![Build Status](https://travis-ci.org/justy989/ce.svg?branch=master)](https://travis-ci.org/justy989/ce)
 
@@ -75,3 +75,6 @@ ctrl+n and ctrl+p will move you between definitions of that symbol (if tags have
   
 `cscope -L3ce_insert_char`  
 ctrl+n and ctrl+p will move you between functions calling this function (if tags have been generated)  
+
+`man pthread_create`  
+c syntax highlighted man pages

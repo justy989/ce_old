@@ -1563,9 +1563,9 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor,const Point_t*
                          color_left--;
                     }else{
                          if(!inside_string){
+                              int64_t keyword_left = 0;
                               if(!inside_comment && !inside_multiline_comment){
-
-                                   int64_t keyword_left = ce_is_c_control(buffer_line, c);
+                                   keyword_left = ce_is_c_control(buffer_line, c);
                                    if(keyword_left){
                                         color_left = keyword_left;
                                         highlight_color = S_CONTROL;
@@ -1588,19 +1588,19 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor,const Point_t*
                                    }
 
                                    if(!keyword_left){
-                                        keyword_left = ce_is_caps_var(buffer_line, c);
-                                        if(keyword_left){
-                                             color_left = keyword_left;
-                                             highlight_color = S_CONSTANT;
-                                        }
-                                   }
-
-                                   if(!keyword_left){
                                         keyword_left = ce_is_preprocessor(buffer_line, c);
                                         if(keyword_left){
                                              color_left = keyword_left;
                                              highlight_color = S_PREPROCESSOR;
                                         }
+                                   }
+                              }
+
+                              if(!keyword_left){
+                                   keyword_left = ce_is_caps_var(buffer_line, c);
+                                   if(keyword_left){
+                                        color_left = keyword_left;
+                                        highlight_color = S_CONSTANT;
                                    }
                               }
                          }
@@ -1674,17 +1674,17 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor,const Point_t*
                                    }
 
                                    if(!color_left){
-                                        color_left = ce_is_caps_var(line_to_print, c);
-                                        if(color_left){
-                                             fg_color = set_color(S_CONSTANT, inside_highlight);
-                                        }
-                                   }
-
-                                   if(!color_left){
                                         color_left = ce_is_preprocessor(line_to_print, c);
                                         if(color_left){
                                              fg_color = set_color(S_PREPROCESSOR, inside_highlight);
                                         }
+                                   }
+                              }
+
+                              if(!color_left){
+                                   color_left = ce_is_caps_var(line_to_print, c);
+                                   if(color_left){
+                                        fg_color = set_color(S_CONSTANT, inside_highlight);
                                    }
                               }
                          }

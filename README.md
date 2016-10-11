@@ -2,6 +2,10 @@
 
 [![Build Status](https://travis-ci.org/justy989/ce.svg?branch=master)](https://travis-ci.org/justy989/ce)
 
+###Build
+1. Dependencies: c11 enabled compiler, libncurses
+2. run `make`
+
 ###Default keybindings (when not in insert mode)
 - Ctrl+f: load file
 - Ctrl+q: kill current window, if there is only 1 window, then quit

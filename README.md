@@ -24,6 +24,8 @@
 - Ctrl+l: move cursor to the view to the right
 - Ctrl+n: goto the next file definition in the shell command buffer
 - Ctrl+p: goto the previous file definition in the shell command buffer
+- i: enter insert mode
+- esc: enter normal mode
 - h: move cursor left
 - j: move cursor down
 - k: move cursor up

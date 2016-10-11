@@ -276,6 +276,12 @@ void tab_view_remove(TabView_t** head, TabView_t* view)
 }
 
 typedef struct{
+     const char** options;
+     int64_t count;
+     int64_t current;
+} AutoComplete_t;
+
+typedef struct{
      VimMode_t vim_mode;
      bool input;
      const char* input_message;

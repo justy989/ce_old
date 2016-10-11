@@ -1372,6 +1372,29 @@ void ce_is_string_literal(const char* line, int64_t start_offset, int64_t line_l
                     *last_quote_char = ch;
                }
           }
+     }else if(ch == '<'){
+          const char* itr = line + start_offset + 1;
+          bool valid_system_header = true;
+
+          while(*itr && *itr != '>'){
+               if(isalnum(*itr)){
+                    // pass
+               }else if(*itr == '.'){
+                    // pass
+               }else if(*itr == '/'){
+                    // pass
+               }else{
+                    valid_system_header = false;
+               }
+               itr++;
+          }
+
+          if(valid_system_header && *itr == '>'){
+               *inside_string = true;
+               *last_quote_char = ch;
+          }
+     }else if(ch == '>' && *last_quote_char == '<'){
+          *inside_string = false;
      }
 }
 

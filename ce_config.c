@@ -281,6 +281,7 @@ typedef struct{
      InputHistory shell_command_history;
      InputHistory search_history;
      InputHistory load_file_history;
+     Point start_search;
 } ConfigState;
 
 typedef struct MarkNode{
@@ -377,7 +378,7 @@ char* str_from_file_stream(FILE* file){
      return str;
 }
 
-BufferNode* new_buffer_from_string(BufferNode* head, const char* name, const char* str){
+Buffer* new_buffer_from_string(BufferNode* head, const char* name, const char* str){
      Buffer* buffer = calloc(1, sizeof(*buffer));
      if(!buffer){
           ce_message("failed to allocate buffer");
@@ -409,7 +410,7 @@ BufferNode* new_buffer_from_string(BufferNode* head, const char* name, const cha
           return NULL;
      }
 
-     return new_buffer_node;
+     return buffer;
 }
 
 BufferNode* new_buffer_from_file(BufferNode* head, const char* filename)
@@ -526,6 +527,7 @@ void input_start(ConfigState* config_state, const char* input_message, char inpu
 {
      ce_clear_lines(config_state->view_input->buffer);
      ce_alloc_lines(config_state->view_input->buffer, 1);
+     config_state->input = true;
      config_state->view_input->cursor = (Point){0, 0};
      config_state->input_message = input_message;
      config_state->input_key = input_key;
@@ -589,7 +591,7 @@ Buffer* open_file_buffer(BufferNode* head, const char* filename)
      nftw(".", nftw_find_file, 20, FTW_CHDIR);
      if(nftw_state.new_node) return nftw_state.new_node->buffer;
 
-     ce_message("file %s not found", filename); 
+     ce_message("file %s not found", filename);
 
      return NULL;
 }
@@ -1611,7 +1613,7 @@ void update_buffer_list_buffer(ConfigState* config_state, const BufferNode* head
               max_buffer_lines_digits);
      snprintf(buffer_info, BUFSIZ, format_string, "flags", "buffer name", "lines", buffer_count);
      ce_append_line(&config_state->buffer_list_buffer, buffer_info);
-     
+
      // build buffer info
      snprintf(format_string, BUFSIZ, "%%5s %%-%"PRId64"s %%%"PRId64 PRId64, max_name_len, max_buffer_lines_digits);
 
@@ -1718,6 +1720,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case 10: // return
           {
+               if(!buffer->lines) ce_alloc_lines(buffer, 1);
                char* start = buffer->lines[cursor->y] + cursor->x;
                int64_t to_end_of_line_len = strlen(start);
 
@@ -1886,8 +1889,11 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 27: // ESC
           {
                if(config_state->input){
+                    if(config_state->input_key == '/' || config_state->input_key == '?'){
+                         config_state->tab_current->view_input_save->cursor = config_state->start_search;
+                         center_view(config_state->tab_current->view_input_save);
+                    }
                     input_end();
-                    config_state->input = false;
                }
                if(config_state->vim_mode != VM_NORMAL){
                     enter_normal_mode(config_state);
@@ -2581,17 +2587,13 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     case '/':
                          if(config_state->view_input->buffer->line_count){
                               commit_input_to_history(config_state, &config_state->search_history);
-                              config_state->search_command.direction = CE_DOWN;
                               add_yank(config_state, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
-                              goto search;
                          }
                          break;
                     case '?':
                          if(config_state->view_input->buffer->line_count){
                               commit_input_to_history(config_state, &config_state->search_history);
-                              config_state->search_command.direction = CE_UP;
                               add_yank(config_state, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
-                              goto search;
                          }
                          break;
                     case 24: // Ctrl + x
@@ -2658,6 +2660,47 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          command_buffer->readonly = true;
                          command_buffer->modified = false;
                     } break;
+                    case 'R':
+                    {
+                         YankNode* yank = find_yank(config_state, '/');
+                         if(!yank) break;
+                         const char* search_str = yank->text;
+                         // NOTE: allow empty string to replace search
+                         int64_t search_len = strlen(search_str);
+                         if(!search_len) break;
+                         char* replace_str = ce_dupe_buffer(config_state->view_input->buffer);
+                         int64_t replace_len = strlen(replace_str);
+                         Point begin = {};
+                         Point match = {};
+                         int64_t replace_count = 0;
+                         while(ce_find_string(buffer, &begin, search_str, &match, CE_DOWN)){
+                              if(!ce_remove_string(buffer, &match, search_len)) break;
+                              if(replace_len){
+                                   if(!ce_insert_string(buffer, &match, replace_str)) break;
+                              }
+                              ce_commit_change_string(&buffer_state->commit_tail, &match, &match, &match, strdup(replace_str),
+                                                      strdup(search_str));
+                              begin = match;
+                              replace_count++;
+                         }
+                         if(replace_count){
+                              ce_message("replaced %" PRId64 " matches", replace_count);
+                         }else{
+                              ce_message("no matches found to replace");
+                         }
+                         *cursor = match;
+                         center_view(config_state->tab_current->view_current);
+                         free(replace_str);
+                    } break;
+                    case 1: // Ctrl + a
+                    {
+                         if(!config_state->view_input->buffer->lines ||
+                            !config_state->view_input->buffer->lines[0][0]) break;
+
+                         if(ce_save_buffer(buffer, config_state->view_input->buffer->lines[0])){
+                              buffer->filename = strdup(config_state->view_input->buffer->lines[0]);
+                         }
+                    } break;
                     }
                }else if(config_state->tab_current->view_current->buffer == &config_state->buffer_list_buffer){
                     int64_t line = cursor->y - 1; // account for buffer list row header
@@ -2711,13 +2754,12 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case ':':
           {
                if(config_state->input) break;
-               config_state->input = true;
                input_start(config_state, "Goto Line", key);
           }
           break;
           case '#':
           {
-               if(!buffer->lines[cursor->y]) break;
+               if(!buffer->lines || !buffer->lines[cursor->y]) break;
 
                Point word_start, word_end;
                if(!ce_get_word_at_location(buffer, cursor, &word_start, &word_end)) break;
@@ -2728,7 +2770,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case '*':
           {
-               if(!buffer->lines[cursor->y]) break;
+               if(!buffer->lines || !buffer->lines[cursor->y]) break;
 
                Point word_start, word_end;
                if(!ce_get_word_at_location(buffer, cursor, &word_start, &word_end)) break;
@@ -2740,14 +2782,16 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case '/':
           {
                if(config_state->input) break;
-               config_state->input = true;
+               config_state->search_command.direction = CE_DOWN;
+               config_state->start_search = *cursor;
                input_start(config_state, "Search", key);
                break;
           }
           case '?':
           {
                if(config_state->input) break;
-               config_state->input = true;
+               config_state->search_command.direction = CE_UP;
+               config_state->start_search = *cursor;
                input_start(config_state, "Reverse Search", key);
                break;
           }
@@ -2794,7 +2838,7 @@ search:
                          break;
                     default:
                          clear_keys(config_state);
-                         return true; 
+                         return true;
                     }
 
                     // TODO support undo with clang-format
@@ -2931,7 +2975,6 @@ search:
           case 24: // Ctrl + x
           {
                if(config_state->input) break;
-               config_state->input = true;
                input_start(config_state, "Shell Command", key);
           } break;
           case 14: // Ctrl + n
@@ -2951,7 +2994,6 @@ search:
           case 6: // Ctrl + f
           {
                if(config_state->input) break;
-               config_state->input = true;
                input_start(config_state, "Load File", key);
           } break;
           case 20: // Ctrl + t
@@ -2967,6 +3009,41 @@ search:
 
                config_state->tab_current = new_tab;
           } break;
+          case 'R':
+               if(config_state->input) break;
+               input_start(config_state, "Replace", key);
+          break;
+          case 5: // Ctrl + e
+          {
+               Buffer* new_buffer = new_buffer_from_string(head, "unnamed", NULL);
+               ce_alloc_lines(new_buffer, 1);
+               config_state->tab_current->view_current->buffer = new_buffer;
+               *cursor = (Point){0, 0};
+          } break;
+          case 1: // Ctrl + a
+               if(config_state->input) break;
+               input_start(config_state, "Save Buffer As", key);
+          break;
+          }
+     }
+
+     // incremental search
+     if(config_state->input && (config_state->input_key == '/' || config_state->input_key == '?')){
+          if(config_state->view_input->buffer->lines == NULL){
+               config_state->tab_current->view_input_save->cursor = config_state->start_search;
+          }else{
+               const char* search_str = config_state->view_input->buffer->lines[0];
+               Point match = {};
+               if(search_str[0] &&
+                  ce_find_string(config_state->tab_current->view_input_save->buffer,
+                                 &config_state->start_search, search_str, &match,
+                                 config_state->search_command.direction)){
+                    ce_set_cursor(config_state->tab_current->view_input_save->buffer,
+                                  &config_state->tab_current->view_input_save->cursor, &match);
+                    center_view(config_state->tab_current->view_input_save);
+               }else{
+                    config_state->tab_current->view_input_save->cursor = config_state->start_search;
+               }
           }
      }
 
@@ -2997,6 +3074,9 @@ void draw_view_statuses(BufferView* view, BufferView* current_view, VimMode vim_
      mvprintw(view->bottom_right.y, view->top_left.x + 1, " %s%s%s%s ",
               view == current_view ? mode_names[vim_mode] : "",
               modified_string(buffer), buffer->filename, readonly_string(buffer));
+#ifndef NDEBUG
+     if(view == current_view) printw("%s %d ", keyname(last_key), last_key);
+#endif
      int64_t line = view->cursor.y + 1;
      int64_t digits_in_line = count_digits(line);
      mvprintw(view->bottom_right.y, (view->bottom_right.x - (digits_in_line + 3)), " %"PRId64" ", line);
@@ -3067,8 +3147,13 @@ void view_drawer(const BufferNode* head, void* user_data)
      standend();
 
      const char* search = NULL;
-     YankNode* yank = find_yank(config_state, '/');
-     if(yank) search = yank->text;
+     if(config_state->input && (config_state->input_key == '/' || config_state->input_key == '?') &&
+        config_state->view_input->buffer->lines && config_state->view_input->buffer->lines[0][0]){
+          search = config_state->view_input->buffer->lines[0];
+     }else{
+          YankNode* yank = find_yank(config_state, '/');
+          if(yank) search = yank->text;
+     }
 
      // NOTE: always draw from the head
      ce_draw_views(config_state->tab_current->view_head, search);
@@ -3086,7 +3171,8 @@ void view_drawer(const BufferNode* head, void* user_data)
                     addch(' ');
                }
           }
-          ce_draw_views(config_state->view_input, search);
+
+          ce_draw_views(config_state->view_input, NULL);
      }
 
      draw_view_statuses(config_state->tab_current->view_head, config_state->tab_current->view_current,

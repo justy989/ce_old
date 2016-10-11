@@ -425,7 +425,7 @@ char* ce_dupe_string(const Buffer* buffer, const Point* start, const Point* end)
                return NULL;
           }
           memcpy(new_str, buffer->lines[start->y] + start->x, total_len);
-          if(!new_str[total_len-1]) new_str[total_len-1] = '\n';
+          if(start->x != start->y && !new_str[total_len-1]) new_str[total_len-1] = '\n';
           new_str[total_len] = 0;
 
           return new_str;
@@ -1427,7 +1427,8 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                          inside_highlight = true;
                          set_color(fg_color, inside_highlight);
                     }else{
-                         if(highlight_word && strncmp(buffer_line + c, highlight_word, highlight_word_len) == 0){
+                         if(highlight_word && strncmp(buffer_line + c + buffer_top_left->x, highlight_word,
+                                                      highlight_word_len) == 0){
                               highlighting_left = highlight_word_len;
                               inside_highlight = true;
                               set_color(fg_color, inside_highlight);

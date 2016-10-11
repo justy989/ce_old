@@ -806,8 +806,6 @@ TEST(sanity_clear_lines_readonly)
      ce_free_buffer(&buffer);
 }
 
-
-
 TEST(sanity_dupe_string)
 {
      Buffer_t buffer = {};

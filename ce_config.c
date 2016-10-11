@@ -1688,9 +1688,9 @@ void update_buffer_list_buffer(ConfigState_t* config_state, const BufferNode_t* 
      // build format string, OMG THIS IS SO UNREADABLE HOLY MOLY BATMAN
      char format_string[BUFSIZ];
      // build header
-     snprintf(format_string, BUFSIZ, "%%5s %%-%"PRId64"s %%-%"PRId64"s (%%"PRId64" buffers)", max_name_len,
+     snprintf(format_string, BUFSIZ, "%%5s %%-%"PRId64"s %%-%"PRId64"s", max_name_len,
               max_buffer_lines_digits);
-     snprintf(buffer_info, BUFSIZ, format_string, "flags", "buffer name", "lines", buffer_count);
+     snprintf(buffer_info, BUFSIZ, format_string, "flags", "buffer name", "lines");
      ce_append_line(&config_state->buffer_list_buffer, buffer_info);
 
      // build buffer info
@@ -2692,6 +2692,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                config_state->tab_current->view_current->buffer->cursor = *cursor;
                config_state->tab_current->view_current->buffer = &config_state->buffer_list_buffer;
                config_state->tab_current->view_current->cursor = (Point_t){0, 1};
+               config_state->tab_current->view_current->top_row = 0;
           } break;
           case 'u':
                if(buffer_state->commit_tail && buffer_state->commit_tail->commit.type != BCT_NONE){

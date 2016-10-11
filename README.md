@@ -2,7 +2,7 @@
 
 [![Build Status](https://travis-ci.org/justy989/ce.svg?branch=master)](https://travis-ci.org/justy989/ce)
 
-##Default keybindings (when not in insert mode)
+###Default keybindings (when not in insert mode)
 - Ctrl+f: load File
 - Ctrl+q: kill current Window, if there is only 1 window, then quit
 - Ctrl+w: save buffer
@@ -24,7 +24,6 @@
 - Ctrl+l: move cursor to the view to the right
 - Ctrl+n: goto the next file definition in the shell command buffer
 - Ctrl+p: goto the previous file definition in the shell command buffer
-
 - h: move cursor left
 - j: move cursor down
 - k: move cursor up
@@ -61,18 +60,18 @@
 - \*: search forward for the word under the cursor
 - #: search forward for the word under the cursor
 
-##Cool commands to run
-  `fgrep -n -H <pattern> <files>`
-  `fgrep -n -H Buffer ce_config.c`
-  `fgrep -n default *`
-  ctrl+n and ctrl+p will move you between matches
-
-  `make`
-  ctrl+n and ctrl+p will move you between build failures
-
-  `cscope -L1<symbol>`
-  `cscope -L1BufferView`
-  ctrl+n and ctrl+p will move you between definitions of that symbol (if tags have been generated)
-
-  `cscope -L3ce_insert_char`
-  ctrl+n and ctrl+p will move you between functions calling this function (if tags have been generated)
+###Cool commands to run
+`fgrep -n -H <pattern> <files>`  
+`fgrep -n -H Buffer ce_config.c`  
+`fgrep -n default *`  
+ctrl+n and ctrl+p will move you between matches  
+  
+`make`  
+ctrl+n and ctrl+p will move you between build failures  
+  
+`cscope -L1<symbol>`  
+`cscope -L1BufferView`  
+ctrl+n and ctrl+p will move you between definitions of that symbol (if tags have been generated)  
+  
+`cscope -L3ce_insert_char`  
+ctrl+n and ctrl+p will move you between functions calling this function (if tags have been generated)  

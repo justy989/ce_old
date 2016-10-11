@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <fcntl.h>
+#include <dirent.h>
 
 #define TAB_STRING "     "
 #define SCROLL_LINES 1
@@ -275,11 +276,101 @@ void tab_view_remove(TabView_t** head, TabView_t* view)
      free(view);
 }
 
+typedef struct CompleteNode_t{
+     char* option;
+     struct CompleteNode_t* next;
+     struct CompleteNode_t* prev;
+} CompleteNode_t;
+
 typedef struct{
-     const char** options;
-     int64_t count;
-     int64_t current;
+     CompleteNode_t* head;
+     CompleteNode_t* tail;
+     CompleteNode_t* current;
+     Point_t start;
 } AutoComplete_t;
+
+bool auto_complete_insert(AutoComplete_t* auto_complete, const char* option)
+{
+     CompleteNode_t* new_node = calloc(1, sizeof(*new_node));
+     if(!new_node){
+          ce_message("failed to allocate auto complete option");
+          return false;
+     }
+
+     new_node->option = strdup(option);
+
+     if(auto_complete->tail){
+          auto_complete->tail->next = new_node;
+          new_node->prev = auto_complete->tail;
+     }
+
+     auto_complete->tail = new_node;
+     if(!auto_complete->head){
+          auto_complete->head = new_node;
+     }
+
+     return true;
+}
+
+void auto_complete_start(AutoComplete_t* auto_complete, Point_t start)
+{
+     assert(start.x >= 0);
+     auto_complete->start = start;
+     auto_complete->current = auto_complete->head;
+}
+
+void auto_complete_end(AutoComplete_t* auto_complete)
+{
+     auto_complete->start.x = -1;
+}
+
+bool auto_completing(AutoComplete_t* auto_complete)
+{
+    return auto_complete->start.x >= 0;
+}
+
+void auto_complete_clear(AutoComplete_t* auto_complete)
+{
+    CompleteNode_t* itr = auto_complete->head;
+    while(itr){
+         CompleteNode_t* tmp = itr;
+         itr = itr->next;
+         free(tmp->option);
+         free(tmp);
+    }
+
+    auto_complete->head = NULL;
+    auto_complete->tail = NULL;
+    auto_complete->current = NULL;
+}
+
+void auto_complete_next(AutoComplete_t* auto_complete, const char* match)
+{
+     int64_t match_len = strlen(match);
+     CompleteNode_t* initial_node = auto_complete->current;
+
+     do{
+          auto_complete->current = auto_complete->current->next;
+          if(!auto_complete->current) auto_complete->current = auto_complete->head;
+          if(strncmp(auto_complete->current->option, match, match_len) == 0) return;
+     }while(auto_complete->current != initial_node);
+
+     auto_complete_end(auto_complete);
+}
+
+void auto_complete_prev(AutoComplete_t* auto_complete, const char* match)
+{
+     int64_t match_len = strlen(match);
+     CompleteNode_t* initial_node = auto_complete->current;
+
+     do{
+          auto_complete->current = auto_complete->current->prev;
+          if(!auto_complete->current) auto_complete->current = auto_complete->tail;
+          if(strncmp(auto_complete->current->option, match, match_len) == 0) return;
+     }while(auto_complete->current != initial_node);
+
+     auto_complete_end(auto_complete);
+}
 
 typedef struct{
      VimMode_t vim_mode;
@@ -317,6 +408,7 @@ typedef struct{
      Point_t start_search;
      pthread_t shell_command_thread;
      pthread_t shell_input_thread;
+     AutoComplete_t auto_complete;
 } ConfigState_t;
 
 typedef struct MarkNode_t{
@@ -480,6 +572,7 @@ BufferNode_t* new_buffer_from_file(BufferNode_t* head, const char* filename)
 void enter_normal_mode(ConfigState_t* config_state)
 {
      config_state->vim_mode = VM_NORMAL;
+     auto_complete_end(&config_state->auto_complete);
 }
 
 void enter_insert_mode(ConfigState_t* config_state, Point_t* cursor)
@@ -803,6 +896,7 @@ bool initializer(BufferNode_t* head, Point_t* terminal_dimensions, int argc, cha
 
      init_pair(S_VIEW_STATUS, COLOR_CYAN, COLOR_BACKGROUND);
      init_pair(S_INPUT_STATUS, COLOR_RED, COLOR_BACKGROUND);
+     init_pair(S_AUTO_COMPLETE, COLOR_WHITE, COLOR_BACKGROUND);
 
      // Doesn't work in insert mode :<
      //define_key("h", KEY_LEFT);
@@ -820,6 +914,9 @@ bool initializer(BufferNode_t* head, Point_t* terminal_dimensions, int argc, cha
      //define_key("\x0A", KEY_ENTER);     // Enter       (10) (0x0A) ASCII "LF"  NL Line Feed, New Line
 
      pthread_mutex_init(&draw_lock, NULL);
+
+     auto_complete_end(&config_state->auto_complete);
+
      return true;
 }
 
@@ -1960,6 +2057,31 @@ void unindent_line(Buffer_t* buffer, BufferCommitNode_t** commit_tail, int64_t l
 
 }
 
+bool generate_auto_complete_files_in_dir(AutoComplete_t* auto_complete, const char* dir)
+{
+     struct dirent *node;
+     DIR* os_dir = opendir(dir);
+     if(!os_dir) return false;
+
+     char tmp[PATH_MAX];
+     struct stat info;
+     auto_complete_clear(auto_complete);
+     while((node = readdir(os_dir)) != NULL){
+          stat(node->d_name, &info);
+          if(S_ISDIR(info.st_mode)){
+               snprintf(tmp, PATH_MAX, "%s/", node->d_name);
+          }else{
+               strncpy(tmp, node->d_name, PATH_MAX);
+          }
+          auto_complete_insert(auto_complete, tmp);
+     }
+
+     closedir(os_dir);
+
+     if(!auto_complete->head) return false;
+     return true;
+}
+
 bool key_handler(int key, BufferNode_t* head, void* user_data)
 {
      ConfigState_t* config_state = user_data;
@@ -2003,6 +2125,8 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                                    cursor->x = prev_line_len;
                                    config_state->start_insert = *cursor;
                               }
+
+                              auto_complete_start(&config_state->auto_complete, (Point_t){0, cursor->y});
                          }
                     }else{
                          Point_t previous = *cursor;
@@ -2022,13 +2146,33 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                }
                break;
           case KEY_DC:
-               // TODO: with our current insert mode undo implementation we can't support this 
+               // TODO: with our current insert mode undo implementation we can't support this
                // ce_remove_char(buffer, cursor);
                break;
           case '\t':
           {
-               ce_insert_string(buffer, cursor, TAB_STRING);
-               ce_move_cursor(buffer, cursor, (Point_t){5, 0});
+               if(auto_completing(&config_state->auto_complete))
+               {
+                    int64_t offset = cursor->x - config_state->auto_complete.start.x;
+                    if(offset < 0){
+                         config_state->auto_complete.start.x += offset; // slide back the start
+                         offset = 0;
+                    }
+
+                    const char* complete = config_state->auto_complete.current->option + offset;
+                    int64_t complete_len = strlen(complete);
+                    if(ce_insert_string(buffer, cursor, complete)){
+                         ce_move_cursor(buffer, cursor, (Point_t){complete_len + 1, cursor->y});
+                         cursor->x++;
+                         if(complete[complete_len - 1] == '/' &&
+                            generate_auto_complete_files_in_dir(&config_state->auto_complete, buffer->lines[cursor->y])){
+                              auto_complete_start(&config_state->auto_complete, *cursor);
+                         }
+                    }
+               }else{
+                    ce_insert_string(buffer, cursor, TAB_STRING);
+                    ce_move_cursor(buffer, cursor, (Point_t){5, 0});
+               }
           } break;
           case 10: // return
           {
@@ -2042,6 +2186,8 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     }
                     cursor->y++;
                     cursor->x = 0;
+
+                    auto_complete_start(&config_state->auto_complete, *cursor);
 
                     // indent if necessary
                     Point_t prev_line = {0, cursor->y-1};
@@ -2108,6 +2254,16 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                }
           } break;
           case 14: // Ctrl + n
+               if(auto_completing(&config_state->auto_complete)){
+                    Point_t end = *cursor;
+                    end.x--;
+                    if(end.x < 0) end.x = 0;
+                    char* match = ce_dupe_string(buffer, &config_state->auto_complete.start, &end);
+                    auto_complete_next(&config_state->auto_complete, match);
+                    free(match);
+                    break;
+               }
+
                if(config_state->input){
                     if(iterate_history_input(config_state, false)){
                          if(buffer->line_count && buffer->lines[cursor->y][0]) cursor->x++;
@@ -2116,6 +2272,16 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                }
                break;
           case 16: // Ctrl + p
+               if(auto_completing(&config_state->auto_complete)){
+                    Point_t end = *cursor;
+                    end.x--;
+                    if(end.x < 0) end.x = 0;
+                    char* match = ce_dupe_string(buffer, &config_state->auto_complete.start, &end);
+                    auto_complete_prev(&config_state->auto_complete, match);
+                    free(match);
+                    break;
+               }
+
                if(config_state->input){
                     if(iterate_history_input(config_state, true)){
                          if(buffer->line_count && buffer->lines[cursor->y][0]) cursor->x++;
@@ -2125,6 +2291,17 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                break;
           default:
                if(ce_insert_char(buffer, cursor, key)) cursor->x++;
+               if(auto_completing(&config_state->auto_complete)){
+                    Point_t end = *cursor;
+                    end.x--;
+                    if(end.x < 0) end.x = 0;
+                    char* match = ce_dupe_string(buffer, &config_state->auto_complete.start, &end);
+                    int64_t match_len = strlen(match);
+                    if(strncmp(config_state->auto_complete.current->option, match, match_len) != 0){
+                         auto_complete_next(&config_state->auto_complete, match);
+                    }
+                    free(match);
+               }
                break;
           }
      }else{
@@ -3419,6 +3596,9 @@ search:
           {
                if(config_state->input) break;
                input_start(config_state, "Load File", key);
+               if(generate_auto_complete_files_in_dir(&config_state->auto_complete, ".")){
+                    auto_complete_start(&config_state->auto_complete, *cursor);
+               }
           } break;
           case 20: // Ctrl + t
           {
@@ -3616,6 +3796,7 @@ void view_drawer(const BufferNode_t* head, void* user_data)
      // NOTE: always draw from the head
      ce_draw_views(config_state->tab_current->view_head, search);
 
+     // draw input status
      if(config_state->input){
           move(input_top_left.y - 1, input_top_left.x);
 
@@ -3637,6 +3818,20 @@ void view_drawer(const BufferNode_t* head, void* user_data)
           }
 
           ce_draw_views(config_state->view_input, NULL);
+     }
+
+     // draw auto complete
+     Point_t terminal_cursor = get_cursor_on_terminal(cursor, buffer_view);
+     if(auto_completing(&config_state->auto_complete)){
+          move(terminal_cursor.y, terminal_cursor.x);
+          int64_t offset = cursor->x - config_state->auto_complete.start.x;
+          if(offset < 0) offset = 0;
+          const char* option = config_state->auto_complete.current->option + offset;
+          attron(COLOR_PAIR(S_AUTO_COMPLETE));
+          while(*option){
+               addch(*option);
+               option++;
+          }
      }
 
      draw_view_statuses(config_state->tab_current->view_head, config_state->tab_current->view_current,
@@ -3687,7 +3882,6 @@ void view_drawer(const BufferNode_t* head, void* user_data)
      }
 
      // reset the cursor
-     Point_t terminal_cursor = get_cursor_on_terminal(cursor, buffer_view);
      move(terminal_cursor.y, terminal_cursor.x);
 
      // update the screen with what we drew

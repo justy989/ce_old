@@ -56,6 +56,8 @@ typedef enum {
 
      S_VIEW_STATUS,
      S_INPUT_STATUS,
+
+     S_AUTO_COMPLETE,
 } Syntax_t;
 
 #define CE_CHECK_PTR_ARG(arg)                                                 \

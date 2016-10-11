@@ -3,8 +3,8 @@
 [![Build Status](https://travis-ci.org/justy989/ce.svg?branch=master)](https://travis-ci.org/justy989/ce)
 
 ###Default keybindings (when not in insert mode)
-- Ctrl+f: load File
-- Ctrl+q: kill current Window, if there is only 1 window, then quit
+- Ctrl+f: load file
+- Ctrl+q: kill current window, if there is only 1 window, then quit
 - Ctrl+w: save buffer
 - Ctrl+a: save buffer as new filename
 - Ctrl+e: open new unnamed buffer

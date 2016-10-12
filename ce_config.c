@@ -898,7 +898,7 @@ bool initializer(BufferNode_t* head, Point_t* terminal_dimensions, int argc, cha
 
      init_pair(S_TRAILING_WHITESPACE, COLOR_FOREGROUND, COLOR_RED);
 
-     init_pair(S_BORDERS, COLOR_WHITE, COLOR_BACKGROUND);
+     init_pair(S_BORDERS, COLOR_FOREGROUND, COLOR_BACKGROUND);
 
      init_pair(S_TAB_NAME, COLOR_WHITE, COLOR_BACKGROUND);
      init_pair(S_CURRENT_TAB_NAME, COLOR_CYAN, COLOR_BACKGROUND);

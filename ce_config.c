@@ -1817,8 +1817,11 @@ void* run_shell_commands(void* user_data)
                     // check if the pid has exitted
                     int status;
                     pid_t check_pid = waitpid(cmd_pid, &status, WNOHANG);
-                    if(check_pid > 0) exit_code = WEXITSTATUS(status);
-                    break;
+                    if(check_pid > 0){
+                         exit_code = WEXITSTATUS(status);
+                         break;
+                    }
+                    continue;
                }
 
                if(ioctl(out_fd, FIONREAD, &count) != -1){

@@ -710,7 +710,8 @@ void input_start(ConfigState_t* config_state, const char* input_message, char in
 void input_end(ConfigState_t* config_state)
 {
      config_state->input = false;
-     config_state->tab_current->view_current = config_state->tab_current->view_input_save; \
+     config_state->tab_current->view_current = config_state->tab_current->view_input_save;
+     enter_normal_mode(config_state);
 }
 
 void input_cancel(ConfigState_t* config_state)
@@ -2178,6 +2179,233 @@ bool calc_auto_complete_start_and_path(AutoComplete_t* auto_complete, const char
      return rc;
 }
 
+void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
+{
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Buffer_t* buffer = buffer_view->buffer;
+     Point_t* cursor = &buffer_view->cursor;
+     BufferState_t* buffer_state = buffer->user_data;
+
+     if(config_state->input){
+          input_end(config_state);
+
+          // update convenience vars
+          buffer_view = config_state->tab_current->view_current;
+          buffer = config_state->tab_current->view_current->buffer;
+          cursor = &config_state->tab_current->view_current->cursor;
+          buffer_state = buffer->user_data;
+
+          switch(config_state->input_key) {
+          default:
+               break;
+          case ':':
+          {
+               if(config_state->view_input->buffer->line_count){
+                    int64_t line = atoi(config_state->view_input->buffer->lines[0]);
+                    if(line > 0){
+                         *cursor = (Point_t){0, line - 1};
+                         ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
+                    }
+               }
+          } break;
+          case 6: // Ctrl + f
+               // just grab the first line and load it as a file
+               commit_input_to_history(config_state->view_input->buffer, &config_state->load_file_history);
+               for(int64_t i = 0; i < config_state->view_input->buffer->line_count; ++i){
+                    Buffer_t* new_buffer = open_file_buffer(head, config_state->view_input->buffer->lines[i]);
+                    if(i == 0 && new_buffer){
+                         config_state->tab_current->view_current->buffer = new_buffer;
+                         config_state->tab_current->view_current->cursor = (Point_t){0, 0};
+                    }
+               }
+               break;
+          case '/':
+               if(config_state->view_input->buffer->line_count){
+                    commit_input_to_history(config_state->view_input->buffer, &config_state->search_history);
+                    add_yank(config_state, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
+               }
+               break;
+          case '?':
+               if(config_state->view_input->buffer->line_count){
+                    commit_input_to_history(config_state->view_input->buffer, &config_state->search_history);
+                    add_yank(config_state, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
+               }
+               break;
+          case 24: // Ctrl + x
+          {
+               if(config_state->view_input->buffer->line_count == 0){
+                    break;
+               }
+
+               if(config_state->shell_command_thread){
+                    pthread_cancel(config_state->shell_command_thread);
+                    pthread_join(config_state->shell_command_thread, NULL);
+               }
+
+               commit_input_to_history(config_state->view_input->buffer, &config_state->shell_command_history);
+
+               // if we found an existing command buffer, clear it and use it
+               Buffer_t* command_buffer = config_state->shell_command_buffer;
+               command_buffer->cursor = (Point_t){0, 0};
+               config_state->last_command_buffer_jump = 0;
+               BufferView_t* command_view = ce_buffer_in_view(config_state->tab_current->view_head, command_buffer);
+
+               if(command_view){
+                    command_view->cursor = (Point_t){0, 0};
+                    command_view->top_row = 0;
+               }else{
+                    buffer_view->buffer = command_buffer;
+                    buffer_view->cursor = (Point_t){0, 0};
+                    buffer_view->top_row = 0;
+                    command_view = buffer_view;
+               }
+
+               shell_command_data.command_count = config_state->view_input->buffer->line_count;
+               shell_command_data.commands = malloc(shell_command_data.command_count * sizeof(char**));
+               if(!shell_command_data.commands){
+                    ce_message("failed to allocate shell commands");
+                    break;
+               }
+
+               bool failed_to_alloc = false;
+               for(int64_t i = 0; i < config_state->view_input->buffer->line_count; ++i){
+                    shell_command_data.commands[i] = strdup(config_state->view_input->buffer->lines[i]);
+                    if(!shell_command_data.commands[i]){
+                         ce_message("failed to allocate shell command %" PRId64, i + 1);
+                         failed_to_alloc = true;
+                         break;
+                    }
+               }
+               if(failed_to_alloc) break; // leak !
+
+               shell_command_data.output_buffer = command_buffer;
+               shell_command_data.buffer_node_head = head;
+               shell_command_data.view_head = config_state->tab_current->view_head;
+               shell_command_data.view_current = buffer_view;
+               shell_command_data.user_data = config_state;
+
+               assert(command_buffer->readonly);
+               pthread_mutex_lock(&shell_buffer_lock);
+               ce_clear_lines_readonly(command_buffer);
+               pthread_mutex_unlock(&shell_buffer_lock);
+
+               pthread_create(&config_state->shell_command_thread, NULL, run_shell_commands, config_state);
+          } break;
+          case 'R':
+          {
+               YankNode_t* yank = find_yank(config_state, '/');
+               if(!yank) break;
+               const char* search_str = yank->text;
+               // NOTE: allow empty string to replace search
+               int64_t search_len = strlen(search_str);
+               if(!search_len) break;
+               char* replace_str = ce_dupe_buffer(config_state->view_input->buffer);
+               int64_t replace_len = strlen(replace_str);
+               Point_t begin = {};
+               Point_t match = {};
+               int64_t replace_count = 0;
+               while(ce_find_string(buffer, &begin, search_str, &match, CE_DOWN)){
+                    if(!ce_remove_string(buffer, &match, search_len)) break;
+                    if(replace_len){
+                         if(!ce_insert_string(buffer, &match, replace_str)) break;
+                    }
+                    ce_commit_change_string(&buffer_state->commit_tail, &match, &match, &match, strdup(replace_str),
+                                            strdup(search_str));
+                    begin = match;
+                    replace_count++;
+               }
+               if(replace_count){
+                    ce_message("replaced %" PRId64 " matches", replace_count);
+               }else{
+                    ce_message("no matches found to replace");
+               }
+               *cursor = match;
+               center_view(buffer_view);
+               free(replace_str);
+          } break;
+          case 1: // Ctrl + a
+          {
+               if(!config_state->view_input->buffer->lines ||
+                  !config_state->view_input->buffer->lines[0][0]) break;
+
+               if(ce_save_buffer(buffer, config_state->view_input->buffer->lines[0])){
+                    buffer->filename = strdup(config_state->view_input->buffer->lines[0]);
+               }
+          } break;
+          case 9: // Ctrl + i
+          {
+               if(!config_state->view_input->buffer->lines) break;
+               if(!config_state->shell_command_thread) break;
+               if(!shell_command_data.shell_command_input_fd) break;
+
+               if(config_state->shell_input_thread){
+                    pthread_cancel(config_state->shell_input_thread);
+                    pthread_join(config_state->shell_input_thread, NULL);
+               }
+
+               Buffer_t* input_buffer = config_state->view_input->buffer;
+               commit_input_to_history(input_buffer, &config_state->shell_input_history);
+
+               ShellInputData_t* shell_input_data = malloc(sizeof(*shell_input_data));
+               if(!shell_input_data){
+                    ce_message("failed to allocate shell input data");
+                    break;
+               }
+
+               shell_input_data->input_count = input_buffer->line_count;
+               shell_input_data->input = malloc(shell_input_data->input_count * sizeof(char**));
+               if(!shell_input_data->input){
+                    ce_message("failed to allocate shell input");
+                    break;
+               }
+
+               bool failed_to_alloc = false;
+               for(int64_t i = 0; i < shell_input_data->input_count; ++i){
+                    shell_input_data->input[i] = strdup(input_buffer->lines[i]);
+                    if(!shell_input_data->input[i]){
+                         ce_message("failed to allocate shell input line %" PRId64, i + 1);
+                         failed_to_alloc = true;
+                         break;
+                    }
+               }
+
+               if(failed_to_alloc) break; // leak!
+
+               shell_input_data->shell_command_buffer = config_state->shell_command_buffer;
+               shell_input_data->shell_command_input_fd = shell_command_data.shell_command_input_fd;
+               shell_input_data->shell_command_output_fd = shell_command_data.shell_command_output_fd;
+
+               pthread_create(&config_state->shell_input_thread, NULL, send_shell_input, shell_input_data);
+          }break;
+          }
+     }else if(buffer_view->buffer == &config_state->buffer_list_buffer){
+          int64_t line = cursor->y - 1; // account for buffer list row header
+          if(line < 0) return;
+          BufferNode_t* itr = head;
+
+          while(line > 0){
+               itr = itr->next;
+               if(!itr) return;
+               line--;
+          }
+
+          if(!itr) return;
+
+          buffer_view->buffer = itr->buffer;
+          *cursor = itr->buffer->cursor;
+          center_view(buffer_view);
+     }else if(config_state->tab_current->view_current->buffer == config_state->shell_command_buffer){
+          BufferView_t* view_to_change = buffer_view;
+          if(config_state->tab_current->view_previous) view_to_change = config_state->tab_current->view_previous;
+
+          if(goto_file_destination_in_buffer(head, config_state->shell_command_buffer, cursor->y,
+                                             config_state->tab_current->view_head, view_to_change,
+                                             &config_state->last_command_buffer_jump)){
+               config_state->tab_current->view_current = view_to_change;
+          }
+     }
+}
+
 bool key_handler(int key, BufferNode_t* head, void* user_data)
 {
      ConfigState_t* config_state = user_data;
@@ -2268,10 +2496,6 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                                                                 buffer->lines[cursor->y],
                                                                 *cursor,
                                                                 config_state->completion_buffer);
-                         }else{
-                              // since we didn't auto complete a directory, let's go to normal mode
-                              // so we can quickly load the file
-                              enter_normal_mode(config_state);
                          }
                     }
                }else{
@@ -2399,6 +2623,9 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          enter_normal_mode(config_state);
                     }
                }
+               break;
+          case 25: // Ctrl + y
+               confirm_action(config_state, head);
                break;
           default:
                if(ce_insert_char(buffer, cursor, key)){
@@ -3190,6 +3417,8 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                half_page_down(config_state->tab_current->view_current);
           } break;
           case 25: // Ctrl + y
+          confirm_action(config_state, head);
+#if 0
                if(config_state->input){
                     // dump input history on cursor line
                     InputHistory_t* cur_hist = history_from_input_key(config_state);
@@ -3218,6 +3447,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
 
                     if(empty_first_line) ce_remove_line(config_state->view_input->buffer, 0);
                }
+#endif
               break;
           case 8: // Ctrl + h
           {
@@ -3227,242 +3457,23 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
               switch_to_view_at_point(config_state, point);
           } break;
           case 10: // Ctrl + j
-               if(config_state->input && config_state->tab_current->view_current == config_state->view_input){
-                    input_end(config_state);
-                    buffer = config_state->tab_current->view_current->buffer;
-                    buffer_state = buffer->user_data;
-                    buffer_view = config_state->tab_current->view_current;
-                    cursor = &config_state->tab_current->view_current->cursor;
-
-                    switch(config_state->input_key) {
-                    default:
-                         break;
-                    case ':':
-                    {
-                         if(config_state->view_input->buffer->line_count){
-                              int64_t line = atoi(config_state->view_input->buffer->lines[0]);
-                              if(line > 0){
-                                   config_state->tab_current->view_current->cursor = (Point_t){0, line - 1};
-                                   ce_move_cursor_to_soft_beginning_of_line(config_state->tab_current->view_current->buffer,
-                                                                            &config_state->tab_current->view_current->cursor);
-                              }
-                         }
-                    } break;
-                    case 6: // Ctrl + f
-                         // just grab the first line and load it as a file
-                         commit_input_to_history(config_state->view_input->buffer, &config_state->load_file_history);
-                         for(int64_t i = 0; i < config_state->view_input->buffer->line_count; ++i){
-                              Buffer_t* new_buffer = open_file_buffer(head, config_state->view_input->buffer->lines[i]);
-                              if(i == 0 && new_buffer){
-                                   config_state->tab_current->view_current->buffer = new_buffer;
-                                   config_state->tab_current->view_current->cursor = (Point_t){0, 0};
-                              }
-                         }
-                         break;
-                    case '/':
-                         if(config_state->view_input->buffer->line_count){
-                              commit_input_to_history(config_state->view_input->buffer, &config_state->search_history);
-                              add_yank(config_state, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
-                         }
-                         break;
-                    case '?':
-                         if(config_state->view_input->buffer->line_count){
-                              commit_input_to_history(config_state->view_input->buffer, &config_state->search_history);
-                              add_yank(config_state, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
-                         }
-                         break;
-                    case 24: // Ctrl + x
-                    {
-                         if(config_state->view_input->buffer->line_count == 0){
-                              break;
-                         }
-
-                         if(config_state->shell_command_thread){
-                              pthread_cancel(config_state->shell_command_thread);
-                              pthread_join(config_state->shell_command_thread, NULL);
-                         }
-
-                         commit_input_to_history(config_state->view_input->buffer, &config_state->shell_command_history);
-
-                         // if we found an existing command buffer, clear it and use it
-                         Buffer_t* command_buffer = config_state->shell_command_buffer;
-                         command_buffer->cursor = (Point_t){0, 0};
-                         config_state->last_command_buffer_jump = 0;
-                         BufferView_t* command_view = ce_buffer_in_view(config_state->tab_current->view_head, command_buffer);
-
-                         if(command_view){
-                              command_view->cursor = (Point_t){0, 0};
-                              command_view->top_row = 0;
-                         }else{
-                              config_state->tab_current->view_current->buffer = command_buffer;
-                              config_state->tab_current->view_current->cursor = (Point_t){0, 0};
-                              config_state->tab_current->view_current->top_row = 0;
-                              command_view = config_state->tab_current->view_current;
-                         }
-
-                         shell_command_data.command_count = config_state->view_input->buffer->line_count;
-                         shell_command_data.commands = malloc(shell_command_data.command_count * sizeof(char**));
-                         if(!shell_command_data.commands){
-                              ce_message("failed to allocate shell commands");
-                              break;
-                         }
-
-                         bool failed_to_alloc = false;
-                         for(int64_t i = 0; i < config_state->view_input->buffer->line_count; ++i){
-                              shell_command_data.commands[i] = strdup(config_state->view_input->buffer->lines[i]);
-                              if(!shell_command_data.commands[i]){
-                                   ce_message("failed to allocate shell command %" PRId64, i + 1);
-                                   failed_to_alloc = true;
-                                   break;
-                              }
-                         }
-                         if(failed_to_alloc) break; // leak !
-
-                         shell_command_data.output_buffer = command_buffer;
-                         shell_command_data.buffer_node_head = head;
-                         shell_command_data.view_head = config_state->tab_current->view_head;
-                         shell_command_data.view_current = config_state->tab_current->view_current;
-                         shell_command_data.user_data = user_data;
-
-                         assert(command_buffer->readonly);
-                         pthread_mutex_lock(&shell_buffer_lock);
-                         ce_clear_lines_readonly(command_buffer);
-                         pthread_mutex_unlock(&shell_buffer_lock);
-
-                         pthread_create(&config_state->shell_command_thread, NULL, run_shell_commands, user_data);
-                    } break;
-                    case 'R':
-                    {
-                         YankNode_t* yank = find_yank(config_state, '/');
-                         if(!yank) break;
-                         const char* search_str = yank->text;
-                         // NOTE: allow empty string to replace search
-                         int64_t search_len = strlen(search_str);
-                         if(!search_len) break;
-                         char* replace_str = ce_dupe_buffer(config_state->view_input->buffer);
-                         int64_t replace_len = strlen(replace_str);
-                         Point_t begin = {};
-                         Point_t match = {};
-                         int64_t replace_count = 0;
-                         while(ce_find_string(buffer, &begin, search_str, &match, CE_DOWN)){
-                              if(!ce_remove_string(buffer, &match, search_len)) break;
-                              if(replace_len){
-                                   if(!ce_insert_string(buffer, &match, replace_str)) break;
-                              }
-                              ce_commit_change_string(&buffer_state->commit_tail, &match, &match, &match, strdup(replace_str),
-                                                      strdup(search_str));
-                              begin = match;
-                              replace_count++;
-                         }
-                         if(replace_count){
-                              ce_message("replaced %" PRId64 " matches", replace_count);
-                         }else{
-                              ce_message("no matches found to replace");
-                         }
-                         *cursor = match;
-                         center_view(config_state->tab_current->view_current);
-                         free(replace_str);
-                    } break;
-                    case 1: // Ctrl + a
-                    {
-                         if(!config_state->view_input->buffer->lines ||
-                            !config_state->view_input->buffer->lines[0][0]) break;
-
-                         if(ce_save_buffer(buffer, config_state->view_input->buffer->lines[0])){
-                              buffer->filename = strdup(config_state->view_input->buffer->lines[0]);
-                         }
-                    } break;
-                    case 9: // Ctrl + i
-                    {
-                         if(!config_state->view_input->buffer->lines) break;
-                         if(!config_state->shell_command_thread) break;
-                         if(!shell_command_data.shell_command_input_fd) break;
-
-                         if(config_state->shell_input_thread){
-                              pthread_cancel(config_state->shell_input_thread);
-                              pthread_join(config_state->shell_input_thread, NULL);
-                         }
-
-                         Buffer_t* input_buffer = config_state->view_input->buffer;
-                         commit_input_to_history(input_buffer, &config_state->shell_input_history);
-
-                         ShellInputData_t* shell_input_data = malloc(sizeof(*shell_input_data));
-                         if(!shell_input_data){
-                              ce_message("failed to allocate shell input data");
-                              break;
-                         }
-
-                         shell_input_data->input_count = input_buffer->line_count;
-                         shell_input_data->input = malloc(shell_input_data->input_count * sizeof(char**));
-                         if(!shell_input_data->input){
-                              ce_message("failed to allocate shell input");
-                              break;
-                         }
-
-                         bool failed_to_alloc = false;
-                         for(int64_t i = 0; i < shell_input_data->input_count; ++i){
-                              shell_input_data->input[i] = strdup(input_buffer->lines[i]);
-                              if(!shell_input_data->input[i]){
-                                   ce_message("failed to allocate shell input line %" PRId64, i + 1);
-                                   failed_to_alloc = true;
-                                   break;
-                              }
-                         }
-
-                         if(failed_to_alloc) break; // leak!
-
-                         shell_input_data->shell_command_buffer = config_state->shell_command_buffer;
-                         shell_input_data->shell_command_input_fd = shell_command_data.shell_command_input_fd;
-                         shell_input_data->shell_command_output_fd = shell_command_data.shell_command_output_fd;
-
-                         pthread_create(&config_state->shell_input_thread, NULL, send_shell_input, shell_input_data);
-                    }break;
-                    }
-               }else if(config_state->tab_current->view_current->buffer == &config_state->buffer_list_buffer){
-                    int64_t line = cursor->y - 1; // account for buffer list row header
-                    if(line < 0) break;
-                    BufferNode_t* itr = head;
-
-                    while(line > 0){
-                         itr = itr->next;
-                         if(!itr) break;
-                         line--;
-                    }
-
-                    if(!itr) break;
-
-                    config_state->tab_current->view_current->buffer = itr->buffer;
-                    config_state->tab_current->view_current->cursor = itr->buffer->cursor;
-                    center_view(config_state->tab_current->view_current);
-               }else if(config_state->tab_current->view_current->buffer == config_state->shell_command_buffer){
-                    BufferView_t* view_to_change = config_state->tab_current->view_current;
-                    if(config_state->tab_current->view_previous) view_to_change = config_state->tab_current->view_previous;
-
-                    if(goto_file_destination_in_buffer(head, config_state->shell_command_buffer, cursor->y,
-                                                       config_state->tab_current->view_head, view_to_change,
-                                                       &config_state->last_command_buffer_jump)){
-                         config_state->tab_current->view_current = view_to_change;
-                    }
-               }else{
-                    Point_t point = {cursor->x - config_state->tab_current->view_current->left_column + config_state->tab_current->view_current->top_left.x,
-                                     config_state->tab_current->view_current->bottom_right.y + 2}; // account for window separator
-                    switch_to_view_at_point(config_state, point);
-               }
-               break;
+          {
+               Point_t point = {cursor->x - config_state->tab_current->view_current->left_column + config_state->tab_current->view_current->top_left.x,
+                                config_state->tab_current->view_current->bottom_right.y + 2}; // account for window separator
+               switch_to_view_at_point(config_state, point);
+          } break;
           case 11: // Ctrl + k
           {
                Point_t point = {cursor->x - config_state->tab_current->view_current->left_column + config_state->tab_current->view_current->top_left.x,
                                 config_state->tab_current->view_current->top_left.y - 2};
                switch_to_view_at_point(config_state, point);
-          }
-          break;
+          } break;
           case 12: // Ctrl + l
           {
                Point_t point = {config_state->tab_current->view_current->bottom_right.x + 2, // account for window separator
                                 cursor->y - config_state->tab_current->view_current->top_row + config_state->tab_current->view_current->top_left.y};
                switch_to_view_at_point(config_state, point);
-          }
-          break;
+          } break;
           case ':':
           {
                if(config_state->input) break;

@@ -2067,7 +2067,8 @@ bool generate_auto_complete_files_in_dir(AutoComplete_t* auto_complete, const ch
      struct stat info;
      auto_complete_clear(auto_complete);
      while((node = readdir(os_dir)) != NULL){
-          stat(node->d_name, &info);
+          snprintf(tmp, PATH_MAX, "%s/%s", dir, node->d_name);
+          stat(tmp, &info);
           if(S_ISDIR(info.st_mode)){
                snprintf(tmp, PATH_MAX, "%s/", node->d_name);
           }else{
@@ -2082,6 +2083,59 @@ bool generate_auto_complete_files_in_dir(AutoComplete_t* auto_complete, const ch
      return true;
 }
 
+bool calc_auto_complete_start_and_path(AutoComplete_t* auto_complete, const char* line, Point_t cursor)
+{
+     // we only auto complete in the case where the cursor is up against path with directories
+     // -pat|
+     // -/dir/pat|
+     // -/base/dir/pat|
+     const char* path_begin = line + cursor.x;
+     const char* last_slash = NULL;
+
+     // if the cursor is not on the null terminator, skip
+     if(*path_begin != '\0') return false;
+
+     while(path_begin >= line){
+          if(!last_slash && *path_begin == '/') last_slash = path_begin;
+          if(isblank(*path_begin)) break;
+          path_begin--;
+     }
+
+     path_begin++; // account for iterating 1 too far
+
+     // generate based on the path
+     bool rc = false;
+     if(last_slash){
+          int64_t path_len = (last_slash - path_begin) + 1;
+          char* path = malloc(path_len + 1);
+          if(!path){
+               ce_message("failed to alloc path");
+               return false;
+          }
+
+          memcpy(path, path_begin, path_len);
+          path[path_len] = 0;
+
+          rc = generate_auto_complete_files_in_dir(auto_complete, path);
+          free(path);
+     }else{
+          rc = generate_auto_complete_files_in_dir(auto_complete, ".");
+     }
+
+     // set the start point if we generated files
+     if(rc){
+          if(last_slash){
+               auto_complete_start(auto_complete, (Point_t){(last_slash - line) + 1, cursor.y});
+               auto_complete_next(auto_complete, last_slash + 1);
+          }else{
+               auto_complete_start(auto_complete, (Point_t){(path_begin - line), cursor.y});
+               auto_complete_next(auto_complete, path_begin);
+          }
+     }
+
+     return rc;
+}
+
 bool key_handler(int key, BufferNode_t* head, void* user_data)
 {
      ConfigState_t* config_state = user_data;
@@ -2094,6 +2148,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
 
      if(config_state->vim_mode == VM_INSERT){
           assert(config_state->command_key == '\0');
+
           switch(key){
           case 27: // ESC
           {
@@ -2126,7 +2181,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                                    config_state->start_insert = *cursor;
                               }
 
-                              auto_complete_start(&config_state->auto_complete, (Point_t){0, cursor->y});
+                              auto_complete_end(&config_state->auto_complete);
                          }
                     }else{
                          Point_t previous = *cursor;
@@ -2141,6 +2196,14 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                                    // cannot use move_cursor due to not being able to be ahead of the last character
                                    cursor->x--;
                               }
+
+                              if(auto_completing(&config_state->auto_complete)){
+                                   if(c == '/'){
+                                        calc_auto_complete_start_and_path(&config_state->auto_complete,
+                                                                          buffer->lines[cursor->y],
+                                                                          *cursor);
+                                   }
+                              }
                          }
                     }
                }
@@ -2154,19 +2217,15 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                if(auto_completing(&config_state->auto_complete))
                {
                     int64_t offset = cursor->x - config_state->auto_complete.start.x;
-                    if(offset < 0){
-                         config_state->auto_complete.start.x += offset; // slide back the start
-                         offset = 0;
-                    }
-
                     const char* complete = config_state->auto_complete.current->option + offset;
                     int64_t complete_len = strlen(complete);
                     if(ce_insert_string(buffer, cursor, complete)){
-                         ce_move_cursor(buffer, cursor, (Point_t){complete_len + 1, cursor->y});
+                         ce_move_cursor(buffer, cursor, (Point_t){complete_len, cursor->y});
                          cursor->x++;
-                         if(complete[complete_len - 1] == '/' &&
-                            generate_auto_complete_files_in_dir(&config_state->auto_complete, buffer->lines[cursor->y])){
-                              auto_complete_start(&config_state->auto_complete, *cursor);
+                         if(complete[complete_len - 1] == '/'){
+                              calc_auto_complete_start_and_path(&config_state->auto_complete,
+                                                                buffer->lines[cursor->y],
+                                                                *cursor);
                          }
                     }
                }else{
@@ -2200,6 +2259,8 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          if(ce_insert_string(buffer, cursor, indent))
                               cursor->x += indent_len;
                     }
+
+                    auto_complete_end(&config_state->auto_complete);
                }
           } break;
           case KEY_UP:
@@ -2290,17 +2351,24 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                }
                break;
           default:
-               if(ce_insert_char(buffer, cursor, key)) cursor->x++;
-               if(auto_completing(&config_state->auto_complete)){
-                    Point_t end = *cursor;
-                    end.x--;
-                    if(end.x < 0) end.x = 0;
-                    char* match = ce_dupe_string(buffer, &config_state->auto_complete.start, &end);
-                    int64_t match_len = strlen(match);
-                    if(strncmp(config_state->auto_complete.current->option, match, match_len) != 0){
-                         auto_complete_next(&config_state->auto_complete, match);
+               if(ce_insert_char(buffer, cursor, key)){
+                    cursor->x++;
+
+                    if(auto_completing(&config_state->auto_complete)){
+                         Point_t end = *cursor;
+                         end.x--;
+                         if(end.x < 0) end.x = 0;
+                         char* match = ce_dupe_string(buffer, &config_state->auto_complete.start, &end);
+                         int64_t match_len = strlen(match);
+                         if(strncmp(config_state->auto_complete.current->option, match, match_len) != 0){
+                              auto_complete_next(&config_state->auto_complete, match);
+                         }
+                         free(match);
+                    }else if(config_state->input && config_state->input_key == 6){
+                         calc_auto_complete_start_and_path(&config_state->auto_complete,
+                                                           buffer->lines[cursor->y],
+                                                           *cursor);
                     }
-                    free(match);
                }
                break;
           }
@@ -3596,9 +3664,6 @@ search:
           {
                if(config_state->input) break;
                input_start(config_state, "Load File", key);
-               if(generate_auto_complete_files_in_dir(&config_state->auto_complete, ".")){
-                    auto_complete_start(&config_state->auto_complete, *cursor);
-               }
           } break;
           case 20: // Ctrl + t
           {

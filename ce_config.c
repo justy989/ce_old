@@ -3143,14 +3143,42 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                }
           } break;
           case 2: // Ctrl + b
-          {
-               update_buffer_list_buffer(config_state, head);
-               config_state->buffer_list_buffer.readonly = true;
-               config_state->tab_current->view_current->buffer->cursor = *cursor;
-               config_state->tab_current->view_current->buffer = &config_state->buffer_list_buffer;
-               config_state->tab_current->view_current->cursor = (Point_t){0, 1};
-               config_state->tab_current->view_current->top_row = 0;
-          } break;
+               if(config_state->input){
+                    // dump input history on cursor line
+                    InputHistory_t* cur_hist = history_from_input_key(config_state);
+                    if(!cur_hist){
+                         ce_message("no history to dump");
+                         break;
+                    }
+
+                    // start the insertions after the cursor, unless the buffer is empty
+                    assert(config_state->view_input->buffer->line_count);
+                    int lines_added = 1;
+                    bool empty_first_line = !config_state->view_input->buffer->lines[0][0];
+
+                    // insert each line in history
+                    InputHistoryNode_t* node = cur_hist->head;
+                    while(node && node->entry){
+                         if(ce_insert_line(config_state->view_input->buffer,
+                                           config_state->view_input->cursor.y + lines_added,
+                                           node->entry)){
+                              lines_added += ce_count_string_lines(node->entry);
+                         }else{
+                              break;
+                         }
+                         node = node->next;
+                    }
+
+                    if(empty_first_line) ce_remove_line(config_state->view_input->buffer, 0);
+               }else{
+                    update_buffer_list_buffer(config_state, head);
+                    config_state->buffer_list_buffer.readonly = true;
+                    config_state->tab_current->view_current->buffer->cursor = *cursor;
+                    config_state->tab_current->view_current->buffer = &config_state->buffer_list_buffer;
+                    config_state->tab_current->view_current->cursor = (Point_t){0, 1};
+                    config_state->tab_current->view_current->top_row = 0;
+               }
+               break;
           case 'u':
                if(buffer_state->commit_tail && buffer_state->commit_tail->commit.type != BCT_NONE){
                     ce_commit_undo(buffer, &buffer_state->commit_tail, cursor);
@@ -3349,36 +3377,6 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           } break;
           case 25: // Ctrl + y
                confirm_action(config_state, head);
-#if 0
-               if(config_state->input){
-                    // dump input history on cursor line
-                    InputHistory_t* cur_hist = history_from_input_key(config_state);
-                    if(!cur_hist){
-                         ce_message("no history to dump");
-                         break;
-                    }
-
-                    // start the insertions after the cursor, unless the buffer is empty
-                    assert(config_state->view_input->buffer->line_count);
-                    int lines_added = 1;
-                    bool empty_first_line = !config_state->view_input->buffer->lines[0][0];
-
-                    // insert each line in history
-                    InputHistoryNode_t* node = cur_hist->head;
-                    while(node && node->entry){
-                         if(ce_insert_line(config_state->view_input->buffer,
-                                           config_state->view_input->cursor.y + lines_added,
-                                           node->entry)){
-                              lines_added += ce_count_string_lines(node->entry);
-                         }else{
-                              break;
-                         }
-                         node = node->next;
-                    }
-
-                    if(empty_first_line) ce_remove_line(config_state->view_input->buffer, 0);
-               }
-#endif
                break;
           case 8: // Ctrl + h
           {

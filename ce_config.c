@@ -34,14 +34,6 @@ typedef struct{
      void* user_data;
 } ShellCommandData;
 
-typedef struct{
-     char** input;
-     int64_t input_count;
-     Buffer* shell_command_buffer;
-     int shell_command_input_fd;
-     int shell_command_output_fd;
-} ShellInputData;
-
 ShellCommandData shell_command_data;
 pthread_mutex_t draw_lock;
 pthread_mutex_t shell_buffer_lock;
@@ -1771,6 +1763,19 @@ void redraw_if_shell_command_buffer_in_view(BufferView* view_head, Buffer* shell
      }
 }
 
+void run_shell_commands_cleanup(void* user_data)
+{
+     (void)(user_data);
+
+     // release locks we could be holding
+     pthread_mutex_unlock(&draw_lock);
+     pthread_mutex_unlock(&shell_buffer_lock);
+
+     // free memory we could be using
+     for(int64_t i = 0; i < shell_command_data.command_count; ++i) free(shell_command_data.commands[i]);
+     free(shell_command_data.commands);
+}
+
 // NOTE: runs N commands where each command is newline separated
 void* run_shell_commands(void* user_data)
 {
@@ -1778,11 +1783,13 @@ void* run_shell_commands(void* user_data)
      int in_fd;
      int out_fd;
 
+     pthread_cleanup_push(run_shell_commands_cleanup, NULL);
+
      for(int64_t i = 0; i < shell_command_data.command_count; ++i){
           char* current_command = shell_command_data.commands[i];
 
           pid_t cmd_pid = bidirectional_popen(current_command, &in_fd, &out_fd);
-          if(cmd_pid <= 0) goto clean_exit;
+          if(cmd_pid <= 0) pthread_exit(NULL);
 
           shell_command_data.shell_command_input_fd = in_fd;
           shell_command_data.shell_command_output_fd = out_fd;
@@ -1813,7 +1820,7 @@ void* run_shell_commands(void* user_data)
                if(rc == -1){
                     // NOTE: since this is in a thread, is errno pointless to check?
                     ce_message("select() failed: '%s'", strerror(errno));
-                    goto clean_exit;
+                    pthread_exit(NULL);
                }else if(rc == 0){
                     // nothing happend on the fd
                     if(first_block){
@@ -1847,8 +1854,7 @@ void* run_shell_commands(void* user_data)
 
                pthread_mutex_lock(&shell_buffer_lock);
                if(!ce_append_char_readonly(shell_command_data.output_buffer, ch)){
-                    pthread_mutex_unlock(&shell_buffer_lock);
-                    goto clean_exit;
+                    pthread_exit(NULL);
                }
                pthread_mutex_unlock(&shell_buffer_lock);
 
@@ -1872,57 +1878,7 @@ void* run_shell_commands(void* user_data)
           view_drawer(shell_command_data.buffer_node_head, user_data);
      }
 
-clean_exit:
-
-     for(int64_t i = 0; i < shell_command_data.command_count; ++i) free(shell_command_data.commands[i]);
-     free(shell_command_data.commands);
-     return NULL;
-}
-
-void* send_shell_input(void* data)
-{
-     ShellInputData* shell_input_data = data;
-     struct timeval tv = {};
-     fd_set out_fd_set;
-
-     for(int64_t i = 0; i < shell_input_data->input_count; ++i){
-          char* input = shell_input_data->input[i];
-
-          // NOTE: Here we are sharing the shell_command_buffer with the run_shell_commands
-          //       thread. I'm sure we will need to do locking around this.
-
-          // put the line in the output buffer
-          pthread_mutex_lock(&shell_buffer_lock);
-          ce_append_string_readonly(shell_input_data->shell_command_buffer,
-                                    shell_input_data->shell_command_buffer->line_count - 1,
-                                    input);
-          ce_append_char_readonly(shell_input_data->shell_command_buffer, NEWLINE);
-          pthread_mutex_unlock(&shell_buffer_lock);
-
-          // send the input to the shell command
-          write(shell_input_data->shell_command_input_fd, input, strlen(input));
-          write(shell_input_data->shell_command_input_fd, "\n", 1);
-
-          // NOTE: Wait for output and then a for select to tell us no output is available
-          //       This might be the best we can do for all programs?
-          bool saw_output = false;
-          while(true){
-               FD_ZERO(&out_fd_set);
-               FD_SET(shell_input_data->shell_command_output_fd, &out_fd_set);
-
-               int rc = select(shell_input_data->shell_command_output_fd + 1, &out_fd_set,
-                               NULL, NULL, &tv);
-               if(rc == -1){
-                    ce_message("select() failed: '%s'", strerror(errno));
-                    break;
-               }else if(rc == 0){
-                    if(saw_output) break;
-               }else{
-                    saw_output = true;
-               }
-          }
-     }
-
+     pthread_cleanup_pop(1);
      return NULL;
 }
 
@@ -3087,36 +3043,19 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          Buffer* input_buffer = config_state->view_input->buffer;
                          commit_input_to_history(input_buffer, &config_state->shell_input_history);
 
-                         ShellInputData* shell_input_data = malloc(sizeof(*shell_input_data));
-                         if(!shell_input_data){
-                              ce_message("failed to allocate shell input data");
-                              break;
-                         }
+                         // put the line in the output buffer
+                         const char* input = input_buffer->lines[0];
 
-                         shell_input_data->input_count = input_buffer->line_count;
-                         shell_input_data->input = malloc(shell_input_data->input_count * sizeof(char**));
-                         if(!shell_input_data->input){
-                              ce_message("failed to allocate shell input");
-                              break;
-                         }
+                         pthread_mutex_lock(&shell_buffer_lock);
+                         ce_append_string_readonly(config_state->shell_command_buffer,
+                                                   config_state->shell_command_buffer->line_count - 1,
+                                                   input);
+                         ce_append_char_readonly(config_state->shell_command_buffer, NEWLINE);
+                         pthread_mutex_unlock(&shell_buffer_lock);
 
-                         bool failed_to_alloc = false;
-                         for(int64_t i = 0; i < shell_input_data->input_count; ++i){
-                              shell_input_data->input[i] = strdup(input_buffer->lines[i]);
-                              if(!shell_input_data->input[i]){
-                                   ce_message("failed to allocate shell input line %" PRId64, i + 1);
-                                   failed_to_alloc = true;
-                                   break;
-                              }
-                         }
-
-                         if(failed_to_alloc) break; // leak!
-
-                         shell_input_data->shell_command_buffer = config_state->shell_command_buffer;
-                         shell_input_data->shell_command_input_fd = shell_command_data.shell_command_input_fd;
-                         shell_input_data->shell_command_output_fd = shell_command_data.shell_command_output_fd;
-
-                         pthread_create(&config_state->shell_input_thread, NULL, send_shell_input, shell_input_data);
+                         // send the input to the shell command
+                         write(shell_command_data.shell_command_input_fd, input, strlen(input));
+                         write(shell_command_data.shell_command_input_fd, "\n", 1);
                     }break;
                     }
                }else if(config_state->tab_current->view_current->buffer == &config_state->buffer_list_buffer){

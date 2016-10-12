@@ -42,23 +42,16 @@ WANTS:
 
 #include "ce.h"
 
-typedef struct{
-     int64_t start_line;
-     int last_key;
-     bool split;
-     Point cursor;
-} DefaultConfigState;
-
-typedef struct Config{
+typedef struct Config_t{
      char* path;
      void* so_handle;
      ce_initializer* initializer;
      ce_destroyer* destroyer;
      ce_key_handler* key_handler;
      ce_view_drawer* view_drawer;
-} Config;
+} Config_t;
 
-bool config_open(Config* config, const char* path)
+bool config_open(Config_t* config, const char* path)
 {
      ce_message("load config: '%s'", path);
 
@@ -87,14 +80,14 @@ bool config_open(Config* config, const char* path)
      return true;
 }
 
-void config_close(Config* config)
+void config_close(Config_t* config)
 {
      if(!config->so_handle) return;
      free(config->path);
      if(dlclose(config->so_handle)) ce_message("dlclose() failed with error %s", dlerror());
 }
 
-bool config_revert(Config* config, const char* filepath, const char* stable_config_contents, size_t stable_config_size)
+bool config_revert(Config_t* config, const char* filepath, const char* stable_config_contents, size_t stable_config_size)
 {
      ce_message("overwriting '%s' back to stable config", filepath);
      FILE* file = fopen(filepath, "wb");
@@ -191,7 +184,7 @@ int main(int argc, char** argv)
      }
 
      // init message buffer
-     Buffer* message_buffer = malloc(sizeof(*message_buffer));
+     Buffer_t* message_buffer = malloc(sizeof(*message_buffer));
      if(!message_buffer){
           printf("failed to allocate message buffer: %s\n", strerror(errno));
           return -1;
@@ -205,7 +198,7 @@ int main(int argc, char** argv)
      message_buffer->modified = false;
 
      // init buffer list
-     BufferNode* buffer_list_head = malloc(sizeof(*buffer_list_head));
+     BufferNode_t* buffer_list_head = malloc(sizeof(*buffer_list_head));
      if(!buffer_list_head){
           printf("failed to allocate buffer list: %s\n", strerror(errno));
           return -1;
@@ -213,7 +206,7 @@ int main(int argc, char** argv)
      buffer_list_head->buffer = message_buffer;
      buffer_list_head->next = NULL;
 
-     Point terminal_dimensions = {};
+     Point_t terminal_dimensions = {};
      getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);
      g_terminal_dimensions = &terminal_dimensions;
 
@@ -222,7 +215,7 @@ int main(int argc, char** argv)
      bool done = false;
      bool stable_sigsegvd = false;
 
-     Config current_config;
+     Config_t current_config;
      if(!config_open(&current_config, config)){
           return -1;
      }
@@ -320,7 +313,7 @@ int main(int argc, char** argv)
                if(strlen(message_buffer_buf) == 1) continue;
                message_buffer_buf[strlen(message_buffer_buf)-1] = '\0';
                if(message_buffer->lines[0][0] == '\0'){
-                    Point insert_loc = {0, 0};
+                    Point_t insert_loc = {0, 0};
                     ce_insert_string(message_buffer, &insert_loc, message_buffer_buf);
                     continue;
                }
@@ -382,8 +375,8 @@ int main(int argc, char** argv)
 
      // free our buffers
      // TODO: I think we want to move this into the config
-     BufferNode* itr = buffer_list_head;
-     BufferNode* tmp;
+     BufferNode_t* itr = buffer_list_head;
+     BufferNode_t* tmp;
      while(itr){
           tmp = itr;
           itr = itr->next;

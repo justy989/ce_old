@@ -602,13 +602,14 @@ void commit_insert_mode_changes(ConfigState_t* config_state, Buffer_t* buffer, B
              config_state->start_insert.y == config_state->original_start_insert.y){
                // TODO: assert cursor is after start_insert
                // exclusively inserts
-               Point_t last_inserted_char = {cursor->x, cursor->y};
-               ce_advance_cursor(buffer, &last_inserted_char, -1);
+               Point_t last_inserted_char = {end_cursor->x, end_cursor->y};
                ce_commit_insert_string(&buffer_state->commit_tail,
                                        &config_state->start_insert,
                                        &config_state->original_start_insert,
                                        end_cursor,
                                        ce_dupe_string(buffer, &config_state->start_insert, &last_inserted_char));
+               // NOTE: we could have added backspaces and just not used them
+               backspace_free(&buffer_state->backspace_head);
           }else if(config_state->start_insert.x < config_state->original_start_insert.x ||
                    config_state->start_insert.y < config_state->original_start_insert.y){
                if(cursor->x == config_state->start_insert.x &&
@@ -2371,7 +2372,9 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                                    backspace_push(&buffer_state->backspace_head, '\n');
                                    cursor->y--;
                                    cursor->x = prev_line_len;
-                                   config_state->start_insert = *cursor;
+                                   if(config_state->start_insert.y > cursor->y){
+                                        config_state->start_insert = *cursor;
+                                   }
                               }
 
                               if(auto_completing(&config_state->auto_complete)){
@@ -2389,7 +2392,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                               if(ce_remove_char(buffer, &previous)){
                                    if(previous.x < config_state->start_insert.x){
                                         backspace_push(&buffer_state->backspace_head, c);
-                                        config_state->start_insert.x--;
+                                        config_state->start_insert.x = previous.x;
                                    }
                                    // cannot use move_cursor due to not being able to be ahead of the last character
                                    cursor->x--;
@@ -2443,8 +2446,6 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     }
                     cursor->y++;
                     cursor->x = 0;
-
-                    auto_complete_start(&config_state->auto_complete, *cursor);
 
                     // indent if necessary
                     Point_t prev_line = {0, cursor->y-1};
@@ -2768,9 +2769,9 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                indent_nl[indent_len + 1] = '\0';
 
                if(ce_insert_string(buffer, &begin_line, indent_nl)){
-                    Point_t next_cursor = {indent_len, cursor->y};
-                    ce_commit_insert_string(&buffer_state->commit_tail, &begin_line, cursor, &next_cursor, indent_nl);
-                    *cursor = next_cursor;
+                    // NOTE: no commit needed here, since we start the cursor on the newly added line in insert,
+                    //       mode, and the range that will be committed is inclusive
+                    *cursor = (Point_t){indent_len, cursor->y};
                     enter_insert_mode(config_state, cursor);
                }
           } break;
@@ -2787,9 +2788,9 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                nl_indent[1 + indent_len] = '\0';
 
                if(ce_insert_string(buffer, &end_of_line, nl_indent)){
-                    Point_t next_cursor = {indent_len, cursor->y+1};
-                    ce_commit_insert_string(&buffer_state->commit_tail, &end_of_line, cursor, &next_cursor, nl_indent);
-                    *cursor = next_cursor;
+                    // NOTE: no commit needed here, since we start the cursor on the newly added line in insert,
+                    //       mode, and the range that will be committed is inclusive
+                    *cursor = (Point_t){indent_len, cursor->y + 1};
                     enter_insert_mode(config_state, cursor);
                }
           } break;

@@ -378,6 +378,7 @@ typedef struct{
      const char* input_message;
      char input_key;
      Buffer_t* shell_command_buffer; // Allocate so it can be part of the buffer list and get free'd at the end
+     Buffer_t* completion_buffer; // same as shell_command_buffer (let's see how quickly this comment gets out of date!)
      Buffer_t input_buffer;
      Buffer_t buffer_list_buffer;
      int64_t last_command_buffer_jump;
@@ -813,27 +814,37 @@ bool initializer(BufferNode_t* head, Point_t* terminal_dimensions, int argc, cha
      initialize_buffer(&config_state->buffer_list_buffer);
      config_state->buffer_list_buffer.readonly = true;
 
-     // setup shell command buffer
-     bool found_shell_command_buffer = false;
-
      // if we reload, the shell command buffer may already exist, don't recreate it
      BufferNode_t* itr = head;
      while(itr){
           if(strcmp(itr->buffer->name, "shell_output") == 0){
-               found_shell_command_buffer = true;
                config_state->shell_command_buffer = itr->buffer;
-               break;
+          }
+          if(strcmp(itr->buffer->name, "completions") == 0){
+               config_state->completion_buffer = itr->buffer;
           }
           itr = itr->next;
      }
 
-     if(!found_shell_command_buffer){
+     if(!config_state->shell_command_buffer){
           config_state->shell_command_buffer = calloc(1, sizeof(*config_state->shell_command_buffer));
           config_state->shell_command_buffer->name = strdup("shell_output");
           config_state->shell_command_buffer->readonly = true;
           initialize_buffer(config_state->shell_command_buffer);
           ce_alloc_lines(config_state->shell_command_buffer, 1);
           BufferNode_t* new_buffer_node = ce_append_buffer_to_list(head, config_state->shell_command_buffer);
+          if(!new_buffer_node){
+               ce_message("failed to add shell command buffer to list");
+               return false;
+          }
+     }
+
+     if(!config_state->completion_buffer){
+          config_state->completion_buffer = calloc(1, sizeof(*config_state->shell_command_buffer));
+          config_state->completion_buffer->name = strdup("completions");
+          config_state->completion_buffer->readonly = true;
+          initialize_buffer(config_state->completion_buffer);
+          BufferNode_t* new_buffer_node = ce_append_buffer_to_list(head, config_state->completion_buffer);
           if(!new_buffer_node){
                ce_message("failed to add shell command buffer to list");
                return false;
@@ -1481,7 +1492,7 @@ void split_view(BufferView_t* head_view, BufferView_t* current_view, bool horizo
      BufferView_t* new_view = ce_split_view(current_view, current_view->buffer, horizontal);
      if(new_view){
           Point_t top_left = {0, 0};
-          Point_t bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 2}; // account for statusbar
+          Point_t bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 1};
           ce_calc_views(head_view, &top_left, &bottom_right);
           view_follow_cursor(current_view);
           new_view->cursor = current_view->cursor;
@@ -1753,9 +1764,18 @@ bool iterate_history_input(ConfigState_t* config_state, bool previous)
      return success;
 }
 
-void switch_to_view_at_point(ConfigState_t* config_state, const Point_t* point)
+void switch_to_view_at_point(ConfigState_t* config_state, Point_t point)
 {
-     BufferView_t* next_view = ce_find_view_at_point(config_state->tab_current->view_head, point);
+     BufferView_t* next_view = NULL;
+
+     if(point.x < 0) point.x += g_terminal_dimensions->x - 1;
+     if(point.y < 0) point.y += g_terminal_dimensions->y - 1;
+     if(point.x >= g_terminal_dimensions->x) point.x %= g_terminal_dimensions->x;
+     if(point.y >= g_terminal_dimensions->x) point.y %= g_terminal_dimensions->y;
+
+     if(config_state->input) next_view = ce_find_view_at_point(config_state->view_input, &point);
+     if(!next_view) next_view = ce_find_view_at_point(config_state->tab_current->view_head, &point);
+
      if(next_view){
           // save view and cursor
           config_state->tab_current->view_previous = config_state->tab_current->view_current;
@@ -2057,15 +2077,20 @@ void unindent_line(Buffer_t* buffer, BufferCommitNode_t** commit_tail, int64_t l
 
 }
 
-bool generate_auto_complete_files_in_dir(AutoComplete_t* auto_complete, const char* dir)
+bool generate_auto_complete_files_in_dir(AutoComplete_t* auto_complete, const char* dir,
+                                         Buffer_t* completion_buffer)
 {
      struct dirent *node;
      DIR* os_dir = opendir(dir);
      if(!os_dir) return false;
 
+     assert(completion_buffer->readonly);
+
+     ce_clear_lines_readonly(completion_buffer);
+     auto_complete_clear(auto_complete);
+
      char tmp[PATH_MAX];
      struct stat info;
-     auto_complete_clear(auto_complete);
      while((node = readdir(os_dir)) != NULL){
           snprintf(tmp, PATH_MAX, "%s/%s", dir, node->d_name);
           stat(tmp, &info);
@@ -2075,6 +2100,7 @@ bool generate_auto_complete_files_in_dir(AutoComplete_t* auto_complete, const ch
                strncpy(tmp, node->d_name, PATH_MAX);
           }
           auto_complete_insert(auto_complete, tmp);
+          ce_append_line_readonly(completion_buffer, tmp);
      }
 
      closedir(os_dir);
@@ -2083,7 +2109,8 @@ bool generate_auto_complete_files_in_dir(AutoComplete_t* auto_complete, const ch
      return true;
 }
 
-bool calc_auto_complete_start_and_path(AutoComplete_t* auto_complete, const char* line, Point_t cursor)
+bool calc_auto_complete_start_and_path(AutoComplete_t* auto_complete, const char* line, Point_t cursor,
+                                       Buffer_t* completion_buffer)
 {
      // we only auto complete in the case where the cursor is up against path with directories
      // -pat|
@@ -2116,10 +2143,10 @@ bool calc_auto_complete_start_and_path(AutoComplete_t* auto_complete, const char
           memcpy(path, path_begin, path_len);
           path[path_len] = 0;
 
-          rc = generate_auto_complete_files_in_dir(auto_complete, path);
+          rc = generate_auto_complete_files_in_dir(auto_complete, path, completion_buffer);
           free(path);
      }else{
-          rc = generate_auto_complete_files_in_dir(auto_complete, ".");
+          rc = generate_auto_complete_files_in_dir(auto_complete, ".", completion_buffer);
      }
 
      // set the start point if we generated files
@@ -2197,12 +2224,11 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                                    cursor->x--;
                               }
 
-                              if(auto_completing(&config_state->auto_complete)){
-                                   if(c == '/'){
-                                        calc_auto_complete_start_and_path(&config_state->auto_complete,
-                                                                          buffer->lines[cursor->y],
-                                                                          *cursor);
-                                   }
+                              if(auto_completing(&config_state->auto_complete) && c == '/'){
+                                   calc_auto_complete_start_and_path(&config_state->auto_complete,
+                                                                     buffer->lines[cursor->y],
+                                                                     *cursor,
+                                                                     config_state->completion_buffer);
                               }
                          }
                     }
@@ -2225,7 +2251,8 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          if(complete[complete_len - 1] == '/'){
                               calc_auto_complete_start_and_path(&config_state->auto_complete,
                                                                 buffer->lines[cursor->y],
-                                                                *cursor);
+                                                                *cursor,
+                                                                config_state->completion_buffer);
                          }else{
                               // since we didn't auto complete a directory, let's go to normal mode
                               // so we can quickly load the file
@@ -2371,7 +2398,8 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     }else if(config_state->input && config_state->input_key == 6){
                          calc_auto_complete_start_and_path(&config_state->auto_complete,
                                                            buffer->lines[cursor->y],
-                                                           *cursor);
+                                                           *cursor,
+                                                           config_state->completion_buffer);
                     }
                }
                break;
@@ -3147,44 +3175,45 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           {
                half_page_down(config_state->tab_current->view_current);
           } break;
-          case 8: // Ctrl + h
-              if(config_state->input){
-                   // dump input history on cursor line
-                   InputHistory_t* cur_hist = history_from_input_key(config_state);
-                   if(!cur_hist){
-                        ce_message("no history to dump");
-                        break;
-                   }
-
-                   // start the insertions after the cursor, unless the buffer is empty
-                   assert(config_state->view_input->buffer->line_count);
-                   int lines_added = 1;
-                   bool empty_first_line = !config_state->view_input->buffer->lines[0][0];
-
-                   // insert each line in history
-                   InputHistoryNode_t* node = cur_hist->head;
-                   while(node && node->entry){
-                        if(ce_insert_line(config_state->view_input->buffer,
-                                          config_state->view_input->cursor.y + lines_added,
-                                          node->entry)){
-                            lines_added += ce_count_string_lines(node->entry);
-                        }else{
-                             break;
-                        }
-                        node = node->next;
-                   }
-
-                   if(empty_first_line) ce_remove_line(config_state->view_input->buffer, 0);
-              }else{
-                   // TODO: consolidate into function for use with other window movement keys, and for use in insert mode?
-                   Point_t point = {config_state->tab_current->view_current->top_left.x - 2, // account for window separator
-                                  cursor->y - config_state->tab_current->view_current->top_row + config_state->tab_current->view_current->top_left.y};
-                   if(point.x < 0) point.x += g_terminal_dimensions->x - 1;
-                   switch_to_view_at_point(config_state, &point);
-              }
-          break;
-          case 10: // Ctrl + j
+          case 25: // Ctrl + y
                if(config_state->input){
+                    // dump input history on cursor line
+                    InputHistory_t* cur_hist = history_from_input_key(config_state);
+                    if(!cur_hist){
+                         ce_message("no history to dump");
+                         break;
+                    }
+
+                    // start the insertions after the cursor, unless the buffer is empty
+                    assert(config_state->view_input->buffer->line_count);
+                    int lines_added = 1;
+                    bool empty_first_line = !config_state->view_input->buffer->lines[0][0];
+
+                    // insert each line in history
+                    InputHistoryNode_t* node = cur_hist->head;
+                    while(node && node->entry){
+                         if(ce_insert_line(config_state->view_input->buffer,
+                                           config_state->view_input->cursor.y + lines_added,
+                                           node->entry)){
+                              lines_added += ce_count_string_lines(node->entry);
+                         }else{
+                              break;
+                         }
+                         node = node->next;
+                    }
+
+                    if(empty_first_line) ce_remove_line(config_state->view_input->buffer, 0);
+               }
+              break;
+          case 8: // Ctrl + h
+          {
+              // TODO: consolidate into function for use with other window movement keys, and for use in insert mode?
+              Point_t point = {config_state->tab_current->view_current->top_left.x - 2, // account for window separator
+                               cursor->y - config_state->tab_current->view_current->top_row + config_state->tab_current->view_current->top_left.y};
+              switch_to_view_at_point(config_state, point);
+          } break;
+          case 10: // Ctrl + j
+               if(config_state->input && config_state->tab_current->view_current == config_state->view_input){
                     input_end(config_state);
                     buffer = config_state->tab_current->view_current->buffer;
                     buffer_state = buffer->user_data;
@@ -3402,26 +3431,22 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     }
                }else{
                     Point_t point = {cursor->x - config_state->tab_current->view_current->left_column + config_state->tab_current->view_current->top_left.x,
-                                   config_state->tab_current->view_current->bottom_right.y + 2}; // account for window separator
-                    if(point.y >= g_terminal_dimensions->y - 1) point.y = 0;
-                    switch_to_view_at_point(config_state, &point);
+                                     config_state->tab_current->view_current->bottom_right.y + 2}; // account for window separator
+                    switch_to_view_at_point(config_state, point);
                }
                break;
           case 11: // Ctrl + k
           {
-               if(config_state->input) break;
                Point_t point = {cursor->x - config_state->tab_current->view_current->left_column + config_state->tab_current->view_current->top_left.x,
-                              config_state->tab_current->view_current->top_left.y - 2}; // account for window separator
-               switch_to_view_at_point(config_state, &point);
+                                config_state->tab_current->view_current->top_left.y - 2};
+               switch_to_view_at_point(config_state, point);
           }
           break;
           case 12: // Ctrl + l
           {
-               if(config_state->input) break;
                Point_t point = {config_state->tab_current->view_current->bottom_right.x + 2, // account for window separator
-                              cursor->y - config_state->tab_current->view_current->top_row + config_state->tab_current->view_current->top_left.y};
-               if(point.x >= g_terminal_dimensions->x - 1) point.x = 0;
-               switch_to_view_at_point(config_state, &point);
+                                cursor->y - config_state->tab_current->view_current->top_row + config_state->tab_current->view_current->top_left.y};
+               switch_to_view_at_point(config_state, point);
           }
           break;
           case ':':
@@ -3823,6 +3848,7 @@ void view_drawer(const BufferNode_t* head, void* user_data)
                input_bottom_right.y++; // account for bottom status bar
           }
           ce_calc_views(config_state->view_input, &input_top_left, &input_bottom_right);
+          config_state->tab_current->view_input_save->bottom_right.y = input_top_left.y - 1;
      }
 
      view_follow_cursor(buffer_view);
@@ -3865,17 +3891,22 @@ void view_drawer(const BufferNode_t* head, void* user_data)
      // NOTE: always draw from the head
      ce_draw_views(config_state->tab_current->view_head, search);
 
+     draw_view_statuses(config_state->tab_current->view_head, config_state->tab_current->view_current,
+                        config_state->vim_mode, config_state->last_key);
+
      // draw input status
      if(config_state->input){
-          move(input_top_left.y - 1, input_top_left.x);
+          if(config_state->view_input == config_state->tab_current->view_current){
+               move(input_top_left.y - 1, input_top_left.x);
 
-          attron(COLOR_PAIR(S_BORDERS));
-          for(int i = input_top_left.x; i < input_bottom_right.x; ++i) addch(ACS_HLINE);
-          // if we are at the edge of the terminal, draw the inclusing horizontal line. We
-          if(input_bottom_right.x == g_terminal_dimensions->x - 1) addch(ACS_HLINE);
+               attron(COLOR_PAIR(S_BORDERS));
+               for(int i = input_top_left.x; i < input_bottom_right.x; ++i) addch(ACS_HLINE);
+               // if we are at the edge of the terminal, draw the inclusing horizontal line. We
+               if(input_bottom_right.x == g_terminal_dimensions->x - 1) addch(ACS_HLINE);
 
-          attron(COLOR_PAIR(S_INPUT_STATUS));
-          mvprintw(input_top_left.y - 1, input_top_left.x + 1, " %s ", config_state->input_message);
+               attron(COLOR_PAIR(S_INPUT_STATUS));
+               mvprintw(input_top_left.y - 1, input_top_left.x + 1, " %s ", config_state->input_message);
+          }
 
           standend();
           // clear input buffer section
@@ -3887,9 +3918,12 @@ void view_drawer(const BufferNode_t* head, void* user_data)
           }
 
           ce_draw_views(config_state->view_input, NULL);
+          draw_view_statuses(config_state->view_input, config_state->tab_current->view_current,
+                             config_state->vim_mode, config_state->last_key);
      }
 
      // draw auto complete
+     // TODO: don't draw over borders!
      Point_t terminal_cursor = get_cursor_on_terminal(cursor, buffer_view);
      if(auto_completing(&config_state->auto_complete)){
           move(terminal_cursor.y, terminal_cursor.x);
@@ -3901,14 +3935,6 @@ void view_drawer(const BufferNode_t* head, void* user_data)
                addch(*option);
                option++;
           }
-     }
-
-     draw_view_statuses(config_state->tab_current->view_head, config_state->tab_current->view_current,
-                        config_state->vim_mode, config_state->last_key);
-
-     if(config_state->input){
-          draw_view_statuses(config_state->view_input, config_state->tab_current->view_current,
-                             config_state->vim_mode, config_state->last_key);
      }
 
      // draw tab line

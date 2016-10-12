@@ -2451,7 +2451,12 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                                    config_state->start_insert = *cursor;
                               }
 
-                              auto_complete_end(&config_state->auto_complete);
+                              if(auto_completing(&config_state->auto_complete)){
+                                   calc_auto_complete_start_and_path(&config_state->auto_complete,
+                                                                     buffer->lines[cursor->y],
+                                                                     *cursor,
+                                                                     config_state->completion_buffer);
+                              }
                          }
                     }else{
                          Point_t previous = *cursor;
@@ -2467,7 +2472,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                                    cursor->x--;
                               }
 
-                              if(auto_completing(&config_state->auto_complete) && c == '/'){
+                              if(auto_completing(&config_state->auto_complete)){
                                    calc_auto_complete_start_and_path(&config_state->auto_complete,
                                                                      buffer->lines[cursor->y],
                                                                      *cursor,
@@ -2530,7 +2535,12 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                               cursor->x += indent_len;
                     }
 
-                    auto_complete_end(&config_state->auto_complete);
+                    if(auto_completing(&config_state->auto_complete)){
+                         calc_auto_complete_start_and_path(&config_state->auto_complete,
+                                                           buffer->lines[cursor->y],
+                                                           *cursor,
+                                                           config_state->completion_buffer);
+                    }
                }
           } break;
           case KEY_UP:

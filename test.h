@@ -27,7 +27,8 @@ typedef void test_func(bool*);
           return;                                                                                 \
      }
 
-// NOTE: In registering tests, we're going to take advantage of the knowledge that the globals are layed out sequentially
+// NOTE: When we run tests, we use pointer arithmetic on global function pointers. This is Undefined Behavior
+//       according to the c standard.
 #define RUN_TESTS()                                        \
 {                                                          \
      int tests_failed = 0;                                 \

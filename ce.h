@@ -27,6 +27,8 @@
 typedef enum {
      S_NORMAL = 1,
      S_KEYWORD,
+     S_TYPE,
+     S_CONTROL,
      S_COMMENT,
      S_STRING,
      S_CONSTANT,
@@ -36,6 +38,8 @@ typedef enum {
 
      S_NORMAL_HIGHLIGHTED,
      S_KEYWORD_HIGHLIGHTED,
+     S_TYPE_HIGHLIGHTED,
+     S_CONTROL_HIGHLIGHTED,
      S_COMMENT_HIGHLIGHTED,
      S_STRING_HIGHLIGHTED,
      S_CONSTANT_HIGHLIGHTED,
@@ -43,7 +47,15 @@ typedef enum {
      S_DIFF_ADD_HIGHLIGHTED,
      S_DIFF_REMOVE_HIGHLIGHTED,
 
-     S_CURRENT_TAB,
+     S_TRAILING_WHITESPACE,
+
+     S_BORDERS,
+
+     S_TAB_NAME,
+     S_CURRENT_TAB_NAME,
+
+     S_VIEW_STATUS,
+     S_INPUT_STATUS,
 } Syntax;
 
 #define CE_CHECK_PTR_ARG(arg)                                                 \
@@ -173,34 +185,44 @@ BufferView* ce_buffer_in_view(BufferView* head, const Buffer* buffer);
 
 
 // Buffer Manipulation Functions
-void ce_free_buffer    (Buffer* buffer);
+// NOTE: readonly functions will modify readonly buffers, this is useful for
+//       output-only buffers
+void ce_free_buffer             (Buffer* buffer);
 
-bool ce_alloc_lines    (Buffer* buffer, int64_t line_count);
-void ce_clear_lines    (Buffer* buffer);
+bool ce_alloc_lines             (Buffer* buffer, int64_t line_count);
+void ce_clear_lines             (Buffer* buffer);
+void ce_clear_lines_readonly    (Buffer* buffer);
 
-bool ce_load_string    (Buffer* buffer, const char* string);
-bool ce_load_file      (Buffer* buffer, const char* filename);
+bool ce_load_string             (Buffer* buffer, const char* string);
+bool ce_load_file               (Buffer* buffer, const char* filename);
 
-bool ce_insert_char    (Buffer* buffer, const Point* location, char c);
-bool ce_append_char    (Buffer* buffer, char c);
-bool ce_remove_char    (Buffer* buffer, const Point* location);
-bool ce_set_char       (Buffer* buffer, const Point* location, char c);
+bool ce_insert_char             (Buffer* buffer, const Point* location, char c);
+bool ce_append_char             (Buffer* buffer, char c);
+bool ce_remove_char             (Buffer* buffer, const Point* location);
+bool ce_set_char                (Buffer* buffer, const Point* location, char c);
+bool ce_insert_char_readonly    (Buffer* buffer, const Point* location, char c);
+bool ce_append_char_readonly    (Buffer* buffer, char c);
 
-bool ce_insert_string  (Buffer* buffer, const Point* location, const char* string);
-bool ce_remove_string  (Buffer* buffer, const Point* location, int64_t length);
-bool ce_prepend_string (Buffer* buffer, int64_t line, const char* string);
-bool ce_append_string  (Buffer* buffer, int64_t line, const char* string);
+bool ce_insert_string           (Buffer* buffer, const Point* location, const char* string);
+bool ce_insert_string_readonly  (Buffer* buffer, const Point* location, const char* string);
+bool ce_remove_string           (Buffer* buffer, const Point* location, int64_t length);
+bool ce_prepend_string          (Buffer* buffer, int64_t line, const char* string);
+bool ce_append_string           (Buffer* buffer, int64_t line, const char* string);
+bool ce_append_string_readonly  (Buffer* buffer, int64_t line, const char* string);
 
-bool ce_insert_line    (Buffer* buffer, int64_t line, const char* string);
-bool ce_remove_line    (Buffer* buffer, int64_t line);
-bool ce_append_line    (Buffer* buffer, const char* string);
-bool ce_join_line      (Buffer* buffer, int64_t line);
+bool ce_insert_line             (Buffer* buffer, int64_t line, const char* string);
+bool ce_insert_line_readonly    (Buffer* buffer, int64_t line, const char* string);
+bool ce_remove_line             (Buffer* buffer, int64_t line);
+bool ce_append_line             (Buffer* buffer, const char* string);
+bool ce_append_line_readonly    (Buffer* buffer, const char* string);
+bool ce_join_line               (Buffer* buffer, int64_t line);
 
-bool ce_insert_newline (Buffer* buffer, int64_t line);
+bool ce_insert_newline          (Buffer* buffer, int64_t line);
 
 
 // Buffer Inspection Functions
-bool    ce_draw_buffer                   (const Buffer* buffer, const Point* term_top_left, const Point* term_bottom_right, const Point* buffer_top_left,
+bool    ce_draw_buffer                   (const Buffer* buffer, const Point* cursor,const Point* term_top_left,
+                                          const Point* term_bottom_right, const Point* buffer_top_left,
                                           const char* highlight_word);
 bool    ce_save_buffer                   (Buffer* buffer, const char* filename);
 bool    ce_point_on_buffer               (const Buffer* buffer, const Point* location);

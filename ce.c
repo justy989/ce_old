@@ -33,6 +33,8 @@ bool ce_alloc_lines(Buffer* buffer, int64_t line_count)
 
      if(buffer->readonly) return false;
 
+     if(buffer->lines) ce_clear_lines(buffer);
+
      if(line_count <= 0){
           ce_message("%s() tried to allocate %"PRId64" lines for a buffer, but we can only allocated > 0 lines", __FUNCTION__, line_count);
           return false;
@@ -62,9 +64,9 @@ bool ce_alloc_lines(Buffer* buffer, int64_t line_count)
 
 bool ce_load_file(Buffer* buffer, const char* filename)
 {
-     if(buffer->readonly) return false;
-
      ce_message("load file '%s'", filename);
+
+     if(buffer->lines) ce_free_buffer(buffer);
 
      // read the entire file
      size_t content_size;
@@ -117,15 +119,14 @@ void ce_free_buffer(Buffer* buffer)
 
      free(buffer->filename);
 
-     ce_clear_lines(buffer);
      buffer->modified = false;
      buffer->readonly = false;
+
+     ce_clear_lines(buffer);
 }
 
-void ce_clear_lines(Buffer* buffer)
+void clear_lines_impl(Buffer* buffer)
 {
-     if(buffer->readonly) return;
-
      if(buffer->lines){
           for(int64_t i = 0; i < buffer->line_count; ++i){
                free(buffer->lines[i]);
@@ -136,6 +137,20 @@ void ce_clear_lines(Buffer* buffer)
           buffer->line_count = 0;
      }
      buffer->modified = true;
+}
+
+void ce_clear_lines(Buffer* buffer)
+{
+     if(buffer->readonly) return;
+
+     clear_lines_impl(buffer);
+}
+
+void ce_clear_lines_readonly(Buffer* buffer)
+{
+     if(!buffer->readonly) return;
+
+     clear_lines_impl(buffer);
 }
 
 bool ce_point_on_buffer(const Buffer* buffer, const Point* location)
@@ -160,12 +175,12 @@ bool ce_point_on_buffer(const Buffer* buffer, const Point* location)
      return true;
 }
 
-bool ce_insert_char(Buffer* buffer, const Point* location, char c)
+bool insert_line_impl(Buffer* buffer, int64_t line, const char* string);
+
+bool insert_char_impl(Buffer* buffer, const Point* location, char c)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
-
-     if(buffer->readonly) return false;
 
      if(buffer->line_count == 0 && location->x == 0 && location->y == 0) ce_alloc_lines(buffer, 1);
 
@@ -177,7 +192,7 @@ bool ce_insert_char(Buffer* buffer, const Point* location, char c)
 
      if(c == NEWLINE){
           // copy the rest of the line to the next line
-          if(!ce_insert_line(buffer, location->y + 1, line + location->x)){
+          if(!insert_line_impl(buffer, location->y + 1, line + location->x)){
                return false;
           }
 
@@ -214,27 +229,47 @@ bool ce_insert_char(Buffer* buffer, const Point* location, char c)
      return true;
 }
 
-bool ce_append_char(Buffer* buffer, char c)
+bool ce_insert_char(Buffer* buffer, const Point* location, char c)
 {
      if(buffer->readonly) return false;
 
+     return insert_char_impl(buffer, location, c);
+}
+
+bool ce_insert_char_readonly(Buffer* buffer, const Point* location, char c)
+{
+     if(!buffer->readonly) return false;
+
+     return insert_char_impl(buffer, location, c);
+}
+
+bool ce_append_char(Buffer* buffer, char c)
+{
      Point end = {0, 0};
      if(buffer->line_count){
           end.y = buffer->line_count - 1;
           end.x = strlen(buffer->lines[end.y]);
      }
+
      return ce_insert_char(buffer, &end, c);
 }
 
-bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_string)
+bool ce_append_char_readonly(Buffer* buffer, char c)
 {
-     CE_CHECK_PTR_ARG(buffer);
-     CE_CHECK_PTR_ARG(location);
-     CE_CHECK_PTR_ARG(new_string);
+     Point end = {0, 0};
+     if(buffer->line_count){
+          end.y = buffer->line_count - 1;
+          end.x = strlen(buffer->lines[end.y]);
+     }
 
-     if(buffer->readonly) return false;
+     return ce_insert_char_readonly(buffer, &end, c);
+}
 
-     if(location->x != 0 && location->y != 0){
+bool insert_string_impl(Buffer* buffer, const Point* location, const char* new_string)
+{
+     if(location->x == 0 && location->y == 0){
+          // pass
+     }else{
           if(!ce_point_on_buffer(buffer, location)){
                return false;
           }
@@ -335,16 +370,16 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
                     strncpy(new_line, itr, next_line_length);
                     memcpy(new_line + next_line_length, second_part, second_length);
                     new_line[new_line_length] = 0;
-                    ce_insert_line(buffer, location->y + lines_added, new_line);
+                    insert_line_impl(buffer, location->y + lines_added, new_line);
                     free(new_line);
                }else if(itr == end_of_line){
-                    ce_insert_line(buffer, location->y + lines_added, NULL);
+                    insert_line_impl(buffer, location->y + lines_added, NULL);
                }else{
                     new_line_length = end_of_line - itr;
                     new_line = malloc(new_line_length + 1);
                     strncpy(new_line, itr, new_line_length);
                     new_line[new_line_length] = 0;
-                    ce_insert_line(buffer, location->y + lines_added, new_line);
+                    insert_line_impl(buffer, location->y + lines_added, new_line);
                     free(new_line);
                }
 
@@ -355,6 +390,28 @@ bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_str
 
      buffer->modified = true;
      return true;
+}
+
+bool ce_insert_string(Buffer* buffer, const Point* location, const char* new_string)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+     CE_CHECK_PTR_ARG(new_string);
+
+     if(buffer->readonly) return false;
+
+     return insert_string_impl(buffer, location, new_string);
+}
+
+bool ce_insert_string_readonly(Buffer* buffer, const Point* location, const char* new_string)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+     CE_CHECK_PTR_ARG(new_string);
+
+     if(!buffer->readonly) return false;
+
+     return insert_string_impl(buffer, location, new_string);
 }
 
 bool ce_prepend_string(Buffer* buffer, int64_t line, const char* new_string)
@@ -368,6 +425,13 @@ bool ce_append_string(Buffer* buffer, int64_t line, const char* new_string)
      Point end_of_line = {0, line};
      if(buffer->line_count > line) end_of_line.x = strlen(buffer->lines[line]);
      return ce_insert_string(buffer, &end_of_line, new_string);
+}
+
+bool ce_append_string_readonly(Buffer* buffer, int64_t line, const char* new_string)
+{
+     Point end_of_line = {0, line};
+     if(buffer->line_count > line) end_of_line.x = strlen(buffer->lines[line]);
+     return ce_insert_string_readonly(buffer, &end_of_line, new_string);
 }
 
 bool ce_remove_char(Buffer* buffer, const Point* location)
@@ -855,6 +919,8 @@ bool ce_set_char(Buffer* buffer, const Point* location, char c)
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
 
+     if(buffer->readonly) return false;
+
      if(!ce_point_on_buffer(buffer, location)) return false;
 
      if(c == NEWLINE) return ce_insert_string(buffer, location, "\n");
@@ -864,22 +930,39 @@ bool ce_set_char(Buffer* buffer, const Point* location, char c)
      return true;
 }
 
-// NOTE: passing NULL to string causes an empty line to be inserted
-bool ce_insert_line(Buffer* buffer, int64_t line, const char* string)
+bool insert_line_impl(Buffer* buffer, int64_t line, const char* string)
 {
      CE_CHECK_PTR_ARG(buffer);
 
-     int64_t new_line_count = buffer->line_count + 1;
+     // make sure we are only inserting in the middle or at the very end
+     assert(line >= 0 && line <= buffer->line_count);
+     int64_t string_line_count = 1;
+     if(string) string_line_count = ce_count_string_lines(string);
+
+     int64_t new_line_count = buffer->line_count + string_line_count;
      char** new_lines = realloc(buffer->lines, new_line_count * sizeof(char*));
      if(!new_lines){
           printf("%s() failed to malloc new lines: %"PRId64"\n", __FUNCTION__, new_line_count);
           return false;
      }
 
-     memmove(new_lines + line + 1, new_lines + line, (buffer->line_count - line) * sizeof(*new_lines));
+     memmove(new_lines + line + string_line_count, new_lines + line, (buffer->line_count - line) * sizeof(*new_lines));
 
      if(string){
-          new_lines[line] = strdup(string);
+          const char* line_start = string;
+          for(int i = 0; i < string_line_count; ++i){
+               const char* line_end = strchr(line_start, NEWLINE);
+               if(line_end){
+                    int64_t current_len = line_end - line_start;
+                    char current_line[current_len + 1];
+                    strncpy(current_line, line_start, current_len);
+                    current_line[current_len] = 0;
+                    new_lines[line + i] = strdup(current_line);
+                    line_start = line_end + 1;
+               }else{
+                    new_lines[line + i] = strdup(line_start);
+               }
+          }
      }else{
           new_lines[line] = strdup("");
      }
@@ -890,12 +973,40 @@ bool ce_insert_line(Buffer* buffer, int64_t line, const char* string)
      return true;
 }
 
+
+// NOTE: passing NULL to string causes an empty line to be inserted
+bool ce_insert_line(Buffer* buffer, int64_t line, const char* string)
+{
+     CE_CHECK_PTR_ARG(buffer);
+
+     if(buffer->readonly) return false;
+
+     return insert_line_impl(buffer, line, string);
+}
+
+bool ce_insert_line_readonly(Buffer* buffer, int64_t line, const char* string)
+{
+     CE_CHECK_PTR_ARG(buffer);
+
+     if(!buffer->readonly) return false;
+
+     return insert_line_impl(buffer, line, string);
+}
+
 bool ce_append_line(Buffer* buffer, const char* string)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(string);
 
      return ce_insert_line(buffer, buffer->line_count, string);
+}
+
+bool ce_append_line_readonly(Buffer* buffer, const char* string)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(string);
+
+     return ce_insert_line_readonly(buffer, buffer->line_count, string);
 }
 
 bool ce_insert_newline(Buffer* buffer, int64_t line)
@@ -1054,53 +1165,10 @@ bool ce_save_buffer(Buffer* buffer, const char* filename)
      return true;
 }
 
-int64_t ce_is_c_keyword(const char* line, int64_t start_offset)
+int64_t match_keyword(const char* line, int64_t start_offset, const char** keywords, int64_t keyword_count)
 {
-     static const char* keywords [] = {
-          "__thread",
-          "auto",
-          "bool",
-          "break",
-          "case",
-          "char",
-          "const",
-          "continue",
-          "default",
-          "do",
-          "double",
-          "else",
-          "enum",
-          "extern",
-          "false",
-          "float",
-          "for",
-          "goto",
-          "if",
-          "inline",
-          "int",
-          "register",
-          "return",
-          "short",
-          "signed",
-          "sizeof",
-          "static",
-          "struct",
-          "switch",
-          "true",
-          "typedef",
-          "typeof",
-          "union",
-          "unsigned",
-          "void",
-          "volatile",
-          "while",
-     };
-
-     static const int keyword_count = sizeof(keywords) / sizeof(keywords[0]);
-
      int64_t highlighting_left = 0;
      for(int64_t k = 0; k < keyword_count; ++k){
-          // NOTE: I wish we could strlen at compile time ! Can we?
           int64_t keyword_len = strlen(keywords[k]);
           if(strncmp(line + start_offset, keywords[k], keyword_len) == 0){
                char pre_char = 0;
@@ -1116,6 +1184,105 @@ int64_t ce_is_c_keyword(const char* line, int64_t start_offset)
      }
 
      return highlighting_left;
+}
+
+int64_t ce_is_c_keyword(const char* line, int64_t start_offset)
+{
+     static const char* keywords [] = {
+          "__thread",
+          "auto",
+          "case",
+          "default",
+          "do",
+          "else",
+          "enum",
+          "extern",
+          "false",
+          "for",
+          "if",
+          "inline",
+          "register",
+          "sizeof",
+          "static",
+          "struct",
+          "switch",
+          "true",
+          "typedef",
+          "typeof",
+          "union",
+          "volatile",
+          "while",
+     };
+
+     static const int keyword_count = sizeof(keywords) / sizeof(keywords[0]);
+
+     return match_keyword(line, start_offset, keywords, keyword_count);
+}
+
+int64_t ce_is_c_control(const char* line, int64_t start_offset)
+{
+     static const char* keywords [] = {
+          "break",
+          "const",
+          "continue",
+          "goto",
+          "return",
+     };
+
+     static const int keyword_count = sizeof(keywords) / sizeof(keywords[0]);
+
+     return match_keyword(line, start_offset, keywords, keyword_count);
+}
+
+int iscidentifier(int c)
+{
+     return isalnum(c) || c == '_';
+}
+
+int64_t ce_is_c_typename(const char* line, int64_t start_offset)
+{
+     // NOTE: simple rules for now:
+     //       -if it is one of the c standard type names
+     //       -ends in _t
+
+     static const char* keywords [] = {
+          "bool",
+          "char",
+          "double",
+          "float",
+          "int",
+          "long",
+          "short",
+          "signed",
+          "unsigned",
+          "void",
+     };
+
+     static const int keyword_count = sizeof(keywords) / sizeof(keywords[0]);
+
+     int64_t match = match_keyword(line, start_offset, keywords, keyword_count);
+     if(match) return match;
+
+     if(start_offset > 0 && iscidentifier(line[start_offset - 1])) return 0; // weed out middle of words
+
+     // try valid identifier ending in '_t'
+     const char* itr = line + start_offset;
+     int64_t count = 0;
+     for(char ch = *itr; iscidentifier(ch); ++itr){
+          ch = *itr;
+          count++;
+     }
+
+     if(!count) return 0;
+
+     // we overcounted on the last iteration!
+     count--;
+
+     // reset itr before checking the final 2 characters
+     itr = line + start_offset;
+     if(count >= 2 && itr[count-2] == '_' && itr[count-1] == 't') return count;
+
+     return 0;
 }
 
 int64_t ce_is_preprocessor(const char* line, int64_t start_offset)
@@ -1241,13 +1408,15 @@ int set_color(Syntax syntax, bool highlighted)
 
 static const char non_printable_repr = '~';
 
-bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Point* term_bottom_right,
-                    const Point* buffer_top_left, const char* highlight_word)
+bool ce_draw_buffer(const Buffer* buffer, const Point* cursor,const Point* term_top_left,
+                    const Point* term_bottom_right, const Point* buffer_top_left, const char* highlight_word)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(term_top_left);
      CE_CHECK_PTR_ARG(term_bottom_right);
      CE_CHECK_PTR_ARG(buffer_top_left);
+
+     if(!buffer->line_count) return true;
 
      if(!g_terminal_dimensions){
           ce_message("%s() unknown terminal dimensions", __FUNCTION__);
@@ -1296,8 +1465,6 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
 
      // do a pass looking for only an ending multiline comment
      for(int64_t i = buffer_top_left->y; i <= last_line; ++i) {
-          move(term_top_left->y + (i - buffer_top_left->y), term_top_left->x);
-
           if(!buffer->lines[i][0]) continue;
           const char* buffer_line = buffer->lines[i];
           int64_t len = strlen(buffer_line);
@@ -1320,6 +1487,8 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
      // TODO: if we found a closing multiline comment, make sure there is a matching opening multiline comment
      size_t highlight_word_len = 0;
      if(highlight_word) highlight_word_len = strlen(highlight_word);
+
+     standend();
 
      for(int64_t i = buffer_top_left->y; i <= last_line; ++i) {
           move(term_top_left->y + (i - buffer_top_left->y), term_top_left->x);
@@ -1344,6 +1513,19 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                bool inside_highlight = false;
                int64_t highlighting_left = 0;
                int fg_color = 0;
+
+               int64_t begin_trailing_whitespace = line_length;
+
+               // NOTE: pre-pass to find trailing whitespace if it exists
+               if(cursor->y != i){
+                    for(int64_t c = line_length - 1; c >= 0; --c){
+                         if(isblank(buffer_line[c])){
+                              begin_trailing_whitespace--;
+                         }else{
+                              break;
+                         }
+                    }
+               }
 
                // NOTE: pre-pass check for comments and strings out of view
                for(int64_t c = 0; c < buffer_top_left->x; ++c){
@@ -1380,22 +1562,42 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                     }else{
                          if(!inside_string){
                               if(!inside_comment && !inside_multiline_comment){
-                                   int64_t keyword_left = ce_is_c_keyword(buffer_line, c);
+
+                                   int64_t keyword_left = ce_is_c_control(buffer_line, c);
                                    if(keyword_left){
                                         color_left = keyword_left;
-                                        highlight_color = S_KEYWORD;
-                                   }else{
+                                        highlight_color = S_CONTROL;
+                                   }
+
+                                   if(!keyword_left){
+                                        keyword_left = ce_is_c_typename(buffer_line, c);
+                                        if(keyword_left){
+                                             color_left = keyword_left;
+                                             highlight_color = S_TYPE;
+                                        }
+                                   }
+
+                                   if(!keyword_left){
+                                        keyword_left = ce_is_c_keyword(buffer_line, c);
+                                        if(keyword_left){
+                                             color_left = keyword_left;
+                                             highlight_color = S_KEYWORD;
+                                        }
+                                   }
+
+                                   if(!keyword_left){
                                         keyword_left = ce_is_caps_var(buffer_line, c);
                                         if(keyword_left){
                                              color_left = keyword_left;
                                              highlight_color = S_CONSTANT;
-                                        }else{
-                                             keyword_left = ce_is_preprocessor(buffer_line, c);
-                                             if(keyword_left){
-                                                  color_left = keyword_left;
-                                                  highlight_color = S_PREPROCESSOR;
+                                        }
+                                   }
 
-                                             }
+                                   if(!keyword_left){
+                                        keyword_left = ce_is_preprocessor(buffer_line, c);
+                                        if(keyword_left){
+                                             color_left = keyword_left;
+                                             highlight_color = S_PREPROCESSOR;
                                         }
                                    }
                               }
@@ -1442,26 +1644,41 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                               }else{
                                    inside_highlight = false;
                                    set_color(fg_color, inside_highlight);
-
                               }
                          }
                     }
-
 
                     // syntax highlighting
                     if(color_left == 0){
                          if(!inside_string){
                               if(!inside_comment && !inside_multiline_comment){
-                                   color_left = ce_is_c_keyword(line_to_print, c);
-                              }
-
-                              if(color_left){
-                                   fg_color = set_color(S_KEYWORD, inside_highlight);
-                              }else{
-                                   color_left = ce_is_caps_var(line_to_print, c);
+                                   color_left = ce_is_c_control(line_to_print, c);
                                    if(color_left){
-                                        fg_color = set_color(S_CONSTANT, inside_highlight);
-                                   }else{
+                                        fg_color = set_color(S_CONTROL, inside_highlight);
+                                   }
+
+                                   if(!color_left){
+                                        color_left = ce_is_c_typename(line_to_print, c);
+                                        if(color_left){
+                                             fg_color = set_color(S_TYPE, inside_highlight);
+                                        }
+                                   }
+
+                                   if(!color_left){
+                                        color_left = ce_is_c_keyword(line_to_print, c);
+                                        if(color_left){
+                                             fg_color = set_color(S_KEYWORD, inside_highlight);
+                                        }
+                                   }
+
+                                   if(!color_left){
+                                        color_left = ce_is_caps_var(line_to_print, c);
+                                        if(color_left){
+                                             fg_color = set_color(S_CONSTANT, inside_highlight);
+                                        }
+                                   }
+
+                                   if(!color_left){
                                         color_left = ce_is_preprocessor(line_to_print, c);
                                         if(color_left){
                                              fg_color = set_color(S_PREPROCESSOR, inside_highlight);
@@ -1510,6 +1727,10 @@ bool ce_draw_buffer(const Buffer* buffer, const Point* term_top_left, const Poin
                                    fg_color = set_color(S_DIFF_REMOVE, inside_highlight);
                               }
                          }
+                    }
+
+                    if(c >= begin_trailing_whitespace){
+                         fg_color = set_color(S_TRAILING_WHITESPACE, inside_highlight);
                     }
 
                     // print each character
@@ -1602,7 +1823,7 @@ bool ce_move_cursor_to_end_of_line(const Buffer* buffer, Point* cursor)
 
      if(!ce_point_on_buffer(buffer, cursor)) return false;
 
-     cursor->x = strlen(buffer->lines[cursor->y])-1; 
+     cursor->x = strlen(buffer->lines[cursor->y])-1;
      if(cursor->x < 0) cursor->x = 0;
      return true;
 }
@@ -1613,6 +1834,14 @@ bool ce_set_cursor(const Buffer* buffer, Point* cursor, const Point* location)
      CE_CHECK_PTR_ARG(cursor);
      CE_CHECK_PTR_ARG(location);
 
+     assert(cursor->x >= 0);
+     assert(cursor->y >= 0);
+
+     if(!buffer->line_count){
+          *cursor = (Point){0, 0};
+          return false;
+     }
+
      Point dst = *location;
 
      if(dst.x < 0) dst.x = 0;
@@ -1620,7 +1849,7 @@ bool ce_set_cursor(const Buffer* buffer, Point* cursor, const Point* location)
 
      if(dst.y >= buffer->line_count) dst.y = buffer->line_count - 1;
 
-     if(buffer->lines[dst.y]){
+     if(buffer->lines && buffer->lines[dst.y]){
           int64_t line_len = strlen(buffer->lines[dst.y]);
           if(!line_len){
                dst.x = 0;
@@ -1647,6 +1876,11 @@ bool ce_move_cursor(const Buffer* buffer, Point* cursor, Point delta)
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
 
+     if(!buffer->line_count){
+          *cursor = (Point){0, 0};
+          return true;
+     }
+
      Point dst = *cursor;
      dst.x += delta.x;
      dst.y += delta.y;
@@ -1656,7 +1890,7 @@ bool ce_move_cursor(const Buffer* buffer, Point* cursor, Point delta)
 
      if(dst.y >= buffer->line_count) dst.y = buffer->line_count - 1;
 
-     if(buffer->lines[dst.y]){
+     if(buffer->lines && buffer->lines[dst.y]){
           int64_t line_len = strlen(buffer->lines[dst.y]);
           if(!line_len){
                dst.x = 0;
@@ -1746,6 +1980,9 @@ bool ce_follow_cursor(const Point* cursor, int64_t* left_column, int64_t* top_ro
      CE_CHECK_PTR_ARG(cursor);
      CE_CHECK_PTR_ARG(top_row);
 
+     assert(cursor->x >= 0);
+     assert(cursor->y >= 0);
+
      if(!at_terminal_width_edge) view_width--;
      if(!at_terminal_height_edge) view_height--;
 
@@ -1766,6 +2003,9 @@ bool ce_follow_cursor(const Point* cursor, int64_t* left_column, int64_t* top_ro
           right_column = cursor->x;
           *left_column = right_column - view_width;
      }
+
+     if(*top_row < 0) *top_row = 0;
+     if(*left_column < 0) *left_column = 0;
 
      return true;
 }
@@ -2281,19 +2521,19 @@ bool ce_calc_views(BufferView* view, const Point *top_left, const Point* bottom_
 
 void draw_view_bottom_right_borders(const BufferView* view)
 {
+     attron(COLOR_PAIR(S_BORDERS));
+
      // draw right border
      if(view->bottom_right.x < (g_terminal_dimensions->x - 1)){
-          for(int64_t i = view->top_left.y; i <= view->bottom_right.y; ++i){
+          for(int64_t i = view->top_left.y; i < view->bottom_right.y; ++i){
                move(i, view->bottom_right.x);
                addch(ACS_VLINE);
           }
      }
 
      // draw bottom border
-     // NOTE: accounting for the status bar with -2 here is not what we want going forward.
-     //       we need a better way of determining when the view is at the edge of the terminal
      move(view->bottom_right.y, view->top_left.x);
-     for(int64_t i = view->top_left.x; i <= view->bottom_right.x; ++i){
+     for(int64_t i = view->top_left.x; i < view->bottom_right.x; ++i){
           move(view->bottom_right.y, i);
           addch(ACS_HLINE);
      }
@@ -2311,8 +2551,11 @@ bool draw_horizontal_views(const BufferView* view, bool already_drawn, const cha
           if(((!already_drawn && itr == view) || (itr != view)) && itr->next_vertical){
                draw_vertical_views(itr, true, highlight_word);
           }else{
+               assert(itr->left_column >= 0);
+               assert(itr->top_row >= 0);
                Point buffer_top_left = {itr->left_column, itr->top_row};
-               ce_draw_buffer(itr->buffer, &itr->top_left, &itr->bottom_right, &buffer_top_left, highlight_word);
+               ce_draw_buffer(itr->buffer, &itr->cursor, &itr->top_left, &itr->bottom_right, &buffer_top_left,
+                              highlight_word);
                draw_view_bottom_right_borders(itr);
           }
 
@@ -2333,7 +2576,8 @@ bool draw_vertical_views(const BufferView* view, bool already_drawn, const char*
                draw_horizontal_views(itr, true, highlight_word);
           }else{
                Point buffer_top_left = {itr->left_column, itr->top_row};
-               ce_draw_buffer(itr->buffer, &itr->top_left, &itr->bottom_right, &buffer_top_left, highlight_word);
+               ce_draw_buffer(itr->buffer, &itr->cursor, &itr->top_left, &itr->bottom_right, &buffer_top_left,
+                              highlight_word);
                draw_view_bottom_right_borders(itr);
           }
 
@@ -2352,6 +2596,12 @@ bool ce_connect_border_lines(const Point* location)
      chtype right = mvinch(location->y, location->x + 1);
      chtype top = mvinch(location->y - 1, location->x);
      chtype bottom = mvinch(location->y + 1, location->x);
+
+     // strip out the color info from each adjacent chtype
+     left &= ~A_COLOR;
+     right &= ~A_COLOR;
+     top &= ~A_COLOR;
+     bottom &= ~A_COLOR;
 
      if(left == ACS_HLINE && right == ACS_HLINE && top == ACS_VLINE){
           move(location->y, location->x);
@@ -2401,7 +2651,12 @@ bool ce_draw_views(const BufferView* view, const char* highlight_word)
 {
      CE_CHECK_PTR_ARG(view);
 
-     return draw_horizontal_views(view, false, highlight_word) && connect_borders(view);
+     if(!draw_horizontal_views(view, false, highlight_word)){
+          return false;
+     }
+
+     attron(COLOR_PAIR(S_BORDERS));
+     return connect_borders(view);
 }
 
 BufferView* find_view_at_point(BufferView* view, const Point* point)

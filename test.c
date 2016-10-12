@@ -1,3 +1,6 @@
+#include <execinfo.h>
+#include <signal.h>
+
 #include "ce.h"
 #include "test.h"
 
@@ -180,6 +183,22 @@ TEST(sanity_insert_char)
      ce_free_buffer(&buffer);
 }
 
+TEST(sanity_insert_char_readonly)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.readonly = true;
+
+     Point point = {2, 0};
+     ce_insert_char_readonly(&buffer, &point, 'R');
+
+     EXPECT(strcmp(buffer.lines[0], "TARCOS") == 0);
+
+     ce_free_buffer(&buffer);
+}
+
 TEST(insert_char_newline_begin)
 {
      Buffer buffer = {};
@@ -286,6 +305,22 @@ TEST(insert_string_begin)
 
      Point point = {0, 0};
      ce_insert_string(&buffer, &point, "AHHH ");
+
+     ASSERT(buffer.line_count == 1);
+     EXPECT(strcmp(buffer.lines[0], "AHHH TACOS") == 0);
+     ce_free_buffer(&buffer);
+}
+
+TEST(insert_string_readonly_begin)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.readonly = true;
+
+     Point point = {0, 0};
+     ce_insert_string_readonly(&buffer, &point, "AHHH ");
 
      ASSERT(buffer.line_count == 1);
      EXPECT(strcmp(buffer.lines[0], "AHHH TACOS") == 0);
@@ -438,6 +473,22 @@ TEST(sanity_append_string)
      buffer.lines[0] = strdup("TACOS");
 
      ce_append_string(&buffer, 0, " ARE AWESOME");
+
+     ASSERT(buffer.line_count == 1);
+     EXPECT(strcmp(buffer.lines[0], "TACOS ARE AWESOME") == 0);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(sanity_append_string_readonly)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.readonly = true;
+
+     ce_append_string_readonly(&buffer, 0, " ARE AWESOME");
 
      ASSERT(buffer.line_count == 1);
      EXPECT(strcmp(buffer.lines[0], "TACOS ARE AWESOME") == 0);
@@ -632,6 +683,41 @@ TEST(remove_string_multiline_blank_end)
      ce_free_buffer(&buffer);
 }
 
+TEST(sanity_insert_line_readonly)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.readonly = true;
+
+     ce_insert_line_readonly(&buffer, 0, "ARE AWESOME");
+
+     ASSERT(buffer.line_count == 2);
+     EXPECT(strcmp(buffer.lines[0], "ARE AWESOME") == 0);
+     EXPECT(strcmp(buffer.lines[1], "TACOS") == 0);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(insert_line_multiline)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.readonly = true;
+
+     ce_insert_line_readonly(&buffer, 0, "ARE\nAWESOME");
+
+     ASSERT(buffer.line_count == 3);
+     EXPECT(strcmp(buffer.lines[0], "ARE") == 0);
+     EXPECT(strcmp(buffer.lines[1], "AWESOME") == 0);
+     EXPECT(strcmp(buffer.lines[2], "TACOS") == 0);
+
+     ce_free_buffer(&buffer);
+}
+
 TEST(sanity_append_line)
 {
      Buffer buffer = {};
@@ -643,6 +729,23 @@ TEST(sanity_append_line)
 
      EXPECT(buffer.line_count == 2);
      // NOTE: I realize my examples are insane, but I'm intoxicated.
+     EXPECT(strcmp(buffer.lines[0], "TACOS") == 0);
+     EXPECT(strcmp(buffer.lines[1], "ARE AWESOME") == 0);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(sanity_append_line_readonly)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.readonly = true;
+
+     ce_append_line_readonly(&buffer, "ARE AWESOME");
+
+     EXPECT(buffer.line_count == 2);
      EXPECT(strcmp(buffer.lines[0], "TACOS") == 0);
      EXPECT(strcmp(buffer.lines[1], "ARE AWESOME") == 0);
 
@@ -685,6 +788,25 @@ TEST(sanity_clear_lines)
 
      ce_free_buffer(&buffer);
 }
+
+TEST(sanity_clear_lines_readonly)
+{
+     Buffer buffer = {};
+     buffer.line_count = 2;
+     buffer.lines = malloc(2 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE AWESOME");
+     buffer.readonly = true;
+
+     ce_clear_lines_readonly(&buffer);
+
+     EXPECT(buffer.line_count == 0);
+     EXPECT(buffer.lines == NULL);
+
+     ce_free_buffer(&buffer);
+}
+
+
 
 TEST(sanity_dupe_string)
 {
@@ -1341,9 +1463,7 @@ TEST(sanity_split_view)
 
      Buffer buffers[4] = {};
 
-     for(int i = 0; i < 4; ++i){
-          ASSERT(ce_alloc_lines(buffers + i, 1));
-     }
+     head->buffer = buffers + 0;
 
      // split views
      BufferView* horizontal_split_view = ce_split_view(head, buffers + 1, true);
@@ -1406,10 +1526,6 @@ TEST(sanity_split_view)
 
      // free views
      ASSERT(ce_free_views(&head));
-
-     for(int i = 0; i < 4; ++i){
-          ce_free_buffer(buffers + i);
-     }
 }
 
 // TODO: this function should point us to the last character. not the newline.
@@ -1516,7 +1632,7 @@ TEST(move_cursor_to_beginning_of_word)
      Buffer buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
-     buffer.lines[0] = strdup("Cats are delicious");
+     buffer.lines[0] = strdup("Cats are delicious. Oh yeah!");
 
      Point cursor;
 
@@ -1530,10 +1646,22 @@ TEST(move_cursor_to_beginning_of_word)
      EXPECT(cursor.x == 0);
      EXPECT(cursor.y == 0);
 
-     // NOTE: on whitespace
+     // on whitespace
      cursor = (Point) {8, 0};
      ASSERT(ce_move_cursor_to_beginning_of_word(&buffer, &cursor, false));
      EXPECT(cursor.x == 5);
+     EXPECT(cursor.y == 0);
+
+     // on a beginning of word already
+     cursor = (Point) {5, 0};
+     ASSERT(ce_move_cursor_to_beginning_of_word(&buffer, &cursor, false));
+     EXPECT(cursor.x == 0);
+     EXPECT(cursor.y == 0);
+
+     // move to punctuation
+     cursor = (Point) {20, 0};
+     ASSERT(ce_move_cursor_to_beginning_of_word(&buffer, &cursor, true));
+     EXPECT(cursor.x == 18);
      EXPECT(cursor.y == 0);
 
      ce_free_buffer(&buffer);
@@ -1887,6 +2015,21 @@ TEST(sanity_append_char)
      ce_free_buffer(&buffer);
 }
 
+TEST(sanity_append_char_readonly)
+{
+     Buffer buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS ARE AWESOM");
+     buffer.readonly = true;
+
+     ASSERT(ce_append_char_readonly(&buffer, 'E'));
+     ASSERT(buffer.line_count == 1);
+     EXPECT(strcmp(buffer.lines[0], "TACOS ARE AWESOME") == 0);
+
+     ce_free_buffer(&buffer);
+}
+
 TEST(append_newline)
 {
      Buffer buffer = {};
@@ -1997,10 +2140,90 @@ TEST(sanity_last_index)
      EXPECT(ce_last_index(no_str) == 0);
 }
 
+TEST(sanity_get_char_raw)
+{
+     Buffer buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE");
+     buffer.lines[2] = strdup("AWESOME");
+
+     Point point = {2, 0};
+     EXPECT(ce_get_char_raw(&buffer, &point) == 'C');
+
+     point = (Point){1, 1};
+     EXPECT(ce_get_char_raw(&buffer, &point) == 'R');
+
+     point = (Point){4, 2};
+     EXPECT(ce_get_char_raw(&buffer, &point) == 'O');
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(move_cursor_to_beginning_of_file)
+{
+     Buffer buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE");
+     buffer.lines[2] = strdup("AWESOME");
+
+     Point point = {4, 2};
+     ce_move_cursor_to_beginning_of_file(&buffer, &point);
+     EXPECT(point.x == 0);
+     EXPECT(point.y == 0);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(move_cursor_to_beginning_of_line)
+{
+     Buffer buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE");
+     buffer.lines[2] = strdup("AWESOME");
+
+     Point point = {4, 2};
+     ce_move_cursor_to_beginning_of_line(&buffer, &point);
+     EXPECT(point.x == 0);
+     EXPECT(point.y == 2);
+
+     ce_free_buffer(&buffer);
+}
+
+void segv_handler(int signo)
+{
+     void *array[10];
+     size_t size;
+     char **strings;
+     size_t i;
+
+     size = backtrace(array, 10);
+     strings = backtrace_symbols(array, size);
+
+     printf("SIGSEV\n");
+     printf("%zd frames.\n", size);
+     for (i = 0; i < size; i++) printf ("%s\n", strings[i]);
+     printf("\n");
+
+     exit(signo);
+}
+
 int main()
 {
      Point terminal_dimensions = {17, 10};
      g_terminal_dimensions = &terminal_dimensions;
+
+     struct sigaction sa = {};
+     sa.sa_handler = segv_handler;
+     sigemptyset(&sa.sa_mask);
+     if(sigaction(SIGSEGV, &sa, NULL) == -1){
+          // TODO: handle error
+     }
 
      RUN_TESTS();
 }

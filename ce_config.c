@@ -6,6 +6,9 @@
 #include <stdio.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <pthread.h>
+#include <fcntl.h>
+#include <sys/ioctl.h>
 
 #define TAB_STRING "     "
 #define SCROLL_LINES 1
@@ -19,6 +22,22 @@ const char* readonly_string(Buffer* buffer)
 {
      return buffer->readonly ? " [RO]" : "";
 }
+
+typedef struct{
+     char** commands;
+     int64_t command_count;
+     Buffer* output_buffer;
+     BufferNode* buffer_node_head;
+     BufferView* view_head;
+     BufferView* view_current;
+     int shell_command_input_fd;
+     int shell_command_output_fd;
+     void* user_data;
+} ShellCommandData;
+
+ShellCommandData shell_command_data;
+pthread_mutex_t draw_lock;
+pthread_mutex_t shell_buffer_lock;
 
 int64_t count_digits(int64_t n)
 {
@@ -279,9 +298,12 @@ typedef struct{
      TabView* tab_current;
      BufferView* view_input;
      InputHistory shell_command_history;
+     InputHistory shell_input_history;
      InputHistory search_history;
      InputHistory load_file_history;
      Point start_search;
+     pthread_t shell_command_thread;
+     pthread_t shell_input_thread;
 } ConfigState;
 
 typedef struct MarkNode{
@@ -499,8 +521,7 @@ void commit_insert_mode_changes(ConfigState* config_state, Buffer* buffer, Buffe
                     backspace_free(&buffer_state->backspace_head);
                }else{
                     // mixture of inserts and backspaces
-                    Point last_inserted_char = {cursor->x, cursor->y};
-                    ce_advance_cursor(buffer, &last_inserted_char, -1);
+                    Point last_inserted_char = {end_cursor->x, end_cursor->y};
                     ce_commit_change_string(&buffer_state->commit_tail,
                                             &config_state->start_insert,
                                             &config_state->original_start_insert,
@@ -523,6 +544,45 @@ void clear_keys(ConfigState* config_state)
      memset(config_state->movement_keys, 0, sizeof config_state->movement_keys);
 }
 
+// location is {left_column, top_line} for the view
+void scroll_view_to_location(BufferView* buffer_view, const Point* location){
+     // TODO: we should be able to scroll the view above our first line
+     buffer_view->left_column = (location->x >= 0) ? location->x : 0;
+     buffer_view->top_row = (location->y >= 0) ? location->y : 0;
+}
+
+void center_view(BufferView* view)
+{
+     int64_t view_height = view->bottom_right.y - view->top_left.y;
+     Point location = (Point) {0, view->cursor.y - (view_height / 2)};
+     scroll_view_to_location(view, &location);
+}
+
+InputHistory* history_from_input_key(ConfigState* config_state)
+{
+     InputHistory* history = NULL;
+
+     switch(config_state->input_key){
+     default:
+          break;
+     case '/':
+     case '?':
+          history = &config_state->search_history;
+          break;
+     case 24: // Ctrl + x
+          history = &config_state->shell_command_history;
+          break;
+     case 9: // Ctrl + i
+          history = &config_state->shell_input_history;
+          break;
+     case 6: // Ctrl + f
+          history = &config_state->load_file_history;
+          break;
+     }
+
+     return history;
+}
+
 void input_start(ConfigState* config_state, const char* input_message, char input_key)
 {
      ce_clear_lines(config_state->view_input->buffer);
@@ -534,18 +594,26 @@ void input_start(ConfigState* config_state, const char* input_message, char inpu
      config_state->tab_current->view_input_save = config_state->tab_current->view_current;
      config_state->tab_current->view_current = config_state->view_input;
      enter_insert_mode(config_state, &config_state->view_input->cursor);
+
+     // reset input history back to tail
+     InputHistory* history = history_from_input_key(config_state);
+     if(history) history->cur = history->tail;
 }
 
-// NOTE: locals like buffer, buffer_state, buffer_view, cursor are updated here, which is why this is a macro,
-//       we should clean this up and make it a function.
-#define input_end() ({ \
-     config_state->input = false;\
+void input_end(ConfigState* config_state)
+{
+     config_state->input = false;
      config_state->tab_current->view_current = config_state->tab_current->view_input_save; \
-     buffer = config_state->tab_current->view_current->buffer; \
-     buffer_state = buffer->user_data; \
-     buffer_view = config_state->tab_current->view_current; \
-     cursor = &config_state->tab_current->view_current->cursor; \
- })
+}
+
+void input_cancel(ConfigState* config_state)
+{
+     if(config_state->input_key == '/' || config_state->input_key == '?'){
+          config_state->tab_current->view_input_save->cursor = config_state->start_search;
+          center_view(config_state->tab_current->view_input_save);
+     }
+     input_end(config_state);
+}
 
 #ifndef FTW_STOP
 #define FTW_STOP 1
@@ -640,23 +708,36 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
      config_state->buffer_list_buffer.readonly = true;
 
      // setup shell command buffer
-     config_state->shell_command_buffer = calloc(1, sizeof(*config_state->shell_command_buffer));
-     config_state->shell_command_buffer->name = strdup("shell_output");
-     initialize_buffer(config_state->shell_command_buffer);
-     ce_alloc_lines(config_state->shell_command_buffer, 1);
-     config_state->shell_command_buffer->modified = false;
-     config_state->shell_command_buffer->readonly = true;
-     BufferNode* new_buffer_node = ce_append_buffer_to_list(head, config_state->shell_command_buffer);
-     if(!new_buffer_node){
-          ce_message("failed to add shell command buffer to list");
-          return false;
+     bool found_shell_command_buffer = false;
+
+     // if we reload, the shell command buffer may already exist, don't recreate it
+     BufferNode* itr = head;
+     while(itr){
+          if(strcmp(itr->buffer->name, "shell_output") == 0){
+               found_shell_command_buffer = true;
+               config_state->shell_command_buffer = itr->buffer;
+               break;
+          }
+          itr = itr->next;
+     }
+
+     if(!found_shell_command_buffer){
+          config_state->shell_command_buffer = calloc(1, sizeof(*config_state->shell_command_buffer));
+          config_state->shell_command_buffer->name = strdup("shell_output");
+          config_state->shell_command_buffer->readonly = true;
+          initialize_buffer(config_state->shell_command_buffer);
+          ce_alloc_lines(config_state->shell_command_buffer, 1);
+          BufferNode* new_buffer_node = ce_append_buffer_to_list(head, config_state->shell_command_buffer);
+          if(!new_buffer_node){
+               ce_message("failed to add shell command buffer to list");
+               return false;
+          }
      }
 
      *user_data = config_state;
 
-     BufferNode* itr = head;
-
      // setup state for each buffer
+     itr = head;
      while(itr){
           initialize_buffer(itr->buffer);
           itr = itr->next;
@@ -673,29 +754,42 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
      }
 
      input_history_init(&config_state->shell_command_history);
+     input_history_init(&config_state->shell_input_history);
      input_history_init(&config_state->search_history);
      input_history_init(&config_state->load_file_history);
 
      // setup colors for syntax highlighting
      init_pair(S_NORMAL, COLOR_FOREGROUND, COLOR_BACKGROUND);
      init_pair(S_KEYWORD, COLOR_BLUE, COLOR_BACKGROUND);
+     init_pair(S_TYPE, COLOR_BRIGHT_BLUE, COLOR_BACKGROUND);
+     init_pair(S_CONTROL, COLOR_YELLOW, COLOR_BACKGROUND);
      init_pair(S_COMMENT, COLOR_GREEN, COLOR_BACKGROUND);
      init_pair(S_STRING, COLOR_RED, COLOR_BACKGROUND);
      init_pair(S_CONSTANT, COLOR_MAGENTA, COLOR_BACKGROUND);
-     init_pair(S_PREPROCESSOR, COLOR_YELLOW, COLOR_BACKGROUND);
+     init_pair(S_PREPROCESSOR, COLOR_BRIGHT_MAGENTA, COLOR_BACKGROUND);
      init_pair(S_DIFF_ADD, COLOR_GREEN, COLOR_BACKGROUND);
      init_pair(S_DIFF_REMOVE, COLOR_RED, COLOR_BACKGROUND);
 
      init_pair(S_NORMAL_HIGHLIGHTED, COLOR_FOREGROUND, COLOR_BRIGHT_BLACK);
      init_pair(S_KEYWORD_HIGHLIGHTED, COLOR_BLUE, COLOR_BRIGHT_BLACK);
+     init_pair(S_TYPE_HIGHLIGHTED, COLOR_BRIGHT_BLUE, COLOR_BRIGHT_BLACK);
+     init_pair(S_CONTROL_HIGHLIGHTED, COLOR_YELLOW, COLOR_BRIGHT_BLACK);
      init_pair(S_COMMENT_HIGHLIGHTED, COLOR_GREEN, COLOR_BRIGHT_BLACK);
      init_pair(S_STRING_HIGHLIGHTED, COLOR_RED, COLOR_BRIGHT_BLACK);
      init_pair(S_CONSTANT_HIGHLIGHTED, COLOR_MAGENTA, COLOR_BRIGHT_BLACK);
-     init_pair(S_PREPROCESSOR_HIGHLIGHTED, COLOR_YELLOW, COLOR_BRIGHT_BLACK);
+     init_pair(S_PREPROCESSOR_HIGHLIGHTED, COLOR_BRIGHT_MAGENTA, COLOR_BRIGHT_BLACK);
      init_pair(S_DIFF_ADD_HIGHLIGHTED, COLOR_GREEN, COLOR_BRIGHT_BLACK);
      init_pair(S_DIFF_REMOVE_HIGHLIGHTED, COLOR_RED, COLOR_BRIGHT_BLACK);
 
-     init_pair(S_CURRENT_TAB, COLOR_BRIGHT_WHITE, COLOR_BACKGROUND);
+     init_pair(S_TRAILING_WHITESPACE, COLOR_FOREGROUND, COLOR_RED);
+
+     init_pair(S_BORDERS, COLOR_WHITE, COLOR_BACKGROUND);
+
+     init_pair(S_TAB_NAME, COLOR_WHITE, COLOR_BACKGROUND);
+     init_pair(S_CURRENT_TAB_NAME, COLOR_CYAN, COLOR_BACKGROUND);
+
+     init_pair(S_VIEW_STATUS, COLOR_CYAN, COLOR_BACKGROUND);
+     init_pair(S_INPUT_STATUS, COLOR_RED, COLOR_BACKGROUND);
 
      // Doesn't work in insert mode :<
      //define_key("h", KEY_LEFT);
@@ -712,6 +806,7 @@ bool initializer(BufferNode* head, Point* terminal_dimensions, int argc, char** 
      define_key("\x17", KEY_SAVE);      // ctrl + w    (23) (0x17) ASCII "ETB" End of Transmission Block
      //define_key("\x0A", KEY_ENTER);     // Enter       (10) (0x0A) ASCII "LF"  NL Line Feed, New Line
 
+     pthread_mutex_init(&draw_lock, NULL);
      return true;
 }
 
@@ -754,29 +849,26 @@ bool destroyer(BufferNode* head, void* user_data)
           free(config_state->view_input);
      }
 
+     if(config_state->shell_command_thread){
+          pthread_cancel(config_state->shell_command_thread);
+          pthread_join(config_state->shell_command_thread, NULL);
+     }
+
+     if(config_state->shell_input_thread){
+          pthread_cancel(config_state->shell_input_thread);
+          pthread_join(config_state->shell_input_thread, NULL);
+     }
+
      ce_free_buffer(&config_state->buffer_list_buffer);
 
      // history
      input_history_free(&config_state->shell_command_history);
+     input_history_free(&config_state->shell_input_history);
      input_history_free(&config_state->search_history);
      input_history_free(&config_state->load_file_history);
 
      free(config_state);
      return true;
-}
-
-// location is {left_column, top_line} for the view
-void scroll_view_to_location(BufferView* buffer_view, const Point* location){
-     // TODO: we should be able to scroll the view above our first line
-     buffer_view->left_column = (location->x >= 0) ? location->x : 0;
-     buffer_view->top_row = (location->y >= 0) ? location->y : 0;
-}
-
-void center_view(BufferView* view)
-{
-     int64_t view_height = view->bottom_right.y - view->top_left.y;
-     Point location = (Point) {0, view->cursor.y - (view_height / 2)};
-     scroll_view_to_location(view, &location);
 }
 
 void find_command(int command_key, int find_char, Buffer* buffer, Point* cursor)
@@ -1136,6 +1228,8 @@ void reset_buffer_commits(BufferCommitNode** tail)
 bool goto_file_destination_in_buffer(BufferNode* head, Buffer* buffer, int64_t line, BufferView* head_view,
                                      BufferView* view, int64_t* last_jump)
 {
+     if(!buffer->line_count) return false;
+
      assert(line >= 0);
      assert(line < buffer->line_count);
 
@@ -1246,10 +1340,10 @@ void jump_to_next_shell_command_file_destination(BufferNode* head, ConfigState* 
      }
 }
 
-bool commit_input_to_history(ConfigState* config_state, InputHistory* history)
+bool commit_input_to_history(Buffer* input_buffer, InputHistory* history)
 {
-     if(config_state->view_input->buffer->line_count){
-          char* saved = ce_dupe_buffer(config_state->view_input->buffer);
+     if(input_buffer->line_count){
+          char* saved = ce_dupe_buffer(input_buffer);
           if((history->cur->prev && strcmp(saved, history->cur->prev->entry) != 0) ||
              !history->cur->prev){
                history->cur = history->tail;
@@ -1261,28 +1355,6 @@ bool commit_input_to_history(ConfigState* config_state, InputHistory* history)
      }
 
      return true;
-}
-
-InputHistory* history_from_input_key(ConfigState* config_state)
-{
-     InputHistory* history = NULL;
-
-     switch(config_state->input_key){
-     default:
-          break;
-     case '/':
-     case '?':
-          history = &config_state->search_history;
-          break;
-     case 24: // Ctrl + x
-          history = &config_state->shell_command_history;
-          break;
-     case 6: // Ctrl + f
-          history = &config_state->load_file_history;
-          break;
-     }
-
-     return history;
 }
 
 void view_follow_cursor(BufferView* current_view)
@@ -1648,6 +1720,178 @@ void get_terminal_view_rect(TabView* tab_head, Point* top_left, Point* bottom_ri
      }
 }
 
+// NOTE: stderr is redirected to stdout
+pid_t bidirectional_popen(const char* cmd, int* in_fd, int* out_fd)
+{
+     int input_fds[2];
+     int output_fds[2];
+
+     if(pipe(input_fds) != 0) return 0;
+     if(pipe(output_fds) != 0) return 0;
+
+     pid_t pid = fork();
+     if(pid < 0) return 0;
+
+     if(pid == 0){
+          close(input_fds[1]);
+          close(output_fds[0]);
+
+          dup2(input_fds[0], STDIN_FILENO);
+          dup2(output_fds[1], STDOUT_FILENO);
+          dup2(output_fds[1], STDERR_FILENO);
+
+          execl("/bin/sh", "/bin/sh", "-c", cmd, NULL);
+          assert(0);
+     }else{
+         close(input_fds[0]);
+         close(output_fds[1]);
+
+         *in_fd = input_fds[1];
+         *out_fd = output_fds[0];
+     }
+
+     return pid;
+}
+
+void redraw_if_shell_command_buffer_in_view(BufferView* view_head, Buffer* shell_command_buffer,
+                                            BufferNode* head_buffer_node, void* user_data)
+{
+     BufferView* command_view = ce_buffer_in_view(view_head, shell_command_buffer);
+     if(command_view && shell_command_buffer->line_count > command_view->top_row &&
+         shell_command_buffer->line_count <
+        (command_view->top_row + (command_view->bottom_right.y - command_view->top_left.y))){
+          view_drawer(head_buffer_node, user_data);
+     }
+}
+
+void run_shell_commands_cleanup(void* user_data)
+{
+     (void)(user_data);
+
+     // release locks we could be holding
+     pthread_mutex_unlock(&shell_buffer_lock);
+     pthread_mutex_unlock(&draw_lock);
+
+     // free memory we could be using
+     for(int64_t i = 0; i < shell_command_data.command_count; ++i) free(shell_command_data.commands[i]);
+     free(shell_command_data.commands);
+}
+
+// NOTE: runs N commands where each command is newline separated
+void* run_shell_commands(void* user_data)
+{
+     char tmp[BUFSIZ];
+     int in_fd;
+     int out_fd;
+
+     pthread_cleanup_push(run_shell_commands_cleanup, NULL);
+
+     for(int64_t i = 0; i < shell_command_data.command_count; ++i){
+          char* current_command = shell_command_data.commands[i];
+
+          pid_t cmd_pid = bidirectional_popen(current_command, &in_fd, &out_fd);
+          if(cmd_pid <= 0) pthread_exit(NULL);
+
+          shell_command_data.shell_command_input_fd = in_fd;
+          shell_command_data.shell_command_output_fd = out_fd;
+
+          // append the command to the buffer
+          snprintf(tmp, BUFSIZ, "+ %s", current_command);
+
+          pthread_mutex_lock(&shell_buffer_lock);
+          ce_append_line_readonly(shell_command_data.output_buffer, tmp);
+          ce_append_char_readonly(shell_command_data.output_buffer, NEWLINE);
+          pthread_mutex_unlock(&shell_buffer_lock);
+
+          redraw_if_shell_command_buffer_in_view(shell_command_data.view_head,
+                                                 shell_command_data.output_buffer,
+                                                 shell_command_data.buffer_node_head,
+                                                 user_data);
+
+          // load one line at a time
+          int exit_code = 0;
+          while(true){
+               // has the command generated any output we should read?
+               int count = read(out_fd, tmp, 1);
+               if(count <= 0){
+                    // check if the pid has exitted
+                    int status;
+                    pid_t check_pid = waitpid(cmd_pid, &status, WNOHANG);
+                    if(check_pid > 0){
+                         exit_code = WEXITSTATUS(status);
+                         break;
+                    }
+                    continue;
+               }
+
+               if(ioctl(out_fd, FIONREAD, &count) != -1){
+                    count = read(out_fd, tmp + 1, count);
+               }
+
+               tmp[count + 1] = 0;
+
+               pthread_mutex_lock(&shell_buffer_lock);
+               if(!ce_append_string_readonly(shell_command_data.output_buffer,
+                                             shell_command_data.output_buffer->line_count - 1,
+                                             tmp)){
+                    pthread_exit(NULL);
+               }
+               pthread_mutex_unlock(&shell_buffer_lock);
+
+               redraw_if_shell_command_buffer_in_view(shell_command_data.view_head,
+                                                      shell_command_data.output_buffer,
+                                                      shell_command_data.buffer_node_head,
+                                                      user_data);
+          }
+
+          // append the return code
+          shell_command_data.shell_command_input_fd = 0;
+          snprintf(tmp, BUFSIZ, "+ exit %d", exit_code);
+
+          pthread_mutex_lock(&shell_buffer_lock);
+          ce_append_line_readonly(shell_command_data.output_buffer, tmp);
+          ce_append_line_readonly(shell_command_data.output_buffer, "");
+          pthread_mutex_unlock(&shell_buffer_lock);
+
+          view_drawer(shell_command_data.buffer_node_head, user_data);
+     }
+
+     pthread_cleanup_pop(1);
+     return NULL;
+}
+
+void indent_line(Buffer* buffer, BufferCommitNode** commit_tail, int64_t line, Point* cursor)
+{
+     if(line >= buffer->line_count) return;
+     if(!buffer->lines[line][0]) return;
+     Point loc = {0, line};
+     ce_insert_string(buffer, &loc, TAB_STRING);
+     ce_commit_insert_string(commit_tail, &loc, cursor, cursor, strdup(TAB_STRING));
+}
+
+void unindent_line(Buffer* buffer, BufferCommitNode** commit_tail, int64_t line, Point* cursor)
+{
+     if(line >= buffer->line_count) return;
+     if(!buffer->lines[line][0]) return;
+     // find whitespace prepending line
+     int64_t whitespace_count = 0;
+     const int64_t tab_len = strlen(TAB_STRING);
+     for(int i = 0; i < tab_len; ++i){
+          if(isblank(buffer->lines[line][i])){
+               whitespace_count++;
+          }else{
+               break;
+          }
+     }
+
+     if(whitespace_count){
+          Point loc = {0, line};
+          ce_remove_string(buffer, &loc, whitespace_count);
+          ce_commit_remove_string(commit_tail, &loc, cursor, cursor, strdup(TAB_STRING));
+     }
+
+}
+
 bool key_handler(int key, BufferNode* head, void* user_data)
 {
      ConfigState* config_state = user_data;
@@ -1780,7 +2024,15 @@ bool key_handler(int key, BufferNode* head, void* user_data)
 
                          if(can_unindent){
                               cursor->x -= n_deletes;
-                              ce_remove_string(buffer, cursor, n_deletes);
+                              if(ce_remove_string(buffer, cursor, n_deletes)){
+                                   if(config_state->start_insert.y == cursor->y &&
+                                      config_state->start_insert.x > cursor->x){
+                                        config_state->start_insert.x = cursor->x;
+                                        for(int i = 0; i < n_deletes; ++i){
+                                             backspace_push(&buffer_state->backspace_head, ' ');
+                                        }
+                                   }
+                              }
                          }
                     }
 
@@ -1889,11 +2141,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           case 27: // ESC
           {
                if(config_state->input){
-                    if(config_state->input_key == '/' || config_state->input_key == '?'){
-                         config_state->tab_current->view_input_save->cursor = config_state->start_search;
-                         center_view(config_state->tab_current->view_input_save);
-                    }
-                    input_end();
+                    input_cancel(config_state);
                }
                if(config_state->vim_mode != VM_NORMAL){
                     enter_normal_mode(config_state);
@@ -2328,6 +2576,11 @@ bool key_handler(int key, BufferNode* head, void* user_data)
           } break;
           case KEY_CLOSE: // Ctrl + q
           {
+               if(config_state->input){
+                    input_cancel(config_state);
+                    break;
+               }
+
                Point save_cursor_on_terminal = get_cursor_on_terminal(cursor, buffer_view);
                config_state->tab_current->view_current->buffer->cursor = config_state->tab_current->view_current->cursor;
 
@@ -2463,11 +2716,39 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     // no movement yet, wait for one!
                     return true;
                case '>':
-               {
-                    Point loc = {0, cursor->y};
-                    ce_insert_string(buffer, &loc, TAB_STRING);
-                    ce_commit_insert_string(&buffer_state->commit_tail, &loc, cursor, cursor, strdup(TAB_STRING));
-               } break;
+                    if(config_state->vim_mode == VM_VISUAL_RANGE ||
+                       config_state->vim_mode == VM_VISUAL_LINE){
+                         const Point* a = cursor;
+                         const Point* b = &config_state->visual_start;
+                         ce_sort_points(&a, &b);
+                         for(int64_t i = a->y; i <= b->y; ++i){
+                              indent_line(buffer, &buffer_state->commit_tail, i, cursor);
+                         }
+                    }else{
+                         indent_line(buffer, &buffer_state->commit_tail, cursor->y, cursor);
+                    }
+                    break;
+               }
+          } break;
+          case '<':
+          {
+               switch(config_state->movement_keys[0]){
+               case MOVEMENT_CONTINUE:
+                    // no movement yet, wait for one!
+                    return true;
+               case '<':
+                    if(config_state->vim_mode == VM_VISUAL_RANGE ||
+                       config_state->vim_mode == VM_VISUAL_LINE){
+                         const Point* a = cursor;
+                         const Point* b = &config_state->visual_start;
+                         ce_sort_points(&a, &b);
+                         for(int64_t i = a->y; i <= b->y; ++i){
+                              unindent_line(buffer, &buffer_state->commit_tail, i, cursor);
+                         }
+                    }else{
+                         unindent_line(buffer, &buffer_state->commit_tail, cursor->y, cursor);
+                    }
+                    break;
                }
           } break;
           case 'g':
@@ -2547,18 +2828,49 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                half_page_down(config_state->tab_current->view_current);
           } break;
           case 8: // Ctrl + h
-          {
-               if(config_state->input) break;
-               // TODO: consolidate into function for use with other window movement keys, and for use in insert mode?
-               Point point = {config_state->tab_current->view_current->top_left.x - 2, // account for window separator
-                              cursor->y - config_state->tab_current->view_current->top_row + config_state->tab_current->view_current->top_left.y};
-               if(point.x < 0) point.x += g_terminal_dimensions->x - 1;
-               switch_to_view_at_point(config_state, &point);
-          }
+              if(config_state->input){
+                   // dump input history on cursor line
+                   InputHistory* cur_hist = history_from_input_key(config_state);
+                   if(!cur_hist){
+                        ce_message("no history to dump");
+                        break;
+                   }
+
+                   // start the insertions after the cursor, unless the buffer is empty
+                   assert(config_state->view_input->buffer->line_count);
+                   int lines_added = 1;
+                   bool empty_first_line = !config_state->view_input->buffer->lines[0][0];
+
+                   // insert each line in history
+                   InputHistoryNode* node = cur_hist->head;
+                   while(node && node->entry){
+                        if(ce_insert_line(config_state->view_input->buffer,
+                                          config_state->view_input->cursor.y + lines_added,
+                                          node->entry)){
+                            lines_added += ce_count_string_lines(node->entry);
+                        }else{
+                             break;
+                        }
+                        node = node->next;
+                   }
+
+                   if(empty_first_line) ce_remove_line(config_state->view_input->buffer, 0);
+              }else{
+                   // TODO: consolidate into function for use with other window movement keys, and for use in insert mode?
+                   Point point = {config_state->tab_current->view_current->top_left.x - 2, // account for window separator
+                                  cursor->y - config_state->tab_current->view_current->top_row + config_state->tab_current->view_current->top_left.y};
+                   if(point.x < 0) point.x += g_terminal_dimensions->x - 1;
+                   switch_to_view_at_point(config_state, &point);
+              }
           break;
           case 10: // Ctrl + j
                if(config_state->input){
-                    input_end();
+                    input_end(config_state);
+                    buffer = config_state->tab_current->view_current->buffer;
+                    buffer_state = buffer->user_data;
+                    buffer_view = config_state->tab_current->view_current;
+                    cursor = &config_state->tab_current->view_current->cursor;
+
                     switch(config_state->input_key) {
                     default:
                          break;
@@ -2575,7 +2887,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                     } break;
                     case 6: // Ctrl + f
                          // just grab the first line and load it as a file
-                         commit_input_to_history(config_state, &config_state->load_file_history);
+                         commit_input_to_history(config_state->view_input->buffer, &config_state->load_file_history);
                          for(int64_t i = 0; i < config_state->view_input->buffer->line_count; ++i){
                               Buffer* new_buffer = open_file_buffer(head, config_state->view_input->buffer->lines[i]);
                               if(i == 0 && new_buffer){
@@ -2586,24 +2898,31 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          break;
                     case '/':
                          if(config_state->view_input->buffer->line_count){
-                              commit_input_to_history(config_state, &config_state->search_history);
+                              commit_input_to_history(config_state->view_input->buffer, &config_state->search_history);
                               add_yank(config_state, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
                          }
                          break;
                     case '?':
                          if(config_state->view_input->buffer->line_count){
-                              commit_input_to_history(config_state, &config_state->search_history);
+                              commit_input_to_history(config_state->view_input->buffer, &config_state->search_history);
                               add_yank(config_state, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
                          }
                          break;
                     case 24: // Ctrl + x
                     {
-                         commit_input_to_history(config_state, &config_state->shell_command_history);
+                         if(config_state->view_input->buffer->line_count == 0){
+                              break;
+                         }
+
+                         if(config_state->shell_command_thread){
+                              pthread_cancel(config_state->shell_command_thread);
+                              pthread_join(config_state->shell_command_thread, NULL);
+                         }
+
+                         commit_input_to_history(config_state->view_input->buffer, &config_state->shell_command_history);
 
                          // if we found an existing command buffer, clear it and use it
                          Buffer* command_buffer = config_state->shell_command_buffer;
-                         command_buffer->readonly = false;
-                         ce_clear_lines(command_buffer);
                          command_buffer->cursor = (Point){0, 0};
                          config_state->last_command_buffer_jump = 0;
                          BufferView* command_view = ce_buffer_in_view(config_state->tab_current->view_head, command_buffer);
@@ -2618,47 +2937,36 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                               command_view = config_state->tab_current->view_current;
                          }
 
-                         assert(command_view);
-                         for(int64_t i = 0; i < config_state->view_input->buffer->line_count; ++i){
-                              // run the command
-                              char cmd[BUFSIZ];
-                              snprintf(cmd, BUFSIZ, "%s 2>&1", config_state->view_input->buffer->lines[i]);
-                              FILE* pfile = popen(cmd, "r");
-
-                              // append the command
-                              snprintf(cmd, BUFSIZ, "+ %s", config_state->view_input->buffer->lines[i]);
-                              ce_append_line(command_buffer, cmd);
-
-                              // load one line at a time
-                              while(fgets(cmd, BUFSIZ, pfile) != NULL){
-                                   // strip newline
-                                   size_t cmd_len = strlen(cmd);
-                                   assert(cmd[cmd_len-1] == NEWLINE);
-                                   cmd[cmd_len-1] = 0;
-
-                                   ce_append_line(command_buffer, cmd);
-
-                                   scroll_view_to_last_line(command_view);
-                                   command_view->cursor.y = command_view->top_row;
-
-                                   erase();
-                                   view_drawer(head, user_data);
-                                   refresh();
-                              }
-
-                              // append the return code
-                              int exit_code = pclose(pfile);
-                              snprintf(cmd, BUFSIZ, "+ exit %d", WEXITSTATUS(exit_code));
-                              ce_append_line(command_buffer, cmd);
-
-                              // add blank for readability
-                              ce_append_line(command_buffer, "");
-
-                              scroll_view_to_last_line(command_view);
-                              command_view->cursor.y = command_view->top_row;
+                         shell_command_data.command_count = config_state->view_input->buffer->line_count;
+                         shell_command_data.commands = malloc(shell_command_data.command_count * sizeof(*shell_command_data.commands));
+                         if(!shell_command_data.commands){
+                              ce_message("failed to allocate shell commands");
+                              break;
                          }
-                         command_buffer->readonly = true;
-                         command_buffer->modified = false;
+
+                         bool failed_to_alloc = false;
+                         for(int64_t i = 0; i < config_state->view_input->buffer->line_count; ++i){
+                              shell_command_data.commands[i] = strdup(config_state->view_input->buffer->lines[i]);
+                              if(!shell_command_data.commands[i]){
+                                   ce_message("failed to allocate shell command %" PRId64, i + 1);
+                                   failed_to_alloc = true;
+                                   break;
+                              }
+                         }
+                         if(failed_to_alloc) break; // leak !
+
+                         shell_command_data.output_buffer = command_buffer;
+                         shell_command_data.buffer_node_head = head;
+                         shell_command_data.view_head = config_state->tab_current->view_head;
+                         shell_command_data.view_current = config_state->tab_current->view_current;
+                         shell_command_data.user_data = user_data;
+
+                         assert(command_buffer->readonly);
+                         pthread_mutex_lock(&shell_buffer_lock);
+                         ce_clear_lines_readonly(command_buffer);
+                         pthread_mutex_unlock(&shell_buffer_lock);
+
+                         pthread_create(&config_state->shell_command_thread, NULL, run_shell_commands, user_data);
                     } break;
                     case 'R':
                     {
@@ -2701,6 +3009,34 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                               buffer->filename = strdup(config_state->view_input->buffer->lines[0]);
                          }
                     } break;
+                    case 9: // Ctrl + i
+                    {
+                         if(!config_state->view_input->buffer->lines) break;
+                         if(!config_state->shell_command_thread) break;
+                         if(!shell_command_data.shell_command_input_fd) break;
+
+                         if(config_state->shell_input_thread){
+                              pthread_cancel(config_state->shell_input_thread);
+                              pthread_join(config_state->shell_input_thread, NULL);
+                         }
+
+                         Buffer* input_buffer = config_state->view_input->buffer;
+                         commit_input_to_history(input_buffer, &config_state->shell_input_history);
+
+                         // put the line in the output buffer
+                         const char* input = input_buffer->lines[0];
+
+                         pthread_mutex_lock(&shell_buffer_lock);
+                         ce_append_string_readonly(config_state->shell_command_buffer,
+                                                   config_state->shell_command_buffer->line_count - 1,
+                                                   input);
+                         ce_append_char_readonly(config_state->shell_command_buffer, NEWLINE);
+                         pthread_mutex_unlock(&shell_buffer_lock);
+
+                         // send the input to the shell command
+                         write(shell_command_data.shell_command_input_fd, input, strlen(input));
+                         write(shell_command_data.shell_command_input_fd, "\n", 1);
+                    }break;
                     }
                }else if(config_state->tab_current->view_current->buffer == &config_state->buffer_list_buffer){
                     int64_t line = cursor->y - 1; // account for buffer list row header
@@ -3024,6 +3360,28 @@ search:
                if(config_state->input) break;
                input_start(config_state, "Save Buffer As", key);
           break;
+          case 9: // Ctrl + i
+               if(config_state->input) break;
+               input_start(config_state, "Shell Command Input", key);
+          break;
+          case 15: // Ctrl + o // NOTE: not the best keybinding, but what else is left?!
+          {
+               if(access(buffer->filename, R_OK) != 0){
+                    ce_message("failed to read %s: %s", buffer->filename, strerror(errno));
+                    break;
+               }
+
+               // reload file
+               if(buffer->readonly){
+                    // NOTE: maybe ce_clear_lines shouldn't care about readonly
+                    ce_clear_lines_readonly(buffer);
+               }else{
+                    ce_clear_lines(buffer);
+               }
+
+               ce_load_file(buffer, buffer->filename);
+               ce_clamp_cursor(buffer, &buffer_view->cursor);
+          } break;
           }
      }
 
@@ -3068,9 +3426,11 @@ void draw_view_statuses(BufferView* view, BufferView* current_view, VimMode vim_
           "VISUAL BLOCK ",
      };
 
+     attron(COLOR_PAIR(S_BORDERS));
      move(view->bottom_right.y, view->top_left.x);
      for(int i = view->top_left.x; i < view->bottom_right.x; ++i) addch(ACS_HLINE);
 
+     attron(COLOR_PAIR(S_VIEW_STATUS));
      mvprintw(view->bottom_right.y, view->top_left.x + 1, " %s%s%s%s ",
               view == current_view ? mode_names[vim_mode] : "",
               modified_string(buffer), buffer->filename, readonly_string(buffer));
@@ -3084,6 +3444,18 @@ void draw_view_statuses(BufferView* view, BufferView* current_view, VimMode vim_
 
 void view_drawer(const BufferNode* head, void* user_data)
 {
+     // grab the draw lock so we can draw
+     if(pthread_mutex_trylock(&draw_lock) != 0) return;
+
+     // and the shell_buffer_lock so we know it won't change on us
+     if(pthread_mutex_trylock(&shell_buffer_lock) != 0){
+          pthread_mutex_unlock(&draw_lock);
+          return;
+     }
+
+     // clear all lines in the terminal
+     erase();
+
      (void)(head);
      ConfigState* config_state = user_data;
      Buffer* buffer = config_state->tab_current->view_current->buffer;
@@ -3144,8 +3516,6 @@ void view_drawer(const BufferNode* head, void* user_data)
           buffer->highlight_end = (Point){-1, 0};
      }
 
-     standend();
-
      const char* search = NULL;
      if(config_state->input && (config_state->input_key == '/' || config_state->input_key == '?') &&
         config_state->view_input->buffer->lines && config_state->view_input->buffer->lines[0][0]){
@@ -3160,10 +3530,16 @@ void view_drawer(const BufferNode* head, void* user_data)
 
      if(config_state->input){
           move(input_top_left.y - 1, input_top_left.x);
+
+          attron(COLOR_PAIR(S_BORDERS));
           for(int i = input_top_left.x; i < input_bottom_right.x; ++i) addch(ACS_HLINE);
           // if we are at the edge of the terminal, draw the inclusing horizontal line. We
           if(input_bottom_right.x == g_terminal_dimensions->x - 1) addch(ACS_HLINE);
+
+          attron(COLOR_PAIR(S_INPUT_STATUS));
           mvprintw(input_top_left.y - 1, input_top_left.x + 1, " %s ", config_state->input_message);
+
+          standend();
           // clear input buffer section
           for(int y = input_top_left.y; y <= input_bottom_right.y; ++y){
                move(y, input_top_left.x);
@@ -3186,8 +3562,8 @@ void view_drawer(const BufferNode* head, void* user_data)
      // draw tab line
      if(config_state->tab_head->next){
           // clear tab line with inverses
-          standend();
           move(0, 0);
+          attron(COLOR_PAIR(S_BORDERS));
           for(int i = 0; i < g_terminal_dimensions->x; ++i) addch(ACS_HLINE);
           for(int i = 0; i < g_terminal_dimensions->x; ++i){
                Point p = {i, 0};
@@ -3198,6 +3574,7 @@ void view_drawer(const BufferNode* head, void* user_data)
           move(0, 1);
 
           // draw before current tab
+          attron(COLOR_PAIR(S_TAB_NAME));
           addch(' ');
           while(tab_itr && tab_itr != config_state->tab_current){
                printw(tab_itr->view_current->buffer->name);
@@ -3207,12 +3584,12 @@ void view_drawer(const BufferNode* head, void* user_data)
 
           // draw current tab
           assert(tab_itr == config_state->tab_current);
-          attron(COLOR_PAIR(S_CURRENT_TAB));
+          attron(COLOR_PAIR(S_CURRENT_TAB_NAME));
           printw(tab_itr->view_current->buffer->name);
           addch(' ');
-          standend();
 
           // draw rest of tabs
+          attron(COLOR_PAIR(S_TAB_NAME));
           tab_itr = tab_itr->next;
           while(tab_itr){
                printw(tab_itr->view_current->buffer->name);
@@ -3221,9 +3598,13 @@ void view_drawer(const BufferNode* head, void* user_data)
           }
      }
 
-     standend();
-
      // reset the cursor
      Point terminal_cursor = get_cursor_on_terminal(cursor, buffer_view);
      move(terminal_cursor.y, terminal_cursor.x);
+
+     // update the screen with what we drew
+     refresh();
+
+     pthread_mutex_unlock(&shell_buffer_lock);
+     pthread_mutex_unlock(&draw_lock);
 }

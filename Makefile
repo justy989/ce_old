@@ -2,6 +2,7 @@ CC?=clang
 CFLAGS+=-Wall -Werror -Wextra -std=c11 -ggdb3 -D_GNU_SOURCE $(SCROLL_FLAG)
 LINK=-lncurses
 
+all: LINK += -lpthread
 all: ce ce_config.so
 
 release: CFLAGS += -DNDEBUG -O3
@@ -12,6 +13,7 @@ coverage: CFLAGS += -fprofile-arcs -ftest-coverage
 coverage: clean_test test
 	llvm-cov gcov ce.test.o
 
+test: LINK += -rdynamic
 test: clean_test test.c ce.test.o
 	$(CC) $(CFLAGS) $(filter-out $<,$^) -o $@ $(LINK)
 	./test 2> test_output.txt || (cat test_output.txt && false)

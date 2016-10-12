@@ -156,6 +156,11 @@ const char* config = CE_CONFIG;
 bool save_messages_on_exit = false;
 int main(int argc, char** argv)
 {
+     if(isatty(STDIN_FILENO) == 0){
+          printf("please run %s inside a terminal.\n", argv[0]);
+          return -1;
+     }
+
      int opt = 0;
      int parsed_args = 1;
      bool done_parsing = false;
@@ -329,14 +334,8 @@ int main(int argc, char** argv)
           // ncurses macro that gets height and width
           getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);
 
-          // clear all lines
-          erase();
-
           // user-defined or default draw_view()
           current_config.view_drawer(buffer_list_head, user_data);
-
-          // update the terminal with what we drew
-          refresh();
 
           int key = getch();
           if(key == '`'){

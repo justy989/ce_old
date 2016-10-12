@@ -1448,7 +1448,7 @@ int64_t ce_is_fullpath(const char* line, int64_t start_offset)
 
      itr--;
 
-     if(starts_with_slash) return count;
+     if(starts_with_slash && count > 1) return count;
 
      return 0;
 }

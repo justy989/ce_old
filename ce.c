@@ -1425,8 +1425,7 @@ int64_t ce_is_caps_var(const char* line, int64_t start_offset)
 
 bool likely_a_path(char c)
 {
-     return (isalnum(c) || c == '/' || c == '_' || c == '-' || c == '.' ||
-             c == '*' || c == '[' || c == ']');
+     return (isalnum(c) || c == '/' || c == '_' || c == '-' || c == '.' );
 }
 
 int64_t ce_is_fullpath(const char* line, int64_t start_offset)

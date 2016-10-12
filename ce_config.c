@@ -884,6 +884,7 @@ bool initializer(BufferNode_t* head, Point_t* terminal_dimensions, int argc, cha
      init_pair(S_STRING, COLOR_RED, COLOR_BACKGROUND);
      init_pair(S_CONSTANT, COLOR_MAGENTA, COLOR_BACKGROUND);
      init_pair(S_PREPROCESSOR, COLOR_BRIGHT_MAGENTA, COLOR_BACKGROUND);
+     init_pair(S_FILEPATH, COLOR_BLUE, COLOR_BACKGROUND);
      init_pair(S_DIFF_ADD, COLOR_GREEN, COLOR_BACKGROUND);
      init_pair(S_DIFF_REMOVE, COLOR_RED, COLOR_BACKGROUND);
 
@@ -895,6 +896,7 @@ bool initializer(BufferNode_t* head, Point_t* terminal_dimensions, int argc, cha
      init_pair(S_STRING_HIGHLIGHTED, COLOR_RED, COLOR_BRIGHT_BLACK);
      init_pair(S_CONSTANT_HIGHLIGHTED, COLOR_MAGENTA, COLOR_BRIGHT_BLACK);
      init_pair(S_PREPROCESSOR_HIGHLIGHTED, COLOR_BRIGHT_MAGENTA, COLOR_BRIGHT_BLACK);
+     init_pair(S_FILEPATH_HIGHLIGHTED, COLOR_BLUE, COLOR_BRIGHT_BLACK);
      init_pair(S_DIFF_ADD_HIGHLIGHTED, COLOR_GREEN, COLOR_BRIGHT_BLACK);
      init_pair(S_DIFF_REMOVE_HIGHLIGHTED, COLOR_RED, COLOR_BRIGHT_BLACK);
 
@@ -2077,16 +2079,27 @@ void unindent_line(Buffer_t* buffer, BufferCommitNode_t** commit_tail, int64_t l
 
 }
 
-bool generate_auto_complete_files_in_dir(AutoComplete_t* auto_complete, const char* dir,
-                                         Buffer_t* completion_buffer)
+void update_completion_buffer(Buffer_t* completion_buffer, AutoComplete_t* auto_complete, const char* match)
+{
+     assert(completion_buffer->readonly);
+     ce_clear_lines_readonly(completion_buffer);
+
+     int64_t match_len = strlen(match);
+     CompleteNode_t* itr = auto_complete->head;
+     while(itr){
+          if(strncmp(itr->option, match, match_len) == 0){
+               ce_append_line_readonly(completion_buffer, itr->option);
+          }
+          itr = itr->next;
+     }
+}
+
+bool generate_auto_complete_files_in_dir(AutoComplete_t* auto_complete, const char* dir)
 {
      struct dirent *node;
      DIR* os_dir = opendir(dir);
      if(!os_dir) return false;
 
-     assert(completion_buffer->readonly);
-
-     ce_clear_lines_readonly(completion_buffer);
      auto_complete_clear(auto_complete);
 
      char tmp[PATH_MAX];
@@ -2100,7 +2113,6 @@ bool generate_auto_complete_files_in_dir(AutoComplete_t* auto_complete, const ch
                strncpy(tmp, node->d_name, PATH_MAX);
           }
           auto_complete_insert(auto_complete, tmp);
-          ce_append_line_readonly(completion_buffer, tmp);
      }
 
      closedir(os_dir);
@@ -2143,20 +2155,23 @@ bool calc_auto_complete_start_and_path(AutoComplete_t* auto_complete, const char
           memcpy(path, path_begin, path_len);
           path[path_len] = 0;
 
-          rc = generate_auto_complete_files_in_dir(auto_complete, path, completion_buffer);
+          rc = generate_auto_complete_files_in_dir(auto_complete, path);
           free(path);
      }else{
-          rc = generate_auto_complete_files_in_dir(auto_complete, ".", completion_buffer);
+          rc = generate_auto_complete_files_in_dir(auto_complete, ".");
      }
 
      // set the start point if we generated files
      if(rc){
           if(last_slash){
+               const char* completion = last_slash + 1;
                auto_complete_start(auto_complete, (Point_t){(last_slash - line) + 1, cursor.y});
-               auto_complete_next(auto_complete, last_slash + 1);
+               auto_complete_next(auto_complete, completion);
+               update_completion_buffer(completion_buffer, auto_complete, completion);
           }else{
                auto_complete_start(auto_complete, (Point_t){(path_begin - line), cursor.y});
                auto_complete_next(auto_complete, path_begin);
+               update_completion_buffer(completion_buffer, auto_complete, path_begin);
           }
      }
 
@@ -2352,6 +2367,8 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     if(end.x < 0) end.x = 0;
                     char* match = ce_dupe_string(buffer, &config_state->auto_complete.start, &end);
                     auto_complete_next(&config_state->auto_complete, match);
+                    update_completion_buffer(config_state->completion_buffer, &config_state->auto_complete,
+                                             match);
                     free(match);
                     break;
                }
@@ -2370,6 +2387,8 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     if(end.x < 0) end.x = 0;
                     char* match = ce_dupe_string(buffer, &config_state->auto_complete.start, &end);
                     auto_complete_prev(&config_state->auto_complete, match);
+                    update_completion_buffer(config_state->completion_buffer, &config_state->auto_complete,
+                                             match);
                     free(match);
                     break;
                }
@@ -2386,15 +2405,10 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     cursor->x++;
 
                     if(auto_completing(&config_state->auto_complete)){
-                         Point_t end = *cursor;
-                         end.x--;
-                         if(end.x < 0) end.x = 0;
-                         char* match = ce_dupe_string(buffer, &config_state->auto_complete.start, &end);
-                         int64_t match_len = strlen(match);
-                         if(strncmp(config_state->auto_complete.current->option, match, match_len) != 0){
-                              auto_complete_next(&config_state->auto_complete, match);
-                         }
-                         free(match);
+                         calc_auto_complete_start_and_path(&config_state->auto_complete,
+                                                           buffer->lines[cursor->y],
+                                                           *cursor,
+                                                           config_state->completion_buffer);
                     }else if(config_state->input && config_state->input_key == 6){
                          calc_auto_complete_start_and_path(&config_state->auto_complete,
                                                            buffer->lines[cursor->y],

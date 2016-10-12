@@ -1423,6 +1423,36 @@ int64_t ce_is_caps_var(const char* line, int64_t start_offset)
      return count - 1; // we over-counted on the last iteration
 }
 
+bool likely_a_path(char c)
+{
+     return (isalnum(c) || c == '/' || c == '_' || c == '-' || c == '.' ||
+             c == '*' || c == '[' || c == ']');
+}
+
+int64_t ce_is_fullpath(const char* line, int64_t start_offset)
+{
+     const char* itr = line + start_offset;
+     int64_t count = 0;
+     bool starts_with_slash = (line[start_offset] == '/');
+
+     if(!starts_with_slash) return 0;
+
+     // before the path should be blank
+     if(start_offset && !isblank(line[start_offset-1])) return 0;
+
+     while(itr){
+          if(!likely_a_path(*itr)) break;
+          itr++;
+          count++;
+     }
+
+     itr--;
+
+     if(starts_with_slash) return count;
+
+     return 0;
+}
+
 int set_color(Syntax_t syntax, bool highlighted)
 {
      standend();
@@ -1626,6 +1656,14 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor,const Point_t*
                                         highlight_color = S_CONSTANT;
                                    }
                               }
+
+                              if(!keyword_left){
+                                   keyword_left = ce_is_fullpath(buffer_line, c);
+                                   if(keyword_left){
+                                        color_left = keyword_left;
+                                        highlight_color = S_FILEPATH;
+                                   }
+                              }
                          }
                     }
                }
@@ -1708,6 +1746,13 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor,const Point_t*
                                    color_left = ce_is_caps_var(line_to_print, c);
                                    if(color_left){
                                         fg_color = set_color(S_CONSTANT, inside_highlight);
+                                   }
+                              }
+
+                              if(!color_left){
+                                   color_left = ce_is_fullpath(line_to_print, c);
+                                   if(color_left){
+                                        fg_color = set_color(S_FILEPATH, inside_highlight);
                                    }
                               }
                          }

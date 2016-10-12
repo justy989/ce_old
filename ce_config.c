@@ -1823,10 +1823,9 @@ void* run_shell_commands(void* user_data)
 
                if(ioctl(out_fd, FIONREAD, &count) != -1){
                     count = read(out_fd, tmp + 1, count);
-                    ce_message("read %d bytes", count);
                }
 
-               tmp[count] = 0;
+               tmp[count + 1] = 0;
 
                pthread_mutex_lock(&shell_buffer_lock);
                if(!ce_append_string_readonly(shell_command_data.output_buffer,

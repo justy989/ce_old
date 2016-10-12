@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <fcntl.h>
+#include <sys/ioctl.h>
 
 #define TAB_STRING "     "
 #define SCROLL_LINES 1
@@ -1802,68 +1803,43 @@ void* run_shell_commands(void* user_data)
           ce_append_char_readonly(shell_command_data.output_buffer, NEWLINE);
           pthread_mutex_unlock(&shell_buffer_lock);
 
-          view_drawer(shell_command_data.buffer_node_head, user_data);
+          redraw_if_shell_command_buffer_in_view(shell_command_data.view_head,
+                                                 shell_command_data.output_buffer,
+                                                 shell_command_data.buffer_node_head,
+                                                 user_data);
 
           // load one line at a time
-          bool first_block = true;
-          int exit_code;
-          struct timeval tv = {};
-          fd_set out_fd_set;
-
+          int exit_code = 0;
           while(true){
-               FD_ZERO(&out_fd_set);
-               FD_SET(out_fd, &out_fd_set);
-
                // has the command generated any output we should read?
-               int ch = 0;
-               int rc = select(out_fd + 1, &out_fd_set, NULL, NULL, &tv);
-               if(rc == -1){
-                    // NOTE: since this is in a thread, is errno pointless to check?
-                    ce_message("select() failed: '%s'", strerror(errno));
-                    pthread_exit(NULL);
-               }else if(rc == 0){
-                    // nothing happend on the fd
-                    if(first_block){
-                         redraw_if_shell_command_buffer_in_view(shell_command_data.view_head,
-                                                                shell_command_data.output_buffer,
-                                                                shell_command_data.buffer_node_head,
-                                                                user_data);
-                    }
-
-                    first_block = false;
-                    continue;
-               }else{
-                    assert(FD_ISSET(out_fd, &out_fd_set));
-                    int count = read(out_fd, &ch, 1);
-                    if(count <= 0){
-                         // check if the pid has exitted
-                         int status;
-                         pid_t check_pid = waitpid(cmd_pid, &status, WNOHANG);
-                         if(check_pid > 0){
-                              exit_code = WEXITSTATUS(status);
-                              break;
-                         }
-
-                         continue;
-                    }else{
-                         first_block = true;
-                    }
+               int count = read(out_fd, tmp, 1);
+               if(count <= 0){
+                    // check if the pid has exitted
+                    int status;
+                    pid_t check_pid = waitpid(cmd_pid, &status, WNOHANG);
+                    if(check_pid > 0) exit_code = WEXITSTATUS(status);
+                    break;
                }
 
-               if(!isprint(ch) && ch != NEWLINE) ch = '~';
+               if(ioctl(out_fd, FIONREAD, &count) != -1){
+                    count = read(out_fd, tmp + 1, count);
+                    ce_message("read %d bytes", count);
+               }
+
+               tmp[count] = 0;
 
                pthread_mutex_lock(&shell_buffer_lock);
-               if(!ce_append_char_readonly(shell_command_data.output_buffer, ch)){
+               if(!ce_append_string_readonly(shell_command_data.output_buffer,
+                                             shell_command_data.output_buffer->line_count - 1,
+                                             tmp)){
                     pthread_exit(NULL);
                }
                pthread_mutex_unlock(&shell_buffer_lock);
 
-               if(ch == NEWLINE){
-                    redraw_if_shell_command_buffer_in_view(shell_command_data.view_head,
-                                                           shell_command_data.output_buffer,
-                                                           shell_command_data.buffer_node_head,
-                                                           user_data);
-               }
+               redraw_if_shell_command_buffer_in_view(shell_command_data.view_head,
+                                                      shell_command_data.output_buffer,
+                                                      shell_command_data.buffer_node_head,
+                                                      user_data);
           }
 
           // append the return code

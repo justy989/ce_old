@@ -267,7 +267,9 @@ bool ce_append_char_readonly(Buffer* buffer, char c)
 
 bool insert_string_impl(Buffer* buffer, const Point* location, const char* new_string)
 {
-     if(location->x != 0 && location->y != 0){
+     if(location->x == 0 && location->y == 0){
+          // pass
+     }else{
           if(!ce_point_on_buffer(buffer, location)){
                return false;
           }
@@ -368,16 +370,16 @@ bool insert_string_impl(Buffer* buffer, const Point* location, const char* new_s
                     strncpy(new_line, itr, next_line_length);
                     memcpy(new_line + next_line_length, second_part, second_length);
                     new_line[new_line_length] = 0;
-                    ce_insert_line(buffer, location->y + lines_added, new_line);
+                    insert_line_impl(buffer, location->y + lines_added, new_line);
                     free(new_line);
                }else if(itr == end_of_line){
-                    ce_insert_line(buffer, location->y + lines_added, NULL);
+                    insert_line_impl(buffer, location->y + lines_added, NULL);
                }else{
                     new_line_length = end_of_line - itr;
                     new_line = malloc(new_line_length + 1);
                     strncpy(new_line, itr, new_line_length);
                     new_line[new_line_length] = 0;
-                    ce_insert_line(buffer, location->y + lines_added, new_line);
+                    insert_line_impl(buffer, location->y + lines_added, new_line);
                     free(new_line);
                }
 

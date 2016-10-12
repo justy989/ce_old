@@ -1,7 +1,7 @@
 language: c
 os:
  - linux
- - osx
+# - osx
 compiler: clang
 install: make all
 script: make test

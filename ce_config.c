@@ -1769,8 +1769,8 @@ void run_shell_commands_cleanup(void* user_data)
      (void)(user_data);
 
      // release locks we could be holding
-     pthread_mutex_unlock(&draw_lock);
      pthread_mutex_unlock(&shell_buffer_lock);
+     pthread_mutex_unlock(&draw_lock);
 
      // free memory we could be using
      for(int64_t i = 0; i < shell_command_data.command_count; ++i) free(shell_command_data.commands[i]);
@@ -1862,6 +1862,8 @@ void* run_shell_commands(void* user_data)
 
 void indent_line(Buffer* buffer, BufferCommitNode** commit_tail, int64_t line, Point* cursor)
 {
+     if(line >= buffer->line_count) return;
+     if(!buffer->lines[line][0]) return;
      Point loc = {0, line};
      ce_insert_string(buffer, &loc, TAB_STRING);
      ce_commit_insert_string(commit_tail, &loc, cursor, cursor, strdup(TAB_STRING));
@@ -1869,6 +1871,8 @@ void indent_line(Buffer* buffer, BufferCommitNode** commit_tail, int64_t line, P
 
 void unindent_line(Buffer* buffer, BufferCommitNode** commit_tail, int64_t line, Point* cursor)
 {
+     if(line >= buffer->line_count) return;
+     if(!buffer->lines[line][0]) return;
      // find whitespace prepending line
      int64_t whitespace_count = 0;
      const int64_t tab_len = strlen(TAB_STRING);
@@ -2718,7 +2722,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          const Point* b = &config_state->visual_start;
                          ce_sort_points(&a, &b);
                          for(int64_t i = a->y; i <= b->y; ++i){
-                              if(!buffer->lines[i][0]) continue;
                               indent_line(buffer, &buffer_state->commit_tail, i, cursor);
                          }
                     }else{
@@ -2740,7 +2743,6 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          const Point* b = &config_state->visual_start;
                          ce_sort_points(&a, &b);
                          for(int64_t i = a->y; i <= b->y; ++i){
-                              if(!buffer->lines[i][0]) continue;
                               unindent_line(buffer, &buffer_state->commit_tail, i, cursor);
                          }
                     }else{
@@ -2936,7 +2938,7 @@ bool key_handler(int key, BufferNode* head, void* user_data)
                          }
 
                          shell_command_data.command_count = config_state->view_input->buffer->line_count;
-                         shell_command_data.commands = malloc(shell_command_data.command_count * sizeof(char**));
+                         shell_command_data.commands = malloc(shell_command_data.command_count * sizeof(*shell_command_data.commands));
                          if(!shell_command_data.commands){
                               ce_message("failed to allocate shell commands");
                               break;

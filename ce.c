@@ -1227,10 +1227,6 @@ int64_t ce_is_c_control(const char* line, int64_t start_offset)
           "continue",
           "goto",
           "return",
-
-          // c++
-          "try",
-          "catch",
      };
 
      static const int keyword_count = sizeof(keywords) / sizeof(keywords[0]);

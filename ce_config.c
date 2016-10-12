@@ -2226,6 +2226,10 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                               calc_auto_complete_start_and_path(&config_state->auto_complete,
                                                                 buffer->lines[cursor->y],
                                                                 *cursor);
+                         }else{
+                              // since we didn't auto complete a directory, let's go to normal mode
+                              // so we can quickly load the file
+                              enter_normal_mode(config_state);
                          }
                     }
                }else{

@@ -1,5 +1,7 @@
 language: c
-os: linux
+os:
+ - linux
+ - osx
 compiler: clang
 install: make all
 script: make test

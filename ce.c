@@ -1370,6 +1370,29 @@ void ce_is_string_literal(const char* line, int64_t start_offset, int64_t line_l
                     *last_quote_char = ch;
                }
           }
+     }else if(ch == '<'){
+          const char* itr = line + start_offset + 1;
+          bool valid_system_header = true;
+
+          while(*itr && *itr != '>'){
+               if(isalnum(*itr)){
+                    // pass
+               }else if(*itr == '.'){
+                    // pass
+               }else if(*itr == '/'){
+                    // pass
+               }else{
+                    valid_system_header = false;
+               }
+               itr++;
+          }
+
+          if(valid_system_header && *itr == '>'){
+               *inside_string = true;
+               *last_quote_char = ch;
+          }
+     }else if(ch == '>' && *last_quote_char == '<'){
+          *inside_string = false;
      }
 }
 
@@ -1396,6 +1419,35 @@ int64_t ce_is_caps_var(const char* line, int64_t start_offset)
      if(prev_index >= 0 && (iscapsvarchar(line[prev_index]) || isalpha(line[prev_index]))) return 0;
 
      return count - 1; // we over-counted on the last iteration
+}
+
+bool likely_a_path(char c)
+{
+     return (isalnum(c) || c == '/' || c == '_' || c == '-' || c == '.' );
+}
+
+int64_t ce_is_fullpath(const char* line, int64_t start_offset)
+{
+     const char* itr = line + start_offset;
+     int64_t count = 0;
+     bool starts_with_slash = (line[start_offset] == '/');
+
+     if(!starts_with_slash) return 0;
+
+     // before the path should be blank
+     if(start_offset && !isblank(line[start_offset-1])) return 0;
+
+     while(itr){
+          if(!likely_a_path(*itr)) break;
+          itr++;
+          count++;
+     }
+
+     itr--;
+
+     if(starts_with_slash && count > 1) return count;
+
+     return 0;
 }
 
 int set_color(Syntax_t syntax, bool highlighted)
@@ -1601,6 +1653,14 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor,const Point_t*
                                         highlight_color = S_CONSTANT;
                                    }
                               }
+
+                              if(!keyword_left){
+                                   keyword_left = ce_is_fullpath(buffer_line, c);
+                                   if(keyword_left){
+                                        color_left = keyword_left;
+                                        highlight_color = S_FILEPATH;
+                                   }
+                              }
                          }
                     }
                }
@@ -1683,6 +1743,13 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor,const Point_t*
                                    color_left = ce_is_caps_var(line_to_print, c);
                                    if(color_left){
                                         fg_color = set_color(S_CONSTANT, inside_highlight);
+                                   }
+                              }
+
+                              if(!color_left){
+                                   color_left = ce_is_fullpath(line_to_print, c);
+                                   if(color_left){
+                                        fg_color = set_color(S_FILEPATH, inside_highlight);
                                    }
                               }
                          }

@@ -33,6 +33,7 @@ typedef enum {
      S_STRING,
      S_CONSTANT,
      S_PREPROCESSOR,
+     S_FILEPATH,
      S_DIFF_ADD,
      S_DIFF_REMOVE,
 
@@ -44,6 +45,7 @@ typedef enum {
      S_STRING_HIGHLIGHTED,
      S_CONSTANT_HIGHLIGHTED,
      S_PREPROCESSOR_HIGHLIGHTED,
+     S_FILEPATH_HIGHLIGHTED,
      S_DIFF_ADD_HIGHLIGHTED,
      S_DIFF_REMOVE_HIGHLIGHTED,
 
@@ -56,6 +58,8 @@ typedef enum {
 
      S_VIEW_STATUS,
      S_INPUT_STATUS,
+
+     S_AUTO_COMPLETE,
 } Syntax_t;
 
 #define CE_CHECK_PTR_ARG(arg)                                                 \

@@ -2068,15 +2068,15 @@ bool generate_auto_complete_files_in_dir(AutoComplete_t* auto_complete, const ch
 
      auto_complete_clear(auto_complete);
 
-     char tmp[PATH_MAX];
+     char tmp[BUFSIZ];
      struct stat info;
      while((node = readdir(os_dir)) != NULL){
-          snprintf(tmp, PATH_MAX, "%s/%s", dir, node->d_name);
+          snprintf(tmp, BUFSIZ, "%s/%s", dir, node->d_name);
           stat(tmp, &info);
           if(S_ISDIR(info.st_mode)){
-               snprintf(tmp, PATH_MAX, "%s/", node->d_name);
+               snprintf(tmp, BUFSIZ, "%s/", node->d_name);
           }else{
-               strncpy(tmp, node->d_name, PATH_MAX);
+               strncpy(tmp, node->d_name, BUFSIZ);
           }
           auto_complete_insert(auto_complete, tmp);
      }
@@ -2496,27 +2496,22 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           } break;
           case KEY_UP:
           case KEY_DOWN:
-          case KEY_LEFT:
-          case KEY_RIGHT:
-          {
-               config_state->movement_keys[0] = key;
-               config_state->movement_multiplier = 1;
-
-               movement_state_t m_state = try_generic_movement(config_state, buffer, cursor, &movement_start, &movement_end);
-               if(m_state == MOVEMENT_CONTINUE) return true;
-
                if(!config_state->arrow_key_in_insert_mode){
                     commit_insert_mode_changes(config_state, buffer, buffer_state, cursor);
                }
-
                config_state->arrow_key_in_insert_mode = true;
-
-               // this is a generic movement
-               if(movement_end.x == cursor->x && movement_end.y == cursor->y)
-                    ce_set_cursor(buffer, cursor, &movement_start);
-               else
-                    ce_set_cursor(buffer, cursor, &movement_end);
-          } break;
+               ce_move_cursor(buffer, cursor, (Point_t){0, (key == KEY_DOWN) ? 1 : -1});
+               break;
+          case KEY_LEFT:
+          case KEY_RIGHT:
+               if(!config_state->arrow_key_in_insert_mode){
+                    commit_insert_mode_changes(config_state, buffer, buffer_state, cursor);
+               }
+               config_state->arrow_key_in_insert_mode = true;
+               cursor->x += key == KEY_RIGHT? 1 : -1;
+               if(cursor->x > (int64_t) strlen(buffer->lines[cursor->y])) cursor->x--;
+               if(cursor->x < 0) cursor->x++;
+               break;
           case '}':
           {
                if(config_state->arrow_key_in_insert_mode){

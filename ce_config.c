@@ -902,17 +902,17 @@ bool initializer(BufferNode_t* head, Point_t* terminal_dimensions, int argc, cha
      init_pair(S_DIFF_ADD, COLOR_GREEN, COLOR_BACKGROUND);
      init_pair(S_DIFF_REMOVE, COLOR_RED, COLOR_BACKGROUND);
 
-     init_pair(S_NORMAL_HIGHLIGHTED, COLOR_FOREGROUND, COLOR_BRIGHT_BLACK);
-     init_pair(S_KEYWORD_HIGHLIGHTED, COLOR_BLUE, COLOR_BRIGHT_BLACK);
-     init_pair(S_TYPE_HIGHLIGHTED, COLOR_BRIGHT_BLUE, COLOR_BRIGHT_BLACK);
-     init_pair(S_CONTROL_HIGHLIGHTED, COLOR_YELLOW, COLOR_BRIGHT_BLACK);
-     init_pair(S_COMMENT_HIGHLIGHTED, COLOR_GREEN, COLOR_BRIGHT_BLACK);
-     init_pair(S_STRING_HIGHLIGHTED, COLOR_RED, COLOR_BRIGHT_BLACK);
-     init_pair(S_CONSTANT_HIGHLIGHTED, COLOR_MAGENTA, COLOR_BRIGHT_BLACK);
-     init_pair(S_PREPROCESSOR_HIGHLIGHTED, COLOR_BRIGHT_MAGENTA, COLOR_BRIGHT_BLACK);
-     init_pair(S_FILEPATH_HIGHLIGHTED, COLOR_BLUE, COLOR_BRIGHT_BLACK);
-     init_pair(S_DIFF_ADD_HIGHLIGHTED, COLOR_GREEN, COLOR_BRIGHT_BLACK);
-     init_pair(S_DIFF_REMOVE_HIGHLIGHTED, COLOR_RED, COLOR_BRIGHT_BLACK);
+     init_pair(S_NORMAL_HIGHLIGHTED, COLOR_FOREGROUND, COLOR_WHITE);
+     init_pair(S_KEYWORD_HIGHLIGHTED, COLOR_BLUE, COLOR_WHITE);
+     init_pair(S_TYPE_HIGHLIGHTED, COLOR_BRIGHT_BLUE, COLOR_WHITE);
+     init_pair(S_CONTROL_HIGHLIGHTED, COLOR_YELLOW, COLOR_WHITE);
+     init_pair(S_COMMENT_HIGHLIGHTED, COLOR_GREEN, COLOR_WHITE);
+     init_pair(S_STRING_HIGHLIGHTED, COLOR_RED, COLOR_WHITE);
+     init_pair(S_CONSTANT_HIGHLIGHTED, COLOR_MAGENTA, COLOR_WHITE);
+     init_pair(S_PREPROCESSOR_HIGHLIGHTED, COLOR_BRIGHT_MAGENTA, COLOR_WHITE);
+     init_pair(S_FILEPATH_HIGHLIGHTED, COLOR_BLUE, COLOR_WHITE);
+     init_pair(S_DIFF_ADD_HIGHLIGHTED, COLOR_GREEN, COLOR_WHITE);
+     init_pair(S_DIFF_REMOVE_HIGHLIGHTED, COLOR_RED, COLOR_WHITE);
 
      init_pair(S_TRAILING_WHITESPACE, COLOR_FOREGROUND, COLOR_RED);
 
@@ -2399,13 +2399,6 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                                         config_state->start_insert = *cursor;
                                    }
                               }
-
-                              if(auto_completing(&config_state->auto_complete)){
-                                   calc_auto_complete_start_and_path(&config_state->auto_complete,
-                                                                     buffer->lines[cursor->y],
-                                                                     *cursor,
-                                                                     config_state->completion_buffer);
-                              }
                          }
                     }else{
                          Point_t previous = *cursor;
@@ -2420,15 +2413,9 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                                    // cannot use move_cursor due to not being able to be ahead of the last character
                                    cursor->x--;
                               }
-
-                              if(auto_completing(&config_state->auto_complete)){
-                                   calc_auto_complete_start_and_path(&config_state->auto_complete,
-                                                                     buffer->lines[cursor->y],
-                                                                     *cursor,
-                                                                     config_state->completion_buffer);
-                              }
                          }
                     }
+                    auto_complete_end(&config_state->auto_complete);
                }
                break;
           case KEY_DC:
@@ -2450,12 +2437,6 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     if(ce_insert_string(buffer, cursor, complete)){
                          ce_move_cursor(buffer, cursor, (Point_t){complete_len, cursor->y});
                          cursor->x++;
-                         if(complete[complete_len - 1] == '/'){
-                              calc_auto_complete_start_and_path(&config_state->auto_complete,
-                                                                buffer->lines[cursor->y],
-                                                                *cursor,
-                                                                config_state->completion_buffer);
-                         }
                     }
                }else{
                     ce_insert_string(buffer, cursor, TAB_STRING);
@@ -2491,13 +2472,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          if(ce_insert_string(buffer, cursor, indent))
                               cursor->x += indent_len;
                     }
-
-                    if(auto_completing(&config_state->auto_complete)){
-                         calc_auto_complete_start_and_path(&config_state->auto_complete,
-                                                           buffer->lines[cursor->y],
-                                                           *cursor,
-                                                           config_state->completion_buffer);
-                    }
+                    auto_complete_end(&config_state->auto_complete);
                }
           } break;
           case KEY_UP:
@@ -2560,6 +2535,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     }
 
                     cursor->x++;
+                    auto_complete_end(&config_state->auto_complete);
                }
           } break;
           case 14: // Ctrl + n
@@ -2613,20 +2589,20 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
 
                if(ce_insert_char(buffer, cursor, key)){
                     cursor->x++;
-
-                    if(auto_completing(&config_state->auto_complete)){
-                         calc_auto_complete_start_and_path(&config_state->auto_complete,
-                                                           buffer->lines[cursor->y],
-                                                           *cursor,
-                                                           config_state->completion_buffer);
-                    }else if(config_state->input && config_state->input_key == 6){
-                         calc_auto_complete_start_and_path(&config_state->auto_complete,
-                                                           buffer->lines[cursor->y],
-                                                           *cursor,
-                                                           config_state->completion_buffer);
-                    }
+                    calc_auto_complete_start_and_path(&config_state->auto_complete,
+                                                      buffer->lines[cursor->y],
+                                                      *cursor,
+                                                      config_state->completion_buffer);
                }
                break;
+          }
+
+          if(!auto_completing(&config_state->auto_complete) && config_state->input &&
+             config_state->input_key == 6){
+               calc_auto_complete_start_and_path(&config_state->auto_complete,
+                                                 buffer->lines[cursor->y],
+                                                 *cursor,
+                                                 config_state->completion_buffer);
           }
      }else{
           if(config_state->command_key == '\0' && config_state->command_multiplier == 0){

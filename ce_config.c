@@ -1784,10 +1784,10 @@ void switch_to_view_at_point(ConfigState_t* config_state, Point_t point)
 {
      BufferView_t* next_view = NULL;
 
-     if(point.x < 0) point.x += g_terminal_dimensions->x - 1;
-     if(point.y < 0) point.y += g_terminal_dimensions->y - 1;
-     if(point.x >= g_terminal_dimensions->x) point.x %= g_terminal_dimensions->x;
-     if(point.y >= g_terminal_dimensions->x) point.y %= g_terminal_dimensions->y;
+     if(point.x < 0) point.x = g_terminal_dimensions->x - 1;
+     if(point.y < 0) point.y = g_terminal_dimensions->y - 1;
+     if(point.x >= g_terminal_dimensions->x) point.x = 0;
+     if(point.y >= g_terminal_dimensions->y) point.y = 0;
 
      if(config_state->input) next_view = ce_find_view_at_point(config_state->view_input, &point);
      if(!next_view) next_view = ce_find_view_at_point(config_state->tab_current->view_head, &point);

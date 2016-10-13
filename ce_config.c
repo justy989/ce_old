@@ -35,7 +35,6 @@ typedef struct{
      void* user_data;
 } ShellCommandData_t;
 
-
 ShellCommandData_t shell_command_data;
 pthread_mutex_t draw_lock;
 pthread_mutex_t shell_buffer_lock;
@@ -808,6 +807,8 @@ bool initializer(BufferNode_t* head, Point_t* terminal_dimensions, int argc, cha
      //define_key("\x0A", KEY_ENTER);     // Enter       (10) (0x0A) ASCII "LF"  NL Line Feed, New Line
 
      pthread_mutex_init(&draw_lock, NULL);
+     pthread_mutex_init(&shell_buffer_lock, NULL);
+
      return true;
 }
 
@@ -867,6 +868,9 @@ bool destroyer(BufferNode_t* head, void* user_data)
      input_history_free(&config_state->shell_input_history);
      input_history_free(&config_state->search_history);
      input_history_free(&config_state->load_file_history);
+
+     pthread_mutex_destroy(&draw_lock);
+     pthread_mutex_destroy(&shell_buffer_lock);
 
      free(config_state);
      return true;

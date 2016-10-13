@@ -41,7 +41,7 @@ bool ce_alloc_lines(Buffer_t* buffer, int64_t line_count)
      }
 
      // NOTE: if we have lines, we should free them here!
-     buffer->lines = malloc(line_count * sizeof(char*));
+     buffer->lines = calloc(1, line_count * sizeof(char*));
      if(!buffer->lines){
           ce_message("%s() failed to allocate %"PRId64" lines for buffer", __FUNCTION__, line_count);
           return false;

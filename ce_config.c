@@ -2415,7 +2415,13 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                               }
                          }
                     }
-                    auto_complete_end(&config_state->auto_complete);
+
+                    if(auto_completing(&config_state->auto_complete)){
+                         calc_auto_complete_start_and_path(&config_state->auto_complete,
+                                                           buffer->lines[cursor->y],
+                                                           *cursor,
+                                                           config_state->completion_buffer);
+                    }
                }
                break;
           case KEY_DC:
@@ -2429,18 +2435,23 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     config_state->arrow_key_in_insert_mode = false;
                }
 
-               if(auto_completing(&config_state->auto_complete))
-               {
+               if(auto_completing(&config_state->auto_complete)){
                     int64_t offset = cursor->x - config_state->auto_complete.start.x;
                     const char* complete = config_state->auto_complete.current->option + offset;
                     int64_t complete_len = strlen(complete);
                     if(ce_insert_string(buffer, cursor, complete)){
                          ce_move_cursor(buffer, cursor, (Point_t){complete_len, cursor->y});
                          cursor->x++;
+
+                         calc_auto_complete_start_and_path(&config_state->auto_complete,
+                                                           buffer->lines[cursor->y],
+                                                           *cursor,
+                                                           config_state->completion_buffer);
                     }
                }else{
                     ce_insert_string(buffer, cursor, TAB_STRING);
-                    ce_move_cursor(buffer, cursor, (Point_t){5, 0});
+                    ce_move_cursor(buffer, cursor, (Point_t){strlen(TAB_STRING) - 1, 0});
+                    cursor->x++; // we want to be after the tabs
                }
           } break;
           case 10: // return
@@ -2472,7 +2483,13 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          if(ce_insert_string(buffer, cursor, indent))
                               cursor->x += indent_len;
                     }
-                    auto_complete_end(&config_state->auto_complete);
+
+                    if(auto_completing(&config_state->auto_complete)){
+                         calc_auto_complete_start_and_path(&config_state->auto_complete,
+                                                           buffer->lines[cursor->y],
+                                                           *cursor,
+                                                           config_state->completion_buffer);
+                    }
                }
           } break;
           case KEY_UP:
@@ -2535,7 +2552,12 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     }
 
                     cursor->x++;
-                    auto_complete_end(&config_state->auto_complete);
+                    if(auto_completing(&config_state->auto_complete)){
+                         calc_auto_complete_start_and_path(&config_state->auto_complete,
+                                                           buffer->lines[cursor->y],
+                                                           *cursor,
+                                                           config_state->completion_buffer);
+                    }
                }
           } break;
           case 14: // Ctrl + n
@@ -2589,10 +2611,12 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
 
                if(ce_insert_char(buffer, cursor, key)){
                     cursor->x++;
-                    calc_auto_complete_start_and_path(&config_state->auto_complete,
-                                                      buffer->lines[cursor->y],
-                                                      *cursor,
-                                                      config_state->completion_buffer);
+                    if(auto_completing(&config_state->auto_complete)){
+                         calc_auto_complete_start_and_path(&config_state->auto_complete,
+                                                           buffer->lines[cursor->y],
+                                                           *cursor,
+                                                           config_state->completion_buffer);
+                    }
                }
                break;
           }

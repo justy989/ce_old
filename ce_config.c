@@ -381,6 +381,7 @@ typedef struct{
      int command_key;
      uint64_t movement_multiplier;
      int movement_keys[2];
+     bool arrow_key_in_insert_mode;
      struct {
           // state for fF and tT
           char command_key;
@@ -590,23 +591,40 @@ void enter_visual_line_mode(ConfigState_t* config_state, BufferView_t* buffer_vi
      config_state->visual_start = buffer_view->cursor;
 }
 
-void commit_insert_mode_changes(ConfigState_t* config_state, Buffer_t* buffer, BufferState_t* buffer_state, Point_t* cursor, Point_t* end_cursor)
+// TODO: should be replaced with ce_advance_cursor(buffer, cursor, -1), but it didn't work for me, and I'm not sure why!
+Point_t previous_point(Buffer_t* buffer, Point_t point)
+{
+     Point_t previous_point = {point.x - 1, point.y};
+
+     if(previous_point.x < 0){
+          previous_point.y--;
+          if(previous_point.y < 0){
+               previous_point = (Point_t){0, 0};
+          }else{
+               previous_point.x = ce_last_index(buffer->lines[previous_point.y]);
+          }
+     }
+
+     return previous_point;
+}
+
+void commit_insert_mode_changes(ConfigState_t* config_state, Buffer_t* buffer, BufferState_t* buffer_state, Point_t* cursor)
 {
      if(config_state->start_insert.x == cursor->x &&
         config_state->start_insert.y == cursor->y &&
         config_state->original_start_insert.x == cursor->x &&
         config_state->original_start_insert.y == cursor->y){
-        // pass
+        // pass, no changes
      }else{
           if(config_state->start_insert.x == config_state->original_start_insert.x &&
              config_state->start_insert.y == config_state->original_start_insert.y){
                // TODO: assert cursor is after start_insert
                // exclusively inserts
-               Point_t last_inserted_char = {end_cursor->x, end_cursor->y};
+               Point_t last_inserted_char = previous_point(buffer, *cursor);
                ce_commit_insert_string(&buffer_state->commit_tail,
                                        &config_state->start_insert,
                                        &config_state->original_start_insert,
-                                       end_cursor,
+                                       cursor,
                                        ce_dupe_string(buffer, &config_state->start_insert, &last_inserted_char));
                // NOTE: we could have added backspaces and just not used them
                backspace_free(&buffer_state->backspace_head);
@@ -618,16 +636,16 @@ void commit_insert_mode_changes(ConfigState_t* config_state, Buffer_t* buffer, B
                     ce_commit_remove_string(&buffer_state->commit_tail,
                                             cursor,
                                             &config_state->original_start_insert,
-                                            end_cursor,
+                                            cursor,
                                             backspace_get_string(buffer_state->backspace_head));
                     backspace_free(&buffer_state->backspace_head);
                }else{
                     // mixture of inserts and backspaces
-                    Point_t last_inserted_char = {end_cursor->x, end_cursor->y};
+                    Point_t last_inserted_char = previous_point(buffer, *cursor);
                     ce_commit_change_string(&buffer_state->commit_tail,
                                             &config_state->start_insert,
                                             &config_state->original_start_insert,
-                                            end_cursor,
+                                            cursor,
                                             ce_dupe_string(buffer,
                                                            &config_state->start_insert,
                                                            &last_inserted_char),
@@ -985,6 +1003,8 @@ bool destroyer(BufferNode_t* head, void* user_data)
      input_history_free(&config_state->shell_input_history);
      input_history_free(&config_state->search_history);
      input_history_free(&config_state->load_file_history);
+
+     auto_complete_clear(&config_state->auto_complete);
 
      free(config_state);
      return true;
@@ -1505,11 +1525,9 @@ void handle_mouse_event(ConfigState_t* config_state, Buffer_t* buffer, BufferSta
      if(getmouse(&event) == OK){
           bool enter_insert;
           if((enter_insert = config_state->vim_mode == VM_INSERT)){
-               Point_t end_cursor = *cursor;
-               ce_clamp_cursor(buffer, &end_cursor);
+               commit_insert_mode_changes(config_state, buffer, buffer_state, cursor);
+               ce_clamp_cursor(buffer, cursor);
                enter_normal_mode(config_state);
-               commit_insert_mode_changes(config_state, buffer, buffer_state, cursor, &end_cursor);
-               *cursor = end_cursor;
           }
 #ifdef MOUSE_DIAG
           ce_message("0x%x", event.bstate);
@@ -1873,6 +1891,10 @@ pid_t bidirectional_popen(const char* cmd, int* in_fd, int* out_fd)
      }else{
          close(input_fds[0]);
          close(output_fds[1]);
+
+         // set stdin to be non-blocking
+         int fd_flags = fcntl(input_fds[1], F_GETFL, 0);
+         fcntl(input_fds[1], F_SETFL, fd_flags | O_NONBLOCK);
 
          *in_fd = input_fds[1];
          *out_fd = output_fds[0];
@@ -2346,18 +2368,19 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           switch(key){
           case 27: // ESC
           {
-               Point_t end_cursor = *cursor;
-               ce_clamp_cursor(buffer, &end_cursor);
+               commit_insert_mode_changes(config_state, buffer, buffer_state, cursor);
                enter_normal_mode(config_state);
-               commit_insert_mode_changes(config_state, buffer, buffer_state, cursor, &end_cursor);
-
-               // when we exit insert mode, do not move the cursor back unless we are at the end of the line
-               *cursor = end_cursor;
+               ce_clamp_cursor(buffer, cursor);
           } break;
           case KEY_MOUSE:
                handle_mouse_event(config_state, buffer, buffer_state, buffer_view, cursor);
                break;
           case KEY_BACKSPACE:
+               if(config_state->arrow_key_in_insert_mode){
+                    enter_insert_mode(config_state, cursor);
+                    config_state->arrow_key_in_insert_mode = false;
+               }
+
                if(buffer->line_count){
                     if(cursor->x <= 0){
                          if(cursor->y){
@@ -2414,6 +2437,11 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                break;
           case '\t':
           {
+               if(config_state->arrow_key_in_insert_mode){
+                    enter_insert_mode(config_state, cursor);
+                    config_state->arrow_key_in_insert_mode = false;
+               }
+
                if(auto_completing(&config_state->auto_complete))
                {
                     int64_t offset = cursor->x - config_state->auto_complete.start.x;
@@ -2436,6 +2464,11 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           } break;
           case 10: // return
           {
+               if(config_state->arrow_key_in_insert_mode){
+                    enter_insert_mode(config_state, cursor);
+                    config_state->arrow_key_in_insert_mode = false;
+               }
+
                if(!buffer->lines) ce_alloc_lines(buffer, 1);
                char* start = buffer->lines[cursor->y] + cursor->x;
                int64_t to_end_of_line_len = strlen(start);
@@ -2478,6 +2511,12 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                movement_state_t m_state = try_generic_movement(config_state, buffer, cursor, &movement_start, &movement_end);
                if(m_state == MOVEMENT_CONTINUE) return true;
 
+               if(!config_state->arrow_key_in_insert_mode){
+                    commit_insert_mode_changes(config_state, buffer, buffer_state, cursor);
+               }
+
+               config_state->arrow_key_in_insert_mode = true;
+
                // this is a generic movement
                if(movement_end.x == cursor->x && movement_end.y == cursor->y)
                     ce_set_cursor(buffer, cursor, &movement_start);
@@ -2486,6 +2525,11 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           } break;
           case '}':
           {
+               if(config_state->arrow_key_in_insert_mode){
+                    enter_insert_mode(config_state, cursor);
+                    config_state->arrow_key_in_insert_mode = false;
+               }
+
                if(ce_insert_char(buffer, cursor, key)){
 
                     Point_t match;
@@ -2562,6 +2606,11 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                confirm_action(config_state, head);
                break;
           default:
+               if(config_state->arrow_key_in_insert_mode){
+                    enter_insert_mode(config_state, cursor);
+                    config_state->arrow_key_in_insert_mode = false;
+               }
+
                if(ce_insert_char(buffer, cursor, key)){
                     cursor->x++;
 

@@ -3455,7 +3455,6 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           } break;
           case ':':
           {
-               if(config_state->input) break;
                input_start(config_state, "Goto Line", key);
           }
           break;
@@ -3483,18 +3482,16 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           } break;
           case '/':
           {
-               if(config_state->input) break;
+               input_start(config_state, "Search", key);
                config_state->search_command.direction = CE_DOWN;
                config_state->start_search = *cursor;
-               input_start(config_state, "Search", key);
                break;
           }
           case '?':
           {
-               if(config_state->input) break;
+               input_start(config_state, "Reverse Search", key);
                config_state->search_command.direction = CE_UP;
                config_state->start_search = *cursor;
-               input_start(config_state, "Reverse Search", key);
                break;
           }
           case 'n':
@@ -3676,7 +3673,6 @@ search:
           } break;
           case 24: // Ctrl + x
           {
-               if(config_state->input) break;
                input_start(config_state, "Shell Command", key);
           } break;
           case 14: // Ctrl + n
@@ -3695,7 +3691,6 @@ search:
                break;
           case 6: // Ctrl + f
           {
-               if(config_state->input) break;
                input_start(config_state, "Load File", key);
           } break;
           case 20: // Ctrl + t
@@ -3712,7 +3707,6 @@ search:
                config_state->tab_current = new_tab;
           } break;
           case 'R':
-               if(config_state->input) break;
                input_start(config_state, "Replace", key);
           break;
           case 5: // Ctrl + e
@@ -3723,11 +3717,9 @@ search:
                *cursor = (Point_t){0, 0};
           } break;
           case 1: // Ctrl + a
-               if(config_state->input) break;
                input_start(config_state, "Save Buffer As", key);
           break;
           case 9: // Ctrl + i
-               if(config_state->input) break;
                input_start(config_state, "Shell Command Input", key);
           break;
           case 15: // Ctrl + o // NOTE: not the best keybinding, but what else is left?!

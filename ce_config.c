@@ -2149,7 +2149,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
      Point_t* cursor = &buffer_view->cursor;
      BufferState_t* buffer_state = buffer->user_data;
 
-     if(config_state->input){
+     if(config_state->input && buffer_view == config_state->view_input){
           input_end(config_state);
 
           // update convenience vars
@@ -3193,7 +3193,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                }
           } break;
           case 2: // Ctrl + b
-               if(config_state->input){
+               if(config_state->input && config_state->tab_current->view_current == config_state->view_input){
                     // dump input history on cursor line
                     InputHistory_t* cur_hist = history_from_input_key(config_state);
                     if(!cur_hist){

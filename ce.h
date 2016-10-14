@@ -262,6 +262,8 @@ bool     ce_advance_cursor                        (const Buffer_t* buffer, Point
 bool     ce_move_cursor                           (const Buffer_t* buffer, Point_t* cursor, Point_t delta);
 bool     ce_set_cursor                            (const Buffer_t* buffer, Point_t* cursor, const Point_t* location);
 bool     ce_move_cursor_to_beginning_of_word      (const Buffer_t* buffer, Point_t* cursor, bool punctuation_word_boundaries);
+bool     ce_move_cursor_to_end_of_word            (const Buffer_t* buffer, Point_t* cursor, bool punctuation_word_boundaries);
+bool     ce_move_cursor_to_next_word              (const Buffer_t* buffer, Point_t* cursor, bool punctuation_word_boundaries);
 bool     ce_move_cursor_to_end_of_line            (const Buffer_t* buffer, Point_t* cursor);
 void     ce_move_cursor_to_beginning_of_line      (const Buffer_t* buffer, Point_t* cursor);
 bool     ce_move_cursor_to_soft_end_of_line       (const Buffer_t* buffer, Point_t* cursor);

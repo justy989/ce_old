@@ -843,6 +843,78 @@ bool ce_move_cursor_to_beginning_of_word(const Buffer_t* buffer, Point_t* cursor
      return true;
 }
 
+bool ce_move_cursor_to_end_of_word(const Buffer_t* buffer, Point_t* location, bool punctuation_word_boundaries)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+
+     if(!ce_point_on_buffer(buffer, location)) return false;
+     const char* line = buffer->lines[location->y];
+     int line_len = strlen(line);
+     bool start_outside_word = false;
+
+     int64_t first_check = location->x + 1;
+     int64_t i = first_check;
+
+     for(; i < line_len; ++i){
+          if(isblank(line[i]) && !start_outside_word){
+               if(i == first_check){
+                    start_outside_word = true;
+               }else{
+                    break;
+               }
+          }else{
+               if(ce_ispunct(line[i])){
+                    if(punctuation_word_boundaries){
+                         // pass if we start a the end of a word
+                         if(i == first_check || start_outside_word){
+                              i++;
+                         }
+                         break;
+                    }
+               }
+               start_outside_word = false;
+          }
+     }
+
+     if(i != first_check){
+          location->x = i - 1;
+     }
+
+     return true;
+}
+
+bool ce_move_cursor_to_next_word(const Buffer_t* buffer, Point_t* location, bool punctuation_word_boundaries)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+
+     const char* line = buffer->lines[location->y];
+     int line_len = strlen(line);
+     int64_t first_check = location->x + 1;
+     int64_t i = first_check;
+     bool word_end = false;
+
+     for(; i < line_len; ++i){
+          if(isblank(line[i])){
+               word_end = true;
+          }else if(ce_ispunct(line[i])){
+               if(word_end) break;
+               if(punctuation_word_boundaries){
+                    word_end = true;
+               }
+          }else if(word_end){
+               break;
+          }
+     }
+
+     if(i != first_check && i != (line_len - 1)){
+          location->x = i;
+     }
+
+     return true;
+}
+
 // return -1 on failure, delta to move right to the end of the word on success
 int64_t ce_find_delta_to_end_of_word(const Buffer_t* buffer, const Point_t* location, bool punctuation_word_boundaries)
 {

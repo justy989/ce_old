@@ -292,15 +292,34 @@ bool auto_complete_insert(AutoComplete_t* auto_complete, const char* option)
 
      new_node->option = strdup(option);
 
-     if(auto_complete->tail){
-          auto_complete->tail->next = new_node;
-          new_node->prev = auto_complete->tail;
+     if(!auto_complete->tail){
+          // insert at tail/head
+          assert(!auto_complete->head);
+          auto_complete->head = auto_complete->tail = new_node;
+          return true;
      }
 
-     auto_complete->tail = new_node;
-     if(!auto_complete->head){
+     // sorted insert
+     CompleteNode_t* itr = auto_complete->tail;
+     while(itr && strcmp(itr->option, option) > 0) itr = itr->prev;
+
+     if(!itr){
+          // insert at the head and not tail
+          new_node->next = auto_complete->head;
+          if(new_node->next) new_node->next->prev = new_node;
           auto_complete->head = new_node;
+          return true;
      }
+
+     if(itr == auto_complete->tail){
+          // move the tail pointer
+          auto_complete->tail = new_node;
+     }
+
+     new_node->next = itr->next;
+     new_node->prev = itr;
+     if(itr->next) itr->next->prev = new_node;
+     itr->next = new_node;
 
      return true;
 }
@@ -344,8 +363,12 @@ void auto_complete_next(AutoComplete_t* auto_complete, const char* match)
 
      do{
           auto_complete->current = auto_complete->current->next;
+          assert(!auto_complete->current->next
+                 || strcmp(auto_complete->current->next->option, auto_complete->current->option) > 0);
           if(!auto_complete->current) auto_complete->current = auto_complete->head;
           if(strncmp(auto_complete->current->option, match, match_len) == 0) return;
+          // TODO: no sense in continuing to search forward here in the normal case.
+          // we should either start over at head, or walk backwards to the first match
      }while(auto_complete->current != initial_node);
 
      auto_complete_end(auto_complete);
@@ -353,6 +376,7 @@ void auto_complete_next(AutoComplete_t* auto_complete, const char* match)
 
 void auto_complete_prev(AutoComplete_t* auto_complete, const char* match)
 {
+     // TODO: this function can be optimized to take our sorted list into account
      int64_t match_len = strlen(match);
      CompleteNode_t* initial_node = auto_complete->current;
 

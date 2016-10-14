@@ -613,7 +613,7 @@ void commit_insert_mode_changes(ConfigState_t* config_state, Buffer_t* buffer, B
         config_state->start_insert.y == cursor->y &&
         config_state->original_start_insert.x == cursor->x &&
         config_state->original_start_insert.y == cursor->y){
-        // pass, no changes
+          // pass no change
      }else{
           if(config_state->start_insert.x == config_state->original_start_insert.x &&
              config_state->start_insert.y == config_state->original_start_insert.y){
@@ -1521,6 +1521,27 @@ void split_view(BufferView_t* head_view, BufferView_t* current_view, bool horizo
      }
 }
 
+void switch_to_view_at_point(ConfigState_t* config_state, Point_t point)
+{
+     BufferView_t* next_view = NULL;
+
+     if(point.x < 0) point.x = g_terminal_dimensions->x - 1;
+     if(point.y < 0) point.y = g_terminal_dimensions->y - 1;
+     if(point.x >= g_terminal_dimensions->x) point.x = 0;
+     if(point.y >= g_terminal_dimensions->y) point.y = 0;
+
+     if(config_state->input) next_view = ce_find_view_at_point(config_state->view_input, &point);
+     if(!next_view) next_view = ce_find_view_at_point(config_state->tab_current->view_head, &point);
+
+     if(next_view){
+          // save view and cursor
+          config_state->tab_current->view_previous = config_state->tab_current->view_current;
+          config_state->tab_current->view_current->buffer->cursor = config_state->tab_current->view_current->cursor;
+          config_state->tab_current->view_current = next_view;
+          enter_normal_mode(config_state);
+     }
+}
+
 void handle_mouse_event(ConfigState_t* config_state, Buffer_t* buffer, BufferState_t* buffer_state, BufferView_t* buffer_view, Point_t* cursor)
 {
      MEVENT event;
@@ -1586,9 +1607,9 @@ void handle_mouse_event(ConfigState_t* config_state, Buffer_t* buffer, BufferSta
 #endif
           if(event.bstate & BUTTON1_PRESSED){ // Left click OSX
                Point_t click = {event.x, event.y};
-               config_state->tab_current->view_current = ce_find_view_at_point(config_state->tab_current->view_head, &click);
+               switch_to_view_at_point(config_state, click);
                click = (Point_t) {event.x - (config_state->tab_current->view_current->top_left.x - config_state->tab_current->view_current->left_column),
-                                event.y - (config_state->tab_current->view_current->top_left.y - config_state->tab_current->view_current->top_row)};
+                                  event.y - (config_state->tab_current->view_current->top_left.y - config_state->tab_current->view_current->top_row)};
                ce_set_cursor(config_state->tab_current->view_current->buffer,
                              &config_state->tab_current->view_current->cursor,
                              &click);
@@ -1780,27 +1801,6 @@ bool iterate_history_input(ConfigState_t* config_state, bool previous)
      }
 
      return success;
-}
-
-void switch_to_view_at_point(ConfigState_t* config_state, Point_t point)
-{
-     BufferView_t* next_view = NULL;
-
-     if(point.x < 0) point.x = g_terminal_dimensions->x - 1;
-     if(point.y < 0) point.y = g_terminal_dimensions->y - 1;
-     if(point.x >= g_terminal_dimensions->x) point.x = 0;
-     if(point.y >= g_terminal_dimensions->y) point.y = 0;
-
-     if(config_state->input) next_view = ce_find_view_at_point(config_state->view_input, &point);
-     if(!next_view) next_view = ce_find_view_at_point(config_state->tab_current->view_head, &point);
-
-     if(next_view){
-          // save view and cursor
-          config_state->tab_current->view_previous = config_state->tab_current->view_current;
-          config_state->tab_current->view_current->buffer->cursor = config_state->tab_current->view_current->cursor;
-          config_state->tab_current->view_current = next_view;
-          enter_normal_mode(config_state);
-     }
 }
 
 void update_buffer_list_buffer(ConfigState_t* config_state, const BufferNode_t* head)
@@ -2815,9 +2815,9 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                indent_nl[indent_len + 1] = '\0';
 
                if(ce_insert_string(buffer, &begin_line, indent_nl)){
-                    // NOTE: no commit needed here, since we start the cursor on the newly added line in insert,
-                    //       mode, and the range that will be committed is inclusive
                     *cursor = (Point_t){indent_len, cursor->y};
+                    ce_commit_insert_string(&buffer_state->commit_tail, &begin_line, cursor, cursor,
+                                            indent_nl);
                     enter_insert_mode(config_state, cursor);
                }
           } break;
@@ -2834,9 +2834,10 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                nl_indent[1 + indent_len] = '\0';
 
                if(ce_insert_string(buffer, &end_of_line, nl_indent)){
-                    // NOTE: no commit needed here, since we start the cursor on the newly added line in insert,
-                    //       mode, and the range that will be committed is inclusive
+                    Point_t save_cursor = *cursor;
                     *cursor = (Point_t){indent_len, cursor->y + 1};
+                    ce_commit_insert_string(&buffer_state->commit_tail, &end_of_line, &save_cursor, cursor,
+                                            nl_indent);
                     enter_insert_mode(config_state, cursor);
                }
           } break;

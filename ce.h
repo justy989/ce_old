@@ -257,19 +257,19 @@ bool ce_get_homogenous_adjacents (const Buffer_t* buffer, Point_t* start, Point_
 
 
 // Cursor Movement Functions
-Point_t* ce_clamp_cursor                        (const Buffer_t* buffer, Point_t* cursor);
-bool   ce_advance_cursor                        (const Buffer_t* buffer, Point_t* cursor, int64_t delta);
-bool   ce_move_cursor                           (const Buffer_t* buffer, Point_t* cursor, Point_t delta);
-bool   ce_set_cursor                            (const Buffer_t* buffer, Point_t* cursor, const Point_t* location);
-bool   ce_move_cursor_to_beginning_of_word      (const Buffer_t* buffer, Point_t* cursor, bool punctuation_word_boundaries);
-bool   ce_move_cursor_to_end_of_line            (const Buffer_t* buffer, Point_t* cursor);
-void   ce_move_cursor_to_beginning_of_line      (const Buffer_t* buffer, Point_t* cursor);
-bool   ce_move_cursor_to_soft_end_of_line       (const Buffer_t* buffer, Point_t* cursor);
-bool   ce_move_cursor_to_soft_beginning_of_line (const Buffer_t* buffer, Point_t* cursor);
-bool   ce_move_cursor_to_end_of_file            (const Buffer_t* buffer, Point_t* cursor);
-bool   ce_move_cursor_to_beginning_of_file      (const Buffer_t* buffer, Point_t* cursor);
-bool   ce_follow_cursor                         (const Point_t* cursor, int64_t* left_column, int64_t* top_row, int64_t view_width, int64_t view_height,
-                                                 bool at_terminal_width_edge, bool at_terminal_height_edge);
+Point_t* ce_clamp_cursor                          (const Buffer_t* buffer, Point_t* cursor);
+bool     ce_advance_cursor                        (const Buffer_t* buffer, Point_t* cursor, int64_t delta);
+bool     ce_move_cursor                           (const Buffer_t* buffer, Point_t* cursor, Point_t delta);
+bool     ce_set_cursor                            (const Buffer_t* buffer, Point_t* cursor, const Point_t* location);
+bool     ce_move_cursor_to_beginning_of_word      (const Buffer_t* buffer, Point_t* cursor, bool punctuation_word_boundaries);
+bool     ce_move_cursor_to_end_of_line            (const Buffer_t* buffer, Point_t* cursor);
+void     ce_move_cursor_to_beginning_of_line      (const Buffer_t* buffer, Point_t* cursor);
+bool     ce_move_cursor_to_soft_end_of_line       (const Buffer_t* buffer, Point_t* cursor);
+bool     ce_move_cursor_to_soft_beginning_of_line (const Buffer_t* buffer, Point_t* cursor);
+bool     ce_move_cursor_to_end_of_file            (const Buffer_t* buffer, Point_t* cursor);
+bool     ce_move_cursor_to_beginning_of_file      (const Buffer_t* buffer, Point_t* cursor);
+bool     ce_follow_cursor                         (const Point_t* cursor, int64_t* left_column, int64_t* top_row, int64_t view_width, int64_t view_height,
+                                                   bool at_terminal_width_edge, bool at_terminal_height_edge);
 
 // Undo/Redo Functions
 bool ce_commit_insert_char   (BufferCommitNode_t** tail, const Point_t* start, const Point_t* undo_cursor, const Point_t* redo_cursor, char c);

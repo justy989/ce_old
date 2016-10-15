@@ -87,7 +87,7 @@ bool ce_load_file(Buffer_t* buffer, const char* filename)
           contents[content_size] = 0;
 
           // strip the ending '\n'
-          if(contents[content_size - 1] == NEWLINE) contents[content_size - 1] = 0;
+          if(content_size && contents[content_size - 1] == NEWLINE) contents[content_size - 1] = 0;
 
           ce_load_string(buffer, contents);
 

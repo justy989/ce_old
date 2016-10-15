@@ -214,6 +214,11 @@ Point_t previous_point(Buffer_t* buffer, Point_t point)
      return previous_point;
 }
 
+int ispunct_or_iswordchar(int c)
+{
+     return ce_ispunct(c) || ce_iswordchar(c);
+}
+
 typedef struct{
      BufferCommitNode_t* commit_tail;
      BackspaceNode_t* backspace_head;
@@ -275,7 +280,6 @@ typedef enum{
      VCT_INSERT,
      VCT_DELETE,
      VCT_CHANGE_CHAR,
-     VCT_CHANGE_STRING,
      VCT_PASTE_BEFORE,
      VCT_PASTE_AFTER,
      VCT_YANK,
@@ -317,6 +321,8 @@ typedef enum{
      VMT_END_OF_LINE_HARD,
      VMT_END_OF_LINE_SOFT,
      VMT_INSIDE_PAIR,
+     VMT_INSIDE_WORD_LITTLE,
+     VMT_INSIDE_WORD_BIG,
      VMT_VISUAL_RANGE,
      VMT_VISUAL_LINE,
 } VimMotionType_t;
@@ -340,7 +346,13 @@ typedef struct{
      bool yank;
 } VimAction_t;
 
-bool vim_action_from_string(const char* string, VimAction_t* action)
+typedef enum{
+    VCS_INVALID,
+    VCS_CONTINUE,
+    VCS_COMPLETE,
+} VimCommandState_t;
+
+VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action)
 {
      char buffer[BUFSIZ];
      bool get_motion = true;
@@ -361,7 +373,7 @@ bool vim_action_from_string(const char* string, VimAction_t* action)
                built_action.multiplier = 1;
                built_action.change.type = VCT_MOTION;
                built_action.motion.type = VMT_BEGINNING_OF_LINE_HARD;
-               return true;
+               return VCS_COMPLETE;
           }
      }
 
@@ -415,7 +427,7 @@ bool vim_action_from_string(const char* string, VimAction_t* action)
           get_motion = false;
           break;
      case 'I':
-          built_action.motion.type = VMT_END_OF_LINE_HARD;
+          built_action.motion.type = VMT_BEGINNING_OF_LINE_SOFT;
           built_action.ending_vim_mode = VM_INSERT;
           get_motion = false;
           break;
@@ -426,9 +438,9 @@ bool vim_action_from_string(const char* string, VimAction_t* action)
           break;
      case 'r':
           built_action.change.type = VCT_CHANGE_CHAR;
-          built_action.change.change_char = *(itr++);
+          built_action.change.change_char = *(++itr);
           if(!built_action.change.change_char){
-               return false;
+               return VCS_CONTINUE;
           }
           get_motion = false;
           break;
@@ -463,15 +475,27 @@ bool vim_action_from_string(const char* string, VimAction_t* action)
           // get the motion
           switch(*itr){
           default:
-               return false;
+               return VCS_INVALID;
+          case '\0':
+               return VCS_CONTINUE;
           case 'h':
                built_action.motion.type = VMT_LEFT;
                break;
           case 'j':
-               built_action.motion.type = VMT_DOWN;
+               if(change_char == 'd' || change_char == 'c' ||
+                  change_char == 'D' || change_char == 'C'){
+                    built_action.motion.type = VMT_LINE_DOWN;
+               }else{
+                    built_action.motion.type = VMT_DOWN;
+               }
                break;
           case 'k':
-               built_action.motion.type = VMT_UP;
+               if(change_char == 'd' || change_char == 'c' ||
+                  change_char == 'D' || change_char == 'C'){
+                    built_action.motion.type = VMT_LINE_UP;
+               }else{
+                    built_action.motion.type = VMT_UP;
+               }
                break;
           case 'l':
                built_action.motion.type = VMT_RIGHT;
@@ -497,22 +521,22 @@ bool vim_action_from_string(const char* string, VimAction_t* action)
           case 'f':
                built_action.motion.type = VMT_FIND_NEXT_MATCHING_CHAR;
                built_action.motion.match_char = *(++itr);
-               if(!built_action.motion.match_char) return false;
+               if(!built_action.motion.match_char) return VCS_CONTINUE;
                break;
           case 'F':
                built_action.motion.type = VMT_FIND_PREV_MATCHING_CHAR;
                built_action.motion.match_char = *(++itr);
-               if(!built_action.motion.match_char) return false;
+               if(!built_action.motion.match_char) return VCS_CONTINUE;
                break;
           case 't':
                built_action.motion.type = VMT_TO_NEXT_MATCHING_CHAR;
                built_action.motion.match_char = *(++itr);
-               if(!built_action.motion.match_char) return false;
+               if(!built_action.motion.match_char) return VCS_CONTINUE;
                break;
           case 'T':
                built_action.motion.type = VMT_TO_PREV_MATCHING_CHAR;
                built_action.motion.match_char = *(++itr);
-               if(!built_action.motion.match_char) return false;
+               if(!built_action.motion.match_char) return VCS_CONTINUE;
                break;
           case '$':
                built_action.motion.type = VMT_END_OF_LINE_HARD;
@@ -523,25 +547,42 @@ bool vim_action_from_string(const char* string, VimAction_t* action)
           case '^':
                built_action.motion.type = VMT_BEGINNING_OF_LINE_SOFT;
                break;
+          case 'i': // inside
+          {
+               char ch = *(++itr);
+
+               switch(ch){
+               default:
+                    return VCS_INVALID;
+               case '\0':
+                    return VCS_CONTINUE;
+               case 'w':
+                    built_action.motion.type = VMT_INSIDE_WORD_LITTLE;
+                    break;
+               case 'W':
+                    built_action.motion.type = VMT_INSIDE_WORD_BIG;
+                    break;
+               }
+          } break;
           case 'c':
                if(change_char == 'c') {
                     built_action.motion.type = VMT_LINE;
                }else{
-                    return false;
+                    return VCS_INVALID;
                }
                break;
           case 'd':
                if(change_char == 'd') {
                     built_action.motion.type = VMT_LINE;
                }else{
-                    return false;
+                    return VCS_INVALID;
                }
                break;
           }
      }
 
      *action = built_action;
-     return true;
+     return VCS_COMPLETE;
 }
 
 bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, YankNode_t** head)
@@ -552,7 +593,9 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Ya
 
      YankMode_t yank_mode = YANK_NORMAL;
 
-     for(int64_t i = 0; i < action->multiplier; ++i){
+     int64_t multiplier = action->multiplier * action->motion.multiplier;
+
+     for(int64_t i = 0; i < multiplier; ++i){
           // get range based on motion
           switch(action->motion.type){
           default:
@@ -597,22 +640,22 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Ya
                break;
           case VMT_LINE:
                start.x = 0;
-               end.x = ce_last_index(buffer->lines[end.y]);
+               end.x = strlen(buffer->lines[end.y]);
                yank_mode = YANK_LINE;
                break;
           case VMT_LINE_UP:
-               start.x = ce_last_index(buffer->lines[start.y]);
-               end.x = 0;
-               end.y--;
-               if(end.y < 0) end.y = 0;
+               start.x = 0;
+               start.y--;
+               if(start.y < 0) start.y = 0;
+               end.x = strlen(buffer->lines[end.y]);
                yank_mode = YANK_LINE;
                break;
           case VMT_LINE_DOWN:
                start.x = 0;
                end.y++;
-               end.x = ce_last_index(buffer->lines[end.y]);
                if(end.y >= buffer->line_count) end.y = buffer->line_count - 1;
                if(end.y < 0) end.y = 0;
+               end.x = strlen(buffer->lines[end.y]);
                yank_mode = YANK_LINE;
                break;
           case VMT_FIND_NEXT_MATCHING_CHAR:
@@ -647,124 +690,150 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Ya
                break;
           case VMT_INSIDE_PAIR:
                break;
+          case VMT_INSIDE_WORD_LITTLE:
+               ce_get_word_at_location(buffer, cursor, &start, &end);
+               break;
+          case VMT_INSIDE_WORD_BIG:
+          {
+			char curr_char;
+			bool success = ce_get_char(buffer, &start, &curr_char);
+               if(!success) return false;
+
+			if(isblank(curr_char)){
+				ce_get_homogenous_adjacents(buffer, &start, &end, isblank);
+			}else{
+				assert(ispunct_or_iswordchar(curr_char));
+				ce_get_homogenous_adjacents(buffer, &start, &end, ispunct_or_iswordchar);
+			}
+          } break;
+          }
+     }
+
+     const Point_t* sorted_start = &start;
+     const Point_t* sorted_end = &end;
+
+     ce_sort_points(&sorted_start, &sorted_end);
+
+     // perform action on range
+     switch(action->change.type){
+     default:
+          break;
+     case VCT_MOTION:
+          *cursor = end;
+          ce_clamp_cursor(buffer, cursor);
+          break;
+     case VCT_DELETE:
+     {
+          *cursor = *sorted_start;
+
+          char* commit_string = ce_dupe_string(buffer, sorted_start, sorted_end);
+          int64_t len = ce_compute_length(buffer, sorted_start, sorted_end);
+
+          if(!ce_remove_string(buffer, sorted_start, len)){
+               free(commit_string);
+               return false;
           }
 
-          const Point_t* sorted_start = &start;
-          const Point_t* sorted_end = &end;
+          if(action->yank){
+               char* yank_string = strdup(commit_string);
+               if(yank_mode == YANK_LINE && yank_string[len-1] == NEWLINE) yank_string[len-1] = 0;
+               add_yank(head, '"', yank_string, yank_mode);
+          }
 
-          ce_sort_points(&sorted_start, &sorted_end);
+          ce_commit_remove_string(&buffer_state->commit_tail, sorted_start, cursor, sorted_start, commit_string);
+     } break;
+     case VCT_PASTE_BEFORE:
+     {
+          YankNode_t* yank = find_yank(*head, '"');
 
-          // perform action on range
-          switch(action->change.type){
+          if(!yank) return false;
+
+          switch(yank->mode){
           default:
                break;
-          case VCT_MOTION:
-               *cursor = end;
-               ce_clamp_cursor(buffer, cursor);
-               break;
-          case VCT_DELETE:
+          case YANK_NORMAL:
           {
-               *cursor = *sorted_start;
-
-               char* commit_string = ce_dupe_string(buffer, sorted_start, sorted_end);
-               int64_t len = ce_compute_length(buffer, sorted_start, sorted_end);
-
-               if(!ce_remove_string(buffer, sorted_start, len)){
-                    free(commit_string);
-                    return false;
-               }
-
-               if(action->yank){
-                    char* yank_string = strdup(commit_string);
-                    if(yank_mode == YANK_LINE && yank_string[len-1] == NEWLINE) yank_string[len-1] = 0;
-                    add_yank(head, '"', yank_string, yank_mode);
-               }
-
-               ce_commit_remove_string(&buffer_state->commit_tail, sorted_start, cursor, sorted_start, commit_string);
-          } break;
-          case VCT_PASTE_BEFORE:
-          {
-               YankNode_t* yank = find_yank(*head, '"');
-
-               if(!yank) return false;
-
-               switch(yank->mode){
-               default:
-                    break;
-               case YANK_NORMAL:
-               {
-				if(ce_insert_string(buffer, sorted_start, yank->text)){
-					ce_commit_insert_string(&buffer_state->commit_tail,
-									    sorted_start, sorted_start, sorted_start,
-									    strdup(yank->text));
-	               }
-               } break;
-               case YANK_LINE:
-               {
-                         size_t len = strlen(yank->text);
-                         char* save_str = malloc(len + 2); // newline and '\0'
-                         Point_t insert_loc = {0, cursor->y};
-                         Point_t cursor_loc = {0, cursor->y};
-
-					save_str[len] = '\n'; // append a new line to create a line
-					save_str[len+1] = '\0';
-					memcpy(save_str, yank->text, len);
-
-                         if(ce_insert_string(buffer, &insert_loc, save_str)){
-						ce_commit_insert_string(&buffer_state->commit_tail,
-										    &insert_loc, cursor, &cursor_loc,
-										    save_str);
-						*cursor = cursor_loc;
-					}
-               } break;
+               if(ce_insert_string(buffer, sorted_start, yank->text)){
+                    ce_commit_insert_string(&buffer_state->commit_tail,
+                                            sorted_start, sorted_start, sorted_start,
+                                            strdup(yank->text));
                }
           } break;
-          case VCT_PASTE_AFTER:
+          case YANK_LINE:
           {
-               YankNode_t* yank = find_yank(*head, '"');
+                    size_t len = strlen(yank->text);
+                    char* save_str = malloc(len + 2); // newline and '\0'
+                    Point_t insert_loc = {0, cursor->y};
+                    Point_t cursor_loc = {0, cursor->y};
 
-               if(!yank) return false;
+                    save_str[len] = '\n'; // append a new line to create a line
+                    save_str[len+1] = '\0';
+                    memcpy(save_str, yank->text, len);
 
-               switch(yank->mode){
-               default:
-                    break;
-               case YANK_NORMAL:
-               {
-				Point_t insert_cursor = *cursor;
-
-				if(buffer->lines[cursor->y][0]){
-					insert_cursor.x++; // don't increment x for blank lines
-				}else{
-					assert(cursor->x == 0);
-				}
-
-				if(ce_insert_string(buffer, &insert_cursor, yank->text)){
-					ce_commit_insert_string(&buffer_state->commit_tail,
-									    &insert_cursor, sorted_start, sorted_start,
-									    strdup(yank->text));
-	               }
-               } break;
-               case YANK_LINE:
-               {
-                         size_t len = strlen(yank->text);
-                         char* save_str = malloc(len + 2); // newline and '\0'
-                         Point_t insert_loc = {0, cursor->y + 1};
-                         Point_t cursor_loc = {strlen(buffer->lines[cursor->y]), cursor->y};
-
-					save_str[0] = '\n'; // prepend a new line to create a line
-                         memcpy(save_str + 1, yank->text, len + 1); // also copy the '\0'
-
-
-                         if(ce_insert_string(buffer, &insert_loc, save_str)){
-						ce_commit_insert_string(&buffer_state->commit_tail,
-										    &insert_loc, cursor, &cursor_loc,
-										    save_str);
-						*cursor = cursor_loc;
-					}
-               } break;
-               }
+                    if(ce_insert_string(buffer, &insert_loc, save_str)){
+                         ce_commit_insert_string(&buffer_state->commit_tail,
+                                                 &insert_loc, cursor, &cursor_loc,
+                                                 save_str);
+                         *cursor = cursor_loc;
+                    }
           } break;
           }
+     } break;
+     case VCT_PASTE_AFTER:
+     {
+          YankNode_t* yank = find_yank(*head, '"');
+
+          if(!yank) return false;
+
+          switch(yank->mode){
+          default:
+               break;
+          case YANK_NORMAL:
+          {
+               Point_t insert_cursor = *cursor;
+
+               if(buffer->lines[cursor->y][0]){
+                    insert_cursor.x++; // don't increment x for blank lines
+               }else{
+                    assert(cursor->x == 0);
+               }
+
+               if(ce_insert_string(buffer, &insert_cursor, yank->text)){
+                    ce_commit_insert_string(&buffer_state->commit_tail,
+                                            &insert_cursor, sorted_start, sorted_start,
+                                            strdup(yank->text));
+               }
+          } break;
+          case YANK_LINE:
+          {
+                    size_t len = strlen(yank->text);
+                    char* save_str = malloc(len + 2); // newline and '\0'
+                    Point_t insert_loc = {0, cursor->y + 1};
+                    Point_t cursor_loc = {strlen(buffer->lines[cursor->y]), cursor->y};
+
+                    save_str[0] = '\n'; // prepend a new line to create a line
+                    memcpy(save_str + 1, yank->text, len + 1); // also copy the '\0'
+
+
+                    if(ce_insert_string(buffer, &insert_loc, save_str)){
+                         ce_commit_insert_string(&buffer_state->commit_tail,
+                                                 &insert_loc, cursor, &cursor_loc,
+                                                 save_str);
+                         *cursor = cursor_loc;
+                    }
+          } break;
+          }
+     } break;
+     case VCT_CHANGE_CHAR:
+     {
+          char prev_char;
+
+          if(!ce_get_char(buffer, sorted_start, &prev_char)) return false;
+          if(!ce_set_char(buffer, sorted_start, action->change.change_char)) return false;
+
+          ce_commit_change_char(&buffer_state->commit_tail, sorted_start, cursor, sorted_start,
+                                action->change.change_char, prev_char);
+     } break;
      }
 
      return true;
@@ -2824,7 +2893,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           }
      }else{
 
-          bool clear_keys = true;
+          bool clear_command = true;
 
           switch(key){
           default:
@@ -2839,12 +2908,32 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                config_state->command[config_state->command_len] = 0;
 
                VimAction_t vim_action;
-               if(vim_action_from_string(config_state->command, &vim_action)){
-                    // apply the action and reset the command to be clear
-                    vim_action_apply(&vim_action, buffer, cursor, &config_state->yank_head);
-                    config_state->command_len = 0;
-               }else{
-                    clear_keys = false;
+               VimCommandState_t command_state = vim_action_from_string(config_state->command, &vim_action);
+               switch(command_state){
+               default:
+               case VCS_INVALID:
+                    // allow command to be cleared
+                    break;
+               case VCS_CONTINUE:
+                    // no! don't clear the command
+                    clear_command = false;
+                    break;
+               case VCS_COMPLETE:
+                    if(vim_action_apply(&vim_action, buffer, cursor, &config_state->yank_head)){
+                         switch(vim_action.ending_vim_mode){
+                         default:
+                              break;
+                         case VM_INSERT:
+                              enter_insert_mode(config_state, cursor);
+                              break;
+                         case VM_NORMAL:
+                              enter_normal_mode(config_state);
+                              break;
+                         }
+
+                         // allow the command to be cleared
+                    }
+                    break;
                }
           } break;
           case 27: // ESC
@@ -3697,7 +3786,7 @@ search:
           } break;
           }
 
-          if(clear_keys){
+          if(clear_command){
                config_state->command_len = 0;
           }
      }

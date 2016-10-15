@@ -790,11 +790,13 @@ bool ce_move_cursor_to_end_of_word(const Buffer_t* buffer, Point_t* location, bo
      int64_t i = first_check;
 
      for(; i < line_len; ++i){
-          if(isblank(line[i]) && !start_outside_word){
-               if(i == first_check){
-                    start_outside_word = true;
-               }else{
-                    break;
+          if(isblank(line[i])){
+               if(!start_outside_word){
+                    if(i == first_check){
+                         start_outside_word = true;
+                    }else{
+                         break;
+                    }
                }
           }else{
                if(ce_ispunct(line[i])){

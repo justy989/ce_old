@@ -3010,10 +3010,16 @@ int64_t ce_get_indentation_for_next_line(const Buffer_t* buffer, const Point_t* 
      return indent;
 }
 
+// return a > b
+bool ce_point_after(const Point_t* a, const Point_t* b)
+{
+     return b->y < a->y || (b->y == a->y && b->x < a->x);
+}
+
 // if a > b, swap a and b
 void ce_sort_points(const Point_t** a, const Point_t** b)
 {
-     if((*b)->y < (*a)->y || ((*b)->y == (*a)->y && (*b)->x < (*a)->x)){
+     if(ce_point_after(*a, *b)){
           const Point_t* temp = *a;
           *a = *b;
           *b = temp;

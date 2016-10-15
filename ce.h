@@ -97,6 +97,7 @@ typedef struct {
      Point_t highlight_end;
      bool modified;
      bool readonly;
+     uint16_t network_id; // TODO: move this into user data as a NetworkId_t
      union {
           char* filename;
           char* name;

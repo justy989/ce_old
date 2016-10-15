@@ -270,6 +270,8 @@ bool     ce_move_cursor_to_soft_end_of_line       (const Buffer_t* buffer, Point
 bool     ce_move_cursor_to_soft_beginning_of_line (const Buffer_t* buffer, Point_t* cursor);
 bool     ce_move_cursor_to_end_of_file            (const Buffer_t* buffer, Point_t* cursor);
 bool     ce_move_cursor_to_beginning_of_file      (const Buffer_t* buffer, Point_t* cursor);
+bool     ce_move_cursor_forward_to_char           (const Buffer_t* buffer, Point_t* cursor, char c);
+bool     ce_move_cursor_backward_to_char          (const Buffer_t* buffer, Point_t* cursor, char c);
 bool     ce_follow_cursor                         (const Point_t* cursor, int64_t* left_column, int64_t* top_row, int64_t view_width, int64_t view_height,
                                                    bool at_terminal_width_edge, bool at_terminal_height_edge);
 

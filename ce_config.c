@@ -214,6 +214,53 @@ Point_t previous_point(Buffer_t* buffer, Point_t point)
      return previous_point;
 }
 
+typedef struct{
+     BufferCommitNode_t* commit_tail;
+     BackspaceNode_t* backspace_head;
+     struct MarkNode_t* mark_head;
+} BufferState_t;
+
+// TODO: move yank stuff to ce.h
+typedef enum{
+     YANK_NORMAL,
+     YANK_LINE,
+} YankMode_t;
+
+typedef struct YankNode_t{
+     char reg_char;
+     const char* text;
+     YankMode_t mode;
+     struct YankNode_t* next;
+} YankNode_t;
+
+YankNode_t* find_yank(YankNode_t* head, char reg_char){
+     YankNode_t* itr = head;
+     while(itr != NULL){
+          if(itr->reg_char == reg_char) return itr;
+          itr = itr->next;
+     }
+     return NULL;
+}
+
+// for now the yanked string is user allocated. eventually will probably
+// want to change this interface so that everything is hidden
+void add_yank(YankNode_t** head, char reg_char, const char* yank_text, YankMode_t mode){
+     YankNode_t* node = find_yank(*head, reg_char);
+     if(node != NULL){
+          free((void*)node->text);
+     }
+     else{
+          YankNode_t* new_yank = malloc(sizeof(*new_yank));
+          new_yank->reg_char = reg_char;
+          new_yank->next = *head;
+          node = new_yank;
+          *head = new_yank;
+     }
+
+     node->text = yank_text;
+     node->mode = mode;
+}
+
 typedef enum{
      VM_NORMAL,
      VM_INSERT,
@@ -278,7 +325,7 @@ typedef struct{
      VimMotionType_t type;
      int32_t multiplier;
      union{
-          char matching_char;
+          char match_char;
           char inside_pair;
           Point_t visual_end;
      };
@@ -290,6 +337,7 @@ typedef struct{
      VimMotion_t motion;
      VimChange_t change;
      VimMode_t ending_vim_mode;
+     bool yank;
 } VimAction_t;
 
 bool vim_action_from_string(const char* string, VimAction_t* action)
@@ -326,20 +374,24 @@ bool vim_action_from_string(const char* string, VimAction_t* action)
           break;
      case 'd':
           built_action.change.type = VCT_DELETE;
+          built_action.yank = true;
           break;
      case 'D':
           built_action.change.type = VCT_DELETE;
           built_action.motion.type = VMT_END_OF_LINE_HARD;
+          built_action.yank = true;
           get_motion = false;
           break;
      case 'c':
           built_action.change.type = VCT_DELETE;
           built_action.ending_vim_mode = VM_INSERT;
+          built_action.yank = true;
           break;
      case 'C':
           built_action.change.type = VCT_DELETE;
           built_action.motion.type = VMT_END_OF_LINE_HARD;
           built_action.ending_vim_mode = VM_INSERT;
+          built_action.yank = true;
           get_motion = false;
           break;
      case 'a':
@@ -381,11 +433,11 @@ bool vim_action_from_string(const char* string, VimAction_t* action)
           get_motion = false;
           break;
      case 'p':
-          built_action.change.type = VCT_PASTE_BEFORE;
+          built_action.change.type = VCT_PASTE_AFTER;
           get_motion = false;
           break;
      case 'P':
-          built_action.change.type = VCT_PASTE_AFTER;
+          built_action.change.type = VCT_PASTE_BEFORE;
           get_motion = false;
           break;
      }
@@ -394,10 +446,11 @@ bool vim_action_from_string(const char* string, VimAction_t* action)
           // get the motion multiplier
           itr++;
           built_action.motion.multiplier = 1;
+          const char* start_itr = itr;
           while(*itr && isdigit(*itr)) itr++;
-          if(itr != string){
-               int64_t len = itr - string;
-               strncpy(buffer, string, len);
+          if(itr != start_itr){
+               int64_t len = itr - start_itr;
+               strncpy(buffer, start_itr, len);
                buffer[len + 1] = 0;
                built_action.motion.multiplier = atoi(buffer);
 
@@ -443,15 +496,23 @@ bool vim_action_from_string(const char* string, VimAction_t* action)
                break;
           case 'f':
                built_action.motion.type = VMT_FIND_NEXT_MATCHING_CHAR;
+               built_action.motion.match_char = *(++itr);
+               if(!built_action.motion.match_char) return false;
                break;
           case 'F':
                built_action.motion.type = VMT_FIND_PREV_MATCHING_CHAR;
+               built_action.motion.match_char = *(++itr);
+               if(!built_action.motion.match_char) return false;
                break;
           case 't':
                built_action.motion.type = VMT_TO_NEXT_MATCHING_CHAR;
+               built_action.motion.match_char = *(++itr);
+               if(!built_action.motion.match_char) return false;
                break;
           case 'T':
                built_action.motion.type = VMT_TO_PREV_MATCHING_CHAR;
+               built_action.motion.match_char = *(++itr);
+               if(!built_action.motion.match_char) return false;
                break;
           case '$':
                built_action.motion.type = VMT_END_OF_LINE_HARD;
@@ -483,10 +544,13 @@ bool vim_action_from_string(const char* string, VimAction_t* action)
      return true;
 }
 
-bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor)
+bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, YankNode_t** head)
 {
+     BufferState_t* buffer_state = buffer->user_data;
      Point_t start = *cursor;
      Point_t end = start;
+
+     YankMode_t yank_mode = YANK_NORMAL;
 
      for(int64_t i = 0; i < action->multiplier; ++i){
           // get range based on motion
@@ -534,12 +598,14 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor)
           case VMT_LINE:
                start.x = 0;
                end.x = ce_last_index(buffer->lines[end.y]);
+               yank_mode = YANK_LINE;
                break;
           case VMT_LINE_UP:
                start.x = ce_last_index(buffer->lines[start.y]);
                end.x = 0;
                end.y--;
                if(end.y < 0) end.y = 0;
+               yank_mode = YANK_LINE;
                break;
           case VMT_LINE_DOWN:
                start.x = 0;
@@ -547,26 +613,46 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor)
                end.x = ce_last_index(buffer->lines[end.y]);
                if(end.y >= buffer->line_count) end.y = buffer->line_count - 1;
                if(end.y < 0) end.y = 0;
+               yank_mode = YANK_LINE;
                break;
           case VMT_FIND_NEXT_MATCHING_CHAR:
+               ce_move_cursor_forward_to_char(buffer, &end, action->motion.match_char);
                break;
           case VMT_FIND_PREV_MATCHING_CHAR:
+               ce_move_cursor_backward_to_char(buffer, &end, action->motion.match_char);
                break;
           case VMT_TO_NEXT_MATCHING_CHAR:
+               ce_move_cursor_forward_to_char(buffer, &end, action->motion.match_char);
+               end.x--;
+               if(end.x < 0) end.x = 0;
                break;
           case VMT_TO_PREV_MATCHING_CHAR:
-               break;
+          {
+               ce_move_cursor_backward_to_char(buffer, &end, action->motion.match_char);
+               end.x++;
+               int64_t line_len = strlen(buffer->lines[end.y]);
+               if(end.x > line_len) end.x = line_len;
+          }break;
           case VMT_BEGINNING_OF_LINE_HARD:
+               ce_move_cursor_to_beginning_of_line(buffer, &end);
                break;
           case VMT_BEGINNING_OF_LINE_SOFT:
+               ce_move_cursor_to_soft_beginning_of_line(buffer, &end);
                break;
           case VMT_END_OF_LINE_HARD:
+               ce_move_cursor_to_end_of_line(buffer, &end);
                break;
           case VMT_END_OF_LINE_SOFT:
+               ce_move_cursor_to_soft_end_of_line(buffer, &end);
                break;
           case VMT_INSIDE_PAIR:
                break;
           }
+
+          const Point_t* sorted_start = &start;
+          const Point_t* sorted_end = &end;
+
+          ce_sort_points(&sorted_start, &sorted_end);
 
           // perform action on range
           switch(action->change.type){
@@ -576,24 +662,113 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor)
                *cursor = end;
                ce_clamp_cursor(buffer, cursor);
                break;
+          case VCT_DELETE:
+          {
+               *cursor = *sorted_start;
+
+               char* commit_string = ce_dupe_string(buffer, sorted_start, sorted_end);
+               int64_t len = ce_compute_length(buffer, sorted_start, sorted_end);
+
+               if(!ce_remove_string(buffer, sorted_start, len)){
+                    free(commit_string);
+                    return false;
+               }
+
+               if(action->yank){
+                    char* yank_string = strdup(commit_string);
+                    if(yank_mode == YANK_LINE && yank_string[len-1] == NEWLINE) yank_string[len-1] = 0;
+                    add_yank(head, '"', yank_string, yank_mode);
+               }
+
+               ce_commit_remove_string(&buffer_state->commit_tail, sorted_start, cursor, sorted_start, commit_string);
+          } break;
+          case VCT_PASTE_BEFORE:
+          {
+               YankNode_t* yank = find_yank(*head, '"');
+
+               if(!yank) return false;
+
+               switch(yank->mode){
+               default:
+                    break;
+               case YANK_NORMAL:
+               {
+				if(ce_insert_string(buffer, sorted_start, yank->text)){
+					ce_commit_insert_string(&buffer_state->commit_tail,
+									    sorted_start, sorted_start, sorted_start,
+									    strdup(yank->text));
+	               }
+               } break;
+               case YANK_LINE:
+               {
+                         size_t len = strlen(yank->text);
+                         char* save_str = malloc(len + 2); // newline and '\0'
+                         Point_t insert_loc = {0, cursor->y};
+                         Point_t cursor_loc = {0, cursor->y};
+
+					save_str[len] = '\n'; // append a new line to create a line
+					save_str[len+1] = '\0';
+					memcpy(save_str, yank->text, len);
+
+                         if(ce_insert_string(buffer, &insert_loc, save_str)){
+						ce_commit_insert_string(&buffer_state->commit_tail,
+										    &insert_loc, cursor, &cursor_loc,
+										    save_str);
+						*cursor = cursor_loc;
+					}
+               } break;
+               }
+          } break;
+          case VCT_PASTE_AFTER:
+          {
+               YankNode_t* yank = find_yank(*head, '"');
+
+               if(!yank) return false;
+
+               switch(yank->mode){
+               default:
+                    break;
+               case YANK_NORMAL:
+               {
+				Point_t insert_cursor = *cursor;
+
+				if(buffer->lines[cursor->y][0]){
+					insert_cursor.x++; // don't increment x for blank lines
+				}else{
+					assert(cursor->x == 0);
+				}
+
+				if(ce_insert_string(buffer, &insert_cursor, yank->text)){
+					ce_commit_insert_string(&buffer_state->commit_tail,
+									    &insert_cursor, sorted_start, sorted_start,
+									    strdup(yank->text));
+	               }
+               } break;
+               case YANK_LINE:
+               {
+                         size_t len = strlen(yank->text);
+                         char* save_str = malloc(len + 2); // newline and '\0'
+                         Point_t insert_loc = {0, cursor->y + 1};
+                         Point_t cursor_loc = {strlen(buffer->lines[cursor->y]), cursor->y};
+
+					save_str[0] = '\n'; // prepend a new line to create a line
+                         memcpy(save_str + 1, yank->text, len + 1); // also copy the '\0'
+
+
+                         if(ce_insert_string(buffer, &insert_loc, save_str)){
+						ce_commit_insert_string(&buffer_state->commit_tail,
+										    &insert_loc, cursor, &cursor_loc,
+										    save_str);
+						*cursor = cursor_loc;
+					}
+               } break;
+               }
+          } break;
           }
      }
 
      return true;
 }
-
-// TODO: move yank stuff to ce.h
-typedef enum{
-     YANK_NORMAL,
-     YANK_LINE,
-} YankMode_t;
-
-typedef struct YankNode_t{
-     char reg_char;
-     const char* text;
-     YankMode_t mode;
-     struct YankNode_t* next;
-} YankNode_t;
 
 typedef struct TabView_t{
      BufferView_t* view_head;
@@ -788,39 +963,6 @@ typedef struct MarkNode_t{
      Point_t location;
      struct MarkNode_t* next;
 } MarkNode_t;
-
-typedef struct{
-     BufferCommitNode_t* commit_tail;
-     BackspaceNode_t* backspace_head;
-     struct MarkNode_t* mark_head;
-} BufferState_t;
-
-YankNode_t* find_yank(ConfigState_t* config, char reg_char){
-     YankNode_t* itr = config->yank_head;
-     while(itr != NULL){
-          if(itr->reg_char == reg_char) return itr;
-          itr = itr->next;
-     }
-     return NULL;
-}
-
-// for now the yanked string is user allocated. eventually will probably
-// want to change this interface so that everything is hidden
-void add_yank(ConfigState_t* config, char reg_char, const char* yank_text, YankMode_t mode){
-     YankNode_t* node = find_yank(config, reg_char);
-     if(node != NULL){
-          free((void*)node->text);
-     }
-     else{
-          YankNode_t* new_yank = malloc(sizeof(*config->yank_head));
-          new_yank->reg_char = reg_char;
-          new_yank->next = config->yank_head;
-          node = new_yank;
-          config->yank_head = new_yank;
-     }
-     node->text = yank_text;
-     node->mode = mode;
-}
 
 Point_t* find_mark(BufferState_t* buffer, char mark_char)
 {
@@ -1752,8 +1894,8 @@ void yank_visual_range(ConfigState_t* config_state)
 
      ce_sort_points(&a, &b);
 
-     add_yank(config_state, '0', ce_dupe_string(buffer, a, b), YANK_NORMAL);
-     add_yank(config_state, '"', ce_dupe_string(buffer, a, b), YANK_NORMAL);
+     add_yank(&config_state->yank_head, '0', ce_dupe_string(buffer, a, b), YANK_NORMAL);
+     add_yank(&config_state->yank_head, '"', ce_dupe_string(buffer, a, b), YANK_NORMAL);
 }
 
 void yank_visual_lines(ConfigState_t* config_state)
@@ -1772,8 +1914,8 @@ void yank_visual_lines(ConfigState_t* config_state)
      Point_t start = {0, start_line};
      Point_t end = {ce_last_index(buffer->lines[end_line]), end_line};
 
-     add_yank(config_state, '0', ce_dupe_string(buffer, &start, &end), YANK_LINE);
-     add_yank(config_state, '"', ce_dupe_string(buffer, &start, &end), YANK_LINE);
+     add_yank(&config_state->yank_head, '0', ce_dupe_string(buffer, &start, &end), YANK_LINE);
+     add_yank(&config_state->yank_head, '"', ce_dupe_string(buffer, &start, &end), YANK_LINE);
 }
 
 void remove_visual_range(ConfigState_t* config_state)
@@ -2245,13 +2387,13 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           case '/':
                if(config_state->view_input->buffer->line_count){
                     commit_input_to_history(config_state->view_input->buffer, &config_state->search_history);
-                    add_yank(config_state, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
+                    add_yank(&config_state->yank_head, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
                }
                break;
           case '?':
                if(config_state->view_input->buffer->line_count){
                     commit_input_to_history(config_state->view_input->buffer, &config_state->search_history);
-                    add_yank(config_state, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
+                    add_yank(&config_state->yank_head, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
                }
                break;
           case 24: // Ctrl + x
@@ -2316,7 +2458,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           } break;
           case 'R':
           {
-               YankNode_t* yank = find_yank(config_state, '/');
+               YankNode_t* yank = find_yank(config_state->yank_head, '/');
                if(!yank) break;
                const char* search_str = yank->text;
                // NOTE: allow empty string to replace search
@@ -2682,6 +2824,8 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           }
      }else{
 
+          bool clear_keys = true;
+
           switch(key){
           default:
           {
@@ -2697,8 +2841,10 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                VimAction_t vim_action;
                if(vim_action_from_string(config_state->command, &vim_action)){
                     // apply the action and reset the command to be clear
-                    vim_action_apply(&vim_action, buffer, cursor);
+                    vim_action_apply(&vim_action, buffer, cursor, &config_state->yank_head);
                     config_state->command_len = 0;
+               }else{
+                    clear_keys = false;
                }
           } break;
           case 27: // ESC
@@ -2858,10 +3004,11 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
 #endif
                }
           } break;
+#if 0
           case 'P':
           case 'p':
           {
-               YankNode_t* yank = find_yank(config_state, '"');
+               YankNode_t* yank = find_yank(config_state->yank_head, '"');
                if(yank){
                     // NOTE: unsure why this isn't plug and play !
                     if(config_state->vim_mode == VM_VISUAL_RANGE){
@@ -2870,7 +3017,6 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          remove_visual_lines(config_state);
                     }
 
-#if 0
                     switch(yank->mode){
                     case YANK_LINE:
                     {
@@ -2923,9 +3069,9 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          *cursor = insert_cursor;
                     } break;
                     }
-#endif
                }
           } break;
+#endif
           case 'Z':
 #if 0
                switch(config_state->movement_keys[0]){
@@ -2980,6 +3126,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                               tab_view_remove(&config_state->tab_head, tmp);
                               break;
                          }else{
+                              // Quit !
                               if(config_state->tab_current == config_state->tab_head) return false;
 
                               TabView_t* itr = config_state->tab_head;
@@ -3271,7 +3418,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                Point_t word_start, word_end;
                if(!ce_get_word_at_location(buffer, cursor, &word_start, &word_end)) break;
                char* search_str = ce_dupe_string(buffer, &word_start, &word_end);
-               add_yank(config_state, '/', search_str, YANK_NORMAL);
+               add_yank(&config_state->yank_head, '/', search_str, YANK_NORMAL);
                config_state->search_command.direction = CE_UP;
                goto search;
           } break;
@@ -3282,7 +3429,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                Point_t word_start, word_end;
                if(!ce_get_word_at_location(buffer, cursor, &word_start, &word_end)) break;
                char* search_str = ce_dupe_string(buffer, &word_start, &word_end);
-               add_yank(config_state, '/', search_str, YANK_NORMAL);
+               add_yank(&config_state->yank_head, '/', search_str, YANK_NORMAL);
                config_state->search_command.direction = CE_DOWN;
                goto search;
           } break;
@@ -3303,7 +3450,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           case 'n':
 search:
           {
-               YankNode_t* yank = find_yank(config_state, '/');
+               YankNode_t* yank = find_yank(config_state->yank_head, '/');
                if(yank){
                     assert(yank->mode == YANK_NORMAL);
                     Point_t match;
@@ -3315,7 +3462,7 @@ search:
           } break;
           case 'N':
           {
-               YankNode_t* yank = find_yank(config_state, '/');
+               YankNode_t* yank = find_yank(config_state->yank_head, '/');
                if(yank){
                     assert(yank->mode == YANK_NORMAL);
                     Point_t match;
@@ -3549,6 +3696,10 @@ search:
                ce_clamp_cursor(buffer, &buffer_view->cursor);
           } break;
           }
+
+          if(clear_keys){
+               config_state->command_len = 0;
+          }
      }
 
      // incremental search
@@ -3685,7 +3836,7 @@ void view_drawer(const BufferNode_t* head, void* user_data)
         config_state->view_input->buffer->lines && config_state->view_input->buffer->lines[0][0]){
           search = config_state->view_input->buffer->lines[0];
      }else{
-          YankNode_t* yank = find_yank(config_state, '/');
+          YankNode_t* yank = find_yank(config_state->yank_head, '/');
           if(yank) search = yank->text;
      }
 

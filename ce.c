@@ -889,6 +889,7 @@ bool ce_move_cursor_to_next_word(const Buffer_t* buffer, Point_t* location, bool
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
 
+     if(!ce_point_on_buffer(buffer, location)) return false;
      const char* line = buffer->lines[location->y];
      int line_len = strlen(line);
      int64_t first_check = location->x + 1;
@@ -912,6 +913,38 @@ bool ce_move_cursor_to_next_word(const Buffer_t* buffer, Point_t* location, bool
           location->x = i;
      }
 
+     return true;
+}
+
+bool ce_move_cursor_forward_to_char(const Buffer_t* buffer, Point_t* location, char c)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+
+     Point_t next_location = {location->x + 1, location->y};
+
+     if(!ce_point_on_buffer(buffer, &next_location)) return false;
+
+     char* line = buffer->lines[next_location.y];
+     const char* found_char = strchr(line + next_location.x, c);
+     if(!found_char) return false;
+
+     location->x = (found_char - line);
+     return true;
+}
+
+bool ce_move_cursor_backward_to_char(const Buffer_t* buffer, Point_t* location, char c)
+{
+     CE_CHECK_PTR_ARG(buffer);
+     CE_CHECK_PTR_ARG(location);
+
+     if(!ce_point_on_buffer(buffer, location)) return false;
+
+     char* line = buffer->lines[location->y];
+     const char* found_char = memrchr(line, c, location->x);
+     if(!found_char) return false;
+
+     location->x = (found_char - line);
      return true;
 }
 

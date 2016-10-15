@@ -44,19 +44,14 @@ void ce_server_file_opened(ServerState_t* server_state, const Buffer_t* new_buff
 }
 void ce_server_refresh_view(ServerState_t* server_state, const Buffer_t* buffer, Point_t top_left, Point_t bottom_right)
 {
-     ce_message("sending view to client");
      // TODO: error handling
      NetworkCommand_t cmd = NC_REFRESH_VIEW;
      ssize_t sent_bytes = write(server_state->client_socket, &(cmd), sizeof(cmd));
-     ce_message("view string to client");
      ce_clamp_cursor(buffer, &top_left);
      ce_clamp_cursor(buffer, &bottom_right);
-     ce_message("top left is %lld, %lld", top_left.x, top_left.y);
-     ce_message("bottom right is %lld, %lld", bottom_right.x, bottom_right.y);
      char* view_str = ce_dupe_string(buffer, &top_left, &bottom_right);
      assert(view_str);
      sent_bytes = write(server_state->client_socket, view_str, strlen(view_str) + 1);
-     ce_message("view string sent to client");
      free(view_str);
 }
 
@@ -99,14 +94,10 @@ void* ce_server_listen(void* args)
                } break;
                case NC_REFRESH_VIEW:
                {
-                    ce_message("received refresh view");
                     READ(NetworkId_t, id);
                     NetworkBufferId_t buffer_id = {id, {-1,-1}};
-                    ce_message("parsed buffer_id");
                     READ(Point_t, top_left);
-                    ce_message("parsed top left");
                     READ(Point_t, bottom_right);
-                    ce_message("parsed top right");
                     ce_server_refresh_view(server_state, id_to_buffer(head, &buffer_id), top_left, bottom_right);
                } break;
                case NC_INSERT_STRING:

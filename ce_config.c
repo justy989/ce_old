@@ -219,6 +219,11 @@ int ispunct_or_iswordchar(int c)
      return ce_ispunct(c) || ce_iswordchar(c);
 }
 
+int isnotquote(int c)
+{
+     return c != '"';
+}
+
 typedef struct{
      BufferCommitNode_t* commit_tail;
      BackspaceNode_t* backspace_head;
@@ -323,6 +328,9 @@ typedef enum{
      VMT_INSIDE_PAIR,
      VMT_INSIDE_WORD_LITTLE,
      VMT_INSIDE_WORD_BIG,
+     VMT_AROUND_PAIR,
+     VMT_AROUND_WORD_LITTLE,
+     VMT_AROUND_WORD_BIG,
      VMT_VISUAL_RANGE,
      VMT_VISUAL_LINE,
 } VimMotionType_t;
@@ -333,6 +341,7 @@ typedef struct{
      union{
           char match_char;
           char inside_pair;
+          char around_pair;
           Point_t visual_end;
      };
 } VimMotion_t;
@@ -562,6 +571,31 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
                case 'W':
                     built_action.motion.type = VMT_INSIDE_WORD_BIG;
                     break;
+               case '"':
+                    built_action.motion.type = VMT_INSIDE_PAIR;
+                    built_action.motion.inside_pair = ch;
+                    break;
+               }
+          } break;
+          case 'a': // around
+          {
+               char ch = *(++itr);
+
+               switch(ch){
+               default:
+                    return VCS_INVALID;
+               case '\0':
+                    return VCS_CONTINUE;
+               case 'w':
+                    built_action.motion.type = VMT_AROUND_WORD_LITTLE;
+                    break;
+               case 'W':
+                    built_action.motion.type = VMT_INSIDE_WORD_BIG;
+                    break;
+               case '"':
+                    built_action.motion.type = VMT_AROUND_PAIR;
+                    built_action.motion.around_pair = ch;
+                    break;
                }
           } break;
           case 'c':
@@ -688,8 +722,10 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Ya
           case VMT_END_OF_LINE_SOFT:
                ce_move_cursor_to_soft_end_of_line(buffer, &end);
                break;
-          case VMT_INSIDE_PAIR:
-               break;
+		case VMT_INSIDE_PAIR:
+			if(!ce_get_homogenous_adjacents(buffer, &start, &end, isnotquote)) return false;
+			if(start.x == end.x && start.y == end.y) return false;
+		  	break;
           case VMT_INSIDE_WORD_LITTLE:
                ce_get_word_at_location(buffer, cursor, &start, &end);
                break;
@@ -706,6 +742,17 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Ya
 				ce_get_homogenous_adjacents(buffer, &start, &end, ispunct_or_iswordchar);
 			}
           } break;
+		case VMT_AROUND_PAIR:
+			if(!ce_get_homogenous_adjacents(buffer, &start, &end, isnotquote)) return false;
+			if(start.x == end.x && start.y == end.y) return false;
+               start.x--;
+               end.x++;
+		  	break;
+          // TIME TO SLURP
+          case VMT_AROUND_WORD_LITTLE:
+               break;
+          case VMT_AROUND_WORD_BIG:
+               break;
           }
      }
 
@@ -1025,6 +1072,7 @@ typedef struct{
      pthread_t shell_command_thread;
      pthread_t shell_input_thread;
      AutoComplete_t auto_complete;
+     VimAction_t last_vim_action;
 } ConfigState_t;
 
 typedef struct MarkNode_t{
@@ -2931,11 +2979,15 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                               break;
                          }
 
+                         config_state->last_vim_action = vim_action;
                          // allow the command to be cleared
                     }
                     break;
                }
           } break;
+          case '.':
+               vim_action_apply(&config_state->last_vim_action, buffer, cursor, &config_state->yank_head);
+               break;
           case 27: // ESC
           {
                if(config_state->input){

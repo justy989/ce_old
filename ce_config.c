@@ -521,6 +521,7 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
           break;
      case 'a':
           if(vim_mode == VM_VISUAL_RANGE) { // wait for aw in visual range mode
+               built_action.end_in_vim_mode = vim_mode;
                itr--; // back up so this counts as a motion
                get_motion = true;
                break;
@@ -549,6 +550,7 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
           break;
      case 'i':
           if(vim_mode == VM_VISUAL_RANGE) { // wait for iw in visual range mode
+               built_action.end_in_vim_mode = vim_mode;
                itr--; // back up so this counts as a motion
                get_motion = true;
                break;

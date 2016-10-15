@@ -2893,18 +2893,32 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                               }
                          }
                     }else{
-                         Point_t previous = *cursor;
-                         previous.x--;
-                         char c = 0;
-                         if(ce_get_char(buffer, &previous, &c)){
-                              if(ce_remove_char(buffer, &previous)){
-                                   if(previous.x < config_state->start_insert.x){
-                                        backspace_push(&buffer_state->backspace_head, c);
-                                        config_state->start_insert.x = previous.x;
-                                        config_state->inserted_backspaces++;
+                         // figure out if we can slurp up a tab
+                         size_t n_backspaces = 1;
+                         if(cursor->x % strlen(TAB_STRING) == 0){
+                              n_backspaces = strlen(TAB_STRING);
+                              char c = 0;
+                              Point_t previous = *cursor;
+                              for(size_t n=0; n<n_backspaces; n++){
+                                  previous.x--;
+                                  if(!ce_get_char(buffer, &previous, &c) || c != ' ') n_backspaces = 1;
+                              }
+                         }
+                         for(size_t n=0; n < n_backspaces; n++){
+                              // perform backspace
+                              Point_t previous = *cursor;
+                              previous.x--;
+                              char c = 0;
+                              if(ce_get_char(buffer, &previous, &c)){
+                                   if(ce_remove_char(buffer, &previous)){
+                                        if(previous.x < config_state->start_insert.x){
+                                             backspace_push(&buffer_state->backspace_head, c);
+                                             config_state->start_insert.x = previous.x;
+                                             config_state->inserted_backspaces++;
+                                        }
+                                        // cannot use move_cursor due to not being able to be ahead of the last character
+                                        cursor->x--;
                                    }
-                                   // cannot use move_cursor due to not being able to be ahead of the last character
-                                   cursor->x--;
                               }
                          }
                     }

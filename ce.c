@@ -903,6 +903,8 @@ bool ce_get_char(const Buffer_t* buffer, const Point_t* location, char* c)
 
      *c = buffer->lines[location->y][location->x];
 
+     if(*c == 0) *c = NEWLINE;
+
      return true;
 }
 

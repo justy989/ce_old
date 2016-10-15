@@ -607,40 +607,11 @@ char* ce_dupe_buffer(const Buffer_t* buffer)
      return ce_dupe_string(buffer, &start, &end);
 }
 
-// return x delta between location and the located character 'c' if found. return -1 if not found
-int64_t ce_find_delta_to_char_forward_in_line(const Buffer_t* buffer, const Point_t* location, char c)
-{
-     CE_CHECK_PTR_ARG(buffer);
-     CE_CHECK_PTR_ARG(location);
-
-     const char* cur_char = &buffer->lines[location->y][location->x];
-     if(cur_char == '\0') return -1; // we are at the end of the line
-     const char* search_str = cur_char + 1; // start looking forward from the next character
-     const char* found_char = strchr(search_str, c);
-     if(!found_char) return -1;
-     return found_char - cur_char;
-}
-
-// return -x delta between location and the located character 'c' if found. return -1 if not found
-int64_t ce_find_delta_to_char_backward_in_line(const Buffer_t* buffer, const Point_t* location, char c)
-{
-     CE_CHECK_PTR_ARG(buffer);
-     CE_CHECK_PTR_ARG(location);
-
-     // TODO do I need to validate that the provided location is a real character in the buffer?
-     const char* cur_char = &buffer->lines[location->y][location->x];
-     const char* line = buffer->lines[location->y];
-     const char* found_char = ce_memrchr(line, c, cur_char - line);
-     if(!found_char) return -1;
-     return cur_char - found_char;
-}
-
 // returns the delta to the matching character; return success
-bool ce_find_delta_to_match(const Buffer_t* buffer, const Point_t* location, Point_t* delta)
+bool ce_move_cursor_to_matching_pair(const Buffer_t* buffer, Point_t* location)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
-     CE_CHECK_PTR_ARG(delta);
 
      char matchee, match;
      if(!ce_get_char(buffer, location, &matchee)) return false;
@@ -700,8 +671,7 @@ bool ce_find_delta_to_match(const Buffer_t* buffer, const Point_t* location, Poi
                // loop over line
                if(curr == match){
                     if(--n_unmatched == 0){
-                         delta->x = iter.x - location->x;
-                         delta->y = iter.y - location->y;
+                         *location = iter;
                          return true;
                     }
                }else if(curr == matchee){
@@ -710,21 +680,6 @@ bool ce_find_delta_to_match(const Buffer_t* buffer, const Point_t* location, Poi
           }
      }
      return false;
-}
-
-bool ce_find_match(const Buffer_t* buffer, const Point_t* location, Point_t* match)
-{
-     CE_CHECK_PTR_ARG(buffer);
-     CE_CHECK_PTR_ARG(location);
-     CE_CHECK_PTR_ARG(match);
-
-     Point_t delta = {0, 0};
-     if(!ce_find_delta_to_match(buffer, location, &delta)) return false;
-
-     *match = *location;
-     ce_move_cursor(buffer, match, delta);
-
-     return true;
 }
 
 // returns Point_t at the next matching string; return success
@@ -766,9 +721,12 @@ bool ce_move_cursor_to_soft_beginning_of_line(const Buffer_t* buffer, Point_t* c
      CE_CHECK_PTR_ARG(cursor);
 
      if(!ce_point_on_buffer(buffer, cursor)) return false;
-     int64_t delta_x_sbol = ce_find_delta_to_soft_beginning_of_line(buffer, cursor);
+     const char* line = buffer->lines[cursor->y];
+     int64_t line_len = strlen(line);
+     int i;
+     for(i = 0; i < line_len && isblank(line[i]); i++);
 
-     cursor->x += delta_x_sbol;
+     cursor->x = i;
      return true;
 }
 
@@ -778,9 +736,11 @@ bool ce_move_cursor_to_soft_end_of_line(const Buffer_t* buffer, Point_t* cursor)
      CE_CHECK_PTR_ARG(cursor);
 
      if(!ce_point_on_buffer(buffer, cursor)) return false;
-     int64_t delta_x_seol = ce_find_delta_to_soft_end_of_line(buffer, cursor);
+     const char* line = buffer->lines[cursor->y];
+     int64_t i = CE_MAX((int64_t) strlen(line) - 1, 0);
+     while(i>0 && isblank(line[i])) i--;
 
-     cursor->x += delta_x_seol;
+     cursor->x = i;
      return true;
 }
 
@@ -788,33 +748,6 @@ bool ce_move_cursor_to_soft_end_of_line(const Buffer_t* buffer, Point_t* cursor)
 int ce_ispunct(int c)
 {
      return c != '_' && ispunct(c);
-}
-
-// delta to move to the soft beginning of line (sbol)
-// if there is not a sbol, returns eol
-int64_t ce_find_delta_to_soft_beginning_of_line(const Buffer_t* buffer, const Point_t* cursor)
-{
-     CE_CHECK_PTR_ARG(buffer);
-     CE_CHECK_PTR_ARG(cursor);
-
-     const char* line = buffer->lines[cursor->y];
-     int64_t line_len = strlen(line);
-     int i;
-     for(i = 0; i < line_len && isblank(line[i]); i++);
-     return i - cursor->x;
-}
-
-// delta to move to the soft end of line (seol)
-// if there is not a seol, returns bol
-int64_t ce_find_delta_to_soft_end_of_line(const Buffer_t* buffer, const Point_t* cursor)
-{
-     CE_CHECK_PTR_ARG(buffer);
-     CE_CHECK_PTR_ARG(cursor);
-
-     const char* line = buffer->lines[cursor->y];
-     int64_t i = CE_MAX((int64_t) strlen(line) - 1, 0);
-     while(i>0 && isblank(line[i])) i--;
-     return i - cursor->x;
 }
 
 bool ce_move_cursor_to_beginning_of_word(const Buffer_t* buffer, Point_t* cursor, bool punctuation_word_boundaries)
@@ -944,56 +877,6 @@ bool ce_move_cursor_backward_to_char(const Buffer_t* buffer, Point_t* location, 
 
      location->x = (found_char - line);
      return true;
-}
-
-// return -1 on failure, delta to move right to the end of the word on success
-int64_t ce_find_delta_to_end_of_word(const Buffer_t* buffer, const Point_t* location, bool punctuation_word_boundaries)
-{
-     CE_CHECK_PTR_ARG(buffer);
-     CE_CHECK_PTR_ARG(location);
-
-     if(!ce_point_on_buffer(buffer, location)) return -1;
-     const char* line = buffer->lines[location->y];
-     int line_len = strlen(line);
-     int i = location->x;
-     if(i == line_len) return 0;
-     while(i < line_len){
-          if(isblank(line[i+1])){
-               // we are starting at a boundary move to the beginning of the previous word
-               while(isblank(line[i+1]) && (i+1 < line_len)) i++;
-          }
-          else if(punctuation_word_boundaries && ce_ispunct(line[i+1])){
-               while(ce_ispunct(line[i+1]) && (i+1 < line_len)) i++;
-               break;
-          }
-          else{
-               while(!isblank(line[i+1]) && (!punctuation_word_boundaries || !ce_ispunct(line[i+1])) && (i+1 < line_len)) i++;
-               break;
-          }
-     }
-     return i - location->x;
-}
-
-// return -1 on failure, delta to move right to the beginning of the next word on success
-int64_t ce_find_delta_to_next_word(const Buffer_t* buffer, const Point_t* location, bool punctuation_word_boundaries)
-{
-     // TODO: make this ce_move_cursor_to_next_word. Also, this function appears to be broken.
-     // test case: word = blah // put the cursor on the d in word and hit w or put the cursor on = and hit w
-     CE_CHECK_PTR_ARG(buffer);
-     CE_CHECK_PTR_ARG(location);
-
-     int64_t delta = ce_find_delta_to_end_of_word(buffer, location, punctuation_word_boundaries);
-     if(delta == -1) return -1;
-     const char* line = buffer->lines[location->y];
-     int line_len = strlen(line);
-     int cur_x = location->x + delta;
-     if(cur_x + 1 <= line_len){ // if at eol, the null character is considered the next word
-          do{
-               // churn through all whitespace following end of word
-               cur_x++;
-          } while(isblank(line[cur_x]) && (cur_x+1 < line_len));
-     }
-     return cur_x - location->x;
 }
 
 bool ce_get_char(const Buffer_t* buffer, const Point_t* location, char* c)
@@ -2989,8 +2872,8 @@ int64_t ce_get_indentation_for_next_line(const Buffer_t* buffer, const Point_t* 
 
      // first, match this line's indentation
      Point_t bol = *location;
-     bol.x = 0;
-     int64_t indent = ce_find_delta_to_soft_beginning_of_line(buffer, &bol);
+     ce_move_cursor_to_soft_beginning_of_line(buffer, &bol);
+     int64_t indent = bol.x;
 
      // then, check the line for a '{' that is unmatched on location's line + indent if you find one
      char curr;
@@ -2998,8 +2881,8 @@ int64_t ce_get_indentation_for_next_line(const Buffer_t* buffer, const Point_t* 
          ce_get_char(buffer, &iter, &curr);
          iter.x--){
           if(curr == '{'){
-               Point_t match;
-               if(!ce_find_match(buffer, &iter, &match) || match.y != location->y){
+               Point_t match = iter;
+               if(!ce_move_cursor_to_matching_pair(buffer, &match) || match.y != location->y){
                     // '{' is globally unmatched, or unmatched on our line
                     indent += tab_len;
                     break; // if a line has "{{", we don't want to double tab the next line!

@@ -1190,18 +1190,22 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
           case YANK_NORMAL:
           {
                Point_t insert_cursor = *cursor;
+               int64_t yank_len = strlen(yank->text);
 
                if(buffer->lines[cursor->y][0]){
                     insert_cursor.x++; // don't increment x for blank lines
                }else{
                     assert(cursor->x == 0);
+                    // if the line is empty we cannot paste after the first character, so when we move the
+                    // cursor at the end, we need to account for 1 less character
+                    yank_len--;
                }
 
                if(ce_insert_string(buffer, &insert_cursor, yank->text)){
                     ce_commit_insert_string(&buffer_state->commit_tail,
                                             &insert_cursor, sorted_start, sorted_start,
                                             strdup(yank->text));
-                    ce_advance_cursor(buffer, cursor, strlen(yank->text));
+                    ce_advance_cursor(buffer, cursor, yank_len);
                }
           } break;
           case YANK_LINE:
@@ -3071,8 +3075,8 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
 
                if(ce_insert_char(buffer, cursor, key)){
 
-                    Point_t match;
-                    if(ce_find_match(buffer, cursor, &match) && match.y != cursor->y){
+                    Point_t match = *cursor;
+                    if(ce_move_cursor_to_matching_pair(buffer, &match) && match.y != cursor->y){
 
                          // get the match's sbol (that's the indentation we're matching)
                          Point_t sbol_match = {0, match.y};
@@ -3238,11 +3242,13 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                {
                     if(!buffer->lines[cursor->y]) break;
                     // TODO: get word under the cursor and unify with '*' impl
-                    int64_t word_len = ce_find_delta_to_end_of_word(buffer, cursor, true)+1;
-                    if(buffer->lines[cursor->y][cursor->x+word_len] == '.'){
-                         Point_t ext_start = {cursor->x+word_len, cursor->y};
-                         int64_t extension_len = ce_find_delta_to_end_of_word(buffer, &ext_start, true);
-                         if(extension_len != -1) word_len += extension_len+1;
+                    Point_t word_end = *cursor;
+                    ce_move_cursor_to_end_of_word(buffer, &word_end, true);
+                    int64_t word_len = (word_end.x - cursor->x) + 1;
+                    if(buffer->lines[word_end.y][word_end.x] == '.'){
+                         Point_t ext_end = {cursor->x + word_len, cursor->y};
+                         ce_move_cursor_to_end_of_word(buffer, &ext_end, true);
+                         word_len += ext_end.x - word_end.x;
                     }
                     char* filename = alloca(word_len+1);
                     strncpy(filename, &buffer->lines[cursor->y][cursor->x], word_len);
@@ -3610,10 +3616,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                break;
                case '%':
                {
-                    Point_t delta;
-                    if(ce_find_delta_to_match(buffer, cursor, &delta)){
-                         ce_move_cursor(buffer, cursor, delta);
-                    }
+                    ce_move_cursor_to_matching_pair(buffer, cursor);
                } break;
                case KEY_NPAGE:
                {

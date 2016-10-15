@@ -910,42 +910,59 @@ TEST(sanity_set_char)
      ce_free_buffer(&buffer);
 }
 
-#if 0 // NOTE: unsure why I can't get ce_find_match to work here
-TEST(sanity_find_match_same_line)
+TEST(sanity_find_matching_pair_same_line)
 {
      Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
-     buffer.lines[0] = strdup("TA COS ARE TA COS");
+     buffer.lines[0] = strdup("if(i == 3)");
 
      Point_t point = {2, 0};
-     Point_t delta = {};
-     ce_find_match(&buffer, &point, &delta);
+     ce_move_cursor_to_matching_pair(&buffer, &point);
 
-     EXPECT(delta.x == 11);
-     EXPECT(delta.y == 0);
+     EXPECT(point.x == 9);
+     EXPECT(point.y == 0);
 
      ce_free_buffer(&buffer);
 }
 
-TEST(sanity_find_match_next_line)
+TEST(sanity_find_matching_pair_multiline)
 {
      Buffer_t buffer = {};
-     buffer.line_count = 2;
-     buffer.lines = malloc(2 * sizeof(char*));
-     buffer.lines[0] = strdup("TACOS ARE AWESOME");
-     buffer.lines[1] = strdup("TACOS ARE REVOLUTIONARY");
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("if(x){");
+     buffer.lines[1] = strdup("   x = 5;");
+     buffer.lines[2] = strdup("}");
 
-     Point_t point = {6, 0};
-     Point_t delta = {};
-     ce_find_match(&buffer, &point, &delta);
+     Point_t point = {5, 0};
+     ce_move_cursor_to_matching_pair(&buffer, &point);
 
-     EXPECT(delta.x == 6);
-     EXPECT(delta.y == 1);
+     EXPECT(point.x == 0);
+     EXPECT(point.y == 2);
 
      ce_free_buffer(&buffer);
 }
-#endif
+
+TEST(sanity_find_matching_pair_multiline_nested)
+{
+     Buffer_t buffer = {};
+     buffer.line_count = 5;
+     buffer.lines = malloc(5 * sizeof(char*));
+     buffer.lines[0] = strdup("if(x){");
+     buffer.lines[1] = strdup("   if(y){");
+     buffer.lines[2] = strdup("      x = 5;");
+     buffer.lines[3] = strdup("   }");
+     buffer.lines[4] = strdup("}");
+
+     Point_t point = {5, 0};
+     ce_move_cursor_to_matching_pair(&buffer, &point);
+
+     EXPECT(point.x == 0);
+     EXPECT(point.y == 4);
+
+     ce_free_buffer(&buffer);
+}
 
 TEST(find_match_same_line)
 {
@@ -1549,81 +1566,6 @@ TEST(sanity_move_cursor_to_end_of_line)
      ce_free_buffer(&buffer);
 }
 
-TEST(find_delta_to_soft_end_of_line)
-{
-     Buffer_t buffer = {};
-     buffer.line_count = 1;
-     buffer.lines = malloc(1 * sizeof(char*));
-     buffer.lines[0] = strdup("Cats are delicious   ");
-
-     Point_t cursor;
-
-     cursor = (Point_t) {0, 0};
-     ASSERT(ce_find_delta_to_soft_end_of_line(&buffer, &cursor) == (int64_t) strlen(buffer.lines[0]) - 1 - 3);
-
-     cursor = (Point_t) {5, 0};
-     ASSERT(ce_find_delta_to_soft_end_of_line(&buffer, &cursor) == (int64_t) strlen(buffer.lines[0]) - 1 - 5 - 3);
-
-     cursor = (Point_t) {19, 0};
-     ASSERT(ce_find_delta_to_soft_end_of_line(&buffer, &cursor) == -2);
-
-     ce_free_buffer(&buffer);
-}
-
-TEST(find_delta_to_soft_beginning_of_line)
-{
-     Buffer_t buffer = {};
-     buffer.line_count = 1;
-     buffer.lines = malloc(1 * sizeof(char*));
-     buffer.lines[0] = strdup("   Cats are delicious");
-
-     Point_t cursor;
-
-     cursor = (Point_t) {0, 0};
-     ASSERT(ce_find_delta_to_soft_beginning_of_line(&buffer, &cursor) == 3);
-
-     cursor = (Point_t) {5, 0};
-     ASSERT(ce_find_delta_to_soft_beginning_of_line(&buffer, &cursor) == -2);
-
-     ce_free_buffer(&buffer);
-}
-
-TEST(find_delta_to_soft_char_forward_in_line)
-{
-     Buffer_t buffer = {};
-     buffer.line_count = 1;
-     buffer.lines = malloc(1 * sizeof(char*));
-     buffer.lines[0] = strdup("Cats are delicious");
-
-     Point_t cursor;
-
-     cursor = (Point_t) {0, 0};
-     ASSERT(ce_find_delta_to_char_forward_in_line(&buffer, &cursor, 'd') == 9);
-
-     cursor = (Point_t) {12, 0};
-     ASSERT(ce_find_delta_to_char_forward_in_line(&buffer, &cursor, 'd') == -1);
-
-     ce_free_buffer(&buffer);
-}
-
-TEST(find_delta_to_soft_char_backward_in_line)
-{
-     Buffer_t buffer = {};
-     buffer.line_count = 1;
-     buffer.lines = malloc(1 * sizeof(char*));
-     buffer.lines[0] = strdup("Cats are delicious");
-
-     Point_t cursor;
-
-     cursor = (Point_t) {0, 0};
-     ASSERT(ce_find_delta_to_char_backward_in_line(&buffer, &cursor, 'd') == -1);
-
-     cursor = (Point_t) {12, 0};
-     ASSERT(ce_find_delta_to_char_backward_in_line(&buffer, &cursor, 'd') == 3);
-
-     ce_free_buffer(&buffer);
-}
-
 // TODO: vim's WORDS
 TEST(move_cursor_to_beginning_of_word)
 {
@@ -1665,90 +1607,82 @@ TEST(move_cursor_to_beginning_of_word)
      ce_free_buffer(&buffer);
 }
 
-TEST(find_delta_to_end_of_word)
+TEST(move_cursor_to_end_of_word)
 {
      Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
-     buffer.lines[0] = strdup("Cats are delicious");
+     buffer.lines[0] = strdup("Cats are delicious. Oh yeah!");
 
      Point_t cursor;
 
      cursor = (Point_t) {0, 0};
-     ASSERT(ce_find_delta_to_end_of_word(&buffer, &cursor, false) == 3);
+     ASSERT(ce_move_cursor_to_end_of_word(&buffer, &cursor, false));
+     EXPECT(cursor.x == 3);
+     EXPECT(cursor.y == 0);
 
      cursor = (Point_t) {2, 0};
-     ASSERT(ce_find_delta_to_end_of_word(&buffer, &cursor, false) == 1);
+     ASSERT(ce_move_cursor_to_end_of_word(&buffer, &cursor, false));
+     EXPECT(cursor.x == 3);
+     EXPECT(cursor.y == 0);
 
-     // NOTE: on whitespace
+     // on whitespace
      cursor = (Point_t) {8, 0};
-     ASSERT(ce_find_delta_to_end_of_word(&buffer, &cursor, false) == 9);
+     ASSERT(ce_move_cursor_to_end_of_word(&buffer, &cursor, true));
+     EXPECT(cursor.x == 17);
+     EXPECT(cursor.y == 0);
+
+     // on a end of word already
+     cursor = (Point_t) {3, 0};
+     ASSERT(ce_move_cursor_to_end_of_word(&buffer, &cursor, false));
+     EXPECT(cursor.x == 7);
+     EXPECT(cursor.y == 0);
+
+     // move to punctuation
+     cursor = (Point_t) {17, 0};
+     ASSERT(ce_move_cursor_to_end_of_word(&buffer, &cursor, true));
+     EXPECT(cursor.x == 18);
+     EXPECT(cursor.y == 0);
 
      ce_free_buffer(&buffer);
 }
 
-TEST(find_delta_to_end_of_next_word)
+TEST(move_cursor_to_next_word)
 {
      Buffer_t buffer = {};
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
-     buffer.lines[0] = strdup("Cats are delicious");
+     buffer.lines[0] = strdup("Cats are delicious. Oh yeah!");
 
      Point_t cursor;
 
      cursor = (Point_t) {0, 0};
-     ASSERT(ce_find_delta_to_next_word(&buffer, &cursor, false) == 5);
+     ASSERT(ce_move_cursor_to_next_word(&buffer, &cursor, false));
+     EXPECT(cursor.x == 5);
+     EXPECT(cursor.y == 0);
 
      cursor = (Point_t) {2, 0};
-     ASSERT(ce_find_delta_to_next_word(&buffer, &cursor, false) == 3);
+     ASSERT(ce_move_cursor_to_next_word(&buffer, &cursor, false));
+     EXPECT(cursor.x == 5);
+     EXPECT(cursor.y == 0);
 
-     cursor = (Point_t) {12, 0};
-     ASSERT(ce_find_delta_to_next_word(&buffer, &cursor, false) == 6);
+     // on whitespace
+     cursor = (Point_t) {8, 0};
+     ASSERT(ce_move_cursor_to_next_word(&buffer, &cursor, true));
+     EXPECT(cursor.x == 9);
+     EXPECT(cursor.y == 0);
 
-     ce_free_buffer(&buffer);
-}
+     // on a end of word already
+     cursor = (Point_t) {9, 0};
+     ASSERT(ce_move_cursor_to_next_word(&buffer, &cursor, true));
+     EXPECT(cursor.x == 18);
+     EXPECT(cursor.y == 0);
 
-TEST(find_delta_to_match_single_line)
-{
-     Buffer_t buffer = {};
-     buffer.line_count = 1;
-     buffer.lines = malloc(1 * sizeof(char*));
-     buffer.lines[0] = strdup("Cats {are} delicious");
-
-     Point_t cursor;
-     Point_t delta;
-
-     cursor = (Point_t) {5, 0};
-     ASSERT(ce_find_delta_to_match(&buffer, &cursor, &delta));
-     EXPECT(delta.x == 4);
-     EXPECT(delta.y == 0);
-
-     ce_free_buffer(&buffer);
-}
-
-TEST(find_delta_to_match_multiline)
-{
-     Buffer_t buffer = {};
-     buffer.line_count = 3;
-     buffer.lines = malloc(3 * sizeof(char*));
-     buffer.lines[0] = strdup("if(cat.is_dead()){");
-     buffer.lines[1] = strdup("     cat.cook();");
-     buffer.lines[2] = strdup("}");
-
-     Point_t cursor;
-     Point_t delta;
-
-     // {}
-     cursor = (Point_t) {17, 0};
-     ASSERT(ce_find_delta_to_match(&buffer, &cursor, &delta));
-     EXPECT(delta.x == -17);
-     EXPECT(delta.y == 2);
-
-     // ()
-     cursor = (Point_t) {2, 0};
-     ASSERT(ce_find_delta_to_match(&buffer, &cursor, &delta));
-     EXPECT(delta.x == 14);
-     EXPECT(delta.y == 0);
+     // move off punctuation
+     cursor = (Point_t) {18, 0};
+     ASSERT(ce_move_cursor_to_next_word(&buffer, &cursor, true));
+     EXPECT(cursor.x == 20);
+     EXPECT(cursor.y == 0);
 
      ce_free_buffer(&buffer);
 }
@@ -2189,6 +2123,52 @@ TEST(move_cursor_to_beginning_of_line)
      ce_move_cursor_to_beginning_of_line(&buffer, &point);
      EXPECT(point.x == 0);
      EXPECT(point.y == 2);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(move_cursor_forward_to_char)
+{
+     Buffer_t buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("tacos and cats are great");
+
+     Point_t point = {0, 0};
+     ce_move_cursor_forward_to_char(&buffer, &point, 'a');
+     EXPECT(point.x == 1);
+     EXPECT(point.y == 0);
+
+     ce_move_cursor_forward_to_char(&buffer, &point, 'a');
+     EXPECT(point.x == 6);
+     EXPECT(point.y == 0);
+
+     EXPECT(ce_move_cursor_forward_to_char(&buffer, &point, 'z') == false);
+     EXPECT(point.x == 6);
+     EXPECT(point.y == 0);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(move_cursor_backward_to_char)
+{
+     Buffer_t buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("tacos and cats are great");
+
+     Point_t point = {23, 0};
+     ce_move_cursor_backward_to_char(&buffer, &point, 'a');
+     EXPECT(point.x == 22);
+     EXPECT(point.y == 0);
+
+     ce_move_cursor_backward_to_char(&buffer, &point, 'a');
+     EXPECT(point.x == 15);
+     EXPECT(point.y == 0);
+
+     EXPECT(ce_move_cursor_backward_to_char(&buffer, &point, 'z') == false);
+     EXPECT(point.x == 15);
+     EXPECT(point.y == 0);
 
      ce_free_buffer(&buffer);
 }

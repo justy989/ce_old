@@ -1,4 +1,5 @@
 #include "ce.h"
+#include "ce_network.h"
 #include <assert.h>
 #include <ctype.h>
 #include <ftw.h>
@@ -404,6 +405,8 @@ typedef struct{
      pthread_t shell_command_thread;
      pthread_t shell_input_thread;
      AutoComplete_t auto_complete;
+     ClientState_t client_state;
+     ServerState_t server_state;
 } ConfigState_t;
 
 typedef struct MarkNode_t{
@@ -627,6 +630,12 @@ void commit_insert_mode_changes(ConfigState_t* config_state, Buffer_t* buffer, B
                                        ce_dupe_string(buffer, &config_state->start_insert, &last_inserted_char));
                // NOTE: we could have added backspaces and just not used them
                backspace_free(&buffer_state->backspace_head);
+               if(config_state->client_state.server_socket){
+                    char* inserted_string = ce_dupe_string(buffer, &config_state->start_insert, &last_inserted_char);
+                    ce_message("sending insert %s", inserted_string);
+                    ce_network_insert_string(&config_state->client_state, (NetworkBufferId_t){(NetworkId_t)buffer->network_id, *cursor}, config_state->start_insert, inserted_string);
+                    free(inserted_string);
+               }
           }else if(config_state->start_insert.x < config_state->original_start_insert.x ||
                    config_state->start_insert.y < config_state->original_start_insert.y){
                if(cursor->x == config_state->start_insert.x &&
@@ -784,7 +793,7 @@ Buffer_t* open_file_buffer(BufferNode_t* head, const char* filename)
      return NULL;
 }
 
-bool initializer(BufferNode_t* head, Point_t* terminal_dimensions, int argc, char** argv, void** user_data)
+bool initializer(bool is_client, bool is_server, BufferNode_t* head, Point_t* terminal_dimensions, int argc, char** argv, void** user_data)
 {
      // NOTE: need to set these in this module
      g_terminal_dimensions = terminal_dimensions;
@@ -878,6 +887,8 @@ bool initializer(BufferNode_t* head, Point_t* terminal_dimensions, int argc, cha
 
      for(int i = 0; i < argc; ++i){
           BufferNode_t* node = new_buffer_from_file(head, argv[i]);
+          node->buffer->network_id = i+1;
+          ce_message("buffer %s has network_id %d", node->buffer->name, node->buffer->network_id);
 
           // if we loaded a file, set the view to point at the file
           if(i == 0 && node) config_state->tab_current->view_current->buffer = node->buffer;
@@ -943,6 +954,17 @@ bool initializer(BufferNode_t* head, Point_t* terminal_dimensions, int argc, cha
      pthread_mutex_init(&shell_buffer_lock, NULL);
 
      auto_complete_end(&config_state->auto_complete);
+
+     // client/server initialization
+     if(is_server){
+          ce_message("spawning server");
+          config_state->server_state.buffer_list_head = head;
+          ce_server_init(&config_state->server_state);
+     }
+     if(is_client){
+          ce_message("spawning client");
+          ce_client_init(&config_state->client_state);
+     }
      return true;
 }
 

@@ -157,12 +157,20 @@ int main(int argc, char** argv)
      int opt = 0;
      int parsed_args = 1;
      bool done_parsing = false;
+     bool is_client = false;
+     bool is_server = false;
 
      // TODO: create config parser
      // TODO: pass unhandled main arguments to the config's arg parser?
-     while((opt = getopt(argc, argv, "c:sh")) != -1 && !done_parsing){
+     while((opt = getopt(argc, argv, "SCc:sh")) != -1 && !done_parsing){
           parsed_args++;
           switch(opt){
+          case 'S':
+               is_server = true; // TODO: find a better way to do this
+               break;
+          case 'C':
+               is_client = true; // TODO: find a better way to do this
+               break;
           case 's':
                save_messages_on_exit = true;
                break;
@@ -274,7 +282,7 @@ int main(int argc, char** argv)
           fclose(file);
      }
 
-     current_config.initializer(buffer_list_head, g_terminal_dimensions, argc - parsed_args, argv + parsed_args, &user_data);
+     current_config.initializer(is_client, is_server, buffer_list_head, g_terminal_dimensions, argc - parsed_args, argv + parsed_args, &user_data);
 
      signal(SIGQUIT, SIG_IGN);
      struct sigaction sa = {};
@@ -298,7 +306,7 @@ int main(int argc, char** argv)
                }
                ce_message("loaded config crashed with SIGSEGV. restoring stable config.");
                using_stable_config = true;
-               current_config.initializer(buffer_list_head, g_terminal_dimensions, 0, NULL, &user_data);
+               current_config.initializer(is_client, is_server, buffer_list_head, g_terminal_dimensions, 0, NULL, &user_data);
           }
      }
 
@@ -340,14 +348,14 @@ int main(int argc, char** argv)
                     if(config_open(&current_config, config)){
                          // TODO: pass main args, config needs to be able to handle getting the args again!
                          using_stable_config = false;
-                         current_config.initializer(buffer_list_head, g_terminal_dimensions, 0, NULL, &user_data);
+                         current_config.initializer(is_client, is_server, buffer_list_head, g_terminal_dimensions, 0, NULL, &user_data);
                     }else{
                          if(!config_revert(&current_config, config, stable_config_contents, stable_config_size)){
                               ce_save_buffer(message_buffer, message_buffer->filename);
                               return -1;
                          }
                          using_stable_config = true;
-                         current_config.initializer(buffer_list_head, g_terminal_dimensions, 0, NULL, &user_data);
+                         current_config.initializer(is_client, is_server, buffer_list_head, g_terminal_dimensions, 0, NULL, &user_data);
                     }
                }else{
                     ce_message("%s: %s", current_config.path, strerror(errno));

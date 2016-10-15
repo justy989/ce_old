@@ -24,7 +24,10 @@
 
 Buffer_t* id_to_buffer(BufferNode_t* head, const NetworkBufferId_t* buffer_id)
 {
-     while(head && head->buffer->network_id != buffer_id->id) head = head->next;
+     while(head && head->buffer->network_id != buffer_id->id){
+          head = head->next;
+     }
+     if(!head) return NULL;
      assert(head);
      head->buffer->cursor = buffer_id->cursor;
      return head->buffer;
@@ -55,6 +58,9 @@ void* ce_server_listen(void* args)
                     READ_STR(in_str);
                     ce_insert_string(id_to_buffer(head, &buffer_id), &insert_loc, in_str);
                } break;
+               default:
+                    ce_message("received invalid command");
+                    break;
           }
      }
      return NULL;
@@ -106,10 +112,12 @@ bool ce_client_init(ClientState_t* client_state)
 bool ce_network_insert_string(ClientState_t* client_state, NetworkBufferId_t buffer_id, Point_t location, const char* string)
 {
      assert(client_state->server_socket);
+     NetworkCommand_t cmd = NC_INSERT_STRING;
+     WRITE(cmd);
      WRITE(buffer_id);
      WRITE(location);
-     ssize_t n_bytes_sent = write(client_state->server_socket, string, strlen(string));
-     assert(n_bytes_sent == (ssize_t)strlen(string));
+     ssize_t n_bytes_sent = write(client_state->server_socket, string, strlen(string) + 1);
+     assert(n_bytes_sent == (ssize_t)strlen(string)+1);
      return true;
 }
 

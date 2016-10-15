@@ -409,6 +409,9 @@ typedef struct{
      ServerState_t server_state;
 } ConfigState_t;
 
+// TODO: try not to let justin kill me ;)
+ConfigState_t* g_config_state;
+
 typedef struct MarkNode_t{
      char reg_char;
      Point_t location;
@@ -546,7 +549,12 @@ BufferNode_t* new_buffer_from_file(BufferNode_t* head, const char* filename)
           return NULL;
      }
 
-     if(!ce_load_file(buffer, filename)){
+
+     if(g_config_state->client_state.server_socket){
+          ce_network_load_file(&g_config_state->client_state, buffer, filename);
+          // TODO: don't forget to get rid of this
+     }
+     else if(!ce_load_file(buffer, filename)){
           free(buffer);
           return NULL;
      }
@@ -797,6 +805,7 @@ bool initializer(bool is_client, bool is_server, BufferNode_t* head, Point_t* te
 {
      // NOTE: need to set these in this module
      g_terminal_dimensions = terminal_dimensions;
+     ce_message("dimensions %lld, %lld", terminal_dimensions->x, terminal_dimensions->y);
 
      // setup the config's state
      ConfigState_t* config_state = calloc(1, sizeof(*config_state));
@@ -804,6 +813,7 @@ bool initializer(bool is_client, bool is_server, BufferNode_t* head, Point_t* te
           ce_message("failed to allocate config state");
           return false;
      }
+     g_config_state = config_state;
 
      config_state->tab_head = calloc(1, sizeof(*config_state->tab_head));
      if(!config_state->tab_head){
@@ -875,6 +885,17 @@ bool initializer(bool is_client, bool is_server, BufferNode_t* head, Point_t* te
 
      *user_data = config_state;
 
+     // client/server initialization
+     if(is_server){
+          ce_message("spawning server");
+          config_state->server_state.buffer_list_head = head;
+          ce_server_init(&config_state->server_state);
+     }
+     if(is_client){
+          ce_message("spawning client");
+          ce_client_init(&config_state->client_state);
+     }
+
      // setup state for each buffer
      itr = head;
      while(itr){
@@ -887,11 +908,17 @@ bool initializer(bool is_client, bool is_server, BufferNode_t* head, Point_t* te
 
      for(int i = 0; i < argc; ++i){
           BufferNode_t* node = new_buffer_from_file(head, argv[i]);
-          node->buffer->network_id = i+1;
           ce_message("buffer %s has network_id %d", node->buffer->name, node->buffer->network_id);
 
           // if we loaded a file, set the view to point at the file
-          if(i == 0 && node) config_state->tab_current->view_current->buffer = node->buffer;
+          if(i == 0 && node){
+               config_state->tab_current->view_current->buffer = node->buffer;
+               if(is_client){
+                    config_state->tab_current->view_current->top_left = (Point_t){0, 0};
+                    config_state->tab_current->view_current->bottom_right = (Point_t){g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 1};
+                    ce_network_refresh_view(&config_state->client_state, config_state->tab_current->view_current);
+               }
+          }
      }
 
      input_history_init(&config_state->shell_command_history);
@@ -955,16 +982,6 @@ bool initializer(bool is_client, bool is_server, BufferNode_t* head, Point_t* te
 
      auto_complete_end(&config_state->auto_complete);
 
-     // client/server initialization
-     if(is_server){
-          ce_message("spawning server");
-          config_state->server_state.buffer_list_head = head;
-          ce_server_init(&config_state->server_state);
-     }
-     if(is_client){
-          ce_message("spawning client");
-          ce_client_init(&config_state->client_state);
-     }
      return true;
 }
 
@@ -2760,6 +2777,10 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                for(size_t cm = 0; cm < config_state->command_multiplier; cm++){
                     ce_move_cursor(buffer, cursor, (Point_t){0, (config_state->command_key == 'j' || config_state->command_key == KEY_DOWN) ? 1 : -1});
                }
+               // TODO: remove
+               if(config_state->client_state.server_socket){
+                    ce_network_refresh_view(&config_state->client_state, buffer_view);
+               }
           break;
           case 'B':
           case 'b':
@@ -3426,7 +3447,13 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     filename[word_len] = '\0';
 
                     Buffer_t* file_buffer = open_file_buffer(head, filename);
-                    if(file_buffer) buffer_view->buffer = file_buffer;
+                    if(file_buffer){
+                         buffer_view->buffer = file_buffer;
+                         if(config_state->client_state.server_socket){
+                              ce_network_refresh_view(&config_state->client_state, buffer_view);
+                              // TODO: don't forget to get rid of this
+                         }
+                    }
                } break;
                }
           } break;

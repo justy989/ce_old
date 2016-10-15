@@ -4,6 +4,8 @@
 #include <pthread.h>
 
 typedef enum{
+     NC_OPEN_FILE,
+     NC_REFRESH_VIEW,
      NC_INSERT_STRING,
 }NetworkCommand_t;
 
@@ -39,8 +41,13 @@ typedef struct{
 
 // server side functions
 bool ce_server_init(ServerState_t* server_state);
+void ce_server_refresh_view(ServerState_t* server_state, const Buffer_t* buffer, Point_t top_left, Point_t bottom_right);
+//void ce_server_file_opened(ServerState_t* server_state, Buffer_t* new_buffer);
 
 // client side functions
 bool ce_client_init(ClientState_t* client_state);
 bool ce_network_insert_string(ClientState_t* client_state, NetworkBufferId_t buffer_id, Point_t location, const char* string);
+bool ce_network_load_file(ClientState_t* client_state, Buffer_t* buffer, const char* filename);
+void ce_network_refresh_view(ClientState_t* client_state, BufferView_t* buffer_view);
+
 #endif // CE_NETWORK_H

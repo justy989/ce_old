@@ -214,10 +214,6 @@ int main(int argc, char** argv)
      buffer_list_head->buffer = message_buffer;
      buffer_list_head->next = NULL;
 
-     Point_t terminal_dimensions = {};
-     getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);
-     g_terminal_dimensions = &terminal_dimensions;
-
      void* user_data = NULL;
 
      bool done = false;
@@ -236,6 +232,10 @@ int main(int argc, char** argv)
      raw();
      cbreak();
      noecho();
+
+     Point_t terminal_dimensions = {};
+     getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);
+     g_terminal_dimensions = &terminal_dimensions;
 
      if(has_colors() == TRUE){
           start_color();

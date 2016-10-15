@@ -414,8 +414,8 @@ typedef enum{
      VMT_AROUND_PAIR,
      VMT_AROUND_WORD_LITTLE,
      VMT_AROUND_WORD_BIG,
-     //VMT_VISUAL_RANGE,
-     //VMT_VISUAL_LINE,
+     VMT_VISUAL_RANGE,
+     VMT_VISUAL_LINE,
 } VimMotionType_t;
 
 typedef struct{
@@ -425,7 +425,8 @@ typedef struct{
           char match_char;
           char inside_pair;
           char around_pair;
-          Point_t visual_end;
+          int64_t visual_length;
+          int64_t visual_lines;
      };
 } VimMotion_t;
 
@@ -444,11 +445,12 @@ typedef enum{
     VCS_COMPLETE,
 } VimCommandState_t;
 
-VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action, VimMode_t vim_mode)
+VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action, VimMode_t vim_mode,
+                                         Buffer_t* buffer, Point_t* cursor, Point_t* visual_start)
 {
-     char buffer[BUFSIZ];
+     char tmp[BUFSIZ];
+     bool visual_mode = false;
      bool get_motion = true;
-     bool visual_mode = (vim_mode == VM_VISUAL_RANGE || vim_mode == VM_VISUAL_LINE);
      VimAction_t built_action = {};
 
      built_action.multiplier = 1;
@@ -459,9 +461,9 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
      while(*itr && isdigit(*itr)) itr++;
      if(itr != string){
           int64_t len = itr - string;
-          strncpy(buffer, string, len);
-          buffer[len + 1] = 0;
-          built_action.multiplier = atoi(buffer);
+          strncpy(tmp, string, len);
+          tmp[len + 1] = 0;
+          built_action.multiplier = atoi(tmp);
 
           if(built_action.multiplier == 0){
                // it's actually just a motion to move to the beginning of the line!
@@ -473,17 +475,30 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
           }
      }
 
+     // set motions early if visual mode, allowing them to be overriden by any action that wants to
+     if(vim_mode == VM_VISUAL_RANGE){
+          visual_mode = true;
+          get_motion = false;
+          built_action.motion.type = VMT_VISUAL_RANGE;
+          built_action.motion.visual_length = ce_compute_length(buffer, visual_start, cursor) - 1;
+     }else if(vim_mode == VM_VISUAL_LINE){
+          visual_mode = true;
+          get_motion = false;
+          built_action.motion.type = VMT_VISUAL_LINE;
+          built_action.motion.visual_lines = cursor->y - visual_start->y;
+     }
+
      // get the change
      char change_char = *itr;
      switch(*itr){
      default:
           built_action.change.type = VCT_MOTION;
           itr--;
+          if(visual_mode) get_motion = true; // if we are just executing a motion, use override the built motion
           break;
      case 'd':
           built_action.change.type = VCT_DELETE;
           built_action.yank = true;
-          if(visual_mode) get_motion = false;
           break;
      case 'D':
           built_action.change.type = VCT_DELETE;
@@ -495,7 +510,6 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
           built_action.change.type = VCT_DELETE;
           built_action.end_in_insert = true;
           built_action.yank = true;
-          if(visual_mode) get_motion = false;
           break;
      case 'C':
           built_action.change.type = VCT_DELETE;
@@ -562,9 +576,6 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
           break;
      case 'y':
           built_action.change.type = VCT_YANK;
-          if(vim_mode == VM_VISUAL_RANGE || vim_mode == VM_VISUAL_LINE){
-               get_motion = false;
-          }
           break;
      case 'Y':
           built_action.change.type = VCT_YANK;
@@ -586,9 +597,9 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
           while(*itr && isdigit(*itr)) itr++;
           if(itr != start_itr){
                int64_t len = itr - start_itr;
-               strncpy(buffer, start_itr, len);
-               buffer[len + 1] = 0;
-               built_action.motion.multiplier = atoi(buffer);
+               strncpy(tmp, start_itr, len);
+               tmp[len + 1] = 0;
+               built_action.motion.multiplier = atoi(tmp);
 
                if(built_action.motion.multiplier == 0){
                     built_action.motion.multiplier = 1;
@@ -801,7 +812,7 @@ void unindent_line(Buffer_t* buffer, BufferCommitNode_t** commit_tail, int64_t l
 }
 
 bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, VimMode_t vim_mode,
-                      Point_t* visual_start, YankNode_t** yank_head, VimMode_t* final_mode)
+                      YankNode_t** yank_head, VimMode_t* final_mode)
 {
      BufferState_t* buffer_state = buffer->user_data;
      Point_t start = *cursor;
@@ -809,27 +820,32 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
 
      YankMode_t yank_mode = YANK_NORMAL;
 
-     if(action->change.type != VCT_MOTION && vim_mode == VM_VISUAL_RANGE){
-          *final_mode = VM_NORMAL;
+     if(action->motion.type == VMT_VISUAL_RANGE){
+          Point_t visual_start = *cursor;
+          ce_advance_cursor(buffer, &visual_start, -action->motion.visual_length);
 
           const Point_t* a = cursor;
-          const Point_t* b = visual_start;
+          const Point_t* b = &visual_start;
 
           ce_sort_points(&a, &b);
+
           start = *a;
           end = *b;
-     }else if(action->change.type != VCT_MOTION && vim_mode == VM_VISUAL_LINE){
           *final_mode = VM_NORMAL;
+     }else if(action->motion.type == VMT_VISUAL_LINE){
+          Point_t visual_start = {cursor->x, cursor->y + action->motion.visual_lines};
 
           const Point_t* a = cursor;
-          const Point_t* b = visual_start;
+          const Point_t* b = &visual_start;
 
           ce_sort_points(&a, &b);
+
           start = *a;
           end = *b;
           start.x = 0;
           end.x = strlen(buffer->lines[end.y]);
           yank_mode = YANK_LINE;
+          *final_mode = VM_NORMAL;
      }else{
           int64_t multiplier = action->multiplier * action->motion.multiplier;
 
@@ -1192,23 +1208,17 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
      } break;
      case VCT_YANK:
      {
-          if(vim_mode == VM_VISUAL_RANGE){
-               yank_visual_range(buffer, cursor, visual_start, yank_head);
-          }else if(vim_mode == VM_VISUAL_LINE){
-               yank_visual_lines(buffer, cursor, visual_start, yank_head);
-          }else{
-               char* save_zero = ce_dupe_string(buffer, sorted_start, sorted_end);
-               char* save_quote = ce_dupe_string(buffer, sorted_start, sorted_end);
+          char* save_zero = ce_dupe_string(buffer, sorted_start, sorted_end);
+          char* save_quote = ce_dupe_string(buffer, sorted_start, sorted_end);
 
-               if(yank_mode == YANK_LINE){
-                    int64_t save_len = strlen(save_zero);
-                    save_zero[save_len - 1] = 0;
-                    save_quote[save_len - 1] = 0;
-               }
-
-               add_yank(yank_head, '0', save_zero, yank_mode);
-               add_yank(yank_head, '"', save_quote, yank_mode);
+          if(yank_mode == YANK_LINE){
+               int64_t save_len = strlen(save_zero);
+               save_zero[save_len - 1] = 0;
+               save_quote[save_len - 1] = 0;
           }
+
+          add_yank(yank_head, '0', save_zero, yank_mode);
+          add_yank(yank_head, '"', save_quote, yank_mode);
      } break;
      case VCT_INDENT:
      {
@@ -3222,16 +3232,19 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           case 'm':
           {
                handled_key = true;
-               char mark = config_state->last_key;
+               char mark = key;
                add_mark(buffer_state, mark, cursor);
           } break;
           case '\'':
           {
                handled_key = true;
                Point_t* marked_location;
-               char mark = config_state->last_key;
+               char mark = key;
                marked_location = find_mark(buffer_state, mark);
-               if(marked_location) cursor->y = marked_location->y;
+               if(marked_location) {
+                    cursor->y = marked_location->y;
+                    center_view(buffer_view);
+               }
           } break;
           case 'Z':
                switch(config_state->last_key){
@@ -3258,7 +3271,8 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
 
                     VimAction_t vim_action;
                     VimCommandState_t command_state = vim_action_from_string(config_state->command, &vim_action,
-                                                                             config_state->vim_mode);
+                                                                             config_state->vim_mode, buffer,
+                                                                             &config_state->visual_start, cursor);
                     switch(command_state){
                     default:
                     case VCS_INVALID:
@@ -3273,7 +3287,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          VimMode_t final_mode = config_state->vim_mode;
                          VimMode_t original_mode = final_mode;
                          if(vim_action_apply(&vim_action, buffer, cursor, config_state->vim_mode,
-                                             &config_state->visual_start, &config_state->yank_head, &final_mode)){
+                                             &config_state->yank_head, &final_mode)){
                               if(final_mode != original_mode){
                                    switch(final_mode){
                                    default:
@@ -3309,7 +3323,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                {
                     VimMode_t final_mode;
                     vim_action_apply(&config_state->last_vim_action, buffer, cursor, config_state->vim_mode,
-                                     &config_state->visual_start, &config_state->yank_head, &final_mode);
+                                     &config_state->yank_head, &final_mode);
                     if(config_state->last_vim_action.end_in_insert){
                          InsertModeState_t* insert_state = &config_state->insert_state;
                          // remove any backspaces we made

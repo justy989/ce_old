@@ -894,24 +894,22 @@ bool ce_move_cursor_to_next_word(const Buffer_t* buffer, Point_t* location, bool
      int line_len = strlen(line);
      int64_t first_check = location->x + 1;
      int64_t i = first_check;
-     bool word_end = false;
+     bool word_end = isblank(line[location->x]) || ce_ispunct(line[location->x]);
 
      for(; i < line_len; ++i){
           if(isblank(line[i])){
                word_end = true;
           }else if(ce_ispunct(line[i])){
-               if(word_end) break;
                if(punctuation_word_boundaries){
-                    word_end = true;
+                    break;
                }
+               word_end = true;
           }else if(word_end){
                break;
           }
      }
 
-     if(i != first_check && i != (line_len - 1)){
-          location->x = i;
-     }
+     location->x = i;
 
      return true;
 }

@@ -590,7 +590,7 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
                     built_action.motion.type = VMT_AROUND_WORD_LITTLE;
                     break;
                case 'W':
-                    built_action.motion.type = VMT_INSIDE_WORD_BIG;
+                    built_action.motion.type = VMT_AROUND_WORD_BIG;
                     break;
                case '"':
                     built_action.motion.type = VMT_AROUND_PAIR;
@@ -656,9 +656,21 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Ya
                break;
           case VMT_WORD_LITTLE:
                ce_move_cursor_to_next_word(buffer, &end, true);
+
+               // when we are not executing a motion delete up to the next word
+               if(action->change.type != VCT_MOTION){
+                    end.x--;
+                    if(end.x < 0) end.x = 0;
+               }
                break;
           case VMT_WORD_BIG:
                ce_move_cursor_to_next_word(buffer, &end, false);
+
+               // when we are not executing a motion delete up to the next word
+               if(action->change.type != VCT_MOTION){
+                    end.x--;
+                    if(end.x < 0) end.x = 0;
+               }
                break;
           case VMT_WORD_BEGINNING_LITTLE:
                ce_move_cursor_to_beginning_of_word(buffer, &end, true);
@@ -748,11 +760,92 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Ya
                start.x--;
                end.x++;
 		  	break;
-          // TIME TO SLURP
+               // TIME TO SLURP
+#define SLURP_RIGHT(condition)                                                              \
+               do{ end.x++; if(!ce_get_char(buffer, &end, &c)) break; }while(condition(c)); \
+               end.x--;
+
+#define SLURP_LEFT(condition)                                                                   \
+               do{ start.x--; if(!ce_get_char(buffer, &start, &c)) break; }while(condition(c)); \
+			start.x++;
+
           case VMT_AROUND_WORD_LITTLE:
-               break;
+          {
+			char c;
+			if(!ce_get_char(buffer, &start, &c)) return false;
+
+			if(ce_iswordchar(c)){
+				SLURP_RIGHT(ce_iswordchar);
+
+				if(isblank(c)){
+					SLURP_RIGHT(isblank);
+					SLURP_LEFT(ce_iswordchar);
+
+				}else if(ce_ispunct(c)){
+					SLURP_LEFT(ce_iswordchar);
+					SLURP_LEFT(isblank);
+				}
+			}else if(ce_ispunct(c)){
+				SLURP_RIGHT(ce_ispunct);
+
+				if(isblank(c)){
+					SLURP_RIGHT(isblank);
+					SLURP_LEFT(ce_ispunct);
+
+				}else if(ce_ispunct(c)){
+					SLURP_LEFT(ce_ispunct);
+					SLURP_LEFT(isblank);
+				}
+			}else{
+				assert(isblank(c));
+				SLURP_RIGHT(isblank);
+
+				if(ce_ispunct(c)){
+					SLURP_RIGHT(ce_ispunct);
+					SLURP_LEFT(isblank);
+
+				}else if(ce_iswordchar(c)){
+					SLURP_RIGHT(ce_iswordchar);
+					SLURP_LEFT(isblank);
+
+				}else{
+					SLURP_LEFT(isblank);
+
+					if(ce_ispunct(c)){
+						SLURP_LEFT(ce_ispunct);
+
+					}else if(ce_iswordchar(c)){
+						SLURP_LEFT(ce_iswordchar);
+					}
+				}
+			}
+          } break;
           case VMT_AROUND_WORD_BIG:
-               break;
+		{
+			char c;
+			if(!ce_get_char(buffer, &start, &c)) return false;
+
+			if(ispunct_or_iswordchar(c)){
+				SLURP_RIGHT(ispunct_or_iswordchar);
+
+				if(isblank(c)){
+					SLURP_RIGHT(isblank);
+					SLURP_LEFT(ispunct_or_iswordchar);
+				}
+			}else{
+				assert(isblank(c));
+				SLURP_RIGHT(isblank);
+
+				if(ispunct_or_iswordchar(c)){
+					SLURP_RIGHT(ispunct_or_iswordchar);
+					SLURP_LEFT(isblank);
+
+				}else{
+					SLURP_LEFT(isblank);
+					SLURP_LEFT(ispunct_or_iswordchar);
+				}
+			}
+		} break;
           }
      }
 

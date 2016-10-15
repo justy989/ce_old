@@ -619,6 +619,13 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
                     return VCS_INVALID;
                }
                break;
+          case 'y':
+               if(change_char == 'y') {
+                    built_action.motion.type = VMT_LINE;
+               }else{
+                    return VCS_INVALID;
+               }
+               break;
           }
      }
 
@@ -920,7 +927,6 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Ya
                          ce_commit_insert_string(&buffer_state->commit_tail,
                                                  &insert_loc, cursor, &cursor_loc,
                                                  save_str);
-                         *cursor = cursor_loc;
                     }
           } break;
           }
@@ -948,25 +954,25 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Ya
                     ce_commit_insert_string(&buffer_state->commit_tail,
                                             &insert_cursor, sorted_start, sorted_start,
                                             strdup(yank->text));
+                    ce_advance_cursor(buffer, cursor, strlen(yank->text));
                }
           } break;
           case YANK_LINE:
           {
-                    size_t len = strlen(yank->text);
-                    char* save_str = malloc(len + 2); // newline and '\0'
-                    Point_t insert_loc = {0, cursor->y + 1};
-                    Point_t cursor_loc = {strlen(buffer->lines[cursor->y]), cursor->y};
+               size_t len = strlen(yank->text);
+               char* save_str = malloc(len + 2); // newline and '\0'
+               Point_t cursor_loc = {0, cursor->y + 1};
+               Point_t insert_loc = {strlen(buffer->lines[cursor->y]), cursor->y};
 
-                    save_str[0] = '\n'; // prepend a new line to create a line
-                    memcpy(save_str + 1, yank->text, len + 1); // also copy the '\0'
+               save_str[0] = '\n'; // prepend a new line to create a line
+               memcpy(save_str + 1, yank->text, len + 1); // also copy the '\0'
 
-
-                    if(ce_insert_string(buffer, &insert_loc, save_str)){
-                         ce_commit_insert_string(&buffer_state->commit_tail,
-                                                 &insert_loc, cursor, &cursor_loc,
-                                                 save_str);
-                         *cursor = cursor_loc;
-                    }
+               if(ce_insert_string(buffer, &insert_loc, save_str)){
+                    ce_commit_insert_string(&buffer_state->commit_tail,
+                                            &insert_loc, cursor, &cursor_loc,
+                                            save_str);
+                    *cursor = cursor_loc;
+               }
           } break;
           }
      } break;
@@ -982,8 +988,20 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Ya
      } break;
      case VCT_YANK:
      {
-          add_yank(yank_head, '0', ce_dupe_string(buffer, sorted_start, sorted_end), yank_mode);
-          add_yank(yank_head, '"', ce_dupe_string(buffer, sorted_start, sorted_end), yank_mode);
+          char* save_zero = ce_dupe_string(buffer, sorted_start, sorted_end);
+          char* save_quote = ce_dupe_string(buffer, sorted_start, sorted_end);
+
+          if(yank_mode == YANK_LINE){
+               int64_t save_len = strlen(save_zero);
+               save_zero[save_len - 1] = 0;
+               save_quote[save_len - 1] = 0;
+          }
+
+          ce_message("-");
+          ce_message("%s", save_zero);
+          ce_message("-");
+          add_yank(yank_head, '0', save_zero, yank_mode);
+          add_yank(yank_head, '"', save_quote, yank_mode);
      } break;
      }
 

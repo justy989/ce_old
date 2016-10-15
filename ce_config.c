@@ -280,7 +280,6 @@ typedef enum{
 } VimMode_t;
 
 typedef enum{
-     VCT_NONE,
      VCT_MOTION,
      VCT_INSERT,
      VCT_DELETE,
@@ -461,6 +460,14 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
           built_action.change.type = VCT_PASTE_BEFORE;
           get_motion = false;
           break;
+     case 'y':
+          built_action.change.type = VCT_YANK;
+          break;
+     case 'Y':
+          built_action.change.type = VCT_YANK;
+          built_action.motion.type = VMT_END_OF_LINE_HARD;
+          get_motion = false;
+          break;
      }
 
      if(get_motion){
@@ -619,7 +626,7 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
      return VCS_COMPLETE;
 }
 
-bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, YankNode_t** head)
+bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, YankNode_t** yank_head)
 {
      BufferState_t* buffer_state = buffer->user_data;
      Point_t start = *cursor;
@@ -734,32 +741,31 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Ya
           case VMT_END_OF_LINE_SOFT:
                ce_move_cursor_to_soft_end_of_line(buffer, &end);
                break;
-		case VMT_INSIDE_PAIR:
-			if(!ce_get_homogenous_adjacents(buffer, &start, &end, isnotquote)) return false;
-			if(start.x == end.x && start.y == end.y) return false;
-		  	break;
+          case VMT_INSIDE_PAIR:
+               if(!ce_get_homogenous_adjacents(buffer, &start, &end, isnotquote)) return false;
+               if(start.x == end.x && start.y == end.y) return false;
+               break;
           case VMT_INSIDE_WORD_LITTLE:
                ce_get_word_at_location(buffer, cursor, &start, &end);
                break;
           case VMT_INSIDE_WORD_BIG:
           {
-			char curr_char;
-			bool success = ce_get_char(buffer, &start, &curr_char);
-               if(!success) return false;
+               char curr_char;
+               if(!ce_get_char(buffer, &start, &curr_char)) return false;
 
-			if(isblank(curr_char)){
-				ce_get_homogenous_adjacents(buffer, &start, &end, isblank);
-			}else{
-				assert(ispunct_or_iswordchar(curr_char));
-				ce_get_homogenous_adjacents(buffer, &start, &end, ispunct_or_iswordchar);
-			}
+               if(isblank(curr_char)){
+                    ce_get_homogenous_adjacents(buffer, &start, &end, isblank);
+               }else{
+                    assert(ispunct_or_iswordchar(curr_char));
+                    ce_get_homogenous_adjacents(buffer, &start, &end, ispunct_or_iswordchar);
+               }
           } break;
-		case VMT_AROUND_PAIR:
-			if(!ce_get_homogenous_adjacents(buffer, &start, &end, isnotquote)) return false;
-			if(start.x == end.x && start.y == end.y) return false;
+          case VMT_AROUND_PAIR:
+               if(!ce_get_homogenous_adjacents(buffer, &start, &end, isnotquote)) return false;
+               if(start.x == end.x && start.y == end.y) return false;
                start.x--;
                end.x++;
-		  	break;
+               break;
                // TIME TO SLURP
 #define SLURP_RIGHT(condition)                                                              \
                do{ end.x++; if(!ce_get_char(buffer, &end, &c)) break; }while(condition(c)); \
@@ -767,85 +773,85 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Ya
 
 #define SLURP_LEFT(condition)                                                                   \
                do{ start.x--; if(!ce_get_char(buffer, &start, &c)) break; }while(condition(c)); \
-			start.x++;
+               start.x++;
 
           case VMT_AROUND_WORD_LITTLE:
           {
-			char c;
-			if(!ce_get_char(buffer, &start, &c)) return false;
+               char c;
+               if(!ce_get_char(buffer, &start, &c)) return false;
 
-			if(ce_iswordchar(c)){
-				SLURP_RIGHT(ce_iswordchar);
+               if(ce_iswordchar(c)){
+                    SLURP_RIGHT(ce_iswordchar);
 
-				if(isblank(c)){
-					SLURP_RIGHT(isblank);
-					SLURP_LEFT(ce_iswordchar);
+                    if(isblank(c)){
+                         SLURP_RIGHT(isblank);
+                         SLURP_LEFT(ce_iswordchar);
 
-				}else if(ce_ispunct(c)){
-					SLURP_LEFT(ce_iswordchar);
-					SLURP_LEFT(isblank);
-				}
-			}else if(ce_ispunct(c)){
-				SLURP_RIGHT(ce_ispunct);
+                    }else if(ce_ispunct(c)){
+                         SLURP_LEFT(ce_iswordchar);
+                         SLURP_LEFT(isblank);
+                    }
+               }else if(ce_ispunct(c)){
+                    SLURP_RIGHT(ce_ispunct);
 
-				if(isblank(c)){
-					SLURP_RIGHT(isblank);
-					SLURP_LEFT(ce_ispunct);
+                    if(isblank(c)){
+                         SLURP_RIGHT(isblank);
+                         SLURP_LEFT(ce_ispunct);
 
-				}else if(ce_ispunct(c)){
-					SLURP_LEFT(ce_ispunct);
-					SLURP_LEFT(isblank);
-				}
-			}else{
-				assert(isblank(c));
-				SLURP_RIGHT(isblank);
+                    }else if(ce_ispunct(c)){
+                         SLURP_LEFT(ce_ispunct);
+                         SLURP_LEFT(isblank);
+                    }
+               }else{
+                    assert(isblank(c));
+                    SLURP_RIGHT(isblank);
 
-				if(ce_ispunct(c)){
-					SLURP_RIGHT(ce_ispunct);
-					SLURP_LEFT(isblank);
+                    if(ce_ispunct(c)){
+                         SLURP_RIGHT(ce_ispunct);
+                         SLURP_LEFT(isblank);
 
-				}else if(ce_iswordchar(c)){
-					SLURP_RIGHT(ce_iswordchar);
-					SLURP_LEFT(isblank);
+                    }else if(ce_iswordchar(c)){
+                         SLURP_RIGHT(ce_iswordchar);
+                         SLURP_LEFT(isblank);
 
-				}else{
-					SLURP_LEFT(isblank);
+                    }else{
+                         SLURP_LEFT(isblank);
 
-					if(ce_ispunct(c)){
-						SLURP_LEFT(ce_ispunct);
+                         if(ce_ispunct(c)){
+                              SLURP_LEFT(ce_ispunct);
 
-					}else if(ce_iswordchar(c)){
-						SLURP_LEFT(ce_iswordchar);
-					}
-				}
-			}
+                         }else if(ce_iswordchar(c)){
+                              SLURP_LEFT(ce_iswordchar);
+                         }
+                    }
+               }
           } break;
           case VMT_AROUND_WORD_BIG:
-		{
-			char c;
-			if(!ce_get_char(buffer, &start, &c)) return false;
+          {
+               char c;
+               if(!ce_get_char(buffer, &start, &c)) return false;
 
-			if(ispunct_or_iswordchar(c)){
-				SLURP_RIGHT(ispunct_or_iswordchar);
+               if(ispunct_or_iswordchar(c)){
+                    SLURP_RIGHT(ispunct_or_iswordchar);
 
-				if(isblank(c)){
-					SLURP_RIGHT(isblank);
-					SLURP_LEFT(ispunct_or_iswordchar);
-				}
-			}else{
-				assert(isblank(c));
-				SLURP_RIGHT(isblank);
+                    if(isblank(c)){
+                         SLURP_RIGHT(isblank);
+                         SLURP_LEFT(ispunct_or_iswordchar);
+                    }
+               }else{
+                    assert(isblank(c));
+                    SLURP_RIGHT(isblank);
 
-				if(ispunct_or_iswordchar(c)){
-					SLURP_RIGHT(ispunct_or_iswordchar);
-					SLURP_LEFT(isblank);
+                    if(ispunct_or_iswordchar(c)){
+                         SLURP_RIGHT(ispunct_or_iswordchar);
+                         SLURP_LEFT(isblank);
 
-				}else{
-					SLURP_LEFT(isblank);
-					SLURP_LEFT(ispunct_or_iswordchar);
-				}
-			}
-		} break;
+                    }else{
+                         SLURP_LEFT(isblank);
+                         SLURP_LEFT(ispunct_or_iswordchar);
+                    }
+               }
+          } break;
           }
      }
 
@@ -877,14 +883,14 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Ya
           if(action->yank){
                char* yank_string = strdup(commit_string);
                if(yank_mode == YANK_LINE && yank_string[len-1] == NEWLINE) yank_string[len-1] = 0;
-               add_yank(head, '"', yank_string, yank_mode);
+               add_yank(yank_head, '"', yank_string, yank_mode);
           }
 
           ce_commit_remove_string(&buffer_state->commit_tail, sorted_start, cursor, sorted_start, commit_string);
      } break;
      case VCT_PASTE_BEFORE:
      {
-          YankNode_t* yank = find_yank(*head, '"');
+          YankNode_t* yank = find_yank(*yank_head, '"');
 
           if(!yank) return false;
 
@@ -921,7 +927,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Ya
      } break;
      case VCT_PASTE_AFTER:
      {
-          YankNode_t* yank = find_yank(*head, '"');
+          YankNode_t* yank = find_yank(*yank_head, '"');
 
           if(!yank) return false;
 
@@ -973,6 +979,11 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Ya
 
           ce_commit_change_char(&buffer_state->commit_tail, sorted_start, cursor, sorted_start,
                                 action->change.change_char, prev_char);
+     } break;
+     case VCT_YANK:
+     {
+          add_yank(yank_head, '0', ce_dupe_string(buffer, sorted_start, sorted_end), yank_mode);
+          add_yank(yank_head, '"', ce_dupe_string(buffer, sorted_start, sorted_end), yank_mode);
      } break;
      }
 
@@ -3072,7 +3083,9 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                               break;
                          }
 
-                         config_state->last_vim_action = vim_action;
+                         if(vim_action.change.type != VCT_MOTION){
+                              config_state->last_vim_action = vim_action;
+                         }
                          // allow the command to be cleared
                     }
                     break;
@@ -3190,6 +3203,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                }
 #endif
           } break;
+#if 0
           case 'y':
           {
                if(config_state->vim_mode == VM_VISUAL_RANGE){
@@ -3199,7 +3213,6 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     yank_visual_lines(config_state);
                     enter_normal_mode(config_state);
                }else{
-#if 0
                     movement_state_t m_state = try_generic_movement(config_state, buffer, cursor, &movement_start, &movement_end);
                     switch(m_state){
                     case MOVEMENT_CONTINUE:
@@ -3235,9 +3248,9 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          }
                          break;
                     }
-#endif
                }
           } break;
+#endif
 #if 0
           case 'P':
           case 'p':

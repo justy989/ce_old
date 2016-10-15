@@ -5,6 +5,22 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+/* design thoughts:
+Server side:
+When a client connects, the server creates a piece of state to track that client. This state includes:
+- the socket to send/receive data for that client on
+- the views that the client has visible (these are updated as the user switches the displayed buffer, scrolls, changes tabs, etc...)
+  Having the views stored on the server side lets us track and notify all clients when a buffer change occurs in a visible view.
+I think that in the current design the server will need to move the client's view as we move the cursor around the buffer.
+This is actually kind of annoying at seems like it will make things kind of complicated. I wonder if we should take some other approach here.
+
+Client side:
+- When a client opens a new view, it sends an NC_OPEN_VIEW command to the server and tells it the unique id for that view with
+  which it will refer to the newly opened view in future commands.
+  NOTE: the unique id is per-client. we can look in a per-client list of views on the server to lookup the view on future commands
+- Views will be updated asynchronously as a client receives NC_REFRESH_VIEW commands from the server
+  (this could occur due to a change requested by this client, or a change made to the view by another client)
+*/
 
 #define READ(type, var) \
      type var; \

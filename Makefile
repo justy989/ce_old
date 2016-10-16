@@ -5,7 +5,7 @@ LINK=-lncurses
 all: LINK += -lpthread
 all: ce ce_config.so
 
-release: CFLAGS += -DNDEBUG -O3
+release: CFLAGS += -DNDEBUG -O3 -Wno-unused
 release: all
 
 cov: coverage
@@ -27,10 +27,13 @@ ce.o: ce.c
 ce_network.o: ce_network.c
 	$(CC) -c -fpic $(CFLAGS) $^ -o $@
 
+ce_server.o: ce_server.c
+	$(CC) -c -fpic $(CFLAGS) $^ -o $@
+
 ce_config.o: ce_config.c
 	$(CC) -c -fpic $(CFLAGS) $^ -o $@
 
-ce_config.so: ce_config.o ce.o ce_network.o
+ce_config.so: ce_config.o ce.o ce_network.o ce_server.o
 	$(CC) -shared $(CFLAGS) $^ -o $@ $(LINK)
 
 clean: clean_config clean_test

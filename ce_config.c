@@ -1,5 +1,6 @@
 #include "ce.h"
 #include "ce_network.h"
+#include "ce_server.h"
 #include <assert.h>
 #include <ctype.h>
 #include <ftw.h>
@@ -554,7 +555,7 @@ BufferNode_t* new_buffer_from_file(BufferNode_t* head, const char* filename)
           ce_network_load_file(&g_config_state->client_state, buffer, filename);
           // TODO: don't forget to get rid of this
      }
-     else if(!ce_load_file(buffer, filename)){
+     if(!ce_load_file(buffer, filename)){
           free(buffer);
           return NULL;
      }
@@ -916,7 +917,7 @@ bool initializer(bool is_client, bool is_server, BufferNode_t* head, Point_t* te
                if(is_client){
                     config_state->tab_current->view_current->top_left = (Point_t){0, 0};
                     config_state->tab_current->view_current->bottom_right = (Point_t){g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 1};
-                    ce_network_refresh_view(&config_state->client_state, config_state->tab_current->view_current);
+                    //ce_network_refresh_view(&config_state->client_state, config_state->tab_current->view_current);
                }
           }
      }

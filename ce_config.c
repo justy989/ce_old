@@ -427,6 +427,7 @@ typedef struct{
           int64_t visual_length;
           int64_t visual_lines;
      };
+     bool visual_start_after; // false means after !
 } VimMotion_t;
 
 typedef struct{
@@ -485,11 +486,12 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
           get_motion = false;
           built_action.motion.type = VMT_VISUAL_RANGE;
           built_action.motion.visual_length = ce_compute_length(buffer, visual_start, cursor) - 1;
+          built_action.motion.visual_start_after = ce_point_after(visual_start, cursor);
      }else if(vim_mode == VM_VISUAL_LINE){
           visual_mode = true;
           get_motion = false;
           built_action.motion.type = VMT_VISUAL_LINE;
-          built_action.motion.visual_lines = cursor->y - visual_start->y;
+          built_action.motion.visual_lines = visual_start->y - cursor->y;
      }
 
      // get the change
@@ -848,8 +850,9 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
      // setup the start and end if we are in visual mode
      if(action->motion.type == VMT_VISUAL_RANGE){
           Point_t calc_visual_start = *cursor;
-          ce_advance_cursor(buffer, &calc_visual_start, -action->motion.visual_length);
-
+          int64_t visual_length = action->motion.visual_length;
+          if(!action->motion.visual_start_after) visual_length = -visual_length;
+          ce_advance_cursor(buffer, &calc_visual_start, visual_length);
           start = *cursor;
           end = calc_visual_start;
      }else if(action->motion.type == VMT_VISUAL_LINE){
@@ -1265,9 +1268,11 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
           char* save_quote = ce_dupe_string(buffer, sorted_start, sorted_end);
 
           if(yank_mode == YANK_LINE){
-               int64_t save_len = strlen(save_zero);
-               save_zero[save_len - 1] = 0;
-               save_quote[save_len - 1] = 0;
+               int64_t last_index = strlen(save_zero) - 1;
+               if(last_index >= 0 && save_zero[last_index] == NEWLINE){
+                    save_zero[last_index] = 0;
+                    save_quote[last_index] = 0;
+               }
           }
 
           add_yank(yank_head, '0', save_zero, yank_mode);
@@ -3359,7 +3364,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                VimAction_t vim_action;
                VimCommandState_t command_state = vim_action_from_string(config_state->command, &vim_action,
                                                                         config_state->vim_mode, buffer,
-                                                                        &config_state->visual_start, cursor);
+                                                                        cursor, &config_state->visual_start);
                switch(command_state){
                default:
                case VCS_INVALID:

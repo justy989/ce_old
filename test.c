@@ -2147,6 +2147,10 @@ TEST(move_cursor_forward_to_char)
      EXPECT(point.x == 6);
      EXPECT(point.y == 0);
 
+     ce_move_cursor_forward_to_char(&buffer, &point, '\0');
+     EXPECT(point.x == (int64_t)(strlen(buffer.lines[0])));
+     EXPECT(point.y == 0);
+
      ce_free_buffer(&buffer);
 }
 

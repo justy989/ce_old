@@ -444,6 +444,11 @@ typedef enum{
     VCS_COMPLETE,
 } VimCommandState_t;
 
+typedef struct{
+     VimMotionType_t motion_type;
+     char ch;
+} FindState_t;
+
 VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action, VimMode_t vim_mode,
                                          Buffer_t* buffer, Point_t* cursor, Point_t* visual_start)
 {
@@ -831,7 +836,8 @@ void unindent_line(Buffer_t* buffer, BufferCommitNode_t** commit_tail, int64_t l
 }
 
 bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, VimMode_t vim_mode,
-                      YankNode_t** yank_head, VimMode_t* final_mode, Point_t* visual_start)
+                      YankNode_t** yank_head, VimMode_t* final_mode, Point_t* visual_start,
+                      FindState_t* find_state)
 {
      BufferState_t* buffer_state = buffer->user_data;
      Point_t start = *cursor;
@@ -940,22 +946,40 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                     yank_mode = YANK_LINE;
                     break;
                case VMT_FIND_NEXT_MATCHING_CHAR:
-                    ce_move_cursor_forward_to_char(buffer, &end, action->motion.match_char);
+                    if(ce_move_cursor_forward_to_char(buffer, &end, action->motion.match_char)){
+                         find_state->motion_type = action->motion.type;
+                         find_state->ch = action->motion.match_char;
+                    }
                     break;
                case VMT_FIND_PREV_MATCHING_CHAR:
-                    ce_move_cursor_backward_to_char(buffer, &end, action->motion.match_char);
+                    if(ce_move_cursor_backward_to_char(buffer, &end, action->motion.match_char)){
+                         find_state->motion_type = action->motion.type;
+                         find_state->ch = action->motion.match_char;
+                    }
                     break;
                case VMT_TO_NEXT_MATCHING_CHAR:
-                    ce_move_cursor_forward_to_char(buffer, &end, action->motion.match_char);
-                    end.x--;
-                    if(end.x < 0) end.x = 0;
+                    end.x++;
+                    if(ce_move_cursor_forward_to_char(buffer, &end, action->motion.match_char)){
+                         find_state->motion_type = action->motion.type;
+                         find_state->ch = action->motion.match_char;
+                         end.x--;
+                         if(end.x < 0) end.x = 0;
+                    }else{
+                         end.x--;
+                    }
                     break;
                case VMT_TO_PREV_MATCHING_CHAR:
                {
-                    ce_move_cursor_backward_to_char(buffer, &end, action->motion.match_char);
-                    end.x++;
-                    int64_t line_len = strlen(buffer->lines[end.y]);
-                    if(end.x > line_len) end.x = line_len;
+                    end.x--;
+                    if(ce_move_cursor_backward_to_char(buffer, &end, action->motion.match_char)){
+                         find_state->motion_type = action->motion.type;
+                         find_state->ch = action->motion.match_char;
+                         end.x++;
+                         int64_t line_len = strlen(buffer->lines[end.y]);
+                         if(end.x > line_len) end.x = line_len;
+                    }else{
+                         end.x++;
+                    }
                }break;
                case VMT_BEGINNING_OF_FILE:
                     ce_move_cursor_to_beginning_of_file(buffer, &end);
@@ -1450,11 +1474,7 @@ typedef struct{
      int last_key;
      char command[VIM_COMMAND_MAX];
      int64_t command_len;
-     struct {
-          // state for fF and tT
-          char command_key;
-          char find_char;
-     } find_command;
+     FindState_t find_state;
      struct {
           Direction_t direction;
      } search_command;
@@ -3321,64 +3341,70 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                }
           }
 
+          if(!handled_key && isprint(key)){
+               if(config_state->command_len >= VIM_COMMAND_MAX){
+                    config_state->command_len = 0;
+               }
+
+               // insert the character into the command
+               config_state->command[config_state->command_len] = key;
+               config_state->command_len++;
+               config_state->command[config_state->command_len] = 0;
+
+               VimAction_t vim_action;
+               VimCommandState_t command_state = vim_action_from_string(config_state->command, &vim_action,
+                                                                        config_state->vim_mode, buffer,
+                                                                        &config_state->visual_start, cursor);
+               switch(command_state){
+               default:
+               case VCS_INVALID:
+                    // allow command to be cleared
+                    break;
+               case VCS_CONTINUE:
+                    // no! don't clear the command
+                    clear_command = false;
+                    handled_key = true;
+                    break;
+               case VCS_COMPLETE:
+               {
+                    VimMode_t final_mode = config_state->vim_mode;
+                    VimMode_t original_mode = final_mode;
+                    if(vim_action_apply(&vim_action, buffer, cursor, config_state->vim_mode,
+                                        &config_state->yank_head, &final_mode, &config_state->visual_start,
+                                        &config_state->find_state)){
+                         if(final_mode != original_mode){
+                              switch(final_mode){
+                              default:
+                                   break;
+                              case VM_INSERT:
+                                   enter_insert_mode(config_state, cursor);
+                                   break;
+                              case VM_NORMAL:
+                                   enter_normal_mode(config_state);
+                                   break;
+                              case VM_VISUAL_RANGE:
+                                   enter_visual_range_mode(config_state, buffer_view);
+                                   break;
+                              case VM_VISUAL_LINE:
+                                   enter_visual_line_mode(config_state, buffer_view);
+                                   break;
+                              }
+                         }
+
+                         if(vim_action.change.type != VCT_MOTION || vim_action.end_in_vim_mode == VM_INSERT){
+                              config_state->last_vim_action = vim_action;
+                         }
+                         // allow the command to be cleared
+                    }
+                    handled_key = true;
+               }    break;
+               }
+          }
+
           if(!handled_key){
                switch(key){
                default:
                {
-                    if(config_state->command_len >= VIM_COMMAND_MAX){
-                         config_state->command_len = 0;
-                    }
-
-                    // insert the character into the command
-                    config_state->command[config_state->command_len] = key;
-                    config_state->command_len++;
-                    config_state->command[config_state->command_len] = 0;
-
-                    VimAction_t vim_action;
-                    VimCommandState_t command_state = vim_action_from_string(config_state->command, &vim_action,
-                                                                             config_state->vim_mode, buffer,
-                                                                             &config_state->visual_start, cursor);
-                    switch(command_state){
-                    default:
-                    case VCS_INVALID:
-                         // allow command to be cleared
-                         break;
-                    case VCS_CONTINUE:
-                         // no! don't clear the command
-                         clear_command = false;
-                         break;
-                    case VCS_COMPLETE:
-                    {
-                         VimMode_t final_mode = config_state->vim_mode;
-                         VimMode_t original_mode = final_mode;
-                         if(vim_action_apply(&vim_action, buffer, cursor, config_state->vim_mode,
-                                             &config_state->yank_head, &final_mode, &config_state->visual_start)){
-                              if(final_mode != original_mode){
-                                   switch(final_mode){
-                                   default:
-                                        break;
-                                   case VM_INSERT:
-                                        enter_insert_mode(config_state, cursor);
-                                        break;
-                                   case VM_NORMAL:
-                                        enter_normal_mode(config_state);
-                                        break;
-                                   case VM_VISUAL_RANGE:
-                                        enter_visual_range_mode(config_state, buffer_view);
-                                        break;
-                                   case VM_VISUAL_LINE:
-                                        enter_visual_line_mode(config_state, buffer_view);
-                                        break;
-                                   }
-                              }
-
-                              if(vim_action.change.type != VCT_MOTION || vim_action.end_in_vim_mode == VM_INSERT){
-                                   config_state->last_vim_action = vim_action;
-                              }
-                              // allow the command to be cleared
-                         }
-                    }    break;
-                    }
                } break;
                case '.':
                {
@@ -3387,7 +3413,8 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     }else{
                          VimMode_t final_mode;
                          vim_action_apply(&config_state->last_vim_action, buffer, cursor, config_state->vim_mode,
-                                          &config_state->yank_head, &final_mode, &config_state->visual_start);
+                                          &config_state->yank_head, &final_mode, &config_state->visual_start,
+                                          &config_state->find_state);
 
                          if(config_state->last_vim_action.end_in_vim_mode == VM_INSERT){
                               repeat_insert_actions(&config_state->insert_state, buffer, cursor);
@@ -3584,23 +3611,49 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          ce_commit_redo(buffer, &buffer_state->commit_tail, cursor);
                     }
                } break;
-#if 0
                case ';':
                {
-                    if(config_state->find_command.command_key == '\0') break;
-                    find_command(config_state->find_command.command_key,
-                                 config_state->find_command.find_char, buffer, cursor);
+                    VimAction_t action = {};
+                    FindState_t find_state; // dummy find state so our's doesn't get modified
+                    VimMode_t final_mode;
+                    action.multiplier = 1;
+                    action.change.type = VCT_MOTION;
+                    action.motion.type = config_state->find_state.motion_type;
+                    action.motion.multiplier = 1;
+                    action.motion.match_char = config_state->find_state.ch;
+                    vim_action_apply(&action, buffer, cursor, config_state->vim_mode,
+                                     &config_state->yank_head, &final_mode, &config_state->visual_start,
+                                     &find_state);
                } break;
                case ',':
                {
-                    if(config_state->find_command.command_key == '\0') break;
-                    char command_key = config_state->find_command.command_key;
-                    if(isupper(command_key)) command_key = tolower(command_key);
-                    else command_key = toupper(command_key);
-
-                    find_command(command_key, config_state->find_command.find_char, buffer, cursor);
+                    VimAction_t action = {};
+                    FindState_t find_state; // dummy find state so our's doesn't get modified
+                    VimMode_t final_mode;
+                    action.multiplier = 1;
+                    action.change.type = VCT_MOTION;
+                    action.motion.multiplier = 1;
+                    action.motion.match_char = config_state->find_state.ch;
+                    switch(config_state->find_state.motion_type){
+                    default:
+                         break;
+                    case VMT_FIND_NEXT_MATCHING_CHAR:
+                         action.motion.type = VMT_FIND_PREV_MATCHING_CHAR;
+                         break;
+                    case VMT_FIND_PREV_MATCHING_CHAR:
+                         action.motion.type = VMT_FIND_NEXT_MATCHING_CHAR;
+                         break;
+                    case VMT_TO_NEXT_MATCHING_CHAR:
+                         action.motion.type = VMT_TO_PREV_MATCHING_CHAR;
+                         break;
+                    case VMT_TO_PREV_MATCHING_CHAR:
+                         action.motion.type = VMT_TO_NEXT_MATCHING_CHAR;
+                         break;
+                    }
+                    vim_action_apply(&action, buffer, cursor, config_state->vim_mode,
+                                     &config_state->yank_head, &final_mode, &config_state->visual_start,
+                                     &find_state);
                } break;
-#endif
                case 'H':
                {
                     // move cursor to top line of view
@@ -3953,10 +4006,10 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     ce_clamp_cursor(buffer, &buffer_view->cursor);
                } break;
                }
+          }
 
-               if(clear_command){
-                    config_state->command_len = 0;
-               }
+          if(clear_command){
+               config_state->command_len = 0;
           }
      }
 

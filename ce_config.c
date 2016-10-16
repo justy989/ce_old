@@ -3255,6 +3255,8 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     break;
                case 'z': {
                     center_view(buffer_view);
+                    // reset key so we don't come in here on the very next iteration
+                    key = 0;
                } break;
                case 'b': {
                     // move current line to bottom of view

@@ -2825,10 +2825,13 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                if(!search_len) break;
                char* replace_str = ce_dupe_buffer(config_state->view_input->buffer);
                int64_t replace_len = strlen(replace_str);
-               Point_t begin = {};
+               Point_t begin = config_state->tab_current->view_input_save->buffer->highlight_start;
+               Point_t end = config_state->tab_current->view_input_save->buffer->highlight_end;
+               if(end.x < 0) ce_move_cursor_to_end_of_file(config_state->tab_current->view_input_save->buffer, &end);
                Point_t match = {};
                int64_t replace_count = 0;
                while(ce_find_string(buffer, &begin, search_str, &match, CE_DOWN)){
+                    if(ce_point_after(&match, &end)) break;
                     if(!ce_remove_string(buffer, &match, search_len)) break;
                     if(replace_len){
                          if(!ce_insert_string(buffer, &match, replace_str)) break;
@@ -2843,7 +2846,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                }else{
                     ce_message("no matches found to replace");
                }
-               *cursor = match;
+               *cursor = begin;
                center_view(buffer_view);
                free(replace_str);
           } break;
@@ -3974,7 +3977,11 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     config_state->tab_current = new_tab;
                } break;
                case 'R':
-                    input_start(config_state, "Replace", key);
+                    if(config_state->vim_mode == VM_VISUAL_RANGE || config_state->vim_mode == VM_VISUAL_LINE){
+                         input_start(config_state, "Visual Replace", key);
+                    }else{
+                         input_start(config_state, "Replace", key);
+                    }
                break;
                case 5: // Ctrl + e
                {

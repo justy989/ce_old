@@ -22,6 +22,22 @@ Client side:
   NOTE: the unique id is per-client. we can look in a per-client list of views on the server to lookup the view on future commands
 - Views will be updated asynchronously as a client receives NC_REFRESH_VIEW commands from the server
   (this could occur due to a change requested by this client, or a change made to the view by another client)
+
+UPDATE: I don't think we should implement a view based client-server model
+Upsides to a library-based client server model that sends the whole buffer and library functions to call to modify the buffer:
+- Very few code changes to the view code
+- You have the whole buffer so you can implement features in the config that depend on information that is outside of the current view
+ (for example if you wanted to implement search, or jump to next function, or something)
+- Simple library-based client server model (Client sends a command to the server, server relays the command to all clients and they perform the action)
+- It feels like this model doesn't limit the configs
+Downsides:
+- Send more data
+- Have to send all changes to everyone (even out of view changes)
+- Seems scary to have to keep the buffers in sync like this, but I'd like to try it first to see if it's actually an issue
+
+Random thought:
+- NC_OPEN_VIEW instead of tracking view info on the server just needs to create a new cursor to track with that view
+- The client now needs to make sure that it only moves the cursor with API functions (shouldn't be a big deal to do)
 */
 
 // TODO: make an _read_str function which does appropriate error checking

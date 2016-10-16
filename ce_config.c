@@ -391,6 +391,8 @@ typedef enum{
      VMT_WORD_BIG,
      VMT_WORD_BEGINNING_LITTLE,
      VMT_WORD_BEGINNING_BIG,
+     VMT_WORD_BEGINNING_LITTLE_PRE_CURSOR,
+     VMT_WORD_BEGINNING_BIG_PRE_CURSOR,
      VMT_WORD_END_LITTLE,
      VMT_WORD_END_BIG,
      VMT_LINE,
@@ -671,10 +673,18 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
                built_action.motion.type = VMT_WORD_BIG;
                break;
           case 'b':
-               built_action.motion.type = VMT_WORD_BEGINNING_LITTLE;
+               if(change_char == 'd' || change_char == 'c'){
+                    built_action.motion.type = VMT_WORD_BEGINNING_LITTLE_PRE_CURSOR;
+               }else{
+                    built_action.motion.type = VMT_WORD_BEGINNING_LITTLE;
+               }
                break;
           case 'B':
-               built_action.motion.type = VMT_WORD_BEGINNING_BIG;
+               if(change_char == 'd' || change_char == 'c'){
+                    built_action.motion.type = VMT_WORD_BEGINNING_BIG_PRE_CURSOR;
+               }else{
+                    built_action.motion.type = VMT_WORD_BEGINNING_BIG;
+               }
                break;
           case 'e':
                built_action.motion.type = VMT_WORD_END_LITTLE;
@@ -919,8 +929,18 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                case VMT_WORD_BEGINNING_LITTLE:
                     ce_move_cursor_to_beginning_of_word(buffer, &end, true);
                     break;
+               case VMT_WORD_BEGINNING_LITTLE_PRE_CURSOR:
+                    ce_move_cursor_to_beginning_of_word(buffer, &end, true);
+                    start.x--;
+                    if(start.x < 0) end.x = 0;
+                    break;
                case VMT_WORD_BEGINNING_BIG:
                     ce_move_cursor_to_beginning_of_word(buffer, &end, false);
+                    break;
+               case VMT_WORD_BEGINNING_BIG_PRE_CURSOR:
+                    ce_move_cursor_to_beginning_of_word(buffer, &end, false);
+                    start.x--;
+                    if(start.x < 0) end.x = 0;
                     break;
                case VMT_WORD_END_LITTLE:
                     ce_move_cursor_to_end_of_word(buffer, &end, true);

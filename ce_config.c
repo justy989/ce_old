@@ -350,7 +350,6 @@ void remove_visual_lines(Buffer_t* buffer, Point_t* cursor, Point_t* visual_star
      }
 }
 
-
 typedef enum{
      VM_NORMAL,
      VM_INSERT,
@@ -829,7 +828,6 @@ void unindent_line(Buffer_t* buffer, BufferCommitNode_t** commit_tail, int64_t l
           ce_remove_string(buffer, &loc, whitespace_count);
           ce_commit_remove_string(commit_tail, &loc, cursor, cursor, strdup(TAB_STRING));
      }
-
 }
 
 bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, VimMode_t vim_mode,

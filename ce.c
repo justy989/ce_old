@@ -1272,6 +1272,13 @@ int64_t ce_is_c_typename(const char* line, int64_t start_offset)
      itr = line + start_offset;
      if(count >= 2 && itr[count-2] == '_' && itr[count-1] == 't') return count;
 
+#if 0
+     // NOTE: Justin uses this while working on Bryte!
+     if(isupper(*itr)){
+          return count;
+     }
+#endif
+
      return 0;
 }
 
@@ -1604,11 +1611,22 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor,const Point_t*
                     }else{
                          if(!inside_string){
                               int64_t keyword_left = 0;
-                              if(!inside_comment && !inside_multiline_comment){
-                                   keyword_left = ce_is_c_control(buffer_line, c);
+
+                              if(!keyword_left){
+                                   keyword_left = ce_is_caps_var(buffer_line, c);
                                    if(keyword_left){
                                         color_left = keyword_left;
-                                        highlight_color = S_CONTROL;
+                                        highlight_color = S_CONSTANT;
+                                   }
+                              }
+
+                              if(!inside_comment && !inside_multiline_comment){
+                                   if(!keyword_left){
+                                        keyword_left = ce_is_c_control(buffer_line, c);
+                                        if(keyword_left){
+                                             color_left = keyword_left;
+                                             highlight_color = S_CONTROL;
+                                        }
                                    }
 
                                    if(!keyword_left){
@@ -1633,14 +1651,6 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor,const Point_t*
                                              color_left = keyword_left;
                                              highlight_color = S_PREPROCESSOR;
                                         }
-                                   }
-                              }
-
-                              if(!keyword_left){
-                                   keyword_left = ce_is_caps_var(buffer_line, c);
-                                   if(keyword_left){
-                                        color_left = keyword_left;
-                                        highlight_color = S_CONSTANT;
                                    }
                               }
 
@@ -1701,10 +1711,17 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor,const Point_t*
                     // syntax highlighting
                     if(color_left == 0){
                          if(!inside_string){
+                              color_left = ce_is_caps_var(line_to_print, c);
+                              if(color_left){
+                                   fg_color = set_color(S_CONSTANT, inside_highlight);
+                              }
+
                               if(!inside_comment && !inside_multiline_comment){
-                                   color_left = ce_is_c_control(line_to_print, c);
-                                   if(color_left){
-                                        fg_color = set_color(S_CONTROL, inside_highlight);
+                                   if(!color_left){
+                                        color_left = ce_is_c_control(line_to_print, c);
+                                        if(color_left){
+                                             fg_color = set_color(S_CONTROL, inside_highlight);
+                                        }
                                    }
 
                                    if(!color_left){
@@ -1726,13 +1743,6 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor,const Point_t*
                                         if(color_left){
                                              fg_color = set_color(S_PREPROCESSOR, inside_highlight);
                                         }
-                                   }
-                              }
-
-                              if(!color_left){
-                                   color_left = ce_is_caps_var(line_to_print, c);
-                                   if(color_left){
-                                        fg_color = set_color(S_CONSTANT, inside_highlight);
                                    }
                               }
 

@@ -40,6 +40,7 @@ Random thought:
 - The client now needs to make sure that it only moves the cursor with API functions (shouldn't be a big deal to do)
 */
 
+#if 0
 // TODO: make an _read_str function which does appropriate error checking
 #define READ_STR(buf) ({ \
      size_t read_ix = 0; \
@@ -82,13 +83,14 @@ static void _refresh_view(Client_t* client, const Buffer_t* buffer, Point_t top_
      sent_bytes = write(client->socket, view_str, strlen(view_str) + 1);
      free(view_str);
 }
+#endif
 
 static bool _read(Client_t* client, void* buf, size_t buf_len)
 {
      // attempt to read buf_len bytes into buf. remove client on failure and return false
      ssize_t n_bytes_read = 0;
      do{
-          ssize_t n_bytes = read(client->socket, &buf[n_bytes_read], buf_len - n_bytes_read);
+          ssize_t n_bytes = read(client->socket, buf + n_bytes_read, buf_len - n_bytes_read);
           if(n_bytes < 0){
                int err = errno; // useful for looking at errno in a coredump
                assert(n_bytes >= 0);
@@ -131,6 +133,7 @@ static void _close_client(ServerState_t* server_state, Client_t* client){
      free(client);
 }
 
+#if 0
 static void _handle_open_file(ServerState_t* server_state, Client_t* client)
 {
      char filename[PATH_MAX];
@@ -178,6 +181,7 @@ static void _handle_insert_string(ServerState_t* server_state, Client_t* client)
      READ_STR(to_insert);
      ce_insert_string(_id_to_buffer(server_state->buffer_list_head, &buffer_id), &insert_loc, to_insert);
 }
+#endif
 
 static void _handle_client_command(ServerState_t* server_state, Client_t* client)
 {
@@ -186,23 +190,25 @@ static void _handle_client_command(ServerState_t* server_state, Client_t* client
           _close_client(server_state, client);
           return;
      }
+#if 0
      switch(cmd){
           case NC_OPEN_FILE:
                ce_message("received open file");
-               _handle_open_file(server_state, client);
+               //_handle_open_file(server_state, client);
                break;
           case NC_REFRESH_VIEW:
                ce_message("received refresh view");
-               _handle_refresh_view(server_state, client);
+               //_handle_refresh_view(server_state, client);
                break;
           case NC_INSERT_STRING:
                ce_message("received insert string");
-               _handle_insert_string(server_state, client);
+               //_handle_insert_string(server_state, client);
                break;
           default:
                ce_message("Received invalid command %d", cmd);
                break;
      }
+#endif
 }
 
 void* ce_server_listen(void* args)

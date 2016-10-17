@@ -30,17 +30,20 @@ ce_network.o: ce_network.c
 ce_server.o: ce_server.c
 	$(CC) -c -fpic $(CFLAGS) $^ -o $@
 
+ce_client.o: ce_client.c
+	$(CC) -c -fpic $(CFLAGS) $^ -o $@
+
 ce_config.o: ce_config.c
 	$(CC) -c -fpic $(CFLAGS) $^ -o $@
 
-ce_config.so: ce_config.o ce.o ce_network.o ce_server.o
+ce_config.so: ce_config.o ce.o ce_network.o ce_server.o ce_client.o
 	$(CC) -shared $(CFLAGS) $^ -o $@ $(LINK)
 
 clean: clean_config clean_test
 	rm -rf ce messages buffers shell_output ce.o valgrind_results.txt *.dSYM
 
 clean_config:
-	rm -f ce_config.o ce_config.so ce.o ce_network.o
+	rm -f ce_config.o ce_config.so ce.o ce_network.o ce_server.o ce_client.o
 
 clean_test:
 	rm -f test ce.test.o *.gcda *.gcno *.gcov test_output.txt default.profraw

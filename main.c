@@ -324,7 +324,7 @@ int main(int argc, char** argv)
                message_buffer_buf[strlen(message_buffer_buf)-1] = '\0';
                if(message_buffer->lines[0][0] == '\0'){
                     Point_t insert_loc = {0, 0};
-                    ce_insert_string(message_buffer, &insert_loc, message_buffer_buf);
+                    ce_insert_string(message_buffer, insert_loc, message_buffer_buf);
                     continue;
                }
                bool ret __attribute__((unused)) = ce_append_line(message_buffer, message_buffer_buf);

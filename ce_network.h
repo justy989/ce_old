@@ -24,6 +24,7 @@ typedef enum{
      NC_REMOVE_STRING,
      NC_PREPEND_STRING,
      NC_APPEND_STRING,
+     NC_APPEND_STRING_READONLY,
      NC_INSERT_LINE,
      NC_INSERT_LINE_READONLY,
      NC_REMOVE_LINE,
@@ -46,7 +47,7 @@ void ce_network_refresh_view(ClientState_t* client_state, BufferView_t* buffer_v
 #endif
 
 
-// apply functions with network arguments
+// apply functions with arguments read from the specified socket
 typedef enum {
      APPLY_SUCCESS,
      APPLY_FAILED,
@@ -118,4 +119,30 @@ typedef bool (*SaveBufferFn_t)         (NetworkBufferId_t buffer, const char* fi
 ApplyRC_t apply_save_buffer            (int socket, void* user_data, SaveBufferFn_t fn);
 
 
+bool network_free_buffer            (int socket, NetworkBufferId_t buffer);
+bool network_alloc_lines            (int socket, NetworkBufferId_t buffer, int64_t line_count);
+bool network_clear_lines            (int socket, NetworkBufferId_t buffer);
+bool network_clear_lines_readonly   (int socket, NetworkBufferId_t buffer);
+bool network_load_string            (int socket, NetworkBufferId_t buffer, const char* string);
+bool network_load_file              (int socket, NetworkBufferId_t buffer, const char* filename);
+bool network_insert_char            (int socket, NetworkBufferId_t buffer, Point_t location, char c);
+bool network_insert_char_readonly   (int socket, NetworkBufferId_t buffer, Point_t location, char c);
+bool network_append_char            (int socket, NetworkBufferId_t buffer, char c);
+bool network_append_char_readonly   (int socket, NetworkBufferId_t buffer, char c);
+bool network_remove_char            (int socket, NetworkBufferId_t buffer, Point_t location);
+bool network_set_char               (int socket, NetworkBufferId_t buffer, Point_t location, char c);
+bool network_insert_string          (int socket, NetworkBufferId_t buffer, Point_t location, const char* string);
+bool network_insert_string_readonly (int socket, NetworkBufferId_t buffer, Point_t location, const char* string);
+bool network_remove_string          (int socket, NetworkBufferId_t buffer, Point_t location, int64_t length);
+bool network_prepend_string         (int socket, NetworkBufferId_t buffer, int64_t line, const char* string);
+bool network_append_string          (int socket, NetworkBufferId_t buffer, int64_t line, const char* string);
+bool network_append_string_readonly (int socket, NetworkBufferId_t buffer, int64_t line, const char* string);
+bool network_insert_line            (int socket, NetworkBufferId_t buffer, int64_t line, const char* string);
+bool network_insert_line_readonly   (int socket, NetworkBufferId_t buffer, int64_t line, const char* string);
+bool network_remove_line            (int socket, NetworkBufferId_t buffer, int64_t line);
+bool network_append_line            (int socket, NetworkBufferId_t buffer, int64_t line, const char* string);
+bool network_append_line_readonly   (int socket, NetworkBufferId_t buffer, int64_t line, const char* string);
+bool network_join_line              (int socket, NetworkBufferId_t buffer, int64_t line);
+bool network_insert_newline         (int socket, NetworkBufferId_t buffer, int64_t line);
+bool network_save_buffer            (int socket, NetworkBufferId_t buffer, const char* filename);
 #endif // CE_NETWORK_H

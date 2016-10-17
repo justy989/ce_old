@@ -198,7 +198,7 @@ ApplyRC_t apply_load_file(int socket, void* user_data, LoadFileFn_t fn)
      return fn(buffer, filename, user_data) ? APPLY_SUCCESS : APPLY_FAILED;
 }
 
-//typedef bool (*InsertCharFn_t) (NetworkBufferId_t buffer, Point location, char c, void* user_data);
+//typedef bool (*InsertCharFn_t) (NetworkBufferId_t buffer, Point_t location, char c, void* user_data);
 ApplyRC_t apply_insert_char(int socket, void* user_data, InsertCharFn_t fn)
 {
      APPLY_READ(NetworkBufferId_t, buffer);
@@ -230,7 +230,7 @@ ApplyRC_t apply_append_char_readonly(int socket, void* user_data, AppendCharFn_t
      return fn(buffer, c, user_data) ? APPLY_SUCCESS : APPLY_FAILED;
 }
 
-//typedef bool (*RemoveCharFn_t) (NetworkBufferId_t buffer, Point location, void* user_data);
+//typedef bool (*RemoveCharFn_t) (NetworkBufferId_t buffer, Point_t location, void* user_data);
 ApplyRC_t apply_remove_char(int socket, void* user_data, RemoveCharFn_t fn)
 {
      APPLY_READ(NetworkBufferId_t, buffer);
@@ -238,7 +238,7 @@ ApplyRC_t apply_remove_char(int socket, void* user_data, RemoveCharFn_t fn)
      return fn(buffer, location, user_data) ? APPLY_SUCCESS : APPLY_FAILED;
 }
 
-//typedef bool (*SetCharFn_t) (NetworkBufferId_t buffer, Point location, char c, void* user_data);
+//typedef bool (*SetCharFn_t) (NetworkBufferId_t buffer, Point_t location, char c, void* user_data);
 ApplyRC_t apply_set_char(int socket, void* user_data, SetCharFn_t fn)
 {
      APPLY_READ(NetworkBufferId_t, buffer);
@@ -247,7 +247,7 @@ ApplyRC_t apply_set_char(int socket, void* user_data, SetCharFn_t fn)
      return fn(buffer, location, c, user_data) ? APPLY_SUCCESS : APPLY_FAILED;
 }
 
-//typedef bool (*InsertStringFn_t) (NetworkBufferId_t buffer, Point location, const char* string, void* user_data);
+//typedef bool (*InsertStringFn_t) (NetworkBufferId_t buffer, Point_t location, const char* string, void* user_data);
 ApplyRC_t apply_insert_string(int socket, void* user_data, InsertStringFn_t fn)
 {
      APPLY_READ(NetworkBufferId_t, buffer);
@@ -264,7 +264,7 @@ ApplyRC_t apply_insert_string_readonly(int socket, void* user_data, InsertString
      return fn(buffer, location, string, user_data) ? APPLY_SUCCESS : APPLY_FAILED;
 }
 
-//typedef bool (*RemoveStringFn_t) (NetworkBufferId_t buffer, Point location, int64_t length, void* user_data);
+//typedef bool (*RemoveStringFn_t) (NetworkBufferId_t buffer, Point_t location, int64_t length, void* user_data);
 ApplyRC_t apply_remove_string(int socket, void* user_data, RemoveStringFn_t fn)
 {
      APPLY_READ(NetworkBufferId_t, buffer);
@@ -363,4 +363,277 @@ ApplyRC_t apply_save_buffer(int socket, void* user_data, SaveBufferFn_t fn)
      APPLY_READ(NetworkBufferId_t, buffer);
      APPLY_READ_STR(filename);
      return fn(buffer, filename, user_data) ? APPLY_SUCCESS : APPLY_FAILED;
+}
+
+
+
+
+
+
+
+
+// attempt to write buf_len bytes to the socket. return false on failure
+static bool _write(int socket, const void* buf, size_t buf_len)
+{
+     ssize_t n_bytes_written = 0;
+     do{
+          ssize_t n_bytes = write(socket, buf + n_bytes_written, buf_len - n_bytes_written);
+          if(n_bytes < 0){
+               int err = errno; // useful for looking at errno in a coredump
+               assert(n_bytes >= 0);
+               ce_message("write() failed with error %s", strerror(err));
+               return false;
+          }
+          else if(n_bytes == 0){
+               // server closed connection
+               return false;
+          }
+     } while(n_bytes_written < (ssize_t)buf_len);
+     return true;
+}
+
+#define NETWORK_WRITE(var) if(!_write(socket, &var, sizeof(var))){ return false; }
+#define NETWORK_WRITE_CMD(cmd) ({ \
+     NetworkCommand_t _cmd = cmd; \
+     NETWORK_WRITE(_cmd); \
+})
+
+#define NETWORK_WRITE_STR(var) if(!_write(socket, var, strlen(var) + 1)){ return false; }
+
+// write network functions with network arguments
+//typedef void (*FreeBufferFn_t) (NetworkBufferId_t buffer, void* user_data);
+bool network_free_buffer(int socket, NetworkBufferId_t buffer)
+{
+     NETWORK_WRITE_CMD(NC_FREE_BUFFER);
+     NETWORK_WRITE(buffer);
+     return true;
+}
+
+//typedef bool (*AllocLinesFn_t) (NetworkBufferId_t buffer, int64_t line_count, void* user_data);
+bool network_alloc_lines(int socket, NetworkBufferId_t buffer, int64_t line_count)
+{
+     NETWORK_WRITE_CMD(NC_ALLOC_LINES);
+     NETWORK_WRITE(buffer);
+     NETWORK_WRITE(line_count);
+     return true;
+}
+
+//typedef bool (*ClearLinesFn_t) (NetworkBufferId_t buffer, void* user_data);
+bool network_clear_lines(int socket, NetworkBufferId_t buffer)
+{
+     NETWORK_WRITE_CMD(NC_CLEAR_LINES);
+     NETWORK_WRITE(buffer);
+     return true;
+}
+
+bool network_clear_lines_readonly(int socket, NetworkBufferId_t buffer)
+{
+     NETWORK_WRITE_CMD(NC_CLEAR_LINES_READONLY);
+     NETWORK_WRITE(buffer);
+     return true;
+}
+
+//typedef bool (*LoadStringFn_t) (NetworkBufferId_t buffer, const char* string, void* user_data);
+bool network_load_string(int socket, NetworkBufferId_t buffer, const char* string)
+{
+     NETWORK_WRITE_CMD(NC_LOAD_STRING);
+     NETWORK_WRITE(buffer);
+     NETWORK_WRITE_STR(string);
+     return true;
+}
+
+//typedef bool (*LoadFileFn_t) (NetworkBufferId_t buffer, const char* filename, void* user_data);
+bool network_load_file(int socket, NetworkBufferId_t buffer, const char* filename)
+{
+     NETWORK_WRITE_CMD(NC_LOAD_FILE);
+     NETWORK_WRITE(buffer);
+     NETWORK_WRITE_STR(filename);
+     return true;
+}
+
+//typedef bool (*InsertCharFn_t) (NetworkBufferId_t buffer, Point_t location, char c, void* user_data);
+bool network_insert_char(int socket, NetworkBufferId_t buffer, Point_t location, char c)
+{
+     NETWORK_WRITE_CMD(NC_INSERT_CHAR);
+     NETWORK_WRITE(buffer);
+     NETWORK_WRITE(location);
+     NETWORK_WRITE(c);
+     return true;
+}
+
+bool network_insert_char_readonly(int socket, NetworkBufferId_t buffer, Point_t location, char c)
+{
+     NETWORK_WRITE_CMD(NC_INSERT_CHAR_READONLY);
+     NETWORK_WRITE(buffer);
+     NETWORK_WRITE(location);
+     NETWORK_WRITE(c);
+     return true;
+}
+
+//typedef bool (*AppendCharFn_t) (NetworkBufferId_t buffer, char c, void* user_data);
+bool network_append_char(int socket, NetworkBufferId_t buffer, char c)
+{
+     NETWORK_WRITE_CMD(NC_APPEND_CHAR);
+     NETWORK_WRITE(buffer);
+     NETWORK_WRITE(c);
+     return true;
+}
+
+bool network_append_char_readonly(int socket, NetworkBufferId_t buffer, char c)
+{
+     NETWORK_WRITE_CMD(NC_APPEND_CHAR_READONLY);
+     NETWORK_WRITE(buffer);
+     NETWORK_WRITE(c);
+     return true;
+}
+
+//typedef bool (*RemoveCharFn_t) (NetworkBufferId_t buffer, Point_t location, void* user_data);
+bool network_remove_char(int socket, NetworkBufferId_t buffer, Point_t location)
+{
+     NETWORK_WRITE_CMD(NC_REMOVE_CHAR);
+     NETWORK_WRITE(buffer);
+     NETWORK_WRITE(location);
+     return true;
+}
+
+//typedef bool (*SetCharFn_t) (NetworkBufferId_t buffer, Point_t location, char c, void* user_data);
+bool network_set_char(int socket, NetworkBufferId_t buffer, Point_t location, char c)
+{
+     NETWORK_WRITE_CMD(NC_SET_CHAR);
+     NETWORK_WRITE(buffer);
+     NETWORK_WRITE(location);
+     NETWORK_WRITE(c);
+     return true;
+}
+
+//typedef bool (*InsertStringFn_t) (NetworkBufferId_t buffer, Point_t location, const char* string, void* user_data);
+bool network_insert_string(int socket, NetworkBufferId_t buffer, Point_t location, const char* string)
+{
+     NETWORK_WRITE_CMD(NC_INSERT_STRING);
+     NETWORK_WRITE(buffer);
+     NETWORK_WRITE(location);
+     NETWORK_WRITE_STR(string);
+     return true;
+}
+
+bool network_insert_string_readonly(int socket, NetworkBufferId_t buffer, Point_t location, const char* string)
+{
+     NETWORK_WRITE_CMD(NC_INSERT_STRING_READONLY);
+     NETWORK_WRITE(buffer);
+     NETWORK_WRITE(location);
+     NETWORK_WRITE_STR(string);
+     return true;
+}
+
+//typedef bool (*RemoveStringFn_t) (NetworkBufferId_t buffer, Point_t location, int64_t length, void* user_data);
+bool network_remove_string(int socket, NetworkBufferId_t buffer, Point_t location, int64_t length)
+{
+     NETWORK_WRITE_CMD(NC_REMOVE_STRING);
+     NETWORK_WRITE(buffer);
+     NETWORK_WRITE(location);
+     NETWORK_WRITE(length);
+     return true;
+}
+
+//typedef bool (*PrependStringFn_t) (NetworkBufferId_t buffer, int64_t line, const char* string, void* user_data);
+bool network_prepend_string(int socket, NetworkBufferId_t buffer, int64_t line, const char* string)
+{
+     NETWORK_WRITE_CMD(NC_PREPEND_STRING);
+     NETWORK_WRITE(buffer);
+     NETWORK_WRITE(line);
+     NETWORK_WRITE_STR(string);
+     return true;
+}
+
+//typedef bool (*AppendStringFn_t) (NetworkBufferId_t buffer, int64_t line, const char* string, void* user_data);
+bool network_append_string(int socket, NetworkBufferId_t buffer, int64_t line, const char* string)
+{
+     NETWORK_WRITE_CMD(NC_APPEND_STRING);
+     NETWORK_WRITE(buffer);
+     NETWORK_WRITE(line);
+     NETWORK_WRITE_STR(string);
+     return true;
+}
+
+bool network_append_string_readonly(int socket, NetworkBufferId_t buffer, int64_t line, const char* string)
+{
+     NETWORK_WRITE_CMD(NC_APPEND_STRING_READONLY);
+     NETWORK_WRITE(buffer);
+     NETWORK_WRITE(line);
+     NETWORK_WRITE_STR(string);
+     return true;
+}
+
+//typedef bool (*InsertLineFn_t) (NetworkBufferId_t buffer, int64_t line, const char* string, void* user_data);
+bool network_insert_line(int socket, NetworkBufferId_t buffer, int64_t line, const char* string)
+{
+     NETWORK_WRITE_CMD(NC_INSERT_LINE);
+     NETWORK_WRITE(buffer);
+     NETWORK_WRITE(line);
+     NETWORK_WRITE_STR(string);
+     return true;
+}
+
+bool network_insert_line_readonly(int socket, NetworkBufferId_t buffer, int64_t line, const char* string)
+{
+     NETWORK_WRITE_CMD(NC_INSERT_LINE_READONLY);
+     NETWORK_WRITE(buffer);
+     NETWORK_WRITE(line);
+     NETWORK_WRITE_STR(string);
+     return true;
+}
+
+//typedef bool (*RemoveLineFn_t) (NetworkBufferId_t buffer, int64_t line, void* user_data);
+bool network_remove_line(int socket, NetworkBufferId_t buffer, int64_t line)
+{
+     NETWORK_WRITE_CMD(NC_REMOVE_LINE);
+     NETWORK_WRITE(buffer);
+     NETWORK_WRITE(line);
+     return true;
+}
+
+//typedef bool (*AppendLineFn_t) (NetworkBufferId_t buffer, int64_t line, const char* string, void* user_data);
+bool network_append_line(int socket, NetworkBufferId_t buffer, int64_t line, const char* string)
+{
+     NETWORK_WRITE_CMD(NC_APPEND_LINE);
+     NETWORK_WRITE(buffer);
+     NETWORK_WRITE(line);
+     NETWORK_WRITE_STR(string);
+     return true;
+}
+
+bool network_append_line_readonly(int socket, NetworkBufferId_t buffer, int64_t line, const char* string)
+{
+     NETWORK_WRITE_CMD(NC_APPEND_LINE_READONLY);
+     NETWORK_WRITE(buffer);
+     NETWORK_WRITE(line);
+     NETWORK_WRITE_STR(string);
+     return true;
+}
+
+//typedef bool (*JoinLineFn_t) (NetworkBufferId_t buffer, int64_t line, void* user_data);
+bool network_join_line(int socket, NetworkBufferId_t buffer, int64_t line)
+{
+     NETWORK_WRITE_CMD(NC_JOIN_LINE);
+     NETWORK_WRITE(buffer);
+     NETWORK_WRITE(line);
+     return true;
+}
+
+//typedef bool (*InsertNewlineFn_t) (NetworkBufferId_t buffer, int64_t line, void* user_data);
+bool network_insert_newline(int socket, NetworkBufferId_t buffer, int64_t line)
+{
+     NETWORK_WRITE_CMD(NC_INSERT_NEWLINE);
+     NETWORK_WRITE(buffer);
+     NETWORK_WRITE(line);
+     return true;
+}
+
+//typedef bool (*SaveBufferFn_t) (NetworkBufferId_t buffer, const char* filename, void* user_data);
+bool network_save_buffer(int socket, NetworkBufferId_t buffer, const char* filename)
+{
+     NETWORK_WRITE_CMD(NC_SAVE_BUFFER);
+     NETWORK_WRITE(buffer);
+     NETWORK_WRITE_STR(filename);
+     return true;
 }

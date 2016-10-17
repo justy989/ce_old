@@ -648,7 +648,8 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
           case 'j':
                if(change_char == 'd' || change_char == 'c' ||
                   change_char == 'D' || change_char == 'C' ||
-                  change_char == '<' || change_char == '>'){
+                  change_char == '<' || change_char == '>' ||
+                  change_char == 'y'){
                     built_action.motion.type = VMT_LINE_DOWN;
                }else{
                     built_action.motion.type = VMT_DOWN;
@@ -657,7 +658,8 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
           case 'k':
                if(change_char == 'd' || change_char == 'c' ||
                   change_char == 'D' || change_char == 'C' ||
-                  change_char == '<' || change_char == '>'){
+                  change_char == '<' || change_char == '>' ||
+                  change_char == 'y'){
                     built_action.motion.type = VMT_LINE_UP;
                }else{
                     built_action.motion.type = VMT_UP;
@@ -1274,13 +1276,35 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
      } break;
      case VCT_CHANGE_CHAR:
      {
-          char prev_char;
+          if(action->change.change_char == NEWLINE){
+               char prev_char;
 
-          if(!ce_get_char(buffer, sorted_start, &prev_char)) return false;
-          if(!ce_set_char(buffer, sorted_start, action->change.change_char)) return false;
+               if(!ce_get_char(buffer, sorted_start, &prev_char)) return false;
 
-          ce_commit_change_char(&buffer_state->commit_tail, sorted_start, cursor, sorted_start,
-                                action->change.change_char, prev_char);
+               char* new_string = malloc(2);
+               if(!new_string) return false;
+               char* prev_string = malloc(2);
+               if(!prev_string) return false;
+
+               new_string[0] = action->change.change_char;
+               prev_string[0] = prev_char;
+               new_string[1] = 0;
+               prev_string[1] = 0;
+
+               if(!ce_remove_char(buffer, sorted_start)) return false;
+               if(!ce_insert_char(buffer, sorted_start, action->change.change_char)) return false;
+
+               ce_commit_change_string(&buffer_state->commit_tail, sorted_start, cursor, sorted_start,
+                                       new_string, prev_string);
+          }else{
+               char prev_char;
+
+               if(!ce_get_char(buffer, sorted_start, &prev_char)) return false;
+               if(!ce_set_char(buffer, sorted_start, action->change.change_char)) return false;
+
+               ce_commit_change_char(&buffer_state->commit_tail, sorted_start, cursor, sorted_start,
+                                     action->change.change_char, prev_char);
+          }
      } break;
      case VCT_YANK:
      {
@@ -3371,7 +3395,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                }
           }
 
-          if(!handled_key && isprint(key)){
+          if(!handled_key && (isprint(key) || key == NEWLINE)){
                if(config_state->command_len >= VIM_COMMAND_MAX){
                     config_state->command_len = 0;
                }

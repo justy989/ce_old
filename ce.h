@@ -241,17 +241,7 @@ char*   ce_dupe_lines                    (const Buffer_t* buffer, int64_t start_
 int64_t ce_get_indentation_for_next_line (const Buffer_t* buffer, const Point_t* location, int64_t tab_len);
 
 
-// Find Delta Functions
-int64_t ce_find_delta_to_soft_end_of_line       (const Buffer_t* buffer, const Point_t* location);
-int64_t ce_find_delta_to_soft_beginning_of_line (const Buffer_t* buffer, const Point_t* location);
-int64_t ce_find_delta_to_char_forward_in_line   (const Buffer_t* buffer, const Point_t* location, char c);
-int64_t ce_find_delta_to_char_backward_in_line  (const Buffer_t* buffer, const Point_t* location, char c);
-int64_t ce_find_delta_to_end_of_word            (const Buffer_t* buffer, const Point_t* location, bool punctuation_word_boundaries);
-int64_t ce_find_delta_to_next_word              (const Buffer_t* buffer, const Point_t* location, bool punctuation_word_boundaries);
-bool    ce_find_delta_to_match                  (const Buffer_t* buffer, const Point_t* location, Point_t* delta);
-
 // Find Point_t Functions
-bool ce_find_match               (const Buffer_t* buffer, const Point_t* location, Point_t* delta);
 bool ce_find_string              (const Buffer_t* buffer, const Point_t* location, const char* search_str, Point_t* match, Direction_t direction);
 bool ce_get_word_at_location     (const Buffer_t* buffer, const Point_t* location, Point_t* word_start, Point_t* word_end); // TODO: Is location necessary?
 bool ce_get_homogenous_adjacents (const Buffer_t* buffer, Point_t* start, Point_t* end, int (*is_homogenous)(int));
@@ -263,12 +253,17 @@ bool     ce_advance_cursor                        (const Buffer_t* buffer, Point
 bool     ce_move_cursor                           (const Buffer_t* buffer, Point_t* cursor, Point_t delta);
 bool     ce_set_cursor                            (const Buffer_t* buffer, Point_t* cursor, const Point_t* location);
 bool     ce_move_cursor_to_beginning_of_word      (const Buffer_t* buffer, Point_t* cursor, bool punctuation_word_boundaries);
+bool     ce_move_cursor_to_end_of_word            (const Buffer_t* buffer, Point_t* cursor, bool punctuation_word_boundaries);
+bool     ce_move_cursor_to_next_word              (const Buffer_t* buffer, Point_t* cursor, bool punctuation_word_boundaries);
 bool     ce_move_cursor_to_end_of_line            (const Buffer_t* buffer, Point_t* cursor);
 void     ce_move_cursor_to_beginning_of_line      (const Buffer_t* buffer, Point_t* cursor);
 bool     ce_move_cursor_to_soft_end_of_line       (const Buffer_t* buffer, Point_t* cursor);
 bool     ce_move_cursor_to_soft_beginning_of_line (const Buffer_t* buffer, Point_t* cursor);
 bool     ce_move_cursor_to_end_of_file            (const Buffer_t* buffer, Point_t* cursor);
 bool     ce_move_cursor_to_beginning_of_file      (const Buffer_t* buffer, Point_t* cursor);
+bool     ce_move_cursor_forward_to_char           (const Buffer_t* buffer, Point_t* cursor, char c);
+bool     ce_move_cursor_backward_to_char          (const Buffer_t* buffer, Point_t* cursor, char c);
+bool     ce_move_cursor_to_matching_pair          (const Buffer_t* buffer, Point_t* cursor);
 bool     ce_follow_cursor                         (const Point_t* cursor, int64_t* left_column, int64_t* top_row, int64_t view_width, int64_t view_height,
                                                    bool at_terminal_width_edge, bool at_terminal_height_edge);
 
@@ -302,6 +297,7 @@ int64_t ce_is_caps_var      (const char* line, int64_t start_offset);
 
 // Misc. Utility Functions
 int64_t ce_count_string_lines   (const char* string);
+bool    ce_point_after          (const Point_t* a, const Point_t* b);
 void    ce_sort_points          (const Point_t** a, const Point_t** b);
 int     ce_ispunct              (int c);
 int     ce_iswordchar           (int c);

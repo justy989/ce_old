@@ -157,13 +157,13 @@ TEST(point_on_buffer)
      buffer.lines[1] = strdup("TA");
 
      Point_t point = {1, 1};
-     EXPECT(ce_point_on_buffer(&buffer, &point));
+     EXPECT(ce_point_on_buffer(&buffer, point));
 
      point = (Point_t){1, 2};
-     EXPECT(!ce_point_on_buffer(&buffer, &point));
+     EXPECT(!ce_point_on_buffer(&buffer, point));
 
      point = (Point_t){3, 1};
-     EXPECT(!ce_point_on_buffer(&buffer, &point));
+     EXPECT(!ce_point_on_buffer(&buffer, point));
 
      ce_free_buffer(&buffer);
 }
@@ -176,7 +176,7 @@ TEST(sanity_insert_char)
      buffer.lines[0] = strdup("TACOS");
 
      Point_t point = {2, 0};
-     ce_insert_char(&buffer, &point, 'R');
+     ce_insert_char(&buffer, point, 'R');
 
      EXPECT(strcmp(buffer.lines[0], "TARCOS") == 0);
 
@@ -192,7 +192,7 @@ TEST(sanity_insert_char_readonly)
      buffer.readonly = true;
 
      Point_t point = {2, 0};
-     ce_insert_char_readonly(&buffer, &point, 'R');
+     ce_insert_char_readonly(&buffer, point, 'R');
 
      EXPECT(strcmp(buffer.lines[0], "TARCOS") == 0);
 
@@ -207,7 +207,7 @@ TEST(insert_char_newline_begin)
      buffer.lines[0] = strdup("TACOS");
 
      Point_t point = {0, 0};
-     ce_insert_char(&buffer, &point, '\n');
+     ce_insert_char(&buffer, point, '\n');
 
      ASSERT(buffer.line_count == 2);
      EXPECT(strcmp(buffer.lines[0], "") == 0);
@@ -224,7 +224,7 @@ TEST(insert_char_newline_end)
      buffer.lines[0] = strdup("TACOS");
 
      Point_t point = {5, 0};
-     ce_insert_char(&buffer, &point, '\n');
+     ce_insert_char(&buffer, point, '\n');
 
      ASSERT(buffer.line_count == 2);
      EXPECT(strcmp(buffer.lines[0], "TACOS") == 0);
@@ -241,7 +241,7 @@ TEST(insert_char_newline_middle)
      buffer.lines[0] = strdup("TACOS");
 
      Point_t point = {2, 0};
-     ce_insert_char(&buffer, &point, '\n');
+     ce_insert_char(&buffer, point, '\n');
 
      ASSERT(buffer.line_count == 2);
      EXPECT(strcmp(buffer.lines[0], "TA") == 0);
@@ -258,7 +258,7 @@ TEST(sanity_remove_char)
      buffer.lines[0] = strdup("TACOS");
 
      Point_t point = {2, 0};
-     ce_remove_char(&buffer, &point);
+     ce_remove_char(&buffer, point);
 
      EXPECT(buffer.line_count == 1);
      EXPECT(strcmp(buffer.lines[0], "TAOS") == 0);
@@ -275,7 +275,7 @@ TEST(remove_char_empty_line)
      buffer.lines[1] = strdup("");
 
      Point_t point = {0, 1};
-     ce_remove_char(&buffer, &point);
+     ce_remove_char(&buffer, point);
 
      EXPECT(buffer.line_count == 1);
      EXPECT(strcmp(buffer.lines[0], "TACOS") == 0);
@@ -288,7 +288,7 @@ TEST(insert_string_newline_on_empty)
      Buffer_t buffer = {};
 
      Point_t point = {0, 0};
-     ce_insert_string(&buffer, &point, "\n");
+     ce_insert_string(&buffer, point, "\n");
 
      ASSERT(buffer.line_count == 1);
      EXPECT(strcmp(buffer.lines[0], "") == 0);
@@ -304,7 +304,7 @@ TEST(insert_string_begin)
      buffer.lines[0] = strdup("TACOS");
 
      Point_t point = {0, 0};
-     ce_insert_string(&buffer, &point, "AHHH ");
+     ce_insert_string(&buffer, point, "AHHH ");
 
      ASSERT(buffer.line_count == 1);
      EXPECT(strcmp(buffer.lines[0], "AHHH TACOS") == 0);
@@ -320,7 +320,7 @@ TEST(insert_string_readonly_begin)
      buffer.readonly = true;
 
      Point_t point = {0, 0};
-     ce_insert_string_readonly(&buffer, &point, "AHHH ");
+     ce_insert_string_readonly(&buffer, point, "AHHH ");
 
      ASSERT(buffer.line_count == 1);
      EXPECT(strcmp(buffer.lines[0], "AHHH TACOS") == 0);
@@ -335,7 +335,7 @@ TEST(insert_string_mid)
      buffer.lines[0] = strdup("TACOS");
 
      Point_t point = {2, 0};
-     ce_insert_string(&buffer, &point, " AHHH ");
+     ce_insert_string(&buffer, point, " AHHH ");
 
      ASSERT(buffer.line_count == 1);
      EXPECT(strcmp(buffer.lines[0], "TA AHHH COS") == 0);
@@ -350,7 +350,7 @@ TEST(insert_string_end)
      buffer.lines[0] = strdup("TACOS");
 
      Point_t point = {5, 0};
-     ce_insert_string(&buffer, &point, " AHHH");
+     ce_insert_string(&buffer, point, " AHHH");
 
      ASSERT(buffer.line_count == 1);
      EXPECT(strcmp(buffer.lines[0], "TACOS AHHH") == 0);
@@ -365,7 +365,7 @@ TEST(insert_string_multiline_begin)
      buffer.lines[0] = strdup("TACOS");
 
      Point_t point = {0, 0};
-     ce_insert_string(&buffer, &point, "AH\nHH ");
+     ce_insert_string(&buffer, point, "AH\nHH ");
 
      ASSERT(buffer.line_count == 2);
      // NOTE: I realize my examples are insane, but I'm intoxicated.
@@ -383,7 +383,7 @@ TEST(insert_string_multiline_mid)
      buffer.lines[0] = strdup("TACOS");
 
      Point_t point = {2, 0};
-     ce_insert_string(&buffer, &point, " IN\nTHE\nMID\n ");
+     ce_insert_string(&buffer, point, " IN\nTHE\nMID\n ");
 
      ASSERT(buffer.line_count == 4);
      EXPECT(strcmp(buffer.lines[0], "TA IN") == 0);
@@ -402,7 +402,7 @@ TEST(insert_string_multiline_end)
      buffer.lines[0] = strdup("TACOS");
 
      Point_t point = {5, 0};
-     ce_insert_string(&buffer, &point, " AH\nHH ");
+     ce_insert_string(&buffer, point, " AH\nHH ");
 
      ASSERT(buffer.line_count == 2);
      EXPECT(strcmp(buffer.lines[0], "TACOS AH") == 0);
@@ -419,7 +419,7 @@ TEST(insert_string_multiline_blank_begin)
      buffer.lines[0] = strdup("TACOS");
 
      Point_t point = {0, 0};
-     ce_insert_string(&buffer, &point, "\n\n");
+     ce_insert_string(&buffer, point, "\n\n");
 
      ASSERT(buffer.line_count == 3);
      EXPECT(strcmp(buffer.lines[0], "") == 0);
@@ -437,7 +437,7 @@ TEST(insert_string_multiline_blank_mid)
      buffer.lines[0] = strdup("TACOS");
 
      Point_t point = {2, 0};
-     ce_insert_string(&buffer, &point, "\n\n");
+     ce_insert_string(&buffer, point, "\n\n");
 
      ASSERT(buffer.line_count == 3);
      EXPECT(strcmp(buffer.lines[0], "TA") == 0);
@@ -455,7 +455,7 @@ TEST(insert_string_multiline_blank_end)
      buffer.lines[0] = strdup("TACOS");
 
      Point_t point = {5, 0};
-     ce_insert_string(&buffer, &point, "\n\n");
+     ce_insert_string(&buffer, point, "\n\n");
 
      ASSERT(buffer.line_count == 3);
      EXPECT(strcmp(buffer.lines[0], "TACOS") == 0);
@@ -520,7 +520,7 @@ TEST(remove_string_begin)
      buffer.lines[0] = strdup("TACOS");
 
      Point_t point = {0, 0};
-     ce_remove_string(&buffer, &point, 2);
+     ce_remove_string(&buffer, point, 2);
 
      ASSERT(buffer.line_count == 1);
      EXPECT(strcmp(buffer.lines[0], "COS") == 0);
@@ -536,7 +536,7 @@ TEST(remove_string_mid)
      buffer.lines[0] = strdup("TACOS");
 
      Point_t point = {1, 0};
-     ce_remove_string(&buffer, &point, 2);
+     ce_remove_string(&buffer, point, 2);
 
      ASSERT(buffer.line_count == 1);
      EXPECT(strcmp(buffer.lines[0], "TOS") == 0);
@@ -552,7 +552,7 @@ TEST(remove_string_end)
      buffer.lines[0] = strdup("TACOS");
 
      Point_t point = {3, 0};
-     ce_remove_string(&buffer, &point, 2);
+     ce_remove_string(&buffer, point, 2);
 
      ASSERT(buffer.line_count == 1);
      EXPECT(strcmp(buffer.lines[0], "TAC") == 0);
@@ -570,7 +570,7 @@ TEST(remove_string_multiline_begin)
      buffer.lines[2] = strdup("AWESOME");
 
      Point_t point = {0, 0};
-     ce_remove_string(&buffer, &point, 7);
+     ce_remove_string(&buffer, point, 7);
 
      ASSERT(buffer.line_count == 2);
      EXPECT(strcmp(buffer.lines[0], "RE") == 0);
@@ -589,7 +589,7 @@ TEST(remove_string_multiline_mid)
      buffer.lines[2] = strdup("AWESOME");
 
      Point_t point = {1, 0};
-     ce_remove_string(&buffer, &point, 7);
+     ce_remove_string(&buffer, point, 7);
 
      ASSERT(buffer.line_count == 2);
      EXPECT(strcmp(buffer.lines[0], "TE") == 0);
@@ -608,7 +608,7 @@ TEST(remove_string_multiline_end)
      buffer.lines[2] = strdup("AWESOMT");
 
      Point_t point = {2, 1};
-     ce_remove_string(&buffer, &point, 9);
+     ce_remove_string(&buffer, point, 9);
 
      ASSERT(buffer.line_count == 2);
      EXPECT(strcmp(buffer.lines[0], "TACOS") == 0);
@@ -629,7 +629,7 @@ TEST(remove_string_multiline_blank_begin)
      buffer.lines[4] = strdup("AWESOME");
 
      Point_t point = {0, 0};
-     ce_remove_string(&buffer, &point, 5);
+     ce_remove_string(&buffer, point, 5);
 
      ASSERT(buffer.line_count == 3);
      EXPECT(strcmp(buffer.lines[0], "OS") == 0);
@@ -651,7 +651,7 @@ TEST(remove_string_multiline_blank_mid)
      buffer.lines[4] = strdup("AWESOME");
 
      Point_t point = {0, 1};
-     ce_remove_string(&buffer, &point, 4);
+     ce_remove_string(&buffer, point, 4);
 
      ASSERT(buffer.line_count == 3);
      EXPECT(strcmp(buffer.lines[0], "TACOS") == 0);
@@ -673,7 +673,7 @@ TEST(remove_string_multiline_blank_end)
      buffer.lines[4] = strdup("");
 
      Point_t point = {3, 2};
-     ce_remove_string(&buffer, &point, 7);
+     ce_remove_string(&buffer, point, 7);
 
      ASSERT(buffer.line_count == 3);
      EXPECT(strcmp(buffer.lines[0], "TACOS") == 0);
@@ -815,7 +815,7 @@ TEST(sanity_dupe_string)
 
      Point_t start = {1, 0};
      Point_t end = {3, 0};
-     char* str = ce_dupe_string(&buffer, &start, &end);
+     char* str = ce_dupe_string(&buffer, start, end);
 
      EXPECT(strcmp(str, "ACO") == 0);
 
@@ -834,7 +834,7 @@ TEST(dupe_string_multiline)
 
      Point_t start = {1, 0};
      Point_t end = {3, 2};
-     char* str = ce_dupe_string(&buffer, &start, &end);
+     char* str = ce_dupe_string(&buffer, start, end);
 
      EXPECT(strcmp(str, "ACOS\nARE\nAWES") == 0);
 
@@ -853,7 +853,7 @@ TEST(dupe_string_multiline_on_line_boundry)
 
      Point_t start = {1, 0};
      Point_t end = {3, 1};
-     char* str = ce_dupe_string(&buffer, &start, &end);
+     char* str = ce_dupe_string(&buffer, start, end);
 
      EXPECT(strcmp(str, "ACOS\nARE\n") == 0);
 
@@ -887,7 +887,7 @@ TEST(sanity_get_char)
 
      char ch = 0;
      Point_t point = {2, 0};
-     ce_get_char(&buffer, &point, &ch);
+     ce_get_char(&buffer, point, &ch);
 
      EXPECT(ch == 'C');
 
@@ -902,7 +902,7 @@ TEST(sanity_set_char)
      buffer.lines[0] = strdup("TACOS");
 
      Point_t point = {2, 0};
-     ce_set_char(&buffer, &point, 'R');
+     ce_set_char(&buffer, point, 'R');
 
      ASSERT(buffer.line_count == 1);
      EXPECT(strcmp(buffer.lines[0], "TAROS") == 0);
@@ -973,7 +973,7 @@ TEST(find_match_same_line)
 
      Point_t point = {2, 0};
      Point_t match = {};
-     ce_find_string(&buffer, &point, "ARE", &match, CE_DOWN);
+     ce_find_string(&buffer, point, "ARE", &match, CE_DOWN);
 
      EXPECT(match.x == 6);
      EXPECT(match.y == 0);
@@ -992,7 +992,7 @@ TEST(find_match_next_line)
 
      Point_t point = {2, 0};
      Point_t delta = {};
-     ce_find_string(&buffer, &point, "SO", &delta, CE_DOWN);
+     ce_find_string(&buffer, point, "SO", &delta, CE_DOWN);
 
      EXPECT(delta.x == 4);
      EXPECT(delta.y == 1);
@@ -1064,8 +1064,8 @@ TEST(sanity_set_cursor)
      buffer.lines[2] = strdup("AWESOME");
 
      Point_t cursor = {2, 0};
-     Point_t delta = {4, 2};
-     ce_set_cursor(&buffer, &cursor, &delta);
+     Point_t end_loc = {4, 2};
+     ce_set_cursor(&buffer, &cursor, end_loc);
 
      EXPECT(cursor.x == 4);
      EXPECT(cursor.y == 2);
@@ -1140,7 +1140,7 @@ TEST(commit_insert_char_undo_redo)
      Point_t start = {2, 0};
      Point_t undo = {2, 0};
      Point_t redo = {3, 0};
-     ce_commit_insert_char(&tail, &start, &undo, &redo, 'C');
+     ce_commit_insert_char(&tail, start, undo, redo, 'C');
 
      Point_t cursor = {};
      ce_commit_undo(&buffer, &tail, &cursor);
@@ -1174,7 +1174,7 @@ TEST(commit_insert_string_undo_redo)
      Point_t start = {5, 0};
      Point_t undo = {5, 0};
      Point_t redo = {9, 0};
-     ce_commit_insert_string(&tail, &start, &undo, &redo, strdup(" ARE"));
+     ce_commit_insert_string(&tail, start, undo, redo, strdup(" ARE"));
 
      Point_t cursor = {};
      ce_commit_undo(&buffer, &tail, &cursor);
@@ -1208,7 +1208,7 @@ TEST(commit_remove_char_undo_redo)
      Point_t start = {2, 0};
      Point_t undo = {2, 0};
      Point_t redo = {2, 0};
-     ce_commit_remove_char(&tail, &start, &undo, &redo, 'C');
+     ce_commit_remove_char(&tail, start, undo, redo, 'C');
 
      Point_t cursor = {};
      ce_commit_undo(&buffer, &tail, &cursor);
@@ -1242,7 +1242,7 @@ TEST(commit_remove_string_undo_redo)
      Point_t start = {5, 0};
      Point_t undo = {9, 0};
      Point_t redo = {5, 0};
-     ce_commit_remove_string(&tail, &start, &undo, &redo, strdup(" ARE"));
+     ce_commit_remove_string(&tail, start, undo, redo, strdup(" ARE"));
 
      Point_t cursor = {};
      ce_commit_undo(&buffer, &tail, &cursor);
@@ -1276,7 +1276,7 @@ TEST(commit_change_char_undo_redo)
      Point_t start = {2, 0};
      Point_t undo = {2, 0};
      Point_t redo = {2, 0};
-     ce_commit_change_char(&tail, &start, &undo, &redo, 'L', 'C');
+     ce_commit_change_char(&tail, start, undo, redo, 'L', 'C');
 
      Point_t cursor = {};
      ce_commit_undo(&buffer, &tail, &cursor);
@@ -1310,7 +1310,7 @@ TEST(commit_change_string_undo_redo)
      Point_t start = {5, 0};
      Point_t undo = {9, 0};
      Point_t redo = {5, 0};
-     ce_commit_change_string(&tail, &start, &undo, &redo, strdup(" BE"), strdup(" ARE"));
+     ce_commit_change_string(&tail, start, undo, redo, strdup(" BE"), strdup(" ARE"));
 
      Point_t cursor = {};
      ce_commit_undo(&buffer, &tail, &cursor);
@@ -1417,18 +1417,18 @@ TEST(sanity_follow_cursor)
 
      Point_t cursor = {0, 0};
 
-     ce_follow_cursor(&cursor, &left_column, &top_row, view_width, view_height, false, false);
+     ce_follow_cursor(cursor, &left_column, &top_row, view_width, view_height, false, false);
      EXPECT(left_column == 0);
      EXPECT(top_row == 0);
 
      cursor = (Point_t){3, 0};
-     ce_follow_cursor(&cursor, &left_column, &top_row, view_width, view_height, false, false);
+     ce_follow_cursor(cursor, &left_column, &top_row, view_width, view_height, false, false);
      EXPECT(left_column == 1);
      EXPECT(top_row == 0);
 
      left_column = 0;
      cursor = (Point_t){0, 4};
-     ce_follow_cursor(&cursor, &left_column, &top_row, view_width, view_height, false, false);
+     ce_follow_cursor(cursor, &left_column, &top_row, view_width, view_height, false, false);
      EXPECT(left_column == 0);
      EXPECT(top_row == 1);
 }
@@ -1493,7 +1493,7 @@ TEST(sanity_split_view)
      // calc views
      Point_t top_left = {0, 0};
      Point_t bottom_right = {16, 9};
-     ASSERT(ce_calc_views(head, &top_left, &bottom_right));
+     ce_calc_views(head, top_left, bottom_right);
 
      EXPECT(head->top_left.x == 0);
      EXPECT(head->top_left.y == 0);
@@ -1517,7 +1517,7 @@ TEST(sanity_split_view)
 
      // find view at point
      Point_t find_point = {7, 9};
-     BufferView_t* found_view = ce_find_view_at_point(head, &find_point);
+     BufferView_t* found_view = ce_find_view_at_point(head, find_point);
      EXPECT(found_view == new_horizontal_split_view);
 
      // find view by buffer
@@ -1712,23 +1712,23 @@ TEST(sanity_compute_length)
 
      start = (Point_t) {0, 0};
      end = (Point_t) {1, 0};
-     ASSERT(ce_compute_length(&buffer, &start, &end) == 2);
+     ASSERT(ce_compute_length(&buffer, start, end) == 2);
 
      start = (Point_t) {0, 0};
      end = (Point_t) {18, 0};
-     ASSERT(ce_compute_length(&buffer, &start, &end) == 19);
+     ASSERT(ce_compute_length(&buffer, start, end) == 19);
 
      start = (Point_t) {0, 0};
      end = (Point_t) {0, 1};
-     ASSERT(ce_compute_length(&buffer, &start, &end) == 20);
+     ASSERT(ce_compute_length(&buffer, start, end) == 20);
 
      start = (Point_t) {0, 0};
      end = (Point_t) {1, 1};
-     ASSERT(ce_compute_length(&buffer, &start, &end) == 21);
+     ASSERT(ce_compute_length(&buffer, start, end) == 21);
 
      start = (Point_t) {0, 0};
      end = (Point_t) {strlen(buffer.lines[2]), 2};
-     ASSERT(ce_compute_length(&buffer, &start, &end) == (int64_t) strlen(buffer.lines[0]) + 1 + // account for null
+     ASSERT(ce_compute_length(&buffer, start, end) == (int64_t) strlen(buffer.lines[0]) + 1 + // account for null
                                                         (int64_t) strlen(buffer.lines[1]) + 1 + // account for null
                                                         (int64_t) strlen(buffer.lines[2]) + 1);
 
@@ -1747,7 +1747,7 @@ TEST(sanity_get_homogenous_adjacents)
      Point_t start, end;
      start = end = (Point_t) {1, 0};
 
-     ASSERT(ce_get_homogenous_adjacents(&buffer, &start, &end, isblank));
+     ASSERT(ce_get_homogenous_adjacents(&buffer, start, &end, isblank));
      EXPECT(start.x == 1);
      EXPECT(start.y == 0);
      EXPECT(end.x == 1);
@@ -1755,7 +1755,7 @@ TEST(sanity_get_homogenous_adjacents)
 
      start = end = (Point_t) {1, 0};
 
-     ASSERT(ce_get_homogenous_adjacents(&buffer, &start, &end, ce_ispunct));
+     ASSERT(ce_get_homogenous_adjacents(&buffer, start, &end, ce_ispunct));
      EXPECT(start.x == 1);
      EXPECT(start.y == 0);
      EXPECT(end.x == 1);
@@ -1801,7 +1801,7 @@ TEST(sanity_get_word_at_location)
      Point_t word_start, word_end;
      Point_t cursor = {6, 0};
 
-     ASSERT(ce_get_word_at_location(&buffer, &cursor, &word_start, &word_end));
+     ASSERT(ce_get_word_at_location(&buffer, cursor, &word_start, &word_end));
      EXPECT(word_start.y == 0);
      EXPECT(word_start.x == 5);
      EXPECT(word_end.y == 0);
@@ -1809,7 +1809,7 @@ TEST(sanity_get_word_at_location)
 
      cursor = (Point_t) {6, 1};
 
-     ASSERT(ce_get_word_at_location(&buffer, &cursor, &word_start, &word_end));
+     ASSERT(ce_get_word_at_location(&buffer, cursor, &word_start, &word_end));
      EXPECT(word_start.y == 1);
      EXPECT(word_start.x == 4);
      EXPECT(word_end.y == 1);
@@ -1817,7 +1817,7 @@ TEST(sanity_get_word_at_location)
 
      cursor = (Point_t) {6, 2};
 
-     ASSERT(ce_get_word_at_location(&buffer, &cursor, &word_start, &word_end));
+     ASSERT(ce_get_word_at_location(&buffer, cursor, &word_start, &word_end));
      EXPECT(word_start.y == 2);
      EXPECT(word_start.x == 4);
      EXPECT(word_end.y == 2);
@@ -1843,22 +1843,22 @@ TEST(get_indentation_for_next_line_open_bracket)
      Point_t cursor;
 
      cursor = (Point_t) {5, 0};
-     ASSERT(ce_get_indentation_for_next_line(&buffer, &cursor, tab_len) == 5);
+     ASSERT(ce_get_indentation_for_next_line(&buffer, cursor, tab_len) == 5);
 
      cursor = (Point_t) {7, 1};
-     ASSERT(ce_get_indentation_for_next_line(&buffer, &cursor, tab_len) == 10);
+     ASSERT(ce_get_indentation_for_next_line(&buffer, cursor, tab_len) == 10);
 
      cursor = (Point_t) {4, 2};
-     ASSERT(ce_get_indentation_for_next_line(&buffer, &cursor, tab_len) == 10);
+     ASSERT(ce_get_indentation_for_next_line(&buffer, cursor, tab_len) == 10);
 
      cursor = (Point_t) {2, 3};
-     ASSERT(ce_get_indentation_for_next_line(&buffer, &cursor, tab_len) == 7); // un-aligned!
+     ASSERT(ce_get_indentation_for_next_line(&buffer, cursor, tab_len) == 7); // un-aligned!
 
      cursor = (Point_t) {1, 4};
-     ASSERT(ce_get_indentation_for_next_line(&buffer, &cursor, tab_len) == 5);
+     ASSERT(ce_get_indentation_for_next_line(&buffer, cursor, tab_len) == 5);
 
      cursor = (Point_t) {0, 5};
-     ASSERT(ce_get_indentation_for_next_line(&buffer, &cursor, tab_len) == 0);
+     ASSERT(ce_get_indentation_for_next_line(&buffer, cursor, tab_len) == 0);
 
      ce_free_buffer(&buffer);
 }
@@ -2057,8 +2057,8 @@ TEST(sanity_point_in_line)
      Point_t a = {0, 0};
      Point_t b = {2, 2};
 
-     EXPECT(ce_point_in_range(&a, &start, &end) == false);
-     EXPECT(ce_point_in_range(&b, &start, &end) == true);
+     EXPECT(ce_point_in_range(a, start, end) == false);
+     EXPECT(ce_point_in_range(b, start, end) == true);
 }
 
 TEST(sanity_last_index)
@@ -2082,13 +2082,13 @@ TEST(sanity_get_char_raw)
      buffer.lines[2] = strdup("AWESOME");
 
      Point_t point = {2, 0};
-     EXPECT(ce_get_char_raw(&buffer, &point) == 'C');
+     EXPECT(ce_get_char_raw(&buffer, point) == 'C');
 
      point = (Point_t){1, 1};
-     EXPECT(ce_get_char_raw(&buffer, &point) == 'R');
+     EXPECT(ce_get_char_raw(&buffer, point) == 'R');
 
      point = (Point_t){4, 2};
-     EXPECT(ce_get_char_raw(&buffer, &point) == 'O');
+     EXPECT(ce_get_char_raw(&buffer, point) == 'O');
 
      ce_free_buffer(&buffer);
 }
@@ -2103,7 +2103,7 @@ TEST(move_cursor_to_beginning_of_file)
      buffer.lines[2] = strdup("AWESOME");
 
      Point_t point = {4, 2};
-     ce_move_cursor_to_beginning_of_file(&buffer, &point);
+     ce_move_cursor_to_beginning_of_file(&point);
      EXPECT(point.x == 0);
      EXPECT(point.y == 0);
 

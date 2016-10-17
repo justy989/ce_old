@@ -24,6 +24,9 @@ ce: main.c ce.o
 ce.o: ce.c
 	$(CC) -c -fpic $(CFLAGS) $^ -o $@
 
+ce.test.o: ce.c
+	$(CC) -c -fpic $(CFLAGS) $^ -o $@
+
 ce_network.o: ce_network.c
 	$(CC) -c -fpic $(CFLAGS) $^ -o $@
 

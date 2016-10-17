@@ -138,6 +138,8 @@ const char* random_greeting()
           "Welcome to GNU Emacs, one component of the GNU/Linux operating system.",
           "ce, the world's only editor with a Michelin star.",
           "Oy! ce's a beaut!",
+          "The default config has a great vimplementation!",
+          "They see me slurpin' They hatin'",
      };
 
      srand(time(NULL));

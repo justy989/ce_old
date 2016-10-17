@@ -2000,7 +2000,8 @@ bool initializer(BufferNode_t* head, Point_t* terminal_dimensions, int argc, cha
      define_key("\x11", KEY_CLOSE);     // ctrl + q    (17) (0x11) ASCII "DC1" Device Control 1
      define_key("\x12", KEY_REDO);      // ctrl + r    (18) (0x12) ASCII "DC2" Device Control 2
      define_key("\x17", KEY_SAVE);      // ctrl + w    (23) (0x17) ASCII "ETB" End of Transmission Block
-     //define_key("\x0A", KEY_ENTER);     // Enter       (10) (0x0A) ASCII "LF"  NL Line Feed, New Line
+     define_key(NULL, KEY_ENTER);       // Blow away enter
+     define_key("\x0D", KEY_ENTER);     // Enter       (13) (0x0D) ASCII "CR"  NL Carriage Return
 
      pthread_mutex_init(&draw_lock, NULL);
      pthread_mutex_init(&shell_buffer_lock, NULL);
@@ -3092,7 +3093,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     cursor->x++; // we want to be after the tabs
                }
           } break;
-          case 10: // return
+          case KEY_ENTER: // return
           {
                if(insert_state->used_arrow_key){
                     enter_insert_mode(config_state, cursor);

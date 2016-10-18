@@ -85,26 +85,6 @@ static void _refresh_view(Client_t* client, const Buffer_t* buffer, Point_t top_
 }
 #endif
 
-static bool _read(Client_t* client, void* buf, size_t buf_len)
-{
-     // attempt to read buf_len bytes into buf. remove client on failure and return false
-     ssize_t n_bytes_read = 0;
-     do{
-          ssize_t n_bytes = read(client->socket, buf + n_bytes_read, buf_len - n_bytes_read);
-          if(n_bytes < 0){
-               int err = errno; // useful for looking at errno in a coredump
-               assert(n_bytes >= 0);
-               ce_message("read() failed with error %s - Stopping server", strerror(err));
-               pthread_exit(NULL);
-          }
-          else if(n_bytes == 0){
-               // client closed connection
-               return false;
-          }
-     } while(n_bytes_read < (ssize_t)buf_len);
-     return true;
-}
-
 static void _close_client(ServerState_t* server_state, Client_t* client){
      struct sockaddr_in address;
      int addrlen;
@@ -186,10 +166,11 @@ static void _handle_insert_string(ServerState_t* server_state, Client_t* client)
 static void _handle_client_command(ServerState_t* server_state, Client_t* client)
 {
      NetworkCommand_t cmd = 0;
-     if(!_read(client, &cmd, sizeof(cmd))){
+     if(!network_read(client->socket, &cmd, sizeof(cmd))){
           _close_client(server_state, client);
           return;
      }
+     ce_message("Server received command %s", cmd_to_str(cmd));
 #if 0
      switch(cmd){
           case NC_OPEN_FILE:
@@ -269,9 +250,12 @@ void* ce_server_listen(void* args)
 
                // start tracking the new client. insert at list head
                Client_t* new_client = malloc(sizeof(*new_client));
-               *new_client = (Client_t){client_socket, NULL, {server_state->client_list_head, NULL}};
+               *new_client = (Client_t){client_socket, server_state->current_id++, NULL, {server_state->client_list_head, NULL}};
                if(new_client->next) new_client->next->prev = new_client;
                server_state->client_list_head = new_client;
+
+               // notify the new client of its network id
+               network_write(new_client->socket, &new_client->id, sizeof(new_client->id));
           }
      }
      return NULL;

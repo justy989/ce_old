@@ -13,6 +13,7 @@ typedef struct ClientView{
 
 typedef struct Client{
      int socket;
+     NetworkId_t id; // unique id for this client
      ClientView_t* view_list_head;
      struct{ // client list
           struct Client* next;

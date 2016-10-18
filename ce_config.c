@@ -1828,31 +1828,51 @@ int nftw_find_file(const char* fpath, const struct stat *sb, int typeflag, struc
      return FTW_CONTINUE;
 }
 
+#define REMOTE_PREFIX "remote:"
 Buffer_t* open_file_buffer(BufferNode_t* head, const char* filename)
 {
+     const char* remote_filename = NULL;
+     if(!strncmp(REMOTE_PREFIX, filename, sizeof(REMOTE_PREFIX) - 1)){
+          remote_filename = filename + (sizeof(REMOTE_PREFIX) - 1);
+     }
+
      BufferNode_t* itr = head;
      while(itr){
-          if(!strcmp(itr->buffer->name, filename)){
+          if(!strcmp(itr->buffer->name, (remote_filename) ? : filename)){
                return itr->buffer; // already open
           }
           itr = itr->next;
      }
 
-     if(access(filename, F_OK) == 0){
-          BufferNode_t* node = new_buffer_from_file(head, filename);
-          if(node) return node->buffer;
+     if(!remote_filename){
+          if(access(filename, F_OK) == 0){
+               BufferNode_t* node = new_buffer_from_file(head, filename);
+               if(node) return node->buffer;
+          }
+
+          // clang doesn't support nested functions so we need to deal with global state
+          nftw_state.search_filename = filename;
+          nftw_state.head = head;
+          nftw_state.new_node = NULL;
+          nftw(".", nftw_find_file, 20, FTW_CHDIR);
+          if(nftw_state.new_node) return nftw_state.new_node->buffer;
+
+          ce_message("file %s not found", filename);
+          return NULL;
      }
+     else{
+          // load remote file
+          // NOTE: file will be populated when we receive the load file network command
+          Buffer_t* buffer = new_buffer_from_string(head, remote_filename, "loading remote file...");
 
-     // clang doesn't support nested functions so we need to deal with global state
-     nftw_state.search_filename = filename;
-     nftw_state.head = head;
-     nftw_state.new_node = NULL;
-     nftw(".", nftw_find_file, 20, FTW_CHDIR);
-     if(nftw_state.new_node) return nftw_state.new_node->buffer;
-
-     ce_message("file %s not found", filename);
-
-     return NULL;
+          // request that the file contents be loaded asynchronously over the network
+          if(!network_load_file(g_config_state->client_state.server_list_head->socket,
+                                remote_filename)){
+               ce_message("failed to load file");
+               // TODO: error handling
+          }
+          return buffer;
+     }
 }
 
 bool initializer(bool is_client, bool is_server, BufferNode_t* head, Point_t* terminal_dimensions, int argc, char** argv, void** user_data)
@@ -1946,7 +1966,10 @@ bool initializer(bool is_client, bool is_server, BufferNode_t* head, Point_t* te
      }
      if(is_client){
           ce_message("spawning client");
-          ce_client_init(&config_state->client_state);
+          if(!ce_client_init(&config_state->client_state)){
+               ce_message("failed to initialize client");
+               return false;
+          }
      }
 
      // setup state for each buffer
@@ -1961,7 +1984,7 @@ bool initializer(bool is_client, bool is_server, BufferNode_t* head, Point_t* te
 
      for(int i = 0; i < argc; ++i){
           BufferNode_t* node = new_buffer_from_file(head, argv[i]);
-          ce_message("buffer %s has network_id %d", node->buffer->name, node->buffer->network_id);
+          //ce_message("buffer %s has network_id %d", node->buffer->name, node->buffer->network_id);
 
           // if we loaded a file, set the view to point at the file
           if(i == 0 && node){

@@ -7,6 +7,41 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#define CMD_CASE(cmd) case cmd: return #cmd;
+const char* cmd_to_str(NetworkCommand_t cmd)
+{
+     switch(cmd){
+          CMD_CASE(NC_FREE_BUFFER)
+          CMD_CASE(NC_ALLOC_LINES)
+          CMD_CASE(NC_CLEAR_LINES)
+          CMD_CASE(NC_CLEAR_LINES_READONLY)
+          CMD_CASE(NC_LOAD_STRING)
+          CMD_CASE(NC_LOAD_FILE)
+          CMD_CASE(NC_INSERT_CHAR)
+          CMD_CASE(NC_INSERT_CHAR_READONLY)
+          CMD_CASE(NC_APPEND_CHAR)
+          CMD_CASE(NC_APPEND_CHAR_READONLY)
+          CMD_CASE(NC_REMOVE_CHAR)
+          CMD_CASE(NC_SET_CHAR)
+          CMD_CASE(NC_INSERT_STRING)
+          CMD_CASE(NC_INSERT_STRING_READONLY)
+          CMD_CASE(NC_REMOVE_STRING)
+          CMD_CASE(NC_PREPEND_STRING)
+          CMD_CASE(NC_APPEND_STRING)
+          CMD_CASE(NC_APPEND_STRING_READONLY)
+          CMD_CASE(NC_INSERT_LINE)
+          CMD_CASE(NC_INSERT_LINE_READONLY)
+          CMD_CASE(NC_REMOVE_LINE)
+          CMD_CASE(NC_APPEND_LINE)
+          CMD_CASE(NC_APPEND_LINE_READONLY)
+          CMD_CASE(NC_JOIN_LINE)
+          CMD_CASE(NC_INSERT_NEWLINE)
+          CMD_CASE(NC_SAVE_BUFFER)
+          default:
+               return "invalid command";
+     }
+}
+
 #if 0
 #define WRITE(var) ({ \
      ssize_t sent_bytes = write(client_state->server_socket, &(var), sizeof(var)); \
@@ -101,28 +136,6 @@ bool ce_network_load_file(ClientState_t* client_state, Buffer_t* buffer, const c
 
 
 
-
-
-// attempt to read buf_len bytes into buf. return false on failure
-static bool _read(int socket, void* buf, size_t buf_len)
-{
-     ssize_t n_bytes_read = 0;
-     do{
-          ssize_t n_bytes = read(socket, buf + n_bytes_read, buf_len - n_bytes_read);
-          if(n_bytes < 0){
-               int err = errno; // useful for looking at errno in a coredump
-               assert(n_bytes >= 0);
-               ce_message("read() failed with error %s", strerror(err));
-               pthread_exit(NULL);
-          }
-          else if(n_bytes == 0){
-               // server closed connection
-               return false;
-          }
-     } while(n_bytes_read < (ssize_t)buf_len);
-     return true;
-}
-
 static void _free_buf(char** buf)
 {
      free(*buf);
@@ -130,7 +143,7 @@ static void _free_buf(char** buf)
 
 #define APPLY_READ(type, var) \
      type var; \
-     if(!_read(socket, &var, sizeof(var))){ return APPLY_FAILED; }
+     if(!network_read(socket, &var, sizeof(var))){ return APPLY_FAILED; }
 
 #define APPLY_READ_STR(var) \
      /* free the string when the variable goes out of scope */ \
@@ -371,9 +384,29 @@ ApplyRC_t apply_save_buffer(int socket, void* user_data, SaveBufferFn_t fn)
 
 
 
+bool network_read(int socket, void* buf, size_t buf_len)
+{
+     // attempt to read buf_len bytes into buf. remove server on failure and return false
+     ssize_t n_bytes_read = 0;
+     do{
+          ssize_t n_bytes = read(socket, buf + n_bytes_read, buf_len - n_bytes_read);
+          if(n_bytes < 0){
+               int err = errno; // useful for looking at errno in a coredump
+               assert(n_bytes >= 0);
+               ce_message("read() failed with error %s", strerror(err));
+               return false;
+          }
+          else if(n_bytes == 0){
+               // connection closed
+               return false;
+          }
+          n_bytes_read += n_bytes;
+     } while(n_bytes_read < (ssize_t)buf_len);
+     return true;
+}
 
 // attempt to write buf_len bytes to the socket. return false on failure
-static bool _write(int socket, const void* buf, size_t buf_len)
+bool network_write(int socket, const void* buf, size_t buf_len)
 {
      ssize_t n_bytes_written = 0;
      do{
@@ -385,20 +418,21 @@ static bool _write(int socket, const void* buf, size_t buf_len)
                return false;
           }
           else if(n_bytes == 0){
-               // server closed connection
+               // connection closed
                return false;
           }
+          n_bytes_written += n_bytes;
      } while(n_bytes_written < (ssize_t)buf_len);
      return true;
 }
 
-#define NETWORK_WRITE(var) if(!_write(socket, &var, sizeof(var))){ return false; }
+#define NETWORK_WRITE(var) if(!network_write(socket, &var, sizeof(var))){ return false; }
 #define NETWORK_WRITE_CMD(cmd) ({ \
      NetworkCommand_t _cmd = cmd; \
      NETWORK_WRITE(_cmd); \
 })
 
-#define NETWORK_WRITE_STR(var) if(!_write(socket, var, strlen(var) + 1)){ return false; }
+#define NETWORK_WRITE_STR(var) if(!network_write(socket, var, strlen(var) + 1)){ return false; }
 
 // write network functions with network arguments
 //typedef void (*FreeBufferFn_t) (NetworkBufferId_t buffer, void* user_data);
@@ -443,10 +477,9 @@ bool network_load_string(int socket, NetworkBufferId_t buffer, const char* strin
 }
 
 //typedef bool (*LoadFileFn_t) (NetworkBufferId_t buffer, const char* filename, void* user_data);
-bool network_load_file(int socket, NetworkBufferId_t buffer, const char* filename)
+bool network_load_file(int socket, const char* filename)
 {
      NETWORK_WRITE_CMD(NC_LOAD_FILE);
-     NETWORK_WRITE(buffer);
      NETWORK_WRITE_STR(filename);
      return true;
 }

@@ -8,63 +8,32 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <inttypes.h>
 
-#if 0
-static bool _read(Server_t* server, void* buf, size_t buf_len)
-{
-     // attempt to read buf_len bytes into buf. remove server on failure and return false
-     ssize_t n_bytes_read = 0;
-     do{
-          ssize_t n_bytes = read(server->socket, buf + n_bytes_read, buf_len - n_bytes_read);
-          if(n_bytes < 0){
-               int err = errno; // useful for looking at errno in a coredump
-               assert(n_bytes >= 0);
-               ce_message("read() failed with error %s - Stopping client", strerror(err));
-               pthread_exit(NULL);
-          }
-          else if(n_bytes == 0){
-               // server closed connection
-               return false;
-          }
-     } while(n_bytes_read < (ssize_t)buf_len);
-     return true;
-}
-#endif
-
-#if 0
 static bool _handle_command(ClientState_t* client_state, Server_t* server)
 {
+     (void)client_state;
      NetworkCommand_t cmd = 0;
-     if(!_read(server, &cmd, sizeof(cmd))){
-          _close_server(client_state, server);
-          return;
+     if(!network_read(server->socket, &cmd, sizeof(cmd))){
+          // TODO: close_server
+          //_close_server(client_state, server);
+          return false;;
      }
+
+     ce_message("Client received command %s", cmd_to_str(cmd));
+
+#if 0
      switch(cmd){
-          case NC_OPEN_FILE:
-               ce_message("received open file");
-               _handle_open_file(client_state, server);
-               break;
-          case NC_REFRESH_VIEW:
-               ce_message("received refresh view");
-               _handle_refresh_view(client_state, server);
-               break;
-          case NC_INSERT_STRING:
-               ce_message("received insert string");
-               _handle_insert_string(client_state, server);
-               break;
           default:
-               ce_message("Client received invalid command %d", cmd);
                break;
      }
+#endif
      return true;
 }
-#endif
 
 void* ce_client_listen(void* args)
 {
      ClientState_t* client_state = args;
-     BufferNode_t* head = client_state->buffer_list_head;
-     assert(head);
 
      fd_set server_fds;
      int max_fd; // select needs this
@@ -96,7 +65,7 @@ void* ce_client_listen(void* args)
                Server_t* server_itr = client_state->server_list_head;
                while(server_itr){
                     if(FD_ISSET(server_itr->socket, &server_fds)){
-                         //_handle_command(client_state, server_itr);
+                         _handle_command(client_state, server_itr);
                     }
                     server_itr = server_itr->next;
                }
@@ -124,14 +93,20 @@ static bool _server_connect(ClientState_t* client_state, const char* server_ip)
           return false;
      }
 
-     // TODO: record client's network id
-     ce_message("Client connected to %s:%d", server_ip, MAGIC_PORT);
-
      // add server to server list
      Server_t* new_server = malloc(sizeof(*new_server));
      *new_server = (Server_t){server_socket, 0, NULL, {client_state->server_list_head, NULL}};
      if(new_server->next) new_server->next->prev = new_server;
      client_state->server_list_head = new_server;
+
+     // read the network id from the server
+     if(!network_read(new_server->socket, &new_server->id, sizeof(new_server->id))){
+          free(new_server);
+          return false;
+     }
+
+     ce_message("Client connected to %s:%d with id %"PRIu16, server_ip, MAGIC_PORT, new_server->id);
+
      return true;
 }
 

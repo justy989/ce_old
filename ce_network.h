@@ -35,17 +35,12 @@ typedef enum{
      NC_SAVE_BUFFER,
 }NetworkCommand_t;
 
+const char* cmd_to_str(NetworkCommand_t cmd);
+
 typedef uint16_t NetworkId_t;
 typedef struct{
      NetworkId_t id; // buffer id's are unique across all clients and are generated on the server side
 } NetworkBufferId_t;
-
-#if 0
-bool ce_network_insert_string(ClientState_t* client_state, NetworkBufferId_t buffer_id, Point_t location, const char* string);
-bool ce_network_load_file(ClientState_t* client_state, Buffer_t* buffer, const char* filename);
-void ce_network_refresh_view(ClientState_t* client_state, BufferView_t* buffer_view);
-#endif
-
 
 // apply functions with arguments read from the specified socket
 typedef enum {
@@ -124,7 +119,7 @@ bool network_alloc_lines            (int socket, NetworkBufferId_t buffer, int64
 bool network_clear_lines            (int socket, NetworkBufferId_t buffer);
 bool network_clear_lines_readonly   (int socket, NetworkBufferId_t buffer);
 bool network_load_string            (int socket, NetworkBufferId_t buffer, const char* string);
-bool network_load_file              (int socket, NetworkBufferId_t buffer, const char* filename);
+bool network_load_file              (int socket, const char* filename);
 bool network_insert_char            (int socket, NetworkBufferId_t buffer, Point_t location, char c);
 bool network_insert_char_readonly   (int socket, NetworkBufferId_t buffer, Point_t location, char c);
 bool network_append_char            (int socket, NetworkBufferId_t buffer, char c);
@@ -145,4 +140,7 @@ bool network_append_line_readonly   (int socket, NetworkBufferId_t buffer, int64
 bool network_join_line              (int socket, NetworkBufferId_t buffer, int64_t line);
 bool network_insert_newline         (int socket, NetworkBufferId_t buffer, int64_t line);
 bool network_save_buffer            (int socket, NetworkBufferId_t buffer, const char* filename);
+
+bool network_write(int socket, const void* buf, size_t buf_len);
+bool network_read(int socket, void* buf, size_t buf_len);
 #endif // CE_NETWORK_H

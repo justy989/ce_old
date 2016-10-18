@@ -313,10 +313,12 @@ static bool _handle_command(ClientState_t* client_state, Server_t* server)
      default:
           assert(0);
      }
-     view_drawer(client_state->buffer_list_head, client_state->config_user_data);
-
      // TODO: we only actually want to sem_post if the command originated from this client
      sem_post(&client_state->command_sem);
+#if 0
+     // TODO: we want to redraw the view whenever a command originates from another client
+     view_drawer(client_state->buffer_list_head, client_state->config_user_data);
+#endif
      return true;
 }
 

@@ -16,6 +16,218 @@
 
 void view_drawer(const BufferNode_t* head, void* user_data);
 
+typedef struct CompleteNode_t{
+     char* option;
+     struct CompleteNode_t* next;
+     struct CompleteNode_t* prev;
+} CompleteNode_t;
+
+typedef struct{
+     CompleteNode_t* head;
+     CompleteNode_t* tail;
+     CompleteNode_t* current;
+     Point_t start;
+} AutoComplete_t;
+
+
+// TODO: move this to ce.h
+typedef struct InputHistoryNode_t {
+     char* entry;
+     struct InputHistoryNode_t* next;
+     struct InputHistoryNode_t* prev;
+} InputHistoryNode_t;
+
+typedef struct {
+     InputHistoryNode_t* head;
+     InputHistoryNode_t* tail;
+     InputHistoryNode_t* cur;
+} InputHistory_t;
+
+typedef struct TabView_t{
+     BufferView_t* view_head;
+     BufferView_t* view_current;
+     BufferView_t* view_previous;
+     BufferView_t* view_input_save;
+     struct TabView_t* next;
+} TabView_t;
+
+typedef enum{
+     VM_NORMAL,
+     VM_INSERT,
+     VM_VISUAL_RANGE,
+     VM_VISUAL_LINE,
+     VM_VISUAL_BLOCK,
+} VimMode_t;
+
+typedef enum{
+     VCT_MOTION,
+     VCT_INSERT,
+     VCT_DELETE,
+     VCT_CHANGE_CHAR,
+     VCT_PASTE_BEFORE,
+     VCT_PASTE_AFTER,
+     VCT_YANK,
+     VCT_INDENT,
+     VCT_UNINDENT,
+} VimChangeType_t;
+
+typedef struct{
+     VimChangeType_t type;
+     union{
+          char* insert_string;
+          char yank_register;
+          char paste_register;
+          char change_char;
+          char* change_string;
+     };
+} VimChange_t;
+
+typedef enum{
+     VMT_NONE,
+     VMT_LEFT,
+     VMT_RIGHT,
+     VMT_UP,
+     VMT_DOWN,
+     VMT_WORD_LITTLE,
+     VMT_WORD_BIG,
+     VMT_WORD_BEGINNING_LITTLE,
+     VMT_WORD_BEGINNING_BIG,
+     VMT_WORD_BEGINNING_LITTLE_PRE_CURSOR,
+     VMT_WORD_BEGINNING_BIG_PRE_CURSOR,
+     VMT_WORD_END_LITTLE,
+     VMT_WORD_END_BIG,
+     VMT_LINE,
+     VMT_LINE_UP,
+     VMT_LINE_DOWN,
+     VMT_FIND_NEXT_MATCHING_CHAR,
+     VMT_FIND_PREV_MATCHING_CHAR,
+     VMT_TO_NEXT_MATCHING_CHAR,
+     VMT_TO_PREV_MATCHING_CHAR,
+     VMT_BEGINNING_OF_FILE,
+     VMT_BEGINNING_OF_LINE_HARD,
+     VMT_BEGINNING_OF_LINE_SOFT,
+     VMT_END_OF_LINE_PASSED,
+     VMT_END_OF_LINE_HARD,
+     VMT_END_OF_LINE_SOFT,
+     VMT_END_OF_FILE,
+     VMT_INSIDE_PAIR,
+     VMT_INSIDE_WORD_LITTLE,
+     VMT_INSIDE_WORD_BIG,
+     VMT_AROUND_PAIR,
+     VMT_AROUND_WORD_LITTLE,
+     VMT_AROUND_WORD_BIG,
+     VMT_VISUAL_RANGE,
+     VMT_VISUAL_LINE,
+} VimMotionType_t;
+
+typedef struct{
+     VimMotionType_t type;
+     int32_t multiplier;
+     union{
+          char match_char;
+          char inside_pair;
+          char around_pair;
+          int64_t visual_length;
+          int64_t visual_lines;
+     };
+     bool visual_start_after; // false means after !
+} VimMotion_t;
+
+typedef struct{
+     int64_t multiplier;
+     Point_t start;
+     VimMotion_t motion;
+     VimChange_t change;
+     VimMode_t end_in_vim_mode;
+     bool yank;
+} VimAction_t;
+
+typedef enum{
+    VCS_INVALID,
+    VCS_CONTINUE,
+    VCS_COMPLETE,
+} VimCommandState_t;
+
+typedef struct{
+     VimMotionType_t motion_type;
+     char ch;
+} FindState_t;
+
+typedef struct{
+     Point_t entered;
+     Point_t leftmost;
+     int64_t backspaces;
+     char* string;
+     bool used_arrow_key;
+} InsertModeState_t;
+
+#define VIM_COMMAND_MAX 128
+
+typedef struct{
+     VimMode_t vim_mode;
+     bool input;
+     const char* input_message;
+     char input_key;
+     Buffer_t* shell_command_buffer; // Allocate so it can be part of the buffer list and get free'd at the end
+     Buffer_t* completion_buffer; // same as shell_command_buffer (let's see how quickly this comment gets out of date!)
+     Buffer_t input_buffer;
+     Buffer_t buffer_list_buffer;
+     int64_t last_command_buffer_jump;
+     int last_key;
+     char command[VIM_COMMAND_MAX];
+     int64_t command_len;
+     FindState_t find_state;
+     struct {
+          Direction_t direction;
+     } search_command;
+     InsertModeState_t insert_state;
+     Point_t visual_start;
+     struct YankNode_t* yank_head;
+     TabView_t* tab_head;
+     TabView_t* tab_current;
+     BufferView_t* view_input;
+     InputHistory_t shell_command_history;
+     InputHistory_t shell_input_history;
+     InputHistory_t search_history;
+     InputHistory_t load_file_history;
+     Point_t start_search;
+     pthread_t shell_command_thread;
+     pthread_t shell_input_thread;
+     AutoComplete_t auto_complete;
+     ClientState_t client_state;
+     ServerState_t server_state;
+     VimAction_t last_vim_action;
+} ConfigState_t;
+
+// TODO: try not to let justin kill me ;)
+ConfigState_t* g_config_state;
+
+bool config_free_buffer            (ConfigState_t* config_state, Buffer_t* buffer);
+bool config_alloc_lines            (ConfigState_t* config_state, Buffer_t* buffer, int64_t line_count);
+bool config_clear_lines            (ConfigState_t* config_state, Buffer_t* buffer);
+bool config_clear_lines_readonly   (ConfigState_t* config_state, Buffer_t* buffer);
+bool config_load_string            (ConfigState_t* config_state, Buffer_t* buffer, const char* string);
+bool config_insert_char            (ConfigState_t* config_state, Buffer_t* buffer, Point_t location, char c);
+bool config_insert_char_readonly   (ConfigState_t* config_state, Buffer_t* buffer, Point_t location, char c);
+bool config_append_char            (ConfigState_t* config_state, Buffer_t* buffer, char c);
+bool config_append_char_readonly   (ConfigState_t* config_state, Buffer_t* buffer, char c);
+bool config_remove_char            (ConfigState_t* config_state, Buffer_t* buffer, Point_t location);
+bool config_set_char               (ConfigState_t* config_state, Buffer_t* buffer, Point_t location, char c);
+bool config_insert_string          (ConfigState_t* config_state, Buffer_t* buffer, Point_t location, const char* string);
+bool config_insert_string_readonly (ConfigState_t* config_state, Buffer_t* buffer, Point_t location, const char* string);
+bool config_remove_string          (ConfigState_t* config_state, Buffer_t* buffer, Point_t location, int64_t length);
+bool config_prepend_string         (ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string);
+bool config_append_string          (ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string);
+bool config_append_string_readonly (ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string);
+bool config_insert_line            (ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string);
+bool config_insert_line_readonly   (ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string);
+bool config_remove_line            (ConfigState_t* config_state, Buffer_t* buffer, int64_t line);
+bool config_append_line            (ConfigState_t* config_state, Buffer_t* buffer, const char* string);
+bool config_append_line_readonly   (ConfigState_t* config_state, Buffer_t* buffer, const char* string);
+bool config_join_line              (ConfigState_t* config_state, Buffer_t* buffer, int64_t line);
+bool config_insert_newline         (ConfigState_t* config_state, Buffer_t* buffer, int64_t line);
+bool config_save_buffer            (ConfigState_t* config_state, Buffer_t* buffer, const char* filename);
+
 #define TAB_STRING "     "
 #define SCROLL_LINES 1
 
@@ -112,19 +324,6 @@ void backspace_free(BackspaceNode_t** head)
           free(tmp);
      }
 }
-
-// TODO: move this to ce.h
-typedef struct InputHistoryNode_t {
-     char* entry;
-     struct InputHistoryNode_t* next;
-     struct InputHistoryNode_t* prev;
-} InputHistoryNode_t;
-
-typedef struct {
-     InputHistoryNode_t* head;
-     InputHistoryNode_t* tail;
-     InputHistoryNode_t* cur;
-} InputHistory_t;
 
 bool input_history_init(InputHistory_t* history)
 {
@@ -324,7 +523,7 @@ void remove_visual_range(Buffer_t* buffer, Point_t* cursor, Point_t* visual_star
 
      char* removed_str = ce_dupe_string(buffer, *a, *b);
      int64_t remove_len = ce_compute_length(buffer, *a, *b);
-     if(ce_remove_string(buffer, *a, remove_len)){
+     if(config_remove_string(g_config_state, buffer, *a, remove_len)){
           ce_commit_remove_string(&buffer_state->commit_tail, *a, *cursor, *a, removed_str);
           ce_set_cursor(buffer, cursor, *a);
      }else{
@@ -349,7 +548,7 @@ void remove_visual_lines(Buffer_t* buffer, Point_t* cursor, Point_t* visual_star
 
      char* removed_str = ce_dupe_lines(buffer, start.y, end.y);
      int64_t remove_len = strlen(removed_str);
-     if(ce_remove_string(buffer, start, remove_len)){
+     if(config_remove_string(g_config_state, buffer, start, remove_len)){
           ce_commit_remove_string(&buffer_state->commit_tail, start, *cursor, start,
                                   removed_str);
           ce_set_cursor(buffer, cursor, start);
@@ -357,108 +556,6 @@ void remove_visual_lines(Buffer_t* buffer, Point_t* cursor, Point_t* visual_star
           free(removed_str);
      }
 }
-
-typedef enum{
-     VM_NORMAL,
-     VM_INSERT,
-     VM_VISUAL_RANGE,
-     VM_VISUAL_LINE,
-     VM_VISUAL_BLOCK,
-} VimMode_t;
-
-typedef enum{
-     VCT_MOTION,
-     VCT_INSERT,
-     VCT_DELETE,
-     VCT_CHANGE_CHAR,
-     VCT_PASTE_BEFORE,
-     VCT_PASTE_AFTER,
-     VCT_YANK,
-     VCT_INDENT,
-     VCT_UNINDENT,
-} VimChangeType_t;
-
-typedef struct{
-     VimChangeType_t type;
-     union{
-          char* insert_string;
-          char yank_register;
-          char paste_register;
-          char change_char;
-          char* change_string;
-     };
-} VimChange_t;
-
-typedef enum{
-     VMT_NONE,
-     VMT_LEFT,
-     VMT_RIGHT,
-     VMT_UP,
-     VMT_DOWN,
-     VMT_WORD_LITTLE,
-     VMT_WORD_BIG,
-     VMT_WORD_BEGINNING_LITTLE,
-     VMT_WORD_BEGINNING_BIG,
-     VMT_WORD_BEGINNING_LITTLE_PRE_CURSOR,
-     VMT_WORD_BEGINNING_BIG_PRE_CURSOR,
-     VMT_WORD_END_LITTLE,
-     VMT_WORD_END_BIG,
-     VMT_LINE,
-     VMT_LINE_UP,
-     VMT_LINE_DOWN,
-     VMT_FIND_NEXT_MATCHING_CHAR,
-     VMT_FIND_PREV_MATCHING_CHAR,
-     VMT_TO_NEXT_MATCHING_CHAR,
-     VMT_TO_PREV_MATCHING_CHAR,
-     VMT_BEGINNING_OF_FILE,
-     VMT_BEGINNING_OF_LINE_HARD,
-     VMT_BEGINNING_OF_LINE_SOFT,
-     VMT_END_OF_LINE_PASSED,
-     VMT_END_OF_LINE_HARD,
-     VMT_END_OF_LINE_SOFT,
-     VMT_END_OF_FILE,
-     VMT_INSIDE_PAIR,
-     VMT_INSIDE_WORD_LITTLE,
-     VMT_INSIDE_WORD_BIG,
-     VMT_AROUND_PAIR,
-     VMT_AROUND_WORD_LITTLE,
-     VMT_AROUND_WORD_BIG,
-     VMT_VISUAL_RANGE,
-     VMT_VISUAL_LINE,
-} VimMotionType_t;
-
-typedef struct{
-     VimMotionType_t type;
-     int32_t multiplier;
-     union{
-          char match_char;
-          char inside_pair;
-          char around_pair;
-          int64_t visual_length;
-          int64_t visual_lines;
-     };
-     bool visual_start_after; // false means after !
-} VimMotion_t;
-
-typedef struct{
-     int64_t multiplier;
-     Point_t start;
-     VimMotion_t motion;
-     VimChange_t change;
-     VimMode_t end_in_vim_mode;
-     bool yank;
-} VimAction_t;
-
-typedef enum{
-    VCS_INVALID,
-    VCS_CONTINUE,
-    VCS_COMPLETE,
-} VimCommandState_t;
-
-typedef struct{
-     VimMotionType_t motion_type;
-     char ch;
-} FindState_t;
 
 VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action, VimMode_t vim_mode,
                                          Buffer_t* buffer, Point_t* cursor, Point_t* visual_start)
@@ -828,7 +925,7 @@ void indent_line(Buffer_t* buffer, BufferCommitNode_t** commit_tail, int64_t lin
      if(line >= buffer->line_count) return;
      if(!buffer->lines[line][0]) return;
      Point_t loc = {0, line};
-     ce_insert_string(buffer, loc, TAB_STRING);
+     config_insert_string(g_config_state, buffer, loc, TAB_STRING);
      ce_commit_insert_string(commit_tail, loc, *cursor, *cursor, strdup(TAB_STRING));
 }
 
@@ -850,7 +947,7 @@ void unindent_line(Buffer_t* buffer, BufferCommitNode_t** commit_tail, int64_t l
 
      if(whitespace_count){
           Point_t loc = {0, line};
-          ce_remove_string(buffer, loc, whitespace_count);
+          config_remove_string(g_config_state, buffer, loc, whitespace_count);
           ce_commit_remove_string(commit_tail, loc, *cursor, *cursor, strdup(TAB_STRING));
      }
 }
@@ -1182,7 +1279,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
           char* commit_string = ce_dupe_string(buffer, *sorted_start, *sorted_end);
           int64_t len = ce_compute_length(buffer, *sorted_start, *sorted_end);
 
-          if(!ce_remove_string(buffer, *sorted_start, len)){
+          if(!config_remove_string(g_config_state, buffer, *sorted_start, len)){
                free(commit_string);
                return false;
           }
@@ -1206,7 +1303,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                break;
           case YANK_NORMAL:
           {
-               if(ce_insert_string(buffer, *sorted_start, yank->text)){
+               if(config_insert_string(g_config_state, buffer, *sorted_start, yank->text)){
                     ce_commit_insert_string(&buffer_state->commit_tail,
                                             *sorted_start, *sorted_start, *sorted_start,
                                             strdup(yank->text));
@@ -1223,7 +1320,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                     save_str[len+1] = '\0';
                     memcpy(save_str, yank->text, len);
 
-                    if(ce_insert_string(buffer, insert_loc, save_str)){
+                    if(config_insert_string(g_config_state, buffer, insert_loc, save_str)){
                          ce_commit_insert_string(&buffer_state->commit_tail,
                                                  insert_loc, *cursor, cursor_loc,
                                                  save_str);
@@ -1254,7 +1351,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                     yank_len--;
                }
 
-               if(ce_insert_string(buffer, insert_cursor, yank->text)){
+               if(config_insert_string(g_config_state, buffer, insert_cursor, yank->text)){
                     ce_commit_insert_string(&buffer_state->commit_tail,
                                             insert_cursor, *sorted_start, *sorted_start,
                                             strdup(yank->text));
@@ -1271,7 +1368,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                save_str[0] = '\n'; // prepend a new line to create a line
                memcpy(save_str + 1, yank->text, len + 1); // also copy the '\0'
 
-               if(ce_insert_string(buffer, insert_loc, save_str)){
+               if(config_insert_string(g_config_state, buffer, insert_loc, save_str)){
                     ce_commit_insert_string(&buffer_state->commit_tail,
                                             insert_loc, *cursor, cursor_loc,
                                             save_str);
@@ -1285,7 +1382,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
           char prev_char;
 
           if(!ce_get_char(buffer, *sorted_start, &prev_char)) return false;
-          if(!ce_set_char(buffer, *sorted_start, action->change.change_char)) return false;
+          if(!config_set_char(g_config_state, buffer, *sorted_start, action->change.change_char)) return false;
 
           ce_commit_change_char(&buffer_state->commit_tail, *sorted_start, *cursor, *sorted_start,
                                 action->change.change_char, prev_char);
@@ -1337,14 +1434,6 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
      return true;
 }
 
-typedef struct TabView_t{
-     BufferView_t* view_head;
-     BufferView_t* view_current;
-     BufferView_t* view_previous;
-     BufferView_t* view_input_save;
-     struct TabView_t* next;
-} TabView_t;
-
 TabView_t* tab_view_insert(TabView_t* head)
 {
      // find the tail
@@ -1387,19 +1476,6 @@ void tab_view_remove(TabView_t** head, TabView_t* view)
      tmp->next = view->next;
      free(view);
 }
-
-typedef struct CompleteNode_t{
-     char* option;
-     struct CompleteNode_t* next;
-     struct CompleteNode_t* prev;
-} CompleteNode_t;
-
-typedef struct{
-     CompleteNode_t* head;
-     CompleteNode_t* tail;
-     CompleteNode_t* current;
-     Point_t start;
-} AutoComplete_t;
 
 bool auto_complete_insert(AutoComplete_t* auto_complete, const char* option)
 {
@@ -1484,82 +1560,8 @@ void auto_complete_prev(AutoComplete_t* auto_complete, const char* match)
      auto_complete_end(auto_complete);
 }
 
-typedef struct{
-     Point_t entered;
-     Point_t leftmost;
-     int64_t backspaces;
-     char* string;
-     bool used_arrow_key;
-} InsertModeState_t;
-
-#define VIM_COMMAND_MAX 128
-
-typedef struct{
-     VimMode_t vim_mode;
-     bool input;
-     const char* input_message;
-     char input_key;
-     Buffer_t* shell_command_buffer; // Allocate so it can be part of the buffer list and get free'd at the end
-     Buffer_t* completion_buffer; // same as shell_command_buffer (let's see how quickly this comment gets out of date!)
-     Buffer_t input_buffer;
-     Buffer_t buffer_list_buffer;
-     int64_t last_command_buffer_jump;
-     int last_key;
-     char command[VIM_COMMAND_MAX];
-     int64_t command_len;
-     FindState_t find_state;
-     struct {
-          Direction_t direction;
-     } search_command;
-     InsertModeState_t insert_state;
-     Point_t visual_start;
-     struct YankNode_t* yank_head;
-     TabView_t* tab_head;
-     TabView_t* tab_current;
-     BufferView_t* view_input;
-     InputHistory_t shell_command_history;
-     InputHistory_t shell_input_history;
-     InputHistory_t search_history;
-     InputHistory_t load_file_history;
-     Point_t start_search;
-     pthread_t shell_command_thread;
-     pthread_t shell_input_thread;
-     AutoComplete_t auto_complete;
-     ClientState_t client_state;
-     ServerState_t server_state;
-     VimAction_t last_vim_action;
-} ConfigState_t;
-
-// TODO: try not to let justin kill me ;)
-ConfigState_t* g_config_state;
-
 
 // BEGIN CONFIG VERSIONS OF LIBRARY FUNCTIONS
-bool config_free_buffer            (ConfigState_t* config_state, Buffer_t* buffer);
-bool config_alloc_lines            (ConfigState_t* config_state, Buffer_t* buffer, int64_t line_count);
-bool config_clear_lines            (ConfigState_t* config_state, Buffer_t* buffer);
-bool config_clear_lines_readonly   (ConfigState_t* config_state, Buffer_t* buffer);
-bool config_load_string            (ConfigState_t* config_state, Buffer_t* buffer, const char* string);
-bool config_insert_char            (ConfigState_t* config_state, Buffer_t* buffer, Point_t location, char c);
-bool config_insert_char_readonly   (ConfigState_t* config_state, Buffer_t* buffer, Point_t location, char c);
-bool config_append_char            (ConfigState_t* config_state, Buffer_t* buffer, char c);
-bool config_append_char_readonly   (ConfigState_t* config_state, Buffer_t* buffer, char c);
-bool config_remove_char            (ConfigState_t* config_state, Buffer_t* buffer, Point_t location);
-bool config_set_char               (ConfigState_t* config_state, Buffer_t* buffer, Point_t location, char c);
-bool config_insert_string          (ConfigState_t* config_state, Buffer_t* buffer, Point_t location, const char* string);
-bool config_insert_string_readonly (ConfigState_t* config_state, Buffer_t* buffer, Point_t location, const char* string);
-bool config_remove_string          (ConfigState_t* config_state, Buffer_t* buffer, Point_t location, int64_t length);
-bool config_prepend_string         (ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string);
-bool config_append_string          (ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string);
-bool config_append_string_readonly (ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string);
-bool config_insert_line            (ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string);
-bool config_insert_line_readonly   (ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string);
-bool config_remove_line            (ConfigState_t* config_state, Buffer_t* buffer, int64_t line);
-bool config_append_line            (ConfigState_t* config_state, Buffer_t* buffer, const char* string);
-bool config_append_line_readonly   (ConfigState_t* config_state, Buffer_t* buffer, const char* string);
-bool config_join_line              (ConfigState_t* config_state, Buffer_t* buffer, int64_t line);
-bool config_insert_newline         (ConfigState_t* config_state, Buffer_t* buffer, int64_t line);
-bool config_save_buffer            (ConfigState_t* config_state, Buffer_t* buffer, const char* filename);
 
 bool config_free_buffer(ConfigState_t* config_state, Buffer_t* buffer)
 {
@@ -2103,8 +2105,9 @@ Buffer_t* open_file_buffer(BufferNode_t* head, const char* filename)
           Buffer_t* buffer = new_buffer_from_string(head, remote_filename, "loading remote file...");
 
           // request that the file contents be loaded asynchronously over the network
-          if(!network_load_file(g_config_state->client_state.server_list_head->socket,
-                                remote_filename)){
+          if(!client_load_file(&g_config_state->client_state,
+                               g_config_state->client_state.server_list_head,
+                               remote_filename)){
                ce_message("failed to load file");
                // TODO: error handling
           }
@@ -2703,7 +2706,7 @@ bool iterate_history_input(ConfigState_t* config_state, bool previous)
 
      if(success){
           ce_clear_lines(config_state->view_input->buffer);
-          ce_append_string(config_state->view_input->buffer, 0, history->cur->entry);
+          config_append_string(g_config_state, config_state->view_input->buffer, 0, history->cur->entry);
           config_state->view_input->cursor = (Point_t){0, 0};
           ce_move_cursor_to_end_of_file(config_state->view_input->buffer, &config_state->view_input->cursor);
           reset_buffer_commits(&buffer_state->commit_tail);
@@ -2741,7 +2744,7 @@ void update_buffer_list_buffer(ConfigState_t* config_state, const BufferNode_t* 
      snprintf(format_string, BUFSIZ, "%%5s %%-%"PRId64"s %%-%"PRId64"s", max_name_len,
               max_buffer_lines_digits);
      snprintf(buffer_info, BUFSIZ, format_string, "flags", "buffer name", "lines");
-     ce_append_line(&config_state->buffer_list_buffer, buffer_info);
+     config_append_line(g_config_state, &config_state->buffer_list_buffer, buffer_info);
 
      // build buffer info
      snprintf(format_string, BUFSIZ, "%%5s %%-%"PRId64"s %%%"PRId64 PRId64, max_name_len, max_buffer_lines_digits);
@@ -2752,7 +2755,7 @@ void update_buffer_list_buffer(ConfigState_t* config_state, const BufferNode_t* 
                                                                 modified_string(itr->buffer);
           snprintf(buffer_info, BUFSIZ, format_string, buffer_flag_str, itr->buffer->name,
                    itr->buffer->line_count);
-          ce_append_line(&config_state->buffer_list_buffer, buffer_info);
+          config_append_line(g_config_state, &config_state->buffer_list_buffer, buffer_info);
           itr = itr->next;
      }
      config_state->buffer_list_buffer.modified = false;
@@ -3149,9 +3152,9 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                int64_t replace_count = 0;
                while(ce_find_string(buffer, begin, search_str, &match, CE_DOWN)){
                     if(ce_point_after(match, end)) break;
-                    if(!ce_remove_string(buffer, match, search_len)) break;
+                    if(!config_remove_string(config_state, buffer, match, search_len)) break;
                     if(replace_len){
-                         if(!ce_insert_string(buffer, match, replace_str)) break;
+                         if(!config_insert_string(g_config_state, buffer, match, replace_str)) break;
                     }
                     ce_commit_change_string(&buffer_state->commit_tail, match, match, match, strdup(replace_str),
                                             strdup(search_str));
@@ -3243,10 +3246,10 @@ void repeat_insert_actions(InsertModeState_t* insert_state, Buffer_t* buffer, Po
           ce_advance_cursor(buffer, &replay, -insert_state->backspaces);
           Point_t previous = previous_point(buffer, *cursor);
           char* removed_string = ce_dupe_string(buffer, replay, previous);
-          ce_remove_string(buffer, replay, insert_state->backspaces);
+          config_remove_string(g_config_state, buffer, replay, insert_state->backspaces);
 
           if(insert_state->string){
-               ce_insert_string(buffer, replay, insert_state->string);
+               config_insert_string(g_config_state, buffer, replay, insert_state->string);
                Point_t end = *cursor;
                ce_advance_cursor(buffer, &end, strlen(insert_state->string) -
                                  insert_state->backspaces);
@@ -3260,7 +3263,7 @@ void repeat_insert_actions(InsertModeState_t* insert_state, Buffer_t* buffer, Po
                *cursor = replay;
           }
      }else if(insert_state->string){
-          ce_insert_string(buffer, replay, insert_state->string);
+          config_insert_string(g_config_state, buffer, replay, insert_state->string);
           Point_t end = *cursor;
           ce_advance_cursor(buffer, &end, strlen(insert_state->string));
           ce_commit_insert_string(&buffer_state->commit_tail, replay, *cursor,
@@ -3302,10 +3305,10 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                               int64_t cur_line_len = strlen(buffer->lines[cursor->y]);
 
                               if(cur_line_len){
-                                   ce_append_string(buffer, cursor->y - 1, buffer->lines[cursor->y]);
+                                   config_append_string(g_config_state, buffer, cursor->y - 1, buffer->lines[cursor->y]);
                               }
 
-                              if(ce_remove_line(buffer, cursor->y)){
+                              if(config_remove_line(g_config_state, buffer, cursor->y)){
                                    backspace_push(&buffer_state->backspace_head, '\n');
                                    cursor->y--;
                                    cursor->x = prev_line_len;
@@ -3333,7 +3336,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                               previous.x--;
                               char c = 0;
                               if(ce_get_char(buffer, previous, &c)){
-                                   if(ce_remove_char(buffer, previous)){
+                                   if(config_remove_char(g_config_state, buffer, previous)){
                                         if(previous.x < insert_state->leftmost.x){
                                              backspace_push(&buffer_state->backspace_head, c);
                                              insert_state->leftmost.x = previous.x;
@@ -3356,7 +3359,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                break;
           case KEY_DC:
                // TODO: with our current insert mode undo implementation we can't support this
-               // ce_remove_char(buffer, cursor);
+               // config_remove_char(g_config_state, buffer, cursor);
                break;
           case '\t':
           {
@@ -3369,7 +3372,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     int64_t offset = cursor->x - config_state->auto_complete.start.x;
                     const char* complete = config_state->auto_complete.current->option + offset;
                     int64_t complete_len = strlen(complete);
-                    if(ce_insert_string(buffer, *cursor, complete)){
+                    if(config_insert_string(config_state, buffer, *cursor, complete)){
                          ce_move_cursor(buffer, cursor, (Point_t){complete_len, cursor->y});
                          cursor->x++;
 
@@ -3379,7 +3382,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                                                            config_state->completion_buffer);
                     }
                }else{
-                    ce_insert_string(buffer, *cursor, TAB_STRING);
+                    config_insert_string(config_state, buffer, *cursor, TAB_STRING);
                     ce_move_cursor(buffer, cursor, (Point_t){strlen(TAB_STRING) - 1, 0});
                     cursor->x++; // we want to be after the tabs
                }
@@ -3395,9 +3398,9 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                char* start = buffer->lines[cursor->y] + cursor->x;
                int64_t to_end_of_line_len = strlen(start);
 
-               if(ce_insert_line(buffer, cursor->y + 1, start)){
+               if(config_insert_line(g_config_state, buffer, cursor->y + 1, start)){
                     if(to_end_of_line_len){
-                         ce_remove_string(buffer, *cursor, to_end_of_line_len);
+                         config_remove_string(g_config_state, buffer, *cursor, to_end_of_line_len);
                     }
                     cursor->y++;
                     cursor->x = 0;
@@ -3410,7 +3413,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          memset(indent, ' ', indent_len);
                          indent[indent_len] = '\0';
 
-                         if(ce_insert_string(buffer, *cursor, indent))
+                         if(config_insert_string(config_state, buffer, *cursor, indent))
                               cursor->x += indent_len;
                     }
 
@@ -3447,7 +3450,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     insert_state->used_arrow_key = false;
                }
 
-               if(ce_insert_char(buffer, *cursor, key)){
+               if(config_insert_char(config_state, buffer, *cursor, key)){
 
                     Point_t match = *cursor;
                     if(ce_move_cursor_to_matching_pair(buffer, &match) && match.y != cursor->y){
@@ -3464,7 +3467,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
 
                          if(can_unindent){
                               cursor->x -= n_deletes;
-                              if(ce_remove_string(buffer, *cursor, n_deletes)){
+                              if(config_remove_string(g_config_state, buffer, *cursor, n_deletes)){
                                    if(insert_state->leftmost.y == cursor->y &&
                                       insert_state->leftmost.x > cursor->x){
                                         insert_state->leftmost.x = cursor->x;
@@ -3535,7 +3538,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     insert_state->used_arrow_key = false;
                }
 
-               if(ce_insert_char(buffer, *cursor, key)){
+               if(config_insert_char(config_state, buffer, *cursor, key)){
                     cursor->x++;
                     if(auto_completing(&config_state->auto_complete)){
                          calc_auto_complete_start_and_path(&config_state->auto_complete,
@@ -3769,8 +3772,8 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     else end_join_loc.x--;
                     char* save_str = ce_dupe_string(buffer, join_loc, end_join_loc);
                     assert(save_str[0] == '\n');
-                    if(ce_remove_string(buffer, join_loc, ce_compute_length(buffer, join_loc, end_join_loc))){
-                         ce_insert_string(buffer, join_loc, " ");
+                    if(config_remove_string(g_config_state, buffer, join_loc, ce_compute_length(buffer, join_loc, end_join_loc))){
+                         config_insert_string(config_state, buffer, join_loc, " ");
                          ce_commit_change_string(&buffer_state->commit_tail, join_loc, *cursor, *cursor, strdup("\n"), save_str);
                     }
                } break;
@@ -3785,7 +3788,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     indent_nl[indent_len] = '\n';
                     indent_nl[indent_len + 1] = '\0';
 
-                    if(ce_insert_string(buffer, begin_line, indent_nl)){
+                    if(config_insert_string(config_state, buffer, begin_line, indent_nl)){
                          *cursor = (Point_t){indent_len, cursor->y};
                          ce_commit_insert_string(&buffer_state->commit_tail, begin_line, *cursor, *cursor,
                                                  indent_nl);
@@ -3804,7 +3807,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     memset(&nl_indent[1], ' ', indent_len);
                     nl_indent[1 + indent_len] = '\0';
 
-                    if(ce_insert_string(buffer, end_of_line, nl_indent)){
+                    if(config_insert_string(config_state, buffer, end_of_line, nl_indent)){
                          Point_t save_cursor = *cursor;
                          *cursor = (Point_t){indent_len, cursor->y + 1};
                          ce_commit_insert_string(&buffer_state->commit_tail, end_of_line, save_cursor, *cursor,
@@ -3890,7 +3893,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          // insert each line in history
                          InputHistoryNode_t* node = cur_hist->head;
                          while(node && node->entry){
-                              if(ce_insert_line(config_state->view_input->buffer,
+                              if(config_insert_line(g_config_state, config_state->view_input->buffer,
                                                 config_state->view_input->cursor.y + lines_added,
                                                 node->entry)){
                                    lines_added += ce_count_string_lines(node->entry);
@@ -3900,7 +3903,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                               node = node->next;
                          }
 
-                         if(empty_first_line) ce_remove_line(config_state->view_input->buffer, 0);
+                         if(empty_first_line) config_remove_line(g_config_state, config_state->view_input->buffer, 0);
                     }else{
                          update_buffer_list_buffer(config_state, head);
                          config_state->buffer_list_buffer.readonly = true;
@@ -3921,7 +3924,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                case 'x':
                {
                     char c;
-                    if(ce_get_char(buffer, *cursor, &c) && ce_remove_char(buffer, *cursor)){
+                    if(ce_get_char(buffer, *cursor, &c) && config_remove_char(g_config_state, buffer, *cursor)){
                          ce_commit_remove_char(&buffer_state->commit_tail, *cursor, *cursor, *cursor, c);
                          ce_clamp_cursor(buffer, cursor);
                     }
@@ -4193,7 +4196,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
 
                          // blow away all lines in the file
                          for(int64_t i = buffer->line_count - 1; i >= 0; i--){
-                              ce_remove_line(buffer, i);
+                              config_remove_line(g_config_state, buffer, i);
                          }
 
                          for(int64_t i = 0; ; i++){
@@ -4201,7 +4204,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                               size_t new_line_len = strlen(formatted_line_buf) - 1;
                               assert(formatted_line_buf[new_line_len] == '\n');
                               formatted_line_buf[new_line_len] = 0;
-                              ce_insert_line(buffer, i, formatted_line_buf);
+                              config_insert_line(g_config_state, buffer, i, formatted_line_buf);
 #if 0
                               if(cursor_position > 0){
                                    cursor_position -= new_line_len+1;
@@ -4224,11 +4227,11 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          // save the current line in undo history
                          Point_t delete_begin = {0, cursor->y};
                          char* save_string = ce_dupe_line(buffer, cursor->y);
-                         if(!ce_remove_line(buffer, cursor->y)){
+                         if(!config_remove_line(g_config_state, buffer, cursor->y)){
                               ce_message("ce_remove_string failed");
                               return true;
                          }
-                         ce_insert_string(buffer, &delete_begin, formatted_line);
+                         config_insert_string(config_state, buffer, &delete_begin, formatted_line);
                          ce_commit_change_string(&buffer_state->commit_tail, &delete_begin, cursor, cursor, formatted_line, save_string);
 #endif
 

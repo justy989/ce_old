@@ -333,7 +333,7 @@ int main(int argc, char** argv)
           current_config.view_drawer(buffer_list_head, user_data);
 
           int key = getch();
-          if(key == '`'){
+          if(key == KEY_F(5)){
                // NOTE: maybe at startup we should do this, so when we crash we revert back to before we did the bad thing?
                if(access(current_config.path, F_OK) != -1){
                     current_config.destroyer(buffer_list_head, user_data);

@@ -42,6 +42,16 @@ const char* cmd_to_str(NetworkCommand_t cmd)
      }
 }
 
+Buffer_t* id_to_buffer(BufferNode_t* head, NetworkId_t id)
+{
+     while(head && (head->buffer->network_id != id)){
+          head = head->next;
+     }
+     if(!head) return NULL;
+     return head->buffer;
+}
+
+
 #if 0
 #define WRITE(var) ({ \
      ssize_t sent_bytes = write(client_state->server_socket, &(var), sizeof(var)); \
@@ -338,21 +348,19 @@ ApplyRC_t apply_remove_line(int socket, void* user_data, RemoveLineFn_t fn)
      return fn(buffer, line, user_data) ? APPLY_SUCCESS : APPLY_FAILED;
 }
 
-//typedef bool (*AppendLineFn_t) (NetworkId_t buffer, int64_t line, const char* string, void* user_data);
+//typedef bool (*AppendLineFn_t) (NetworkId_t buffer, const char* string, void* user_data);
 ApplyRC_t apply_append_line(int socket, void* user_data, AppendLineFn_t fn)
 {
      APPLY_READ(NetworkId_t, buffer);
-     APPLY_READ(int64_t, line);
      APPLY_READ_STR(string);
-     return fn(buffer, line, string, user_data) ? APPLY_SUCCESS : APPLY_FAILED;
+     return fn(buffer, string, user_data) ? APPLY_SUCCESS : APPLY_FAILED;
 }
 
 ApplyRC_t apply_append_line_readonly(int socket, void* user_data, AppendLineFn_t fn)
 {
      APPLY_READ(NetworkId_t, buffer);
-     APPLY_READ(int64_t, line);
      APPLY_READ_STR(string);
-     return fn(buffer, line, string, user_data) ? APPLY_SUCCESS : APPLY_FAILED;
+     return fn(buffer, string, user_data) ? APPLY_SUCCESS : APPLY_FAILED;
 }
 
 //typedef bool (*JoinLineFn_t) (NetworkId_t buffer, int64_t line, void* user_data);
@@ -649,21 +657,19 @@ bool network_remove_line(int socket, NetworkId_t buffer, int64_t line)
      return true;
 }
 
-//typedef bool (*AppendLineFn_t) (NetworkId_t buffer, int64_t line, const char* string, void* user_data);
-bool network_append_line(int socket, NetworkId_t buffer, int64_t line, const char* string)
+//typedef bool (*AppendLineFn_t) (NetworkId_t buffer, const char* string, void* user_data);
+bool network_append_line(int socket, NetworkId_t buffer, const char* string)
 {
      NETWORK_WRITE_CMD(NC_APPEND_LINE);
      NETWORK_WRITE(buffer);
-     NETWORK_WRITE(line);
      NETWORK_WRITE_STR(string);
      return true;
 }
 
-bool network_append_line_readonly(int socket, NetworkId_t buffer, int64_t line, const char* string)
+bool network_append_line_readonly(int socket, NetworkId_t buffer,const char* string)
 {
      NETWORK_WRITE_CMD(NC_APPEND_LINE_READONLY);
      NETWORK_WRITE(buffer);
-     NETWORK_WRITE(line);
      NETWORK_WRITE_STR(string);
      return true;
 }

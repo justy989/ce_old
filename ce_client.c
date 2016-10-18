@@ -9,6 +9,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <inttypes.h>
+
+void view_drawer(const BufferNode_t* head, void* user_data);
+
 static bool _handle_load_file(NetworkId_t buffer, const char* filename, const char* file_str, void* user_data)
 {
      ClientState_t* client_state = user_data;
@@ -44,14 +47,135 @@ static bool _handle_load_file(NetworkId_t buffer, const char* filename, const ch
      return true;
 }
 
+#define PARSE_ARGS \
+     ClientState_t* client_state = user_data; \
+     Buffer_t* buf = id_to_buffer(client_state->buffer_list_head, buffer); \
+     assert(buf); /* a client should not tell us about a buffer we don't know about */ \
+     if(!buf) return false;
+
+static bool _handle_insert_char(NetworkId_t buffer, Point_t location, char c, void* user_data)
+{
+     PARSE_ARGS
+     if(!ce_insert_char(buf, location, c)) return false;
+     return true;
+}
+
+static bool _handle_insert_char_readonly(NetworkId_t buffer, Point_t location, char c, void* user_data)
+{
+     PARSE_ARGS
+     if(!ce_insert_char(buf, location, c)) return false;
+     return true;
+}
+
+static bool _handle_append_char(NetworkId_t buffer, char c, void* user_data)
+{
+     PARSE_ARGS
+     return ce_append_char(buf, c);
+}
+
+static bool _handle_append_char_readonly(NetworkId_t buffer, char c, void* user_data)
+{
+     PARSE_ARGS
+     return ce_append_char_readonly(buf, c);
+}
+
+static bool _handle_remove_char(NetworkId_t buffer, Point_t location, void* user_data)
+{
+     PARSE_ARGS
+     return ce_remove_char(buf, location);
+}
+
+static bool _handle_set_char(NetworkId_t buffer, Point_t location, char c, void* user_data)
+{
+     PARSE_ARGS
+     return ce_set_char(buf, location, c);
+}
+
+static bool _handle_insert_string(NetworkId_t buffer, Point_t location, const char* string, void* user_data)
+{
+     PARSE_ARGS
+     return ce_insert_string(buf, location, string);
+}
+
+static bool _handle_insert_string_readonly(NetworkId_t buffer, Point_t location, const char* string, void* user_data)
+{
+     PARSE_ARGS
+     return ce_insert_string_readonly(buf, location, string);
+}
+
+static bool _handle_remove_string(NetworkId_t buffer, Point_t location, int64_t length, void* user_data)
+{
+     PARSE_ARGS
+     return ce_remove_string(buf, location, length);
+}
+
+static bool _handle_prepend_string(NetworkId_t buffer, int64_t line, const char* string, void* user_data)
+{
+     PARSE_ARGS
+     return ce_prepend_string(buf, line, string);
+}
+
+static bool _handle_append_string(NetworkId_t buffer, int64_t line, const char* string, void* user_data)
+{
+     PARSE_ARGS
+     return ce_append_string(buf, line, string);
+}
+
+static bool _handle_append_string_readonly(NetworkId_t buffer, int64_t line, const char* string, void* user_data)
+{
+     PARSE_ARGS
+     return ce_append_string_readonly(buf, line, string);
+}
+
+static bool _handle_insert_line(NetworkId_t buffer, int64_t line, const char* string, void* user_data)
+{
+     PARSE_ARGS
+     return ce_insert_line(buf, line, string);
+}
+
+static bool _handle_insert_line_readonly(NetworkId_t buffer, int64_t line, const char* string, void* user_data)
+{
+     PARSE_ARGS
+     return ce_insert_line_readonly(buf, line, string);
+}
+
+static bool _handle_remove_line(NetworkId_t buffer, int64_t line, void* user_data)
+{
+     PARSE_ARGS
+     return ce_remove_line(buf, line);
+}
+
+static bool _handle_append_line(NetworkId_t buffer, const char* string, void* user_data)
+{
+     PARSE_ARGS
+     return ce_append_line(buf, string);
+}
+
+static bool _handle_append_line_readonly(NetworkId_t buffer, const char* string, void* user_data)
+{
+     PARSE_ARGS
+     return ce_append_line_readonly(buf, string);
+}
+
+static bool _handle_join_line(NetworkId_t buffer, int64_t line, void* user_data)
+{
+     PARSE_ARGS
+     return ce_join_line(buf, line);
+}
+
+static bool _handle_insert_newline(NetworkId_t buffer, int64_t line, void* user_data)
+{
+     PARSE_ARGS
+     return ce_insert_newline(buf, line);
+}
+
 static bool _handle_command(ClientState_t* client_state, Server_t* server)
 {
-     (void)client_state;
      NetworkCommand_t cmd = 0;
      if(!network_read(server->socket, &cmd, sizeof(cmd))){
           // TODO: close_server
           //_close_server(client_state, server);
-          return false;;
+          return false;
      }
 
      ce_message("Client received command %s", cmd_to_str(cmd));
@@ -71,52 +195,128 @@ static bool _handle_command(ClientState_t* client_state, Server_t* server)
           apply_load_file(server->socket, client_state, _handle_load_file);
           break;
      case NC_INSERT_CHAR:
+          if(apply_insert_char(server->socket, client_state, _handle_insert_char) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(client_state, client);
+               return false;
+          }
           break;
      case NC_INSERT_CHAR_READONLY:
+          if(apply_insert_char_readonly(server->socket, client_state, _handle_insert_char_readonly) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(client_state, client);
+               return false;
+          }
           break;
      case NC_APPEND_CHAR:
+          if(apply_append_char(server->socket, client_state, _handle_append_char) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(client_state, client);
+               return false;
+          }
           break;
      case NC_APPEND_CHAR_READONLY:
+          if(apply_append_char_readonly(server->socket, client_state, _handle_append_char_readonly) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(client_state, client);
+               return false;
+          }
           break;
      case NC_REMOVE_CHAR:
+          if(apply_remove_char(server->socket, client_state, _handle_remove_char) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(client_state, client);
+               return false;
+          }
           break;
      case NC_SET_CHAR:
+          if(apply_set_char(server->socket, client_state, _handle_set_char) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(client_state, client);
+               return false;
+          }
           break;
      case NC_INSERT_STRING:
+          if(apply_insert_string(server->socket, client_state, _handle_insert_string) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(client_state, client);
+               return false;
+          }
           break;
      case NC_INSERT_STRING_READONLY:
+          if(apply_insert_string_readonly(server->socket, client_state, _handle_insert_string_readonly) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(client_state, client);
+               return false;
+          }
           break;
      case NC_REMOVE_STRING:
+          if(apply_remove_string(server->socket, client_state, _handle_remove_string) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(client_state, client);
+               return false;
+          }
           break;
      case NC_PREPEND_STRING:
+          if(apply_prepend_string(server->socket, client_state, _handle_prepend_string) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(client_state, client);
+               return false;
+          }
           break;
      case NC_APPEND_STRING:
+          if(apply_append_string(server->socket, client_state, _handle_append_string) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(client_state, client);
+               return false;
+          }
           break;
      case NC_APPEND_STRING_READONLY:
+          if(apply_append_string_readonly(server->socket, client_state, _handle_append_string_readonly) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(client_state, client);
+               return false;
+          }
           break;
      case NC_INSERT_LINE:
+          if(apply_insert_line(server->socket, client_state, _handle_insert_line) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(client_state, client);
+               return false;
+          }
           break;
      case NC_INSERT_LINE_READONLY:
+          if(apply_insert_line_readonly(server->socket, client_state, _handle_insert_line_readonly) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(client_state, client);
+               return false;
+          }
           break;
      case NC_REMOVE_LINE:
+          if(apply_remove_line(server->socket, client_state, _handle_remove_line) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(client_state, client);
+               return false;
+          }
           break;
      case NC_APPEND_LINE:
+          if(apply_append_line(server->socket, client_state, _handle_append_line) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(client_state, client);
+               return false;
+          }
           break;
      case NC_APPEND_LINE_READONLY:
+          if(apply_append_line_readonly(server->socket, client_state, _handle_append_line_readonly) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(client_state, client);
+               return false;
+          }
           break;
      case NC_JOIN_LINE:
+          if(apply_join_line(server->socket, client_state, _handle_join_line) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(client_state, client);
+               return false;
+          }
           break;
      case NC_INSERT_NEWLINE:
+          if(apply_insert_newline(server->socket, client_state, _handle_insert_newline) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(client_state, client);
+               return false;
+          }
           break;
      case NC_SAVE_BUFFER:
           break;
+     default:
+          assert(0);
      }
-#if 0
-     switch(cmd){
-          default:
-               break;
-     }
-#endif
+     view_drawer(client_state->buffer_list_head, client_state->config_user_data);
+
+     // TODO: we only actually want to sem_post if the command originated from this client
+     sem_post(&client_state->command_sem);
      return true;
 }
 
@@ -154,7 +354,9 @@ void* ce_client_listen(void* args)
                Server_t* server_itr = client_state->server_list_head;
                while(server_itr){
                     if(FD_ISSET(server_itr->socket, &server_fds)){
-                         _handle_command(client_state, server_itr);
+                         if(!_handle_command(client_state, server_itr)){
+                              // TODO: hanle error
+                         }
                     }
                     server_itr = server_itr->next;
                }
@@ -201,10 +403,196 @@ static bool _server_connect(ClientState_t* client_state, const char* server_ip)
 
 bool ce_client_init(ClientState_t* client_state)
 {
+     sem_init(&client_state->command_sem, 0, 0);
+
      if(!_server_connect(client_state, "127.0.0.1")) return false;
 
      // launch command handling thread
      pthread_create(&client_state->command_handling_thread, NULL, ce_client_listen, client_state);
+     return true;
+}
+
+// client command
+bool client_free_buffer(ClientState_t* client_state, Server_t* server, NetworkId_t buffer)
+{
+     if(!network_free_buffer(server->socket, buffer)) return false;
+     // TODO: handle sem_wait errors (including signal interrupts)
+     sem_wait(&client_state->command_sem);
+     return true;
+}
+
+bool client_alloc_lines(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, int64_t line_count)
+{
+     if(!network_alloc_lines(server->socket, buffer, line_count)) return false;
+     sem_wait(&client_state->command_sem);
+     return true;
+}
+
+bool client_clear_lines(ClientState_t* client_state, Server_t* server, NetworkId_t buffer)
+{
+     if(!network_clear_lines(server->socket, buffer)) return false;
+     sem_wait(&client_state->command_sem);
+     return true;
+}
+
+bool client_clear_lines_readonly(ClientState_t* client_state, Server_t* server, NetworkId_t buffer)
+{
+     if(!network_clear_lines_readonly(server->socket, buffer)) return false;
+     sem_wait(&client_state->command_sem);
+     return true;
+}
+
+bool client_load_string(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, const char* string)
+{
+     if(!network_load_string(server->socket, buffer, string)) return false;
+     sem_wait(&client_state->command_sem);
+     return true;
+}
+
+bool client_load_file(ClientState_t* client_state, Server_t* server, const char* filename)
+{
+     if(!network_load_file(server->socket, filename)) return false;
+     sem_wait(&client_state->command_sem);
+     return true;
+}
+
+bool client_insert_char(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, Point_t location, char c)
+{
+     if(!network_insert_char(server->socket, buffer, location, c)) return false;
+     sem_wait(&client_state->command_sem);
+     return true;
+}
+
+bool client_insert_char_readonly(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, Point_t location, char c)
+{
+     if(!network_insert_char_readonly(server->socket, buffer, location, c)) return false;
+     sem_wait(&client_state->command_sem);
+     return true;
+}
+
+bool client_append_char(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, char c)
+{
+     if(!network_append_char(server->socket, buffer, c)) return false;
+     sem_wait(&client_state->command_sem);
+     return true;
+}
+
+bool client_append_char_readonly(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, char c)
+{
+     if(!network_append_char_readonly(server->socket, buffer, c)) return false;
+     sem_wait(&client_state->command_sem);
+     return true;
+}
+
+bool client_remove_char(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, Point_t location)
+{
+     if(!network_remove_char(server->socket, buffer, location)) return false;
+     sem_wait(&client_state->command_sem);
+     return true;
+}
+
+bool client_set_char(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, Point_t location, char c)
+{
+     if(!network_set_char(server->socket, buffer, location, c)) return false;
+     sem_wait(&client_state->command_sem);
+     return true;
+}
+
+bool client_insert_string(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, Point_t location, const char* string)
+{
+     if(!network_insert_string(server->socket, buffer, location, string)) return false;
+     sem_wait(&client_state->command_sem);
+     return true;
+}
+
+bool client_insert_string_readonly(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, Point_t location, const char* string)
+{
+     if(!network_insert_string_readonly(server->socket, buffer, location, string)) return false;
+     sem_wait(&client_state->command_sem);
+     return true;
+}
+
+bool client_remove_string(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, Point_t location, int64_t length)
+{
+     if(!network_remove_string(server->socket, buffer, location, length)) return false;
+     sem_wait(&client_state->command_sem);
+     return true;
+}
+
+bool client_prepend_string(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, int64_t line, const char* string)
+{
+     if(!network_prepend_string(server->socket, buffer, line, string)) return false;
+     sem_wait(&client_state->command_sem);
+     return true;
+}
+
+bool client_append_string(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, int64_t line, const char* string)
+{
+     if(!network_append_string(server->socket, buffer, line, string)) return false;
+     sem_wait(&client_state->command_sem);
+     return true;
+}
+
+bool client_append_string_readonly(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, int64_t line, const char* string)
+{
+     if(!network_append_string_readonly(server->socket, buffer, line, string)) return false;
+     sem_wait(&client_state->command_sem);
+     return true;
+}
+
+bool client_insert_line(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, int64_t line, const char* string)
+{
+     if(!network_insert_line(server->socket, buffer, line, string)) return false;
+     sem_wait(&client_state->command_sem);
+     return true;
+}
+
+bool client_insert_line_readonly(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, int64_t line, const char* string)
+{
+     if(!network_insert_line_readonly(server->socket, buffer, line, string)) return false;
+     sem_wait(&client_state->command_sem);
+     return true;
+}
+
+bool client_remove_line(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, int64_t line)
+{
+     if(!network_remove_line(server->socket, buffer, line)) return false;
+     sem_wait(&client_state->command_sem);
+     return true;
+}
+
+bool client_append_line(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, const char* string)
+{
+     if(!network_append_line(server->socket, buffer, string)) return false;
+     sem_wait(&client_state->command_sem);
+     return true;
+}
+
+bool client_append_line_readonly(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, const char* string)
+{
+     if(!network_append_line_readonly(server->socket, buffer, string)) return false;
+     sem_wait(&client_state->command_sem);
+     return true;
+}
+
+bool client_join_line(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, int64_t line)
+{
+     if(!network_join_line(server->socket, buffer, line)) return false;
+     sem_wait(&client_state->command_sem);
+     return true;
+}
+
+bool client_insert_newline(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, int64_t line)
+{
+     if(!network_insert_newline(server->socket, buffer, line)) return false;
+     sem_wait(&client_state->command_sem);
+     return true;
+}
+
+bool client_save_buffer(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, const char* filename)
+{
+     if(!network_save_buffer(server->socket, buffer, filename)) return false;
+     sem_wait(&client_state->command_sem);
      return true;
 }
 

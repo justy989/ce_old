@@ -14,6 +14,8 @@
 #include <dirent.h>
 #include <sys/ioctl.h>
 
+void view_drawer(const BufferNode_t* head, void* user_data);
+
 #define TAB_STRING "     "
 #define SCROLL_LINES 1
 
@@ -53,8 +55,6 @@ int64_t count_digits(int64_t n)
 
      return count;
 }
-
-void view_drawer(const BufferNode_t* head, void* user_data);
 
 typedef struct BackspaceNode_t{
      char c;
@@ -1528,6 +1528,247 @@ typedef struct{
 // TODO: try not to let justin kill me ;)
 ConfigState_t* g_config_state;
 
+
+// BEGIN CONFIG VERSIONS OF LIBRARY FUNCTIONS
+bool config_free_buffer            (ConfigState_t* config_state, Buffer_t* buffer);
+bool config_alloc_lines            (ConfigState_t* config_state, Buffer_t* buffer, int64_t line_count);
+bool config_clear_lines            (ConfigState_t* config_state, Buffer_t* buffer);
+bool config_clear_lines_readonly   (ConfigState_t* config_state, Buffer_t* buffer);
+bool config_load_string            (ConfigState_t* config_state, Buffer_t* buffer, const char* string);
+bool config_load_file              (ConfigState_t* config_state, Buffer_t* buffer, const char* filename);
+bool config_insert_char            (ConfigState_t* config_state, Buffer_t* buffer, Point_t location, char c);
+bool config_insert_char_readonly   (ConfigState_t* config_state, Buffer_t* buffer, Point_t location, char c);
+bool config_append_char            (ConfigState_t* config_state, Buffer_t* buffer, char c);
+bool config_append_char_readonly   (ConfigState_t* config_state, Buffer_t* buffer, char c);
+bool config_remove_char            (ConfigState_t* config_state, Buffer_t* buffer, Point_t location);
+bool config_set_char               (ConfigState_t* config_state, Buffer_t* buffer, Point_t location, char c);
+bool config_insert_string          (ConfigState_t* config_state, Buffer_t* buffer, Point_t location, const char* string);
+bool config_insert_string_readonly (ConfigState_t* config_state, Buffer_t* buffer, Point_t location, const char* string);
+bool config_remove_string          (ConfigState_t* config_state, Buffer_t* buffer, Point_t location, int64_t length);
+bool config_prepend_string         (ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string);
+bool config_append_string          (ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string);
+bool config_append_string_readonly (ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string);
+bool config_insert_line            (ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string);
+bool config_insert_line_readonly   (ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string);
+bool config_remove_line            (ConfigState_t* config_state, Buffer_t* buffer, int64_t line);
+bool config_append_line            (ConfigState_t* config_state, Buffer_t* buffer, const char* string);
+bool config_append_line_readonly   (ConfigState_t* config_state, Buffer_t* buffer, const char* string);
+bool config_join_line              (ConfigState_t* config_state, Buffer_t* buffer, int64_t line);
+bool config_insert_newline         (ConfigState_t* config_state, Buffer_t* buffer, int64_t line);
+bool config_save_buffer            (ConfigState_t* config_state, Buffer_t* buffer, const char* filename);
+
+bool config_free_buffer(ConfigState_t* config_state, Buffer_t* buffer)
+{
+     if(!config_state->client_state.server_list_head){
+          ce_free_buffer(buffer);
+          return true;
+     }
+     return network_free_buffer(config_state->client_state.server_list_head->socket, buffer->network_id);
+}
+
+bool config_alloc_lines(ConfigState_t* config_state, Buffer_t* buffer, int64_t line_count)
+{
+     if(!config_state->client_state.server_list_head){
+          return ce_alloc_lines(buffer, line_count);
+     }
+     return network_alloc_lines(config_state->client_state.server_list_head->socket, buffer->network_id, line_count);
+}
+
+bool config_clear_lines(ConfigState_t* config_state, Buffer_t* buffer)
+{
+     if(!config_state->client_state.server_list_head){
+          ce_clear_lines(buffer);
+          return true;
+     }
+     return network_clear_lines(config_state->client_state.server_list_head->socket, buffer->network_id);
+}
+
+bool config_clear_lines_readonly(ConfigState_t* config_state, Buffer_t* buffer)
+{
+     if(!config_state->client_state.server_list_head){
+          ce_clear_lines_readonly(buffer);
+          return true;
+     }
+     return network_clear_lines_readonly(config_state->client_state.server_list_head->socket, buffer->network_id);
+}
+
+bool config_load_string(ConfigState_t* config_state, Buffer_t* buffer, const char* string)
+{
+     if(!config_state->client_state.server_list_head){
+          return ce_load_string(buffer, string);
+     }
+     return network_load_string(config_state->client_state.server_list_head->socket, buffer->network_id, string);
+}
+
+bool config_load_file(ConfigState_t* config_state, Buffer_t* buffer, const char* filename)
+{
+     if(!config_state->client_state.server_list_head){
+          return ce_load_file(buffer, filename);
+     }
+     return network_load_file(config_state->client_state.server_list_head->socket, filename);
+}
+
+bool config_insert_char(ConfigState_t* config_state, Buffer_t* buffer, Point_t location, char c)
+{
+     if(!config_state->client_state.server_list_head){
+          return ce_insert_char(buffer, location, c);
+     }
+     return network_insert_char(config_state->client_state.server_list_head->socket, buffer->network_id, location, c);
+}
+
+bool config_insert_char_readonly(ConfigState_t* config_state, Buffer_t* buffer, Point_t location, char c)
+{
+     if(!config_state->client_state.server_list_head){
+          return ce_insert_char_readonly(buffer, location, c);
+     }
+     return network_insert_char_readonly(config_state->client_state.server_list_head->socket, buffer->network_id, location, c);
+}
+
+bool config_append_char(ConfigState_t* config_state, Buffer_t* buffer, char c)
+{
+     if(!config_state->client_state.server_list_head){
+          return ce_append_char(buffer, c);
+     }
+     return network_append_char(config_state->client_state.server_list_head->socket, buffer->network_id, c);
+}
+
+bool config_append_char_readonly(ConfigState_t* config_state, Buffer_t* buffer, char c)
+{
+     if(!config_state->client_state.server_list_head){
+          return ce_append_char_readonly(buffer, c);
+     }
+     return network_append_char_readonly(config_state->client_state.server_list_head->socket, buffer->network_id, c);
+}
+
+bool config_remove_char(ConfigState_t* config_state, Buffer_t* buffer, Point_t location)
+{
+     if(!config_state->client_state.server_list_head){
+          return ce_remove_char(buffer, location);
+     }
+     return network_remove_char(config_state->client_state.server_list_head->socket, buffer->network_id, location);
+}
+
+bool config_set_char(ConfigState_t* config_state, Buffer_t* buffer, Point_t location, char c)
+{
+     if(!config_state->client_state.server_list_head){
+          return ce_set_char(buffer, location, c);
+     }
+     return network_set_char(config_state->client_state.server_list_head->socket, buffer->network_id, location, c);
+}
+
+bool config_insert_string(ConfigState_t* config_state, Buffer_t* buffer, Point_t location, const char* string)
+{
+     if(!config_state->client_state.server_list_head){
+          return ce_insert_string(buffer, location, string);
+     }
+     return network_insert_string(config_state->client_state.server_list_head->socket, buffer->network_id, location, string);
+}
+
+bool config_insert_string_readonly(ConfigState_t* config_state, Buffer_t* buffer, Point_t location, const char* string)
+{
+     if(!config_state->client_state.server_list_head){
+          return ce_insert_string_readonly(buffer, location, string);
+     }
+     return network_insert_string_readonly(config_state->client_state.server_list_head->socket, buffer->network_id, location, string);
+}
+
+bool config_remove_string(ConfigState_t* config_state, Buffer_t* buffer, Point_t location, int64_t length)
+{
+     if(!config_state->client_state.server_list_head){
+          return ce_remove_string(buffer, location, length);
+     }
+     return network_remove_string(config_state->client_state.server_list_head->socket, buffer->network_id, location, length);
+}
+
+bool config_prepend_string(ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string)
+{
+     if(!config_state->client_state.server_list_head){
+          return ce_prepend_string(buffer, line, string);
+     }
+     return network_prepend_string(config_state->client_state.server_list_head->socket, buffer->network_id, line, string);
+}
+
+bool config_append_string(ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string)
+{
+     if(!config_state->client_state.server_list_head){
+          return ce_append_string(buffer, line, string);
+     }
+     return network_append_string(config_state->client_state.server_list_head->socket, buffer->network_id, line, string);
+}
+
+bool config_append_string_readonly(ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string)
+{
+     if(!config_state->client_state.server_list_head){
+          return ce_append_string_readonly(buffer, line, string);
+     }
+     return network_append_string_readonly(config_state->client_state.server_list_head->socket, buffer->network_id, line, string);
+}
+
+bool config_insert_line(ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string)
+{
+     if(!config_state->client_state.server_list_head){
+          return ce_insert_line(buffer, line, string);
+     }
+     return network_insert_line(config_state->client_state.server_list_head->socket, buffer->network_id, line, string);
+}
+
+bool config_insert_line_readonly(ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string)
+{
+     if(!config_state->client_state.server_list_head){
+          return ce_insert_line_readonly(buffer, line, string);
+     }
+     return network_insert_line_readonly(config_state->client_state.server_list_head->socket, buffer->network_id, line, string);
+}
+
+bool config_remove_line(ConfigState_t* config_state, Buffer_t* buffer, int64_t line)
+{
+     if(!config_state->client_state.server_list_head){
+          return ce_remove_line(buffer, line);
+     }
+     return network_remove_line(config_state->client_state.server_list_head->socket, buffer->network_id, line);
+}
+
+bool config_append_line(ConfigState_t* config_state, Buffer_t* buffer, const char* string)
+{
+     if(!config_state->client_state.server_list_head){
+          return ce_append_line(buffer, string);
+     }
+     return network_append_line(config_state->client_state.server_list_head->socket, buffer->network_id, string);
+}
+
+bool config_append_line_readonly(ConfigState_t* config_state, Buffer_t* buffer, const char* string)
+{
+     if(!config_state->client_state.server_list_head){
+          return ce_append_line_readonly(buffer, string);
+     }
+     return network_append_line_readonly(config_state->client_state.server_list_head->socket, buffer->network_id, string);
+}
+
+bool config_join_line(ConfigState_t* config_state, Buffer_t* buffer, int64_t line)
+{
+     if(!config_state->client_state.server_list_head){
+          return ce_join_line(buffer, line);
+     }
+     return network_join_line(config_state->client_state.server_list_head->socket, buffer->network_id, line);
+}
+
+bool config_insert_newline(ConfigState_t* config_state, Buffer_t* buffer, int64_t line)
+{
+     if(!config_state->client_state.server_list_head){
+          return ce_insert_newline(buffer, line);
+     }
+     return network_insert_newline(config_state->client_state.server_list_head->socket, buffer->network_id, line);
+}
+
+bool config_save_buffer(ConfigState_t* config_state, Buffer_t* buffer, const char* filename)
+{
+     if(!config_state->client_state.server_list_head){
+          return ce_save_buffer(buffer, filename);
+     }
+     return network_save_buffer(config_state->client_state.server_list_head->socket, buffer->network_id, filename);
+}
+// END CONFIG VERSIONS OF LIBRARY FUNCTIONS
+
 typedef struct MarkNode_t{
      char reg_char;
      Point_t location;
@@ -1961,11 +2202,13 @@ bool initializer(bool is_client, bool is_server, BufferNode_t* head, Point_t* te
      // client/server initialization
      if(is_server){
           ce_message("spawning server");
+          config_state->server_state.config_user_data = config_state;
           config_state->server_state.buffer_list_head = head;
           ce_server_init(&config_state->server_state);
      }
      if(is_client){
           ce_message("spawning client");
+          config_state->client_state.config_user_data = config_state;
           config_state->client_state.buffer_list_head = head;
           if(!ce_client_init(&config_state->client_state)){
                ce_message("failed to initialize client");
@@ -1985,7 +2228,6 @@ bool initializer(bool is_client, bool is_server, BufferNode_t* head, Point_t* te
 
      for(int i = 0; i < argc; ++i){
           BufferNode_t* node = new_buffer_from_file(head, argv[i]);
-          //ce_message("buffer %s has network_id %d", node->buffer->name, node->buffer->network_id);
 
           // if we loaded a file, set the view to point at the file
           if(i == 0 && node){
@@ -1993,7 +2235,6 @@ bool initializer(bool is_client, bool is_server, BufferNode_t* head, Point_t* te
                if(is_client){
                     config_state->tab_current->view_current->top_left = (Point_t){0, 0};
                     config_state->tab_current->view_current->bottom_right = (Point_t){g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 1};
-                    //ce_network_refresh_view(&config_state->client_state, config_state->tab_current->view_current);
                }
           }
      }

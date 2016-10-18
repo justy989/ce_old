@@ -7,6 +7,9 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include "ce.h"
+
+void view_drawer(const BufferNode_t* head, void* user_data);
 /* design thoughts:
 Server side:
 When a client connects, the server creates a piece of state to track that client. This state includes:
@@ -51,17 +54,6 @@ Random thought:
      } while(buf[read_ix-1] != '\0'); \
 })
 
-static Buffer_t* _id_to_buffer(BufferNode_t* head, const NetworkBufferId_t* buffer_id)
-{
-     while(head && head->buffer->network_id != buffer_id->id){
-          head = head->next;
-     }
-     if(!head) return NULL;
-     assert(head);
-     if(buffer_id->cursor.x >= 0 && buffer_id->cursor.y >= 0)
-          head->buffer->cursor = buffer_id->cursor;
-     return head->buffer;
-}
 
 void _notify_file_opened(Client_t* client, const Buffer_t* new_buffer)
 {
@@ -99,16 +91,6 @@ static void _close_client(ServerState_t* server_state, Client_t* client){
           server_state->client_list_head = client->next;
      }
 
-     // cleanup all client views
-     {
-          ClientView_t* view_itr = client->view_list_head;
-          while(view_itr){
-               ClientView_t* tmp = view_itr;
-               view_itr = view_itr->next;
-               free(tmp);
-          }
-     }
-
      close(client->socket);
      free(client);
 }
@@ -122,18 +104,35 @@ static void _handle_load_file(ServerState_t* server_state, Client_t* client)
           return;
      }
 
-     // open the buffer on the server and send its contents to the client
-     Buffer_t* buffer = calloc(1, sizeof(*buffer));
-     if(!ce_load_file(buffer, filename)){
-          ce_message("server failed to load %s", filename);
-          return;
+     // use an existing buffer if we already have one
+     BufferNode_t* itr = server_state->buffer_list_head;
+     while(itr){
+          if(!strcmp(itr->buffer->name, filename)){
+               break; // already open
+          }
+          itr = itr->next;
      }
 
-     buffer->network_id = server_state->current_id++;
-     BufferNode_t* new_node = malloc(sizeof(*new_node));
-     *new_node = (BufferNode_t){buffer, server_state->buffer_list_head->next};
-     server_state->buffer_list_head->next = new_node;
+     Buffer_t* buffer;
+     if(itr){
+          buffer = itr->buffer;
+     }
+     else{
+          // open the buffer on the server
+          buffer = calloc(1, sizeof(*buffer));
+          if(!ce_load_file(buffer, filename)){
+               ce_message("server failed to load %s", filename);
+               return;
+          }
 
+          buffer->network_id = server_state->current_id++;
+          BufferNode_t* new_node = malloc(sizeof(*new_node));
+          *new_node = (BufferNode_t){buffer, server_state->buffer_list_head->next};
+          server_state->buffer_list_head->next = new_node;
+     }
+
+     // NOTE: we only respond to the current client with the load file command.
+     // we do not send it to everyone... at least for the time being
      NetworkCommand_t cmd = NC_LOAD_FILE;
      if(!network_write(client->socket, &(cmd), sizeof(cmd))){
           _close_client(server_state, client);
@@ -159,6 +158,316 @@ static void _handle_load_file(ServerState_t* server_state, Client_t* client)
      free(new_buffer_str);
 }
 
+#define PARSE_ARGS \
+     ServerState_t* server_state = user_data; \
+     Buffer_t* buf = id_to_buffer(server_state->buffer_list_head, buffer); \
+     assert(buf); /* a client should not tell us about a buffer we don't know about */ \
+     if(!buf) return false;
+
+static bool _handle_insert_char(NetworkId_t buffer, Point_t location, char c, void* user_data)
+{
+     PARSE_ARGS
+     if(!ce_insert_char(buf, location, c)) return false;
+
+     // relay command to all clients
+     Client_t* client = server_state->client_list_head;
+     while(client){
+          if(!network_insert_char(client->socket, buffer, location, c)){
+               _close_client(server_state, client);
+          }
+          client = client->next;
+     }
+     return true;
+}
+
+static bool _handle_insert_char_readonly(NetworkId_t buffer, Point_t location, char c, void* user_data)
+{
+     PARSE_ARGS
+     if(!ce_insert_char(buf, location, c)) return false;
+
+     // relay command to all clients
+     Client_t* client = server_state->client_list_head;
+     while(client){
+          if(!network_insert_char_readonly(client->socket, buffer, location, c)){
+               _close_client(server_state, client);
+          }
+          client = client->next;
+     }
+     return true;
+}
+
+static bool _handle_append_char(NetworkId_t buffer, char c, void* user_data)
+{
+     PARSE_ARGS
+     if(!ce_append_char(buf, c)) return false;
+
+     // relay command to all clients
+     Client_t* client = server_state->client_list_head;
+     while(client){
+          if(!network_append_char(client->socket, buffer, c)){
+               _close_client(server_state, client);
+          }
+          client = client->next;
+     }
+     return true;
+}
+
+static bool _handle_append_char_readonly(NetworkId_t buffer, char c, void* user_data)
+{
+     PARSE_ARGS
+     if(!ce_append_char_readonly(buf, c)) return false;
+
+     // relay command to all clients
+     Client_t* client = server_state->client_list_head;
+     while(client){
+          if(!network_append_char_readonly(client->socket, buffer, c)){
+               _close_client(server_state, client);
+          }
+          client = client->next;
+     }
+     return true;
+}
+
+static bool _handle_remove_char(NetworkId_t buffer, Point_t location, void* user_data)
+{
+     PARSE_ARGS
+     if(!ce_remove_char(buf, location)) return false;
+
+     // relay command to all clients
+     Client_t* client = server_state->client_list_head;
+     while(client){
+          if(!network_remove_char(client->socket, buffer, location)){
+               _close_client(server_state, client);
+          }
+          client = client->next;
+     }
+     return true;
+}
+
+static bool _handle_set_char(NetworkId_t buffer, Point_t location, char c, void* user_data)
+{
+     PARSE_ARGS
+     if(!ce_set_char(buf, location, c)) return false;
+
+     // relay command to all clients
+     Client_t* client = server_state->client_list_head;
+     while(client){
+          if(!network_set_char(client->socket, buffer, location, c)){
+               _close_client(server_state, client);
+          }
+          client = client->next;
+     }
+     return true;
+}
+
+static bool _handle_insert_string(NetworkId_t buffer, Point_t location, const char* string, void* user_data)
+{
+     PARSE_ARGS
+     if(!ce_insert_string(buf, location, string)) return false;
+
+     // relay command to all clients
+     Client_t* client = server_state->client_list_head;
+     while(client){
+          if(!network_insert_string(client->socket, buffer, location, string)){
+               _close_client(server_state, client);
+          }
+          client = client->next;
+     }
+     return true;
+}
+
+static bool _handle_insert_string_readonly(NetworkId_t buffer, Point_t location, const char* string, void* user_data)
+{
+     PARSE_ARGS
+     if(!ce_insert_string_readonly(buf, location, string)) return false;
+
+     // relay command to all clients
+     Client_t* client = server_state->client_list_head;
+     while(client){
+          if(!network_insert_string_readonly(client->socket, buffer, location, string)){
+               _close_client(server_state, client);
+          }
+          client = client->next;
+     }
+     return true;
+}
+
+static bool _handle_remove_string(NetworkId_t buffer, Point_t location, int64_t length, void* user_data)
+{
+     PARSE_ARGS
+     if(!ce_remove_string(buf, location, length)) return false;
+
+     // relay command to all clients
+     Client_t* client = server_state->client_list_head;
+     while(client){
+          if(!network_remove_string(client->socket, buffer, location, length)){
+               _close_client(server_state, client);
+          }
+          client = client->next;
+     }
+     return true;
+}
+
+static bool _handle_prepend_string(NetworkId_t buffer, int64_t line, const char* string, void* user_data)
+{
+     PARSE_ARGS
+     if(!ce_prepend_string(buf, line, string)) return false;
+
+     // relay command to all clients
+     Client_t* client = server_state->client_list_head;
+     while(client){
+          if(!network_prepend_string(client->socket, buffer, line, string)){
+               _close_client(server_state, client);
+          }
+          client = client->next;
+     }
+     return true;
+}
+
+static bool _handle_append_string(NetworkId_t buffer, int64_t line, const char* string, void* user_data)
+{
+     PARSE_ARGS
+     if(!ce_append_string(buf, line, string)) return false;
+
+     // relay command to all clients
+     Client_t* client = server_state->client_list_head;
+     while(client){
+          if(!network_append_string(client->socket, buffer, line, string)){
+               _close_client(server_state, client);
+          }
+          client = client->next;
+     }
+     return true;
+}
+
+static bool _handle_append_string_readonly(NetworkId_t buffer, int64_t line, const char* string, void* user_data)
+{
+     PARSE_ARGS
+     if(!ce_append_string_readonly(buf, line, string)) return false;
+
+     // relay command to all clients
+     Client_t* client = server_state->client_list_head;
+     while(client){
+          if(!network_append_string_readonly(client->socket, buffer, line, string)){
+               _close_client(server_state, client);
+          }
+          client = client->next;
+     }
+     return true;
+}
+
+static bool _handle_insert_line(NetworkId_t buffer, int64_t line, const char* string, void* user_data)
+{
+     PARSE_ARGS
+     if(!ce_insert_line(buf, line, string)) return false;
+
+     // relay command to all clients
+     Client_t* client = server_state->client_list_head;
+     while(client){
+          if(!network_insert_line(client->socket, buffer, line, string)){
+               _close_client(server_state, client);
+          }
+          client = client->next;
+     }
+     return true;
+}
+
+static bool _handle_insert_line_readonly(NetworkId_t buffer, int64_t line, const char* string, void* user_data)
+{
+     PARSE_ARGS
+     if(!ce_insert_line_readonly(buf, line, string)) return false;
+
+     // relay command to all clients
+     Client_t* client = server_state->client_list_head;
+     while(client){
+          if(!network_insert_line_readonly(client->socket, buffer, line, string)){
+               _close_client(server_state, client);
+          }
+          client = client->next;
+     }
+     return true;
+}
+
+static bool _handle_remove_line(NetworkId_t buffer, int64_t line, void* user_data)
+{
+     PARSE_ARGS
+     if(!ce_remove_line(buf, line)) return false;
+
+     // relay command to all clients
+     Client_t* client = server_state->client_list_head;
+     while(client){
+          if(!network_remove_line(client->socket, buffer, line)){
+               _close_client(server_state, client);
+          }
+          client = client->next;
+     }
+     return true;
+}
+
+static bool _handle_append_line(NetworkId_t buffer, const char* string, void* user_data)
+{
+     PARSE_ARGS
+     if(!ce_append_line(buf, string)) return false;
+
+     // relay command to all clients
+     Client_t* client = server_state->client_list_head;
+     while(client){
+          if(!network_append_line(client->socket, buffer, string)){
+               _close_client(server_state, client);
+          }
+          client = client->next;
+     }
+     return true;
+}
+
+static bool _handle_append_line_readonly(NetworkId_t buffer, const char* string, void* user_data)
+{
+     PARSE_ARGS
+     if(!ce_append_line_readonly(buf, string)) return false;
+
+     // relay command to all clients
+     Client_t* client = server_state->client_list_head;
+     while(client){
+          if(!network_append_line_readonly(client->socket, buffer, string)){
+               _close_client(server_state, client);
+          }
+          client = client->next;
+     }
+     return true;
+}
+
+static bool _handle_join_line(NetworkId_t buffer, int64_t line, void* user_data)
+{
+     PARSE_ARGS
+     if(!ce_join_line(buf, line)) return false;
+
+     // relay command to all clients
+     Client_t* client = server_state->client_list_head;
+     while(client){
+          if(!network_join_line(client->socket, buffer, line)){
+               _close_client(server_state, client);
+          }
+          client = client->next;
+     }
+     return true;
+}
+
+static bool _handle_insert_newline(NetworkId_t buffer, int64_t line, void* user_data)
+{
+     PARSE_ARGS
+     if(!ce_insert_newline(buf, line)) return false;
+
+     // relay command to all clients
+     Client_t* client = server_state->client_list_head;
+     while(client){
+          if(!network_insert_newline(client->socket, buffer, line)){
+               _close_client(server_state, client);
+          }
+          client = client->next;
+     }
+     return true;
+}
+
 static void _handle_client_command(ServerState_t* server_state, Client_t* client)
 {
      NetworkCommand_t cmd = 0;
@@ -182,46 +491,123 @@ static void _handle_client_command(ServerState_t* server_state, Client_t* client
           _handle_load_file(server_state, client);
           break;
      case NC_INSERT_CHAR:
+          if(apply_insert_char(client->socket, server_state, _handle_insert_char) == APPLY_SOCKET_DISCONNECTED){
+               _close_client(server_state, client);
+               return;
+          }
           break;
      case NC_INSERT_CHAR_READONLY:
+          if(apply_insert_char_readonly(client->socket, server_state, _handle_insert_char_readonly) == APPLY_SOCKET_DISCONNECTED){
+               _close_client(server_state, client);
+               return;
+          }
           break;
      case NC_APPEND_CHAR:
+          if(apply_append_char(client->socket, server_state, _handle_append_char) == APPLY_SOCKET_DISCONNECTED){
+               _close_client(server_state, client);
+               return;
+          }
           break;
      case NC_APPEND_CHAR_READONLY:
+          if(apply_append_char_readonly(client->socket, server_state, _handle_append_char_readonly) == APPLY_SOCKET_DISCONNECTED){
+               _close_client(server_state, client);
+               return;
+          }
           break;
      case NC_REMOVE_CHAR:
+          if(apply_remove_char(client->socket, server_state, _handle_remove_char) == APPLY_SOCKET_DISCONNECTED){
+               _close_client(server_state, client);
+               return;
+          }
           break;
      case NC_SET_CHAR:
+          if(apply_set_char(client->socket, server_state, _handle_set_char) == APPLY_SOCKET_DISCONNECTED){
+               _close_client(server_state, client);
+               return;
+          }
           break;
      case NC_INSERT_STRING:
+          if(apply_insert_string(client->socket, server_state, _handle_insert_string) == APPLY_SOCKET_DISCONNECTED){
+               _close_client(server_state, client);
+               return;
+          }
           break;
      case NC_INSERT_STRING_READONLY:
+          if(apply_insert_string_readonly(client->socket, server_state, _handle_insert_string_readonly) == APPLY_SOCKET_DISCONNECTED){
+               _close_client(server_state, client);
+               return;
+          }
           break;
      case NC_REMOVE_STRING:
+          if(apply_remove_string(client->socket, server_state, _handle_remove_string) == APPLY_SOCKET_DISCONNECTED){
+               _close_client(server_state, client);
+               return;
+          }
           break;
      case NC_PREPEND_STRING:
+          if(apply_prepend_string(client->socket, server_state, _handle_prepend_string) == APPLY_SOCKET_DISCONNECTED){
+               _close_client(server_state, client);
+               return;
+          }
           break;
      case NC_APPEND_STRING:
+          if(apply_append_string(client->socket, server_state, _handle_append_string) == APPLY_SOCKET_DISCONNECTED){
+               _close_client(server_state, client);
+               return;
+          }
           break;
      case NC_APPEND_STRING_READONLY:
+          if(apply_append_string_readonly(client->socket, server_state, _handle_append_string_readonly) == APPLY_SOCKET_DISCONNECTED){
+               _close_client(server_state, client);
+               return;
+          }
           break;
      case NC_INSERT_LINE:
+          if(apply_insert_line(client->socket, server_state, _handle_insert_line) == APPLY_SOCKET_DISCONNECTED){
+               _close_client(server_state, client);
+               return;
+          }
           break;
      case NC_INSERT_LINE_READONLY:
+          if(apply_insert_line_readonly(client->socket, server_state, _handle_insert_line_readonly) == APPLY_SOCKET_DISCONNECTED){
+               _close_client(server_state, client);
+               return;
+          }
           break;
      case NC_REMOVE_LINE:
+          if(apply_remove_line(client->socket, server_state, _handle_remove_line) == APPLY_SOCKET_DISCONNECTED){
+               _close_client(server_state, client);
+               return;
+          }
           break;
      case NC_APPEND_LINE:
+          if(apply_append_line(client->socket, server_state, _handle_append_line) == APPLY_SOCKET_DISCONNECTED){
+               _close_client(server_state, client);
+               return;
+          }
           break;
      case NC_APPEND_LINE_READONLY:
+          if(apply_append_line_readonly(client->socket, server_state, _handle_append_line_readonly) == APPLY_SOCKET_DISCONNECTED){
+               _close_client(server_state, client);
+               return;
+          }
           break;
      case NC_JOIN_LINE:
+          if(apply_join_line(client->socket, server_state, _handle_join_line) == APPLY_SOCKET_DISCONNECTED){
+               _close_client(server_state, client);
+               return;
+          }
           break;
      case NC_INSERT_NEWLINE:
+          if(apply_insert_newline(client->socket, server_state, _handle_insert_newline) == APPLY_SOCKET_DISCONNECTED){
+               _close_client(server_state, client);
+               return;
+          }
           break;
      case NC_SAVE_BUFFER:
           break;
      }
+     view_drawer(server_state->buffer_list_head, server_state->config_user_data);
 }
 
 void* ce_server_listen(void* args)

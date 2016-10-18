@@ -38,6 +38,7 @@ typedef enum{
 const char* cmd_to_str(NetworkCommand_t cmd);
 
 typedef uint16_t NetworkId_t;
+Buffer_t* id_to_buffer(BufferNode_t* head, NetworkId_t id);
 
 // apply functions with arguments read from the specified socket
 typedef enum {
@@ -98,7 +99,7 @@ ApplyRC_t apply_insert_line_readonly   (int socket, void* user_data, InsertLineF
 typedef bool (*RemoveLineFn_t)         (NetworkId_t buffer, int64_t line, void* user_data);
 ApplyRC_t apply_remove_line            (int socket, void* user_data, RemoveLineFn_t fn);
 
-typedef bool (*AppendLineFn_t)         (NetworkId_t buffer, int64_t line, const char* string, void* user_data);
+typedef bool (*AppendLineFn_t)         (NetworkId_t buffer, const char* string, void* user_data);
 ApplyRC_t apply_append_line            (int socket, void* user_data, AppendLineFn_t fn);
 ApplyRC_t apply_append_line_readonly   (int socket, void* user_data, AppendLineFn_t fn);
 
@@ -133,8 +134,8 @@ bool network_append_string_readonly (int socket, NetworkId_t buffer, int64_t lin
 bool network_insert_line            (int socket, NetworkId_t buffer, int64_t line, const char* string);
 bool network_insert_line_readonly   (int socket, NetworkId_t buffer, int64_t line, const char* string);
 bool network_remove_line            (int socket, NetworkId_t buffer, int64_t line);
-bool network_append_line            (int socket, NetworkId_t buffer, int64_t line, const char* string);
-bool network_append_line_readonly   (int socket, NetworkId_t buffer, int64_t line, const char* string);
+bool network_append_line            (int socket, NetworkId_t buffer, const char* string);
+bool network_append_line_readonly   (int socket, NetworkId_t buffer, const char* string);
 bool network_join_line              (int socket, NetworkId_t buffer, int64_t line);
 bool network_insert_newline         (int socket, NetworkId_t buffer, int64_t line);
 bool network_save_buffer            (int socket, NetworkId_t buffer, const char* filename);

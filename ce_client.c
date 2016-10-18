@@ -12,9 +12,15 @@
 
 void view_drawer(const BufferNode_t* head, void* user_data);
 
+typedef struct{
+     ClientState_t* client_state;
+     Server_t* server;
+}ClientServer_t;
+
 static bool _handle_load_file(NetworkId_t buffer, const char* filename, const char* file_str, void* user_data)
 {
-     ClientState_t* client_state = user_data;
+     ClientServer_t* client_server = user_data;
+     ClientState_t* client_state = client_server->client_state;
      BufferNode_t* itr = client_state->buffer_list_head;
      while(itr){
           if(!strcmp(itr->buffer->name, filename)){
@@ -44,11 +50,15 @@ static bool _handle_load_file(NetworkId_t buffer, const char* filename, const ch
           ce_message("failed to load new network file %s", filename);
      }
      to_load->modified = false;
+     assert(CLIENT_ID(buffer) == client_server->server->id);
+     sem_post(&client_state->command_sem);
      return true;
 }
 
 #define PARSE_ARGS \
-     ClientState_t* client_state = user_data; \
+     ClientServer_t* client_server = user_data; \
+     ClientState_t* client_state = client_server->client_state; \
+     Server_t* server = client_server->server; \
      Buffer_t* buf = id_to_buffer(client_state->buffer_list_head, buffer); \
      assert(buf); /* a client should not tell us about a buffer we don't know about */ \
      if(!buf) return false;
@@ -57,6 +67,8 @@ static bool _handle_insert_char(NetworkId_t buffer, Point_t location, char c, vo
 {
      PARSE_ARGS
      if(!ce_insert_char(buf, location, c)) return false;
+     if(CLIENT_ID(buffer) == server->id) sem_post(&client_state->command_sem);
+     else view_drawer(client_state->buffer_list_head, client_state->config_user_data);
      return true;
 }
 
@@ -64,109 +76,162 @@ static bool _handle_insert_char_readonly(NetworkId_t buffer, Point_t location, c
 {
      PARSE_ARGS
      if(!ce_insert_char(buf, location, c)) return false;
+     if(CLIENT_ID(buffer) == server->id) sem_post(&client_state->command_sem);
+     else view_drawer(client_state->buffer_list_head, client_state->config_user_data);
      return true;
 }
 
 static bool _handle_append_char(NetworkId_t buffer, char c, void* user_data)
 {
      PARSE_ARGS
-     return ce_append_char(buf, c);
+     if(!ce_append_char(buf, c)) return false;
+     if(CLIENT_ID(buffer) == server->id) sem_post(&client_state->command_sem);
+     else view_drawer(client_state->buffer_list_head, client_state->config_user_data);
+     return true;
 }
 
 static bool _handle_append_char_readonly(NetworkId_t buffer, char c, void* user_data)
 {
      PARSE_ARGS
-     return ce_append_char_readonly(buf, c);
+     if(!ce_append_char_readonly(buf, c)) return false;
+     if(CLIENT_ID(buffer) == server->id) sem_post(&client_state->command_sem);
+     else view_drawer(client_state->buffer_list_head, client_state->config_user_data);
+     return true;
 }
 
 static bool _handle_remove_char(NetworkId_t buffer, Point_t location, void* user_data)
 {
      PARSE_ARGS
-     return ce_remove_char(buf, location);
+     if(!ce_remove_char(buf, location)) return false;
+     if(CLIENT_ID(buffer) == server->id) sem_post(&client_state->command_sem);
+     else view_drawer(client_state->buffer_list_head, client_state->config_user_data);
+     return true;
 }
 
 static bool _handle_set_char(NetworkId_t buffer, Point_t location, char c, void* user_data)
 {
      PARSE_ARGS
-     return ce_set_char(buf, location, c);
+     if(!ce_set_char(buf, location, c)) return false;
+     if(CLIENT_ID(buffer) == server->id) sem_post(&client_state->command_sem);
+     else view_drawer(client_state->buffer_list_head, client_state->config_user_data);
+     return true;
 }
 
 static bool _handle_insert_string(NetworkId_t buffer, Point_t location, const char* string, void* user_data)
 {
      PARSE_ARGS
-     return ce_insert_string(buf, location, string);
+     if(!ce_insert_string(buf, location, string)) return false;
+     if(CLIENT_ID(buffer) == server->id) sem_post(&client_state->command_sem);
+     else view_drawer(client_state->buffer_list_head, client_state->config_user_data);
+     return true;
 }
 
 static bool _handle_insert_string_readonly(NetworkId_t buffer, Point_t location, const char* string, void* user_data)
 {
      PARSE_ARGS
-     return ce_insert_string_readonly(buf, location, string);
+     if(!ce_insert_string_readonly(buf, location, string)) return false;
+     if(CLIENT_ID(buffer) == server->id) sem_post(&client_state->command_sem);
+     else view_drawer(client_state->buffer_list_head, client_state->config_user_data);
+     return true;
 }
 
 static bool _handle_remove_string(NetworkId_t buffer, Point_t location, int64_t length, void* user_data)
 {
      PARSE_ARGS
-     return ce_remove_string(buf, location, length);
+     if(!ce_remove_string(buf, location, length)) return false;
+     if(CLIENT_ID(buffer) == server->id) sem_post(&client_state->command_sem);
+     else view_drawer(client_state->buffer_list_head, client_state->config_user_data);
+     return true;
 }
 
 static bool _handle_prepend_string(NetworkId_t buffer, int64_t line, const char* string, void* user_data)
 {
      PARSE_ARGS
-     return ce_prepend_string(buf, line, string);
+     if(!ce_prepend_string(buf, line, string)) return false;
+     if(CLIENT_ID(buffer) == server->id) sem_post(&client_state->command_sem);
+     else view_drawer(client_state->buffer_list_head, client_state->config_user_data);
+     return true;
 }
 
 static bool _handle_append_string(NetworkId_t buffer, int64_t line, const char* string, void* user_data)
 {
      PARSE_ARGS
-     return ce_append_string(buf, line, string);
+     if(!ce_append_string(buf, line, string)) return false;
+     if(CLIENT_ID(buffer) == server->id) sem_post(&client_state->command_sem);
+     else view_drawer(client_state->buffer_list_head, client_state->config_user_data);
+     return true;
 }
 
 static bool _handle_append_string_readonly(NetworkId_t buffer, int64_t line, const char* string, void* user_data)
 {
      PARSE_ARGS
-     return ce_append_string_readonly(buf, line, string);
+     if(!ce_append_string_readonly(buf, line, string)) return false;
+     if(CLIENT_ID(buffer) == server->id) sem_post(&client_state->command_sem);
+     else view_drawer(client_state->buffer_list_head, client_state->config_user_data);
+     return true;
 }
 
 static bool _handle_insert_line(NetworkId_t buffer, int64_t line, const char* string, void* user_data)
 {
      PARSE_ARGS
-     return ce_insert_line(buf, line, string);
+     if(!ce_insert_line(buf, line, string)) return false;
+     if(CLIENT_ID(buffer) == server->id) sem_post(&client_state->command_sem);
+     else view_drawer(client_state->buffer_list_head, client_state->config_user_data);
+     return true;
 }
 
 static bool _handle_insert_line_readonly(NetworkId_t buffer, int64_t line, const char* string, void* user_data)
 {
      PARSE_ARGS
-     return ce_insert_line_readonly(buf, line, string);
+     if(!ce_insert_line_readonly(buf, line, string)) return false;
+     if(CLIENT_ID(buffer) == server->id) sem_post(&client_state->command_sem);
+     else view_drawer(client_state->buffer_list_head, client_state->config_user_data);
+     return true;
 }
 
 static bool _handle_remove_line(NetworkId_t buffer, int64_t line, void* user_data)
 {
      PARSE_ARGS
-     return ce_remove_line(buf, line);
+     if(!ce_remove_line(buf, line)) return false;
+     if(CLIENT_ID(buffer) == server->id) sem_post(&client_state->command_sem);
+     else view_drawer(client_state->buffer_list_head, client_state->config_user_data);
+     return true;
 }
 
 static bool _handle_append_line(NetworkId_t buffer, const char* string, void* user_data)
 {
      PARSE_ARGS
-     return ce_append_line(buf, string);
+     if(!ce_append_line(buf, string)) return false;
+     if(CLIENT_ID(buffer) == server->id) sem_post(&client_state->command_sem);
+     else view_drawer(client_state->buffer_list_head, client_state->config_user_data);
+     return true;
 }
 
 static bool _handle_append_line_readonly(NetworkId_t buffer, const char* string, void* user_data)
 {
      PARSE_ARGS
-     return ce_append_line_readonly(buf, string);
+     if(!ce_append_line_readonly(buf, string)) return false;
+     if(CLIENT_ID(buffer) == server->id) sem_post(&client_state->command_sem);
+     else view_drawer(client_state->buffer_list_head, client_state->config_user_data);
+     return true;
 }
 
 static bool _handle_join_line(NetworkId_t buffer, int64_t line, void* user_data)
 {
      PARSE_ARGS
-     return ce_join_line(buf, line);
+     if(!ce_join_line(buf, line)) return false;
+     if(CLIENT_ID(buffer) == server->id) sem_post(&client_state->command_sem);
+     else view_drawer(client_state->buffer_list_head, client_state->config_user_data);
+     return true;
 }
 
 static bool _handle_insert_newline(NetworkId_t buffer, int64_t line, void* user_data)
 {
      PARSE_ARGS
-     return ce_insert_newline(buf, line);
+     if(!ce_insert_newline(buf, line)) return false;
+     if(CLIENT_ID(buffer) == server->id) sem_post(&client_state->command_sem);
+     else view_drawer(client_state->buffer_list_head, client_state->config_user_data);
+     return true;
 }
 
 static bool _handle_command(ClientState_t* client_state, Server_t* server)
@@ -179,6 +244,7 @@ static bool _handle_command(ClientState_t* client_state, Server_t* server)
      }
 
      ce_message("Client received command %s", cmd_to_str(cmd));
+     ClientServer_t client_server = {client_state, server};
 
      switch(cmd){
      case NC_FREE_BUFFER:
@@ -192,119 +258,119 @@ static bool _handle_command(ClientState_t* client_state, Server_t* server)
      case NC_LOAD_STRING:
           break;
      case NC_LOAD_FILE:
-          apply_load_file(server->socket, client_state, _handle_load_file);
+          apply_load_file(server->socket, &client_server, _handle_load_file);
           break;
      case NC_INSERT_CHAR:
-          if(apply_insert_char(server->socket, client_state, _handle_insert_char) == APPLY_SOCKET_DISCONNECTED){
-               //_disconnect_client(client_state, client);
+          if(apply_insert_char(server->socket, &client_server, _handle_insert_char) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(&client_server, client);
                return false;
           }
           break;
      case NC_INSERT_CHAR_READONLY:
-          if(apply_insert_char_readonly(server->socket, client_state, _handle_insert_char_readonly) == APPLY_SOCKET_DISCONNECTED){
-               //_disconnect_client(client_state, client);
+          if(apply_insert_char_readonly(server->socket, &client_server, _handle_insert_char_readonly) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(&client_server, client);
                return false;
           }
           break;
      case NC_APPEND_CHAR:
-          if(apply_append_char(server->socket, client_state, _handle_append_char) == APPLY_SOCKET_DISCONNECTED){
-               //_disconnect_client(client_state, client);
+          if(apply_append_char(server->socket, &client_server, _handle_append_char) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(&client_server, client);
                return false;
           }
           break;
      case NC_APPEND_CHAR_READONLY:
-          if(apply_append_char_readonly(server->socket, client_state, _handle_append_char_readonly) == APPLY_SOCKET_DISCONNECTED){
-               //_disconnect_client(client_state, client);
+          if(apply_append_char_readonly(server->socket, &client_server, _handle_append_char_readonly) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(&client_server, client);
                return false;
           }
           break;
      case NC_REMOVE_CHAR:
-          if(apply_remove_char(server->socket, client_state, _handle_remove_char) == APPLY_SOCKET_DISCONNECTED){
-               //_disconnect_client(client_state, client);
+          if(apply_remove_char(server->socket, &client_server, _handle_remove_char) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(&client_server, client);
                return false;
           }
           break;
      case NC_SET_CHAR:
-          if(apply_set_char(server->socket, client_state, _handle_set_char) == APPLY_SOCKET_DISCONNECTED){
-               //_disconnect_client(client_state, client);
+          if(apply_set_char(server->socket, &client_server, _handle_set_char) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(&client_server, client);
                return false;
           }
           break;
      case NC_INSERT_STRING:
-          if(apply_insert_string(server->socket, client_state, _handle_insert_string) == APPLY_SOCKET_DISCONNECTED){
-               //_disconnect_client(client_state, client);
+          if(apply_insert_string(server->socket, &client_server, _handle_insert_string) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(&client_server, client);
                return false;
           }
           break;
      case NC_INSERT_STRING_READONLY:
-          if(apply_insert_string_readonly(server->socket, client_state, _handle_insert_string_readonly) == APPLY_SOCKET_DISCONNECTED){
-               //_disconnect_client(client_state, client);
+          if(apply_insert_string_readonly(server->socket, &client_server, _handle_insert_string_readonly) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(&client_server, client);
                return false;
           }
           break;
      case NC_REMOVE_STRING:
-          if(apply_remove_string(server->socket, client_state, _handle_remove_string) == APPLY_SOCKET_DISCONNECTED){
-               //_disconnect_client(client_state, client);
+          if(apply_remove_string(server->socket, &client_server, _handle_remove_string) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(&client_server, client);
                return false;
           }
           break;
      case NC_PREPEND_STRING:
-          if(apply_prepend_string(server->socket, client_state, _handle_prepend_string) == APPLY_SOCKET_DISCONNECTED){
-               //_disconnect_client(client_state, client);
+          if(apply_prepend_string(server->socket, &client_server, _handle_prepend_string) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(&client_server, client);
                return false;
           }
           break;
      case NC_APPEND_STRING:
-          if(apply_append_string(server->socket, client_state, _handle_append_string) == APPLY_SOCKET_DISCONNECTED){
-               //_disconnect_client(client_state, client);
+          if(apply_append_string(server->socket, &client_server, _handle_append_string) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(&client_server, client);
                return false;
           }
           break;
      case NC_APPEND_STRING_READONLY:
-          if(apply_append_string_readonly(server->socket, client_state, _handle_append_string_readonly) == APPLY_SOCKET_DISCONNECTED){
-               //_disconnect_client(client_state, client);
+          if(apply_append_string_readonly(server->socket, &client_server, _handle_append_string_readonly) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(&client_server, client);
                return false;
           }
           break;
      case NC_INSERT_LINE:
-          if(apply_insert_line(server->socket, client_state, _handle_insert_line) == APPLY_SOCKET_DISCONNECTED){
-               //_disconnect_client(client_state, client);
+          if(apply_insert_line(server->socket, &client_server, _handle_insert_line) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(&client_server, client);
                return false;
           }
           break;
      case NC_INSERT_LINE_READONLY:
-          if(apply_insert_line_readonly(server->socket, client_state, _handle_insert_line_readonly) == APPLY_SOCKET_DISCONNECTED){
-               //_disconnect_client(client_state, client);
+          if(apply_insert_line_readonly(server->socket, &client_server, _handle_insert_line_readonly) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(&client_server, client);
                return false;
           }
           break;
      case NC_REMOVE_LINE:
-          if(apply_remove_line(server->socket, client_state, _handle_remove_line) == APPLY_SOCKET_DISCONNECTED){
-               //_disconnect_client(client_state, client);
+          if(apply_remove_line(server->socket, &client_server, _handle_remove_line) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(&client_server, client);
                return false;
           }
           break;
      case NC_APPEND_LINE:
-          if(apply_append_line(server->socket, client_state, _handle_append_line) == APPLY_SOCKET_DISCONNECTED){
-               //_disconnect_client(client_state, client);
+          if(apply_append_line(server->socket, &client_server, _handle_append_line) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(&client_server, client);
                return false;
           }
           break;
      case NC_APPEND_LINE_READONLY:
-          if(apply_append_line_readonly(server->socket, client_state, _handle_append_line_readonly) == APPLY_SOCKET_DISCONNECTED){
-               //_disconnect_client(client_state, client);
+          if(apply_append_line_readonly(server->socket, &client_server, _handle_append_line_readonly) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(&client_server, client);
                return false;
           }
           break;
      case NC_JOIN_LINE:
-          if(apply_join_line(server->socket, client_state, _handle_join_line) == APPLY_SOCKET_DISCONNECTED){
-               //_disconnect_client(client_state, client);
+          if(apply_join_line(server->socket, &client_server, _handle_join_line) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(&client_server, client);
                return false;
           }
           break;
      case NC_INSERT_NEWLINE:
-          if(apply_insert_newline(server->socket, client_state, _handle_insert_newline) == APPLY_SOCKET_DISCONNECTED){
-               //_disconnect_client(client_state, client);
+          if(apply_insert_newline(server->socket, &client_server, _handle_insert_newline) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(&client_server, client);
                return false;
           }
           break;
@@ -313,8 +379,6 @@ static bool _handle_command(ClientState_t* client_state, Server_t* server)
      default:
           assert(0);
      }
-     // TODO: we only actually want to sem_post if the command originated from this client
-     sem_post(&client_state->command_sem);
 #if 0
      // TODO: we want to redraw the view whenever a command originates from another client
      view_drawer(client_state->buffer_list_head, client_state->config_user_data);
@@ -398,16 +462,16 @@ static bool _server_connect(ClientState_t* client_state, const char* server_ip)
           return false;
      }
 
-     ce_message("Client connected to %s:%d with id %"PRIu16, server_ip, MAGIC_PORT, new_server->id);
+     ce_message("Client connected to %s:%d with id %"PRIx64, server_ip, MAGIC_PORT, new_server->id);
 
      return true;
 }
 
-bool ce_client_init(ClientState_t* client_state)
+bool ce_client_init(ClientState_t* client_state, const char* server_addr)
 {
      sem_init(&client_state->command_sem, 0, 0);
 
-     if(!_server_connect(client_state, "127.0.0.1")) return false;
+     if(!_server_connect(client_state, server_addr)) return false;
 
      // launch command handling thread
      pthread_create(&client_state->command_handling_thread, NULL, ce_client_listen, client_state);

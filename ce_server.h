@@ -13,8 +13,9 @@ typedef struct Client{
 } Client_t;
 
 typedef struct{
-     NetworkId_t current_id; // used for generating unique network id's
      int server_socket;
+     NetworkId_t current_client_id;
+     NetworkId_t current_buffer_id; // used for generating unique network id's
      void* config_user_data;
      Client_t* client_list_head;
      BufferNode_t* buffer_list_head; // TODO: eventually make this a **

@@ -125,7 +125,8 @@ static void _handle_load_file(ServerState_t* server_state, Client_t* client)
                return;
           }
 
-          buffer->network_id = server_state->current_id++;
+          buffer->network_id = server_state->current_buffer_id++;
+          assert(CLIENT_ID(buffer->network_id) == 0);
           BufferNode_t* new_node = malloc(sizeof(*new_node));
           *new_node = (BufferNode_t){buffer, server_state->buffer_list_head->next};
           server_state->buffer_list_head->next = new_node;
@@ -139,7 +140,8 @@ static void _handle_load_file(ServerState_t* server_state, Client_t* client)
           return;
      }
 
-     if(!network_write(client->socket, &(buffer->network_id), sizeof(buffer->network_id))){
+     NetworkId_t net_id = NETWORK_ID(client->id, buffer->network_id);
+     if(!network_write(client->socket, &net_id, sizeof(net_id))){
           _close_client(server_state, client);
           return;
      }
@@ -668,7 +670,9 @@ void* ce_server_listen(void* args)
 
                // start tracking the new client. insert at list head
                Client_t* new_client = malloc(sizeof(*new_client));
-               *new_client = (Client_t){client_socket, server_state->current_id++, NULL, {server_state->client_list_head, NULL}};
+               *new_client = (Client_t){client_socket, server_state->current_client_id, NULL, {server_state->client_list_head, NULL}};
+               server_state->current_client_id = server_state->current_client_id << 1;
+               assert(CLIENT_ID(server_state->current_client_id)); // make sure we have enough client bits
                if(new_client->next) new_client->next->prev = new_client;
                server_state->client_list_head = new_client;
 
@@ -681,7 +685,8 @@ void* ce_server_listen(void* args)
 
 bool ce_server_init(ServerState_t* server_state)
 {
-     server_state->current_id = 1; // start uid's at 1
+     server_state->current_client_id = CLIENT_ID_START;
+     server_state->current_buffer_id = BUFFER_ID_START;
      // open tcp server socket
      if((server_state->server_socket = socket(AF_INET, SOCK_STREAM, 0)) < 0){
           ce_message("socket() failed with error: %s", strerror(errno));

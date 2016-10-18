@@ -6,6 +6,13 @@
 #define MAGIC_PORT 12345
 #define MAX_CONNECTIONS 5
 
+// this is is an artifical limit for now to get my implementation up and running quickly
+#define CLIENT_ID(net_id) (net_id & ((NetworkId_t)0xFFFF000000000000))
+#define BUFFER_ID(net_id) (net_id & ~((NetworkId_t)0xFFFF000000000000))
+#define CLIENT_ID_START ((NetworkId_t)0x0001000000000000)
+#define BUFFER_ID_START ((NetworkId_t)1)
+#define NETWORK_ID(client_id, buffer_id) (client_id | buffer_id)
+
 typedef enum{
      NC_FREE_BUFFER,
      NC_ALLOC_LINES,
@@ -37,7 +44,7 @@ typedef enum{
 
 const char* cmd_to_str(NetworkCommand_t cmd);
 
-typedef uint16_t NetworkId_t;
+typedef uint64_t NetworkId_t;
 Buffer_t* id_to_buffer(BufferNode_t* head, NetworkId_t id);
 
 // apply functions with arguments read from the specified socket

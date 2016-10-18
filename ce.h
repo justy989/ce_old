@@ -97,7 +97,7 @@ typedef struct {
      Point_t highlight_end;
      bool modified;
      bool readonly;
-     uint16_t network_id; // TODO: move this into user data as a NetworkId_t
+     uint64_t network_id; // TODO: move this into user data as a NetworkId_t
      union {
           char* filename;
           char* name;
@@ -168,7 +168,7 @@ typedef enum {
 extern Point_t* g_terminal_dimensions;
 
 // CE Configuration-Defined Functions
-typedef bool ce_initializer (bool, bool, BufferNode_t*, Point_t*, int, char**, void**);
+typedef bool ce_initializer (const char*, bool, BufferNode_t*, Point_t*, int, char**, void**);
 typedef void ce_destroyer   (BufferNode_t*, void*);
 typedef bool ce_key_handler (int, BufferNode_t*, void*);
 typedef void ce_view_drawer (const BufferNode_t*, void*);

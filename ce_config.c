@@ -2117,7 +2117,7 @@ Buffer_t* open_file_buffer(BufferNode_t* head, const char* filename)
      }
 }
 
-bool initializer(bool is_client, bool is_server, BufferNode_t* head, Point_t* terminal_dimensions, int argc, char** argv, void** user_data)
+bool initializer(const char* server_addr, bool is_server, BufferNode_t* head, Point_t* terminal_dimensions, int argc, char** argv, void** user_data)
 {
      // NOTE: need to set these in this module
      g_terminal_dimensions = terminal_dimensions;
@@ -2207,11 +2207,11 @@ bool initializer(bool is_client, bool is_server, BufferNode_t* head, Point_t* te
           config_state->server_state.buffer_list_head = head;
           ce_server_init(&config_state->server_state);
      }
-     if(is_client){
+     if(server_addr){
           ce_message("spawning client");
           config_state->client_state.config_user_data = config_state;
           config_state->client_state.buffer_list_head = head;
-          if(!ce_client_init(&config_state->client_state)){
+          if(!ce_client_init(&config_state->client_state, server_addr)){
                ce_message("failed to initialize client");
                return false;
           }
@@ -2233,7 +2233,7 @@ bool initializer(bool is_client, bool is_server, BufferNode_t* head, Point_t* te
           // if we loaded a file, set the view to point at the file
           if(i == 0 && node){
                config_state->tab_current->view_current->buffer = node->buffer;
-               if(is_client){
+               if(server_addr){
                     config_state->tab_current->view_current->top_left = (Point_t){0, 0};
                     config_state->tab_current->view_current->bottom_right = (Point_t){g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 1};
                }

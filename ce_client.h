@@ -25,7 +25,7 @@ typedef struct{
 } ClientState_t;
 
 // client side functions
-bool ce_client_init(ClientState_t* client_state);
+bool ce_client_init(ClientState_t* client_state, const char* server_addr);
 
 bool client_free_buffer            (ClientState_t* client_state, Server_t* server, NetworkId_t buffer);
 bool client_alloc_lines            (ClientState_t* client_state, Server_t* server, NetworkId_t buffer, int64_t line_count);

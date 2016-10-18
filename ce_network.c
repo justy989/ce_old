@@ -44,7 +44,7 @@ const char* cmd_to_str(NetworkCommand_t cmd)
 
 Buffer_t* id_to_buffer(BufferNode_t* head, NetworkId_t id)
 {
-     while(head && (head->buffer->network_id != id)){
+     while(head && (BUFFER_ID(head->buffer->network_id) != BUFFER_ID(id))){
           head = head->next;
      }
      if(!head) return NULL;

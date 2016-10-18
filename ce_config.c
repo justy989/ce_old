@@ -227,10 +227,15 @@ int isnotquote(int c)
      return c != '"';
 }
 
+typedef enum{
+     BT_LOCAL = 0,
+     BT_NETWORK,
+}BufferType_t;
 typedef struct{
      BufferCommitNode_t* commit_tail;
      BackspaceNode_t* backspace_head;
      struct MarkNode_t* mark_head;
+     BufferType_t type;
 } BufferState_t;
 
 // TODO: move yank stuff to ce.h
@@ -1535,7 +1540,6 @@ bool config_alloc_lines            (ConfigState_t* config_state, Buffer_t* buffe
 bool config_clear_lines            (ConfigState_t* config_state, Buffer_t* buffer);
 bool config_clear_lines_readonly   (ConfigState_t* config_state, Buffer_t* buffer);
 bool config_load_string            (ConfigState_t* config_state, Buffer_t* buffer, const char* string);
-bool config_load_file              (ConfigState_t* config_state, Buffer_t* buffer, const char* filename);
 bool config_insert_char            (ConfigState_t* config_state, Buffer_t* buffer, Point_t location, char c);
 bool config_insert_char_readonly   (ConfigState_t* config_state, Buffer_t* buffer, Point_t location, char c);
 bool config_append_char            (ConfigState_t* config_state, Buffer_t* buffer, char c);
@@ -1559,213 +1563,205 @@ bool config_save_buffer            (ConfigState_t* config_state, Buffer_t* buffe
 
 bool config_free_buffer(ConfigState_t* config_state, Buffer_t* buffer)
 {
-     if(!config_state->client_state.server_list_head){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
           ce_free_buffer(buffer);
           return true;
      }
-     return network_free_buffer(config_state->client_state.server_list_head->socket, buffer->network_id);
+     return client_free_buffer(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id);
 }
 
 bool config_alloc_lines(ConfigState_t* config_state, Buffer_t* buffer, int64_t line_count)
 {
-     if(!config_state->client_state.server_list_head){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
           return ce_alloc_lines(buffer, line_count);
      }
-     return network_alloc_lines(config_state->client_state.server_list_head->socket, buffer->network_id, line_count);
+     return client_alloc_lines(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, line_count);
 }
 
 bool config_clear_lines(ConfigState_t* config_state, Buffer_t* buffer)
 {
-     if(!config_state->client_state.server_list_head){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
           ce_clear_lines(buffer);
           return true;
      }
-     return network_clear_lines(config_state->client_state.server_list_head->socket, buffer->network_id);
+     return client_clear_lines(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id);
 }
 
 bool config_clear_lines_readonly(ConfigState_t* config_state, Buffer_t* buffer)
 {
-     if(!config_state->client_state.server_list_head){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
           ce_clear_lines_readonly(buffer);
           return true;
      }
-     return network_clear_lines_readonly(config_state->client_state.server_list_head->socket, buffer->network_id);
+     return client_clear_lines_readonly(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id);
 }
 
 bool config_load_string(ConfigState_t* config_state, Buffer_t* buffer, const char* string)
 {
-     if(!config_state->client_state.server_list_head){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
           return ce_load_string(buffer, string);
      }
-     return network_load_string(config_state->client_state.server_list_head->socket, buffer->network_id, string);
-}
-
-bool config_load_file(ConfigState_t* config_state, Buffer_t* buffer, const char* filename)
-{
-     if(!config_state->client_state.server_list_head){
-          return ce_load_file(buffer, filename);
-     }
-     return network_load_file(config_state->client_state.server_list_head->socket, filename);
+     return client_load_string(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, string);
 }
 
 bool config_insert_char(ConfigState_t* config_state, Buffer_t* buffer, Point_t location, char c)
 {
-     if(!config_state->client_state.server_list_head){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
           return ce_insert_char(buffer, location, c);
      }
-     return network_insert_char(config_state->client_state.server_list_head->socket, buffer->network_id, location, c);
+     return client_insert_char(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, location, c);
 }
 
 bool config_insert_char_readonly(ConfigState_t* config_state, Buffer_t* buffer, Point_t location, char c)
 {
-     if(!config_state->client_state.server_list_head){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
           return ce_insert_char_readonly(buffer, location, c);
      }
-     return network_insert_char_readonly(config_state->client_state.server_list_head->socket, buffer->network_id, location, c);
+     return client_insert_char_readonly(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, location, c);
 }
 
 bool config_append_char(ConfigState_t* config_state, Buffer_t* buffer, char c)
 {
-     if(!config_state->client_state.server_list_head){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
           return ce_append_char(buffer, c);
      }
-     return network_append_char(config_state->client_state.server_list_head->socket, buffer->network_id, c);
+     return client_append_char(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, c);
 }
 
 bool config_append_char_readonly(ConfigState_t* config_state, Buffer_t* buffer, char c)
 {
-     if(!config_state->client_state.server_list_head){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
           return ce_append_char_readonly(buffer, c);
      }
-     return network_append_char_readonly(config_state->client_state.server_list_head->socket, buffer->network_id, c);
+     return client_append_char_readonly(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, c);
 }
 
 bool config_remove_char(ConfigState_t* config_state, Buffer_t* buffer, Point_t location)
 {
-     if(!config_state->client_state.server_list_head){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
           return ce_remove_char(buffer, location);
      }
-     return network_remove_char(config_state->client_state.server_list_head->socket, buffer->network_id, location);
+     return client_remove_char(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, location);
 }
 
 bool config_set_char(ConfigState_t* config_state, Buffer_t* buffer, Point_t location, char c)
 {
-     if(!config_state->client_state.server_list_head){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
           return ce_set_char(buffer, location, c);
      }
-     return network_set_char(config_state->client_state.server_list_head->socket, buffer->network_id, location, c);
+     return client_set_char(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, location, c);
 }
 
 bool config_insert_string(ConfigState_t* config_state, Buffer_t* buffer, Point_t location, const char* string)
 {
-     if(!config_state->client_state.server_list_head){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
           return ce_insert_string(buffer, location, string);
      }
-     return network_insert_string(config_state->client_state.server_list_head->socket, buffer->network_id, location, string);
+     return client_insert_string(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, location, string);
 }
 
 bool config_insert_string_readonly(ConfigState_t* config_state, Buffer_t* buffer, Point_t location, const char* string)
 {
-     if(!config_state->client_state.server_list_head){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
           return ce_insert_string_readonly(buffer, location, string);
      }
-     return network_insert_string_readonly(config_state->client_state.server_list_head->socket, buffer->network_id, location, string);
+     return client_insert_string_readonly(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, location, string);
 }
 
 bool config_remove_string(ConfigState_t* config_state, Buffer_t* buffer, Point_t location, int64_t length)
 {
-     if(!config_state->client_state.server_list_head){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
           return ce_remove_string(buffer, location, length);
      }
-     return network_remove_string(config_state->client_state.server_list_head->socket, buffer->network_id, location, length);
+     return client_remove_string(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, location, length);
 }
 
 bool config_prepend_string(ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string)
 {
-     if(!config_state->client_state.server_list_head){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
           return ce_prepend_string(buffer, line, string);
      }
-     return network_prepend_string(config_state->client_state.server_list_head->socket, buffer->network_id, line, string);
+     return client_prepend_string(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, line, string);
 }
 
 bool config_append_string(ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string)
 {
-     if(!config_state->client_state.server_list_head){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
           return ce_append_string(buffer, line, string);
      }
-     return network_append_string(config_state->client_state.server_list_head->socket, buffer->network_id, line, string);
+     return client_append_string(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, line, string);
 }
 
 bool config_append_string_readonly(ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string)
 {
-     if(!config_state->client_state.server_list_head){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
           return ce_append_string_readonly(buffer, line, string);
      }
-     return network_append_string_readonly(config_state->client_state.server_list_head->socket, buffer->network_id, line, string);
+     return client_append_string_readonly(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, line, string);
 }
 
 bool config_insert_line(ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string)
 {
-     if(!config_state->client_state.server_list_head){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
           return ce_insert_line(buffer, line, string);
      }
-     return network_insert_line(config_state->client_state.server_list_head->socket, buffer->network_id, line, string);
+     return client_insert_line(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, line, string);
 }
 
 bool config_insert_line_readonly(ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string)
 {
-     if(!config_state->client_state.server_list_head){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
           return ce_insert_line_readonly(buffer, line, string);
      }
-     return network_insert_line_readonly(config_state->client_state.server_list_head->socket, buffer->network_id, line, string);
+     return client_insert_line_readonly(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, line, string);
 }
 
 bool config_remove_line(ConfigState_t* config_state, Buffer_t* buffer, int64_t line)
 {
-     if(!config_state->client_state.server_list_head){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
           return ce_remove_line(buffer, line);
      }
-     return network_remove_line(config_state->client_state.server_list_head->socket, buffer->network_id, line);
+     return client_remove_line(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, line);
 }
 
 bool config_append_line(ConfigState_t* config_state, Buffer_t* buffer, const char* string)
 {
-     if(!config_state->client_state.server_list_head){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
           return ce_append_line(buffer, string);
      }
-     return network_append_line(config_state->client_state.server_list_head->socket, buffer->network_id, string);
+     return client_append_line(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, string);
 }
 
 bool config_append_line_readonly(ConfigState_t* config_state, Buffer_t* buffer, const char* string)
 {
-     if(!config_state->client_state.server_list_head){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
           return ce_append_line_readonly(buffer, string);
      }
-     return network_append_line_readonly(config_state->client_state.server_list_head->socket, buffer->network_id, string);
+     return client_append_line_readonly(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, string);
 }
 
 bool config_join_line(ConfigState_t* config_state, Buffer_t* buffer, int64_t line)
 {
-     if(!config_state->client_state.server_list_head){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
           return ce_join_line(buffer, line);
      }
-     return network_join_line(config_state->client_state.server_list_head->socket, buffer->network_id, line);
+     return client_join_line(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, line);
 }
 
 bool config_insert_newline(ConfigState_t* config_state, Buffer_t* buffer, int64_t line)
 {
-     if(!config_state->client_state.server_list_head){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
           return ce_insert_newline(buffer, line);
      }
-     return network_insert_newline(config_state->client_state.server_list_head->socket, buffer->network_id, line);
+     return client_insert_newline(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, line);
 }
 
 bool config_save_buffer(ConfigState_t* config_state, Buffer_t* buffer, const char* filename)
 {
-     if(!config_state->client_state.server_list_head){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
           return ce_save_buffer(buffer, filename);
      }
-     return network_save_buffer(config_state->client_state.server_list_head->socket, buffer->network_id, filename);
+     return client_save_buffer(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, filename);
 }
 // END CONFIG VERSIONS OF LIBRARY FUNCTIONS
 
@@ -2112,6 +2108,8 @@ Buffer_t* open_file_buffer(BufferNode_t* head, const char* filename)
                ce_message("failed to load file");
                // TODO: error handling
           }
+          BufferState_t* buffer_state = buffer->user_data;
+          buffer_state->type = BT_NETWORK;
           return buffer;
      }
 }

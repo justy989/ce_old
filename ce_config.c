@@ -1966,6 +1966,7 @@ bool initializer(bool is_client, bool is_server, BufferNode_t* head, Point_t* te
      }
      if(is_client){
           ce_message("spawning client");
+          config_state->client_state.buffer_list_head = head;
           if(!ce_client_init(&config_state->client_state)){
                ce_message("failed to initialize client");
                return false;

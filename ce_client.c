@@ -9,6 +9,40 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <inttypes.h>
+static bool _handle_load_file(NetworkId_t buffer, const char* filename, const char* file_str, void* user_data)
+{
+     ClientState_t* client_state = user_data;
+     BufferNode_t* itr = client_state->buffer_list_head;
+     while(itr){
+          if(!strcmp(itr->buffer->name, filename)){
+               break; // already open
+          }
+          itr = itr->next;
+     }
+
+     Buffer_t* to_load;
+     if(!itr){
+          // TODO: create a new buffer from file_str
+#if 0
+          to_load = calloc(1, sizeof(*to_load));
+          if(!ce_load_string(to_load, file_str)){
+          }
+#endif
+          ce_message("buffer was not already open");
+          assert(0);
+          return false;
+     }
+     else{
+          to_load = itr->buffer;
+     }
+     to_load->network_id = buffer;
+     ce_clear_lines(to_load);
+     if(!ce_load_string(to_load, file_str)){
+          ce_message("failed to load new network file %s", filename);
+     }
+     to_load->modified = false;
+     return true;
+}
 
 static bool _handle_command(ClientState_t* client_state, Server_t* server)
 {
@@ -22,6 +56,61 @@ static bool _handle_command(ClientState_t* client_state, Server_t* server)
 
      ce_message("Client received command %s", cmd_to_str(cmd));
 
+     switch(cmd){
+     case NC_FREE_BUFFER:
+          break;
+     case NC_ALLOC_LINES:
+          break;
+     case NC_CLEAR_LINES:
+          break;
+     case NC_CLEAR_LINES_READONLY:
+          break;
+     case NC_LOAD_STRING:
+          break;
+     case NC_LOAD_FILE:
+          apply_load_file(server->socket, client_state, _handle_load_file);
+          break;
+     case NC_INSERT_CHAR:
+          break;
+     case NC_INSERT_CHAR_READONLY:
+          break;
+     case NC_APPEND_CHAR:
+          break;
+     case NC_APPEND_CHAR_READONLY:
+          break;
+     case NC_REMOVE_CHAR:
+          break;
+     case NC_SET_CHAR:
+          break;
+     case NC_INSERT_STRING:
+          break;
+     case NC_INSERT_STRING_READONLY:
+          break;
+     case NC_REMOVE_STRING:
+          break;
+     case NC_PREPEND_STRING:
+          break;
+     case NC_APPEND_STRING:
+          break;
+     case NC_APPEND_STRING_READONLY:
+          break;
+     case NC_INSERT_LINE:
+          break;
+     case NC_INSERT_LINE_READONLY:
+          break;
+     case NC_REMOVE_LINE:
+          break;
+     case NC_APPEND_LINE:
+          break;
+     case NC_APPEND_LINE_READONLY:
+          break;
+     case NC_JOIN_LINE:
+          break;
+     case NC_INSERT_NEWLINE:
+          break;
+     case NC_SAVE_BUFFER:
+          break;
+     }
 #if 0
      switch(cmd){
           default:

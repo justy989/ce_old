@@ -113,55 +113,51 @@ static void _close_client(ServerState_t* server_state, Client_t* client){
      free(client);
 }
 
-#if 0
-static void _handle_open_file(ServerState_t* server_state, Client_t* client)
+static void _handle_load_file(ServerState_t* server_state, Client_t* client)
 {
      char filename[PATH_MAX];
-     ssize_t n_bytes;
-     READ_STR(filename);
-     ce_message("Received OPEN_FILE %s", filename);
-     Buffer_t* buffer = calloc(1, sizeof(*buffer));
-     if(!ce_load_file(buffer, filename)){
-          free(buffer);
+     if(!network_read_string(client->socket, filename, sizeof(filename))){
+          assert(0);
+          _close_client(server_state, client);
           return;
      }
+
+     // open the buffer on the server and send its contents to the client
+     Buffer_t* buffer = calloc(1, sizeof(*buffer));
+     if(!ce_load_file(buffer, filename)){
+          ce_message("server failed to load %s", filename);
+          return;
+     }
+
      buffer->network_id = server_state->current_id++;
      BufferNode_t* new_node = malloc(sizeof(*new_node));
      *new_node = (BufferNode_t){buffer, server_state->buffer_list_head->next};
      server_state->buffer_list_head->next = new_node;
 
-     // notify all clients about the new buffer
-     _notify_file_opened(client, buffer);
+     NetworkCommand_t cmd = NC_LOAD_FILE;
+     if(!network_write(client->socket, &(cmd), sizeof(cmd))){
+          _close_client(server_state, client);
+          return;
+     }
+
+     if(!network_write(client->socket, &(buffer->network_id), sizeof(buffer->network_id))){
+          _close_client(server_state, client);
+          return;
+     }
+
+     if(!network_write(client->socket, buffer->filename, strlen(buffer->filename) + 1)){
+          _close_client(server_state, client);
+          return;
+     }
+
+     char* new_buffer_str = ce_dupe_buffer(buffer);
+     if(!network_write(client->socket, new_buffer_str, strlen(new_buffer_str) + 1)){
+          free(new_buffer_str);
+          _close_client(server_state, client);
+          return;
+     }
+     free(new_buffer_str);
 }
-
-static void _handle_refresh_view(ServerState_t* server_state, Client_t* client)
-{
-     NetworkId_t id;
-     if(!_read(client, &id, sizeof(id))) _close_client(server_state, client);
-     // TODO: this should be the per-client view id
-     NetworkBufferId_t buffer_id = {id, {-1,-1}};
-
-     Point_t top_left;
-     if(!_read(client, &top_left, sizeof(top_left))) _close_client(server_state, client);
-
-     Point_t bottom_right;
-     if(!_read(client, &bottom_right, sizeof(bottom_right))) _close_client(server_state, client);
-
-     _refresh_view(client, _id_to_buffer(server_state->buffer_list_head, &buffer_id), top_left, bottom_right);
-}
-
-static void _handle_insert_string(ServerState_t* server_state, Client_t* client)
-{
-     ssize_t n_bytes;
-     NetworkBufferId_t buffer_id;
-     if(!_read(client, &buffer_id, sizeof(buffer_id))) _close_client(server_state, client);
-
-     Point_t insert_loc;
-     char to_insert[BUFSIZ]; // TODO: insert string by line (or as we fill up to_insert)
-     READ_STR(to_insert);
-     ce_insert_string(_id_to_buffer(server_state->buffer_list_head, &buffer_id), &insert_loc, to_insert);
-}
-#endif
 
 static void _handle_client_command(ServerState_t* server_state, Client_t* client)
 {
@@ -171,25 +167,61 @@ static void _handle_client_command(ServerState_t* server_state, Client_t* client
           return;
      }
      ce_message("Server received command %s", cmd_to_str(cmd));
-#if 0
      switch(cmd){
-          case NC_OPEN_FILE:
-               ce_message("received open file");
-               //_handle_open_file(server_state, client);
-               break;
-          case NC_REFRESH_VIEW:
-               ce_message("received refresh view");
-               //_handle_refresh_view(server_state, client);
-               break;
-          case NC_INSERT_STRING:
-               ce_message("received insert string");
-               //_handle_insert_string(server_state, client);
-               break;
-          default:
-               ce_message("Received invalid command %d", cmd);
-               break;
+     case NC_FREE_BUFFER:
+          break;
+     case NC_ALLOC_LINES:
+          break;
+     case NC_CLEAR_LINES:
+          break;
+     case NC_CLEAR_LINES_READONLY:
+          break;
+     case NC_LOAD_STRING:
+          break;
+     case NC_LOAD_FILE:
+          _handle_load_file(server_state, client);
+          break;
+     case NC_INSERT_CHAR:
+          break;
+     case NC_INSERT_CHAR_READONLY:
+          break;
+     case NC_APPEND_CHAR:
+          break;
+     case NC_APPEND_CHAR_READONLY:
+          break;
+     case NC_REMOVE_CHAR:
+          break;
+     case NC_SET_CHAR:
+          break;
+     case NC_INSERT_STRING:
+          break;
+     case NC_INSERT_STRING_READONLY:
+          break;
+     case NC_REMOVE_STRING:
+          break;
+     case NC_PREPEND_STRING:
+          break;
+     case NC_APPEND_STRING:
+          break;
+     case NC_APPEND_STRING_READONLY:
+          break;
+     case NC_INSERT_LINE:
+          break;
+     case NC_INSERT_LINE_READONLY:
+          break;
+     case NC_REMOVE_LINE:
+          break;
+     case NC_APPEND_LINE:
+          break;
+     case NC_APPEND_LINE_READONLY:
+          break;
+     case NC_JOIN_LINE:
+          break;
+     case NC_INSERT_NEWLINE:
+          break;
+     case NC_SAVE_BUFFER:
+          break;
      }
-#endif
 }
 
 void* ce_server_listen(void* args)

@@ -478,7 +478,12 @@ static void _handle_client_command(ServerState_t* server_state, Client_t* client
           return;
      }
      ce_message("Server received command %s", cmd_to_str(cmd));
+     ApplyRC_t rc = APPLY_SUCCESS;
      switch(cmd){
+     case NC_FAILED:
+          assert(0); // the client should never send this
+          rc = APPLY_SOCKET_DISCONNECTED;
+          break;
      case NC_FREE_BUFFER:
           break;
      case NC_ALLOC_LINES:
@@ -493,123 +498,80 @@ static void _handle_client_command(ServerState_t* server_state, Client_t* client
           _handle_load_file(server_state, client);
           break;
      case NC_INSERT_CHAR:
-          if(apply_insert_char(client->socket, server_state, _handle_insert_char) == APPLY_SOCKET_DISCONNECTED){
-               _close_client(server_state, client);
-               return;
-          }
+          rc = apply_insert_char(client->socket, server_state, _handle_insert_char);
           break;
      case NC_INSERT_CHAR_READONLY:
-          if(apply_insert_char_readonly(client->socket, server_state, _handle_insert_char_readonly) == APPLY_SOCKET_DISCONNECTED){
-               _close_client(server_state, client);
-               return;
-          }
+          rc = apply_insert_char_readonly(client->socket, server_state, _handle_insert_char_readonly);
           break;
      case NC_APPEND_CHAR:
-          if(apply_append_char(client->socket, server_state, _handle_append_char) == APPLY_SOCKET_DISCONNECTED){
-               _close_client(server_state, client);
-               return;
-          }
+          rc = apply_append_char(client->socket, server_state, _handle_append_char);
           break;
      case NC_APPEND_CHAR_READONLY:
-          if(apply_append_char_readonly(client->socket, server_state, _handle_append_char_readonly) == APPLY_SOCKET_DISCONNECTED){
-               _close_client(server_state, client);
-               return;
-          }
+          rc = apply_append_char_readonly(client->socket, server_state, _handle_append_char_readonly);
           break;
      case NC_REMOVE_CHAR:
-          if(apply_remove_char(client->socket, server_state, _handle_remove_char) == APPLY_SOCKET_DISCONNECTED){
-               _close_client(server_state, client);
-               return;
-          }
+          rc = apply_remove_char(client->socket, server_state, _handle_remove_char);
           break;
      case NC_SET_CHAR:
-          if(apply_set_char(client->socket, server_state, _handle_set_char) == APPLY_SOCKET_DISCONNECTED){
-               _close_client(server_state, client);
-               return;
-          }
+          rc = apply_set_char(client->socket, server_state, _handle_set_char);
           break;
      case NC_INSERT_STRING:
-          if(apply_insert_string(client->socket, server_state, _handle_insert_string) == APPLY_SOCKET_DISCONNECTED){
-               _close_client(server_state, client);
-               return;
-          }
+          rc = apply_insert_string(client->socket, server_state, _handle_insert_string);
           break;
      case NC_INSERT_STRING_READONLY:
-          if(apply_insert_string_readonly(client->socket, server_state, _handle_insert_string_readonly) == APPLY_SOCKET_DISCONNECTED){
-               _close_client(server_state, client);
-               return;
-          }
+          rc = apply_insert_string_readonly(client->socket, server_state, _handle_insert_string_readonly);
           break;
      case NC_REMOVE_STRING:
-          if(apply_remove_string(client->socket, server_state, _handle_remove_string) == APPLY_SOCKET_DISCONNECTED){
-               _close_client(server_state, client);
-               return;
-          }
+          rc = apply_remove_string(client->socket, server_state, _handle_remove_string);
           break;
      case NC_PREPEND_STRING:
-          if(apply_prepend_string(client->socket, server_state, _handle_prepend_string) == APPLY_SOCKET_DISCONNECTED){
-               _close_client(server_state, client);
-               return;
-          }
+          rc = apply_prepend_string(client->socket, server_state, _handle_prepend_string);
           break;
      case NC_APPEND_STRING:
-          if(apply_append_string(client->socket, server_state, _handle_append_string) == APPLY_SOCKET_DISCONNECTED){
-               _close_client(server_state, client);
-               return;
-          }
+          rc = apply_append_string(client->socket, server_state, _handle_append_string);
           break;
      case NC_APPEND_STRING_READONLY:
-          if(apply_append_string_readonly(client->socket, server_state, _handle_append_string_readonly) == APPLY_SOCKET_DISCONNECTED){
-               _close_client(server_state, client);
-               return;
-          }
+          rc = apply_append_string_readonly(client->socket, server_state, _handle_append_string_readonly);
           break;
      case NC_INSERT_LINE:
-          if(apply_insert_line(client->socket, server_state, _handle_insert_line) == APPLY_SOCKET_DISCONNECTED){
-               _close_client(server_state, client);
-               return;
-          }
+          rc = apply_insert_line(client->socket, server_state, _handle_insert_line);
           break;
      case NC_INSERT_LINE_READONLY:
-          if(apply_insert_line_readonly(client->socket, server_state, _handle_insert_line_readonly) == APPLY_SOCKET_DISCONNECTED){
-               _close_client(server_state, client);
-               return;
-          }
+          rc = apply_insert_line_readonly(client->socket, server_state, _handle_insert_line_readonly);
           break;
      case NC_REMOVE_LINE:
-          if(apply_remove_line(client->socket, server_state, _handle_remove_line) == APPLY_SOCKET_DISCONNECTED){
-               _close_client(server_state, client);
-               return;
-          }
+          rc = apply_remove_line(client->socket, server_state, _handle_remove_line);
           break;
      case NC_APPEND_LINE:
-          if(apply_append_line(client->socket, server_state, _handle_append_line) == APPLY_SOCKET_DISCONNECTED){
-               _close_client(server_state, client);
-               return;
-          }
+          rc = apply_append_line(client->socket, server_state, _handle_append_line);
           break;
      case NC_APPEND_LINE_READONLY:
-          if(apply_append_line_readonly(client->socket, server_state, _handle_append_line_readonly) == APPLY_SOCKET_DISCONNECTED){
-               _close_client(server_state, client);
-               return;
-          }
+          rc = apply_append_line_readonly(client->socket, server_state, _handle_append_line_readonly);
           break;
      case NC_JOIN_LINE:
-          if(apply_join_line(client->socket, server_state, _handle_join_line) == APPLY_SOCKET_DISCONNECTED){
-               _close_client(server_state, client);
-               return;
-          }
+          rc = apply_join_line(client->socket, server_state, _handle_join_line);
           break;
      case NC_INSERT_NEWLINE:
-          if(apply_insert_newline(client->socket, server_state, _handle_insert_newline) == APPLY_SOCKET_DISCONNECTED){
-               _close_client(server_state, client);
-               return;
-          }
+          rc = apply_insert_newline(client->socket, server_state, _handle_insert_newline);
           break;
      case NC_SAVE_BUFFER:
           break;
      }
-     view_drawer(server_state->buffer_list_head, server_state->config_user_data);
+
+     if(rc == APPLY_SUCCESS){
+          view_drawer(server_state->buffer_list_head, server_state->config_user_data);
+     }
+     else if(rc == APPLY_FAILED){
+          cmd = NC_FAILED;
+          // NOTE: only return the error to the client who asked for the action to take place
+          if(!network_write(client->socket, &(cmd), sizeof(cmd))){
+               _close_client(server_state, client);
+          }
+     }
+     else{
+          assert(rc == APPLY_SOCKET_DISCONNECTED);
+          _close_client(server_state, client);
+     }
 }
 
 void* ce_server_listen(void* args)

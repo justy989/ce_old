@@ -14,6 +14,8 @@
 #define NETWORK_ID(client_id, buffer_id) (client_id | buffer_id)
 
 typedef enum{
+     NC_FAILED, // no-op command we send when a command fails.
+                // this will let a client release its semaphores
      NC_FREE_BUFFER,
      NC_ALLOC_LINES,
      NC_CLEAR_LINES,
@@ -50,8 +52,8 @@ Buffer_t* id_to_buffer(BufferNode_t* head, NetworkId_t id);
 // apply functions with arguments read from the specified socket
 typedef enum {
      APPLY_SUCCESS,
-     APPLY_FAILED,
-     APPLY_SOCKET_DISCONNECTED,
+     APPLY_FAILED, // library function failed. no data was sent to client
+     APPLY_SOCKET_DISCONNECTED, // read or write returned 0
 } ApplyRC_t;
 
 // TODO: do I eventually want to include the client's NetworkId_t with all messages?

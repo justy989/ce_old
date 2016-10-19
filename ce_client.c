@@ -248,6 +248,9 @@ static bool _handle_command(ClientState_t* client_state, Server_t* server)
      ClientServer_t client_server = {client_state, server};
 
      switch(cmd){
+     case NC_FAILED:
+          sem_post(client_state->command_sem);
+          break;
      case NC_FREE_BUFFER:
           break;
      case NC_ALLOC_LINES:

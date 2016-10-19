@@ -477,7 +477,9 @@ static void _handle_client_command(ServerState_t* server_state, Client_t* client
           _close_client(server_state, client);
           return;
      }
+#ifdef DEBUG_NETWORK
      ce_message("Server received command %s", cmd_to_str(cmd));
+#endif
      ApplyRC_t rc = APPLY_SUCCESS;
      switch(cmd){
      case NC_FAILED:

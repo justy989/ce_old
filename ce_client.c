@@ -244,7 +244,9 @@ static bool _handle_command(ClientState_t* client_state, Server_t* server)
           return false;
      }
 
+#ifdef DEBUG_NETWORK
      ce_message("Client received command %s", cmd_to_str(cmd));
+#endif
      ClientServer_t client_server = {client_state, server};
      client_state->command_rc = true;
      switch(cmd){

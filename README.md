@@ -20,7 +20,6 @@ Ctrl+i|send shell command input
 Ctrl+u|page up
 Ctrl+d|page down
 Ctrl+b|view buffer list (hit return on the buffer to open it in the buffer list view)
-Ctrl+o|reload buffer from associated file
 Ctrl+r|redo
 Ctrl+v|vertical split
 Ctrl+g|horizontal split
@@ -63,11 +62,13 @@ zb|scroll view so cursor is at the bottom
 gf|goto file under cursor
 gt|goto next tab
 gT|goto previous tab
+gr|reload buffer from associated file
 <<|unindent line
 >>|indent line
 %|find matching quotes, parents, brackets, square brackets, angled brackets
 \*|search forward for the word under the cursor
 #|search forward for the word under the cursor
+~|flip case
 
 ###Cool commands to run
 `fgrep -n -H <pattern> <files>`  

@@ -239,7 +239,7 @@ static bool _handle_command(ClientState_t* client_state, Server_t* server)
 {
      NetworkCommand_t cmd = 0;
      if(!network_read(server->socket, &cmd, sizeof(cmd))){
-          // TODO: close_server
+          // TODO: close_server. NOTE: _close_server should also post to the command semaphore
           //_close_server(client_state, server);
           return false;
      }

@@ -846,8 +846,6 @@ bool ce_move_cursor_backward_to_char(const Buffer_t* buffer, Point_t* location, 
 
 bool ce_get_char(const Buffer_t* buffer, Point_t location, char* c)
 {
-     // NOTE: this assert seems to be pretty useful for debugging
-
      if(!ce_point_on_buffer(buffer, location)) return false;
 
      *c = buffer->lines[location.y][location.x];
@@ -881,7 +879,7 @@ bool insert_line_impl(Buffer_t* buffer, int64_t line, const char* string)
 {
 
      // make sure we are only inserting in the middle or at the very end
-     assert(line >= 0 && line <= buffer->line_count);
+     if(!(line >= 0 && line <= buffer->line_count)) return false;
      int64_t string_line_count = 1;
      if(string) string_line_count = ce_count_string_lines(string);
 

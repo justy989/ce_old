@@ -2898,6 +2898,7 @@ void* run_shell_commands(void* user_data)
                }
 
                if(ioctl(out_fd, FIONREAD, &count) != -1){
+                    if(count >= BUFSIZ) count = BUFSIZ - 1;
                     count = read(out_fd, tmp + 1, count);
                }
 

@@ -558,18 +558,14 @@ static void _handle_client_command(ServerState_t* server_state, Client_t* client
           break;
      }
 
-     if(rc == APPLY_SUCCESS){
-          view_drawer(server_state->buffer_list_head, server_state->config_user_data);
-     }
-     else if(rc == APPLY_FAILED){
+     if(rc == APPLY_FAILED){
           cmd = NC_FAILED;
           // NOTE: only return the error to the client who asked for the action to take place
           if(!network_write(client->socket, &(cmd), sizeof(cmd))){
                _close_client(server_state, client);
           }
      }
-     else{
-          assert(rc == APPLY_SOCKET_DISCONNECTED);
+     else if(rc == APPLY_SOCKET_DISCONNECTED){
           _close_client(server_state, client);
      }
 }

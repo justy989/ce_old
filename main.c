@@ -41,6 +41,7 @@ WANTS:
 #include <unistd.h>
 
 #include "ce.h"
+#include "ce_server.h"
 
 typedef struct Config_t{
      char* path;
@@ -161,6 +162,7 @@ int main(int argc, char** argv)
      bool done_parsing = false;
      const char* server_addr = NULL;
      bool is_server = false;
+     bool is_headless_server = false;
 
      // TODO: create config parser
      // TODO: pass unhandled main arguments to the config's arg parser?
@@ -169,6 +171,7 @@ int main(int argc, char** argv)
           switch(opt){
           case 'S':
                is_server = true; // TODO: find a better way to do this
+               is_headless_server = false; // TODO: find a better way to do this
                break;
           case 'C':
                server_addr = strdup(optarg);
@@ -221,6 +224,13 @@ int main(int argc, char** argv)
 
      bool done = false;
      bool stable_sigsegvd = false;
+     ServerState_t* server_state = NULL;
+     if(is_headless_server){
+          server_state = calloc(1, sizeof(*server_state));
+          server_state->buffer_list_head = buffer_list_head;
+          ce_server_init(server_state);
+          goto shutdown;
+     }
 
      Config_t current_config;
      if(!config_open(&current_config, config)){
@@ -384,6 +394,12 @@ int main(int argc, char** argv)
      close(message_buffer_fds[0]);
      close(message_buffer_fds[1]);
 
+     free(stable_config_contents);
+
+shutdown:
+     if(server_state){
+          pthread_join(server_state->thread, NULL);
+     }
      // free our buffers
      // TODO: I think we want to move this into the config
      BufferNode_t* itr = buffer_list_head;
@@ -395,8 +411,6 @@ int main(int argc, char** argv)
           free(tmp->buffer);
           free(tmp);
      }
-
-     free(stable_config_contents);
 
      return 0;
 }

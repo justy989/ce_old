@@ -227,6 +227,7 @@ bool config_append_line_readonly   (ConfigState_t* config_state, Buffer_t* buffe
 bool config_join_line              (ConfigState_t* config_state, Buffer_t* buffer, int64_t line);
 bool config_insert_newline         (ConfigState_t* config_state, Buffer_t* buffer, int64_t line);
 bool config_save_buffer            (ConfigState_t* config_state, Buffer_t* buffer, const char* filename);
+bool config_commit_undo            (ConfigState_t* config_state, Buffer_t* buffer, BufferCommitNode_t** tail, Point_t* cursor);
 
 #define TAB_STRING "     "
 #define SCROLL_LINES 1
@@ -1765,6 +1766,14 @@ bool config_save_buffer(ConfigState_t* config_state, Buffer_t* buffer, const cha
      }
      return client_save_buffer(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, filename);
 }
+
+bool config_commit_undo(ConfigState_t* config_state, Buffer_t* buffer, BufferCommitNode_t** tail, Point_t* cursor)
+{
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL || pthread_equal(config_state->client_state.command_thread, pthread_self())){
+          return ce_commit_undo(buffer, tail, cursor);
+     }
+     else return false;
+}
 // END CONFIG VERSIONS OF LIBRARY FUNCTIONS
 
 typedef struct MarkNode_t{
@@ -2203,7 +2212,6 @@ bool initializer(const char* server_addr, bool is_server, BufferNode_t* head, Po
      // client/server initialization
      if(is_server){
           ce_message("spawning server");
-          config_state->server_state.config_user_data = config_state;
           config_state->server_state.buffer_list_head = head;
           ce_server_init(&config_state->server_state);
      }
@@ -3915,7 +3923,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     break;
                case 'u':
                     if(buffer_state->commit_tail && buffer_state->commit_tail->commit.type != BCT_NONE){
-                         ce_commit_undo(buffer, &buffer_state->commit_tail, cursor);
+                         config_commit_undo(config_state, buffer, &buffer_state->commit_tail, cursor);
                          if(buffer_state->commit_tail->commit.type == BCT_NONE){
                               buffer->modified = false;
                          }

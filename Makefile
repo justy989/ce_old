@@ -18,7 +18,7 @@ test: clean_test test.c ce.test.o
 	$(CC) $(CFLAGS) $(filter-out $<,$^) -o $@ $(LINK)
 	./test 2> test_output.txt || (cat test_output.txt && false)
 
-ce: main.c ce.o
+ce: main.c ce.o ce_network.o ce_server.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LINK) -ldl -Wl,-rpath,.
 
 ce.o: ce.c

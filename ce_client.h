@@ -19,7 +19,7 @@ typedef struct{
      Server_t* server_list_head; // TODO: eventually support connecting to multiple servers?
      void* config_user_data;
      BufferNode_t* buffer_list_head;
-     pthread_t command_handling_thread;
+     pthread_t command_thread;
      sem_t command_sem; // clients wait on this when they send a command and post
                         // when they receive a command that originated from this client
 } ClientState_t;

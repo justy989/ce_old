@@ -474,7 +474,7 @@ bool ce_client_init(ClientState_t* client_state, const char* server_addr)
      if(!_server_connect(client_state, server_addr)) return false;
 
      // launch command handling thread
-     pthread_create(&client_state->command_handling_thread, NULL, ce_client_listen, client_state);
+     pthread_create(&client_state->command_thread, NULL, ce_client_listen, client_state);
      return true;
 }
 

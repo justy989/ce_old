@@ -1565,7 +1565,7 @@ void auto_complete_prev(AutoComplete_t* auto_complete, const char* match)
 
 bool config_free_buffer(ConfigState_t* config_state, Buffer_t* buffer)
 {
-     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL || pthread_equal(config_state->client_state.command_thread, pthread_self())){
           ce_free_buffer(buffer);
           return true;
      }
@@ -1574,7 +1574,7 @@ bool config_free_buffer(ConfigState_t* config_state, Buffer_t* buffer)
 
 bool config_alloc_lines(ConfigState_t* config_state, Buffer_t* buffer, int64_t line_count)
 {
-     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL || pthread_equal(config_state->client_state.command_thread, pthread_self())){
           return ce_alloc_lines(buffer, line_count);
      }
      return client_alloc_lines(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, line_count);
@@ -1582,7 +1582,7 @@ bool config_alloc_lines(ConfigState_t* config_state, Buffer_t* buffer, int64_t l
 
 bool config_clear_lines(ConfigState_t* config_state, Buffer_t* buffer)
 {
-     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL || pthread_equal(config_state->client_state.command_thread, pthread_self())){
           ce_clear_lines(buffer);
           return true;
      }
@@ -1591,7 +1591,7 @@ bool config_clear_lines(ConfigState_t* config_state, Buffer_t* buffer)
 
 bool config_clear_lines_readonly(ConfigState_t* config_state, Buffer_t* buffer)
 {
-     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL || pthread_equal(config_state->client_state.command_thread, pthread_self())){
           ce_clear_lines_readonly(buffer);
           return true;
      }
@@ -1600,7 +1600,7 @@ bool config_clear_lines_readonly(ConfigState_t* config_state, Buffer_t* buffer)
 
 bool config_load_string(ConfigState_t* config_state, Buffer_t* buffer, const char* string)
 {
-     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL || pthread_equal(config_state->client_state.command_thread, pthread_self())){
           return ce_load_string(buffer, string);
      }
      return client_load_string(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, string);
@@ -1608,7 +1608,7 @@ bool config_load_string(ConfigState_t* config_state, Buffer_t* buffer, const cha
 
 bool config_insert_char(ConfigState_t* config_state, Buffer_t* buffer, Point_t location, char c)
 {
-     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL || pthread_equal(config_state->client_state.command_thread, pthread_self())){
           return ce_insert_char(buffer, location, c);
      }
      return client_insert_char(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, location, c);
@@ -1616,7 +1616,7 @@ bool config_insert_char(ConfigState_t* config_state, Buffer_t* buffer, Point_t l
 
 bool config_insert_char_readonly(ConfigState_t* config_state, Buffer_t* buffer, Point_t location, char c)
 {
-     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL || pthread_equal(config_state->client_state.command_thread, pthread_self())){
           return ce_insert_char_readonly(buffer, location, c);
      }
      return client_insert_char_readonly(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, location, c);
@@ -1624,7 +1624,7 @@ bool config_insert_char_readonly(ConfigState_t* config_state, Buffer_t* buffer, 
 
 bool config_append_char(ConfigState_t* config_state, Buffer_t* buffer, char c)
 {
-     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL || pthread_equal(config_state->client_state.command_thread, pthread_self())){
           return ce_append_char(buffer, c);
      }
      return client_append_char(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, c);
@@ -1632,7 +1632,7 @@ bool config_append_char(ConfigState_t* config_state, Buffer_t* buffer, char c)
 
 bool config_append_char_readonly(ConfigState_t* config_state, Buffer_t* buffer, char c)
 {
-     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL || pthread_equal(config_state->client_state.command_thread, pthread_self())){
           return ce_append_char_readonly(buffer, c);
      }
      return client_append_char_readonly(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, c);
@@ -1640,7 +1640,7 @@ bool config_append_char_readonly(ConfigState_t* config_state, Buffer_t* buffer, 
 
 bool config_remove_char(ConfigState_t* config_state, Buffer_t* buffer, Point_t location)
 {
-     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL || pthread_equal(config_state->client_state.command_thread, pthread_self())){
           return ce_remove_char(buffer, location);
      }
      return client_remove_char(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, location);
@@ -1648,7 +1648,7 @@ bool config_remove_char(ConfigState_t* config_state, Buffer_t* buffer, Point_t l
 
 bool config_set_char(ConfigState_t* config_state, Buffer_t* buffer, Point_t location, char c)
 {
-     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL || pthread_equal(config_state->client_state.command_thread, pthread_self())){
           return ce_set_char(buffer, location, c);
      }
      return client_set_char(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, location, c);
@@ -1656,7 +1656,7 @@ bool config_set_char(ConfigState_t* config_state, Buffer_t* buffer, Point_t loca
 
 bool config_insert_string(ConfigState_t* config_state, Buffer_t* buffer, Point_t location, const char* string)
 {
-     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL || pthread_equal(config_state->client_state.command_thread, pthread_self())){
           return ce_insert_string(buffer, location, string);
      }
      return client_insert_string(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, location, string);
@@ -1664,7 +1664,7 @@ bool config_insert_string(ConfigState_t* config_state, Buffer_t* buffer, Point_t
 
 bool config_insert_string_readonly(ConfigState_t* config_state, Buffer_t* buffer, Point_t location, const char* string)
 {
-     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL || pthread_equal(config_state->client_state.command_thread, pthread_self())){
           return ce_insert_string_readonly(buffer, location, string);
      }
      return client_insert_string_readonly(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, location, string);
@@ -1672,7 +1672,7 @@ bool config_insert_string_readonly(ConfigState_t* config_state, Buffer_t* buffer
 
 bool config_remove_string(ConfigState_t* config_state, Buffer_t* buffer, Point_t location, int64_t length)
 {
-     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL || pthread_equal(config_state->client_state.command_thread, pthread_self())){
           return ce_remove_string(buffer, location, length);
      }
      return client_remove_string(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, location, length);
@@ -1680,7 +1680,7 @@ bool config_remove_string(ConfigState_t* config_state, Buffer_t* buffer, Point_t
 
 bool config_prepend_string(ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string)
 {
-     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL || pthread_equal(config_state->client_state.command_thread, pthread_self())){
           return ce_prepend_string(buffer, line, string);
      }
      return client_prepend_string(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, line, string);
@@ -1688,7 +1688,7 @@ bool config_prepend_string(ConfigState_t* config_state, Buffer_t* buffer, int64_
 
 bool config_append_string(ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string)
 {
-     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL || pthread_equal(config_state->client_state.command_thread, pthread_self())){
           return ce_append_string(buffer, line, string);
      }
      return client_append_string(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, line, string);
@@ -1696,7 +1696,7 @@ bool config_append_string(ConfigState_t* config_state, Buffer_t* buffer, int64_t
 
 bool config_append_string_readonly(ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string)
 {
-     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL || pthread_equal(config_state->client_state.command_thread, pthread_self())){
           return ce_append_string_readonly(buffer, line, string);
      }
      return client_append_string_readonly(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, line, string);
@@ -1704,7 +1704,7 @@ bool config_append_string_readonly(ConfigState_t* config_state, Buffer_t* buffer
 
 bool config_insert_line(ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string)
 {
-     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL || pthread_equal(config_state->client_state.command_thread, pthread_self())){
           return ce_insert_line(buffer, line, string);
      }
      return client_insert_line(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, line, string);
@@ -1712,7 +1712,7 @@ bool config_insert_line(ConfigState_t* config_state, Buffer_t* buffer, int64_t l
 
 bool config_insert_line_readonly(ConfigState_t* config_state, Buffer_t* buffer, int64_t line, const char* string)
 {
-     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL || pthread_equal(config_state->client_state.command_thread, pthread_self())){
           return ce_insert_line_readonly(buffer, line, string);
      }
      return client_insert_line_readonly(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, line, string);
@@ -1720,7 +1720,7 @@ bool config_insert_line_readonly(ConfigState_t* config_state, Buffer_t* buffer, 
 
 bool config_remove_line(ConfigState_t* config_state, Buffer_t* buffer, int64_t line)
 {
-     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL || pthread_equal(config_state->client_state.command_thread, pthread_self())){
           return ce_remove_line(buffer, line);
      }
      return client_remove_line(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, line);
@@ -1728,7 +1728,7 @@ bool config_remove_line(ConfigState_t* config_state, Buffer_t* buffer, int64_t l
 
 bool config_append_line(ConfigState_t* config_state, Buffer_t* buffer, const char* string)
 {
-     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL || pthread_equal(config_state->client_state.command_thread, pthread_self())){
           return ce_append_line(buffer, string);
      }
      return client_append_line(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, string);
@@ -1736,7 +1736,7 @@ bool config_append_line(ConfigState_t* config_state, Buffer_t* buffer, const cha
 
 bool config_append_line_readonly(ConfigState_t* config_state, Buffer_t* buffer, const char* string)
 {
-     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL || pthread_equal(config_state->client_state.command_thread, pthread_self())){
           return ce_append_line_readonly(buffer, string);
      }
      return client_append_line_readonly(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, string);
@@ -1744,7 +1744,7 @@ bool config_append_line_readonly(ConfigState_t* config_state, Buffer_t* buffer, 
 
 bool config_join_line(ConfigState_t* config_state, Buffer_t* buffer, int64_t line)
 {
-     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL || pthread_equal(config_state->client_state.command_thread, pthread_self())){
           return ce_join_line(buffer, line);
      }
      return client_join_line(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, line);
@@ -1752,7 +1752,7 @@ bool config_join_line(ConfigState_t* config_state, Buffer_t* buffer, int64_t lin
 
 bool config_insert_newline(ConfigState_t* config_state, Buffer_t* buffer, int64_t line)
 {
-     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL || pthread_equal(config_state->client_state.command_thread, pthread_self())){
           return ce_insert_newline(buffer, line);
      }
      return client_insert_newline(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, line);
@@ -1760,7 +1760,7 @@ bool config_insert_newline(ConfigState_t* config_state, Buffer_t* buffer, int64_
 
 bool config_save_buffer(ConfigState_t* config_state, Buffer_t* buffer, const char* filename)
 {
-     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL){
+     if(((BufferState_t*)buffer->user_data)->type == BT_LOCAL || pthread_equal(config_state->client_state.command_thread, pthread_self())){
           return ce_save_buffer(buffer, filename);
      }
      return client_save_buffer(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, filename);
@@ -3791,8 +3791,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
 
                     if(config_insert_string(config_state, buffer, begin_line, indent_nl)){
                          *cursor = (Point_t){indent_len, cursor->y};
-                         ce_commit_insert_string(&buffer_state->commit_tail, begin_line, *cursor, *cursor,
-                                                 indent_nl);
+                         ce_commit_insert_string(&buffer_state->commit_tail, begin_line, *cursor, *cursor, indent_nl);
                          enter_insert_mode(config_state, cursor);
                     }
                } break;

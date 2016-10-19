@@ -246,9 +246,10 @@ static bool _handle_command(ClientState_t* client_state, Server_t* server)
 
      ce_message("Client received command %s", cmd_to_str(cmd));
      ClientServer_t client_server = {client_state, server};
-
+     client_state->command_rc = true;
      switch(cmd){
      case NC_FAILED:
+          client_state->command_rc = false;
           sem_post(client_state->command_sem);
           break;
      case NC_FREE_BUFFER:
@@ -492,181 +493,181 @@ bool client_free_buffer(ClientState_t* client_state, Server_t* server, NetworkId
      if(!network_free_buffer(server->socket, buffer)) return false;
      // TODO: handle sem_wait errors (including signal interrupts)
      sem_wait(client_state->command_sem);
-     return true;
+     return client_state->command_rc;
 }
 
 bool client_alloc_lines(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, int64_t line_count)
 {
      if(!network_alloc_lines(server->socket, buffer, line_count)) return false;
      sem_wait(client_state->command_sem);
-     return true;
+     return client_state->command_rc;
 }
 
 bool client_clear_lines(ClientState_t* client_state, Server_t* server, NetworkId_t buffer)
 {
      if(!network_clear_lines(server->socket, buffer)) return false;
      sem_wait(client_state->command_sem);
-     return true;
+     return client_state->command_rc;
 }
 
 bool client_clear_lines_readonly(ClientState_t* client_state, Server_t* server, NetworkId_t buffer)
 {
      if(!network_clear_lines_readonly(server->socket, buffer)) return false;
      sem_wait(client_state->command_sem);
-     return true;
+     return client_state->command_rc;
 }
 
 bool client_load_string(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, const char* string)
 {
      if(!network_load_string(server->socket, buffer, string)) return false;
      sem_wait(client_state->command_sem);
-     return true;
+     return client_state->command_rc;
 }
 
 bool client_load_file(ClientState_t* client_state, Server_t* server, const char* filename)
 {
      if(!network_load_file(server->socket, filename)) return false;
      sem_wait(client_state->command_sem);
-     return true;
+     return client_state->command_rc;
 }
 
 bool client_insert_char(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, Point_t location, char c)
 {
      if(!network_insert_char(server->socket, buffer, location, c)) return false;
      sem_wait(client_state->command_sem);
-     return true;
+     return client_state->command_rc;
 }
 
 bool client_insert_char_readonly(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, Point_t location, char c)
 {
      if(!network_insert_char_readonly(server->socket, buffer, location, c)) return false;
      sem_wait(client_state->command_sem);
-     return true;
+     return client_state->command_rc;
 }
 
 bool client_append_char(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, char c)
 {
      if(!network_append_char(server->socket, buffer, c)) return false;
      sem_wait(client_state->command_sem);
-     return true;
+     return client_state->command_rc;
 }
 
 bool client_append_char_readonly(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, char c)
 {
      if(!network_append_char_readonly(server->socket, buffer, c)) return false;
      sem_wait(client_state->command_sem);
-     return true;
+     return client_state->command_rc;
 }
 
 bool client_remove_char(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, Point_t location)
 {
      if(!network_remove_char(server->socket, buffer, location)) return false;
      sem_wait(client_state->command_sem);
-     return true;
+     return client_state->command_rc;
 }
 
 bool client_set_char(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, Point_t location, char c)
 {
      if(!network_set_char(server->socket, buffer, location, c)) return false;
      sem_wait(client_state->command_sem);
-     return true;
+     return client_state->command_rc;
 }
 
 bool client_insert_string(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, Point_t location, const char* string)
 {
      if(!network_insert_string(server->socket, buffer, location, string)) return false;
      sem_wait(client_state->command_sem);
-     return true;
+     return client_state->command_rc;
 }
 
 bool client_insert_string_readonly(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, Point_t location, const char* string)
 {
      if(!network_insert_string_readonly(server->socket, buffer, location, string)) return false;
      sem_wait(client_state->command_sem);
-     return true;
+     return client_state->command_rc;
 }
 
 bool client_remove_string(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, Point_t location, int64_t length)
 {
      if(!network_remove_string(server->socket, buffer, location, length)) return false;
      sem_wait(client_state->command_sem);
-     return true;
+     return client_state->command_rc;
 }
 
 bool client_prepend_string(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, int64_t line, const char* string)
 {
      if(!network_prepend_string(server->socket, buffer, line, string)) return false;
      sem_wait(client_state->command_sem);
-     return true;
+     return client_state->command_rc;
 }
 
 bool client_append_string(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, int64_t line, const char* string)
 {
      if(!network_append_string(server->socket, buffer, line, string)) return false;
      sem_wait(client_state->command_sem);
-     return true;
+     return client_state->command_rc;
 }
 
 bool client_append_string_readonly(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, int64_t line, const char* string)
 {
      if(!network_append_string_readonly(server->socket, buffer, line, string)) return false;
      sem_wait(client_state->command_sem);
-     return true;
+     return client_state->command_rc;
 }
 
 bool client_insert_line(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, int64_t line, const char* string)
 {
      if(!network_insert_line(server->socket, buffer, line, string)) return false;
      sem_wait(client_state->command_sem);
-     return true;
+     return client_state->command_rc;
 }
 
 bool client_insert_line_readonly(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, int64_t line, const char* string)
 {
      if(!network_insert_line_readonly(server->socket, buffer, line, string)) return false;
      sem_wait(client_state->command_sem);
-     return true;
+     return client_state->command_rc;
 }
 
 bool client_remove_line(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, int64_t line)
 {
      if(!network_remove_line(server->socket, buffer, line)) return false;
      sem_wait(client_state->command_sem);
-     return true;
+     return client_state->command_rc;
 }
 
 bool client_append_line(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, const char* string)
 {
      if(!network_append_line(server->socket, buffer, string)) return false;
      sem_wait(client_state->command_sem);
-     return true;
+     return client_state->command_rc;
 }
 
 bool client_append_line_readonly(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, const char* string)
 {
      if(!network_append_line_readonly(server->socket, buffer, string)) return false;
      sem_wait(client_state->command_sem);
-     return true;
+     return client_state->command_rc;
 }
 
 bool client_join_line(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, int64_t line)
 {
      if(!network_join_line(server->socket, buffer, line)) return false;
      sem_wait(client_state->command_sem);
-     return true;
+     return client_state->command_rc;
 }
 
 bool client_insert_newline(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, int64_t line)
 {
      if(!network_insert_newline(server->socket, buffer, line)) return false;
      sem_wait(client_state->command_sem);
-     return true;
+     return client_state->command_rc;
 }
 
 bool client_save_buffer(ClientState_t* client_state, Server_t* server, NetworkId_t buffer, const char* filename)
 {
      if(!network_save_buffer(server->socket, buffer, filename)) return false;
      sem_wait(client_state->command_sem);
-     return true;
+     return client_state->command_rc;
 }
 

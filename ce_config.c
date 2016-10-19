@@ -368,6 +368,7 @@ typedef enum{
      VCT_YANK,
      VCT_INDENT,
      VCT_UNINDENT,
+     VCT_FLIP_CASE,
 } VimChangeType_t;
 
 typedef struct{
@@ -391,8 +392,6 @@ typedef enum{
      VMT_WORD_BIG,
      VMT_WORD_BEGINNING_LITTLE,
      VMT_WORD_BEGINNING_BIG,
-     VMT_WORD_BEGINNING_LITTLE_PRE_CURSOR,
-     VMT_WORD_BEGINNING_BIG_PRE_CURSOR,
      VMT_WORD_END_LITTLE,
      VMT_WORD_END_BIG,
      VMT_LINE,
@@ -617,6 +616,9 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
      case '<':
           built_action.change.type = VCT_UNINDENT;
           break;
+     case '~':
+          built_action.change.type = VCT_FLIP_CASE;
+          break;
      }
 
      if(get_motion){
@@ -646,21 +648,17 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
                built_action.motion.type = VMT_LEFT;
                break;
           case 'j':
-               if(change_char == 'd' || change_char == 'c' ||
-                  change_char == 'D' || change_char == 'C' ||
-                  change_char == '<' || change_char == '>'){
-                    built_action.motion.type = VMT_LINE_DOWN;
-               }else{
+               if(built_action.change.type == VCT_MOTION){
                     built_action.motion.type = VMT_DOWN;
+               }else{
+                    built_action.motion.type = VMT_LINE_DOWN;
                }
                break;
           case 'k':
-               if(change_char == 'd' || change_char == 'c' ||
-                  change_char == 'D' || change_char == 'C' ||
-                  change_char == '<' || change_char == '>'){
-                    built_action.motion.type = VMT_LINE_UP;
-               }else{
+               if(built_action.change.type == VCT_MOTION){
                     built_action.motion.type = VMT_UP;
+               }else{
+                    built_action.motion.type = VMT_LINE_UP;
                }
                break;
           case 'l':
@@ -673,18 +671,10 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
                built_action.motion.type = VMT_WORD_BIG;
                break;
           case 'b':
-               if(change_char == 'd' || change_char == 'c'){
-                    built_action.motion.type = VMT_WORD_BEGINNING_LITTLE_PRE_CURSOR;
-               }else{
-                    built_action.motion.type = VMT_WORD_BEGINNING_LITTLE;
-               }
+               built_action.motion.type = VMT_WORD_BEGINNING_LITTLE;
                break;
           case 'B':
-               if(change_char == 'd' || change_char == 'c'){
-                    built_action.motion.type = VMT_WORD_BEGINNING_BIG_PRE_CURSOR;
-               }else{
-                    built_action.motion.type = VMT_WORD_BEGINNING_BIG;
-               }
+               built_action.motion.type = VMT_WORD_BEGINNING_BIG;
                break;
           case 'e':
                built_action.motion.type = VMT_WORD_END_LITTLE;
@@ -910,37 +900,15 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                     break;
                case VMT_WORD_LITTLE:
                     ce_move_cursor_to_next_word(buffer, &end, true);
-
-                    // when we are not executing a motion delete up to the next word
-                    if(action->change.type != VCT_MOTION){
-                         end.x--;
-                         if(end.x < 0) end.x = 0;
-                    }
                     break;
                case VMT_WORD_BIG:
                     ce_move_cursor_to_next_word(buffer, &end, false);
-
-                    // when we are not executing a motion delete up to the next word
-                    if(action->change.type != VCT_MOTION){
-                         end.x--;
-                         if(end.x < 0) end.x = 0;
-                    }
                     break;
                case VMT_WORD_BEGINNING_LITTLE:
                     ce_move_cursor_to_beginning_of_word(buffer, &end, true);
                     break;
-               case VMT_WORD_BEGINNING_LITTLE_PRE_CURSOR:
-                    ce_move_cursor_to_beginning_of_word(buffer, &end, true);
-                    start.x--;
-                    if(start.x < 0) end.x = 0;
-                    break;
                case VMT_WORD_BEGINNING_BIG:
                     ce_move_cursor_to_beginning_of_word(buffer, &end, false);
-                    break;
-               case VMT_WORD_BEGINNING_BIG_PRE_CURSOR:
-                    ce_move_cursor_to_beginning_of_word(buffer, &end, false);
-                    start.x--;
-                    if(start.x < 0) end.x = 0;
                     break;
                case VMT_WORD_END_LITTLE:
                     ce_move_cursor_to_end_of_word(buffer, &end, true);
@@ -1142,6 +1110,24 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
           }
      }
 
+     // when we are not executing a motion delete up to the next word
+     if(action->change.type != VCT_MOTION){
+          if(action->motion.type == VMT_WORD_LITTLE || action->motion.type == VMT_WORD_BIG){
+               end.x--;
+               if(end.x < 0) end.x = 0;
+          }else if(action->motion.type == VMT_WORD_BEGINNING_LITTLE || action->motion.type == VMT_WORD_BEGINNING_BIG){
+               start.x--;
+               if(start.x < 0) start.x = 0;
+          }else if(action->motion.type == VMT_RIGHT){
+               end.x--;
+               if(end.x < 0) end.x = 0;
+          }else if(action->motion.type == VMT_LEFT){
+               if(end.x + 1 <= ce_last_index(buffer->lines[start.y])){
+                    end.x++;
+               }
+          }
+     }
+
      const Point_t* sorted_start = &start;
      const Point_t* sorted_end = &end;
 
@@ -1153,9 +1139,6 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
           break;
      case VCT_MOTION:
           *cursor = end;
-          if(action->end_in_vim_mode != VM_INSERT){
-               ce_clamp_cursor(buffer, cursor);
-          }
           if(vim_mode == VM_VISUAL_RANGE){
                // expand the selection for some motions
                if(ce_point_after(visual_start, cursor) &&
@@ -1322,9 +1305,36 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                return false;
           }
      } break;
+     case VCT_FLIP_CASE:
+     {
+          Point_t itr = *sorted_start;
+
+          do{
+               char prev_char = 0;
+               if(!ce_get_char(buffer, &itr, &prev_char)) assert(0);
+
+               if(isalpha(prev_char)) {
+                    char new_char = 0;
+                    if(isupper(prev_char)){
+                         new_char = tolower(prev_char);
+                    }else{
+                         new_char = toupper(prev_char);
+                    }
+                    if(!ce_set_char(buffer, &itr, new_char)) return false;
+                    ce_commit_change_char(&buffer_state->commit_tail, &itr, &itr, &itr,
+                                          new_char, prev_char);
+               }
+
+               ce_advance_cursor(buffer, &itr, 1);
+          } while(!ce_point_after(&itr, sorted_end));
+     } break;
      }
 
      *final_mode = action->end_in_vim_mode;
+
+     if(action->end_in_vim_mode != VM_INSERT){
+          ce_clamp_cursor(buffer, cursor);
+     }
 
      return true;
 }
@@ -3323,6 +3333,25 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          config_state->tab_current = itr;
                     }
                     break;
+               case 'r': // reload file
+               {
+                    ce_message("reloading %s", buffer->filename);
+                    if(access(buffer->filename, R_OK) != 0){
+                         ce_message("failed to read %s: %s", buffer->filename, strerror(errno));
+                         break;
+                    }
+
+                    // reload file
+                    if(buffer->readonly){
+                         // NOTE: maybe ce_clear_lines shouldn't care about readonly
+                         ce_clear_lines_readonly(buffer);
+                    }else{
+                         ce_clear_lines(buffer);
+                    }
+
+                    ce_load_file(buffer, buffer->filename);
+                    ce_clamp_cursor(buffer, &buffer_view->cursor);
+               } break;
                case 'f':
                {
                     if(!buffer->lines[cursor->y]) break;
@@ -4022,24 +4051,6 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                case 9: // Ctrl + i
                     input_start(config_state, "Shell Command Input", key);
                break;
-               case 15: // Ctrl + o // NOTE: not the best keybinding, but what else is left?!
-               {
-                    if(access(buffer->filename, R_OK) != 0){
-                         ce_message("failed to read %s: %s", buffer->filename, strerror(errno));
-                         break;
-                    }
-
-                    // reload file
-                    if(buffer->readonly){
-                         // NOTE: maybe ce_clear_lines shouldn't care about readonly
-                         ce_clear_lines_readonly(buffer);
-                    }else{
-                         ce_clear_lines(buffer);
-                    }
-
-                    ce_load_file(buffer, buffer->filename);
-                    ce_clamp_cursor(buffer, &buffer_view->cursor);
-               } break;
                }
           }
 

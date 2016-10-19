@@ -20,8 +20,8 @@ typedef struct{
      void* config_user_data;
      BufferNode_t* buffer_list_head;
      pthread_t command_thread;
-     sem_t command_sem; // clients wait on this when they send a command and post
-                        // when they receive a command that originated from this client
+     sem_t* command_sem; // clients wait on this when they send a command and post
+                         // when they receive a command that originated from this client
 } ClientState_t;
 
 // client side functions

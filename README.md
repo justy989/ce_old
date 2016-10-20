@@ -62,6 +62,8 @@ zb|scroll view so cursor is at the bottom
 gf|goto file under cursor
 gt|goto next tab
 gT|goto previous tab
+gc|comment line
+gu|uncomment line
 gr|reload buffer from associated file
 <<|unindent line
 >>|indent line

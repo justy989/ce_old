@@ -351,6 +351,8 @@ void remove_visual_lines(Buffer_t* buffer, Point_t* cursor, Point_t* visual_star
      }
 }
 
+#define VIM_COMMENT_STRING "// "
+
 typedef enum{
      VM_NORMAL,
      VM_INSERT,
@@ -369,6 +371,8 @@ typedef enum{
      VCT_YANK,
      VCT_INDENT,
      VCT_UNINDENT,
+     VCT_COMMENT,
+     VCT_UNCOMMENT,
      VCT_FLIP_CASE,
 } VimChangeType_t;
 
@@ -592,6 +596,21 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
           }
           get_motion = false;
           break;
+     case 'g':
+     {
+          built_action.end_in_vim_mode = vim_mode;
+          char next_ch = *(itr + 1);
+          if(next_ch == 'c'){
+               built_action.change.type = VCT_COMMENT;
+          }else if(next_ch == 'u'){
+               built_action.change.type = VCT_UNCOMMENT;
+          }else if(next_ch == 0){
+               return VCS_CONTINUE;
+          }else{
+               built_action.change.type = VCT_MOTION;
+               if(visual_mode) get_motion = true;
+          }
+     } break;
      case 'p':
           built_action.change.type = VCT_PASTE_AFTER;
           get_motion = false;
@@ -599,9 +618,6 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
      case 'P':
           built_action.change.type = VCT_PASTE_BEFORE;
           get_motion = false;
-          break;
-     case 'g':
-          built_action.change.type = VCT_MOTION;
           break;
      case 'y':
           built_action.change.type = VCT_YANK;
@@ -761,11 +777,20 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
                     return VCS_INVALID;
                }
           break;
+          case 'u':
+               if(change_char == 'g') {
+                    built_action.motion.type = VMT_LINE;
+               }else{
+                    return VCS_INVALID;
+               }
+          break;
           case 'G':
           built_action.motion.type = VMT_END_OF_FILE;
           break;
           case 'c':
                if(change_char == 'c') {
+                    built_action.motion.type = VMT_LINE;
+               }else if(change_char == 'g') {
                     built_action.motion.type = VMT_LINE;
                }else{
                     return VCS_INVALID;
@@ -1304,6 +1329,35 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                }
           }else{
                return false;
+          }
+     } break;
+     case VCT_COMMENT:
+     {
+          for(int64_t i = sorted_start->y; i <= sorted_end->y; ++i){
+               if(!strlen(buffer->lines[i])) continue;
+
+               Point_t soft_beginning = {0, i};
+               ce_move_cursor_to_soft_beginning_of_line(buffer, &soft_beginning);
+
+               if(ce_insert_string(buffer, &soft_beginning, VIM_COMMENT_STRING)){
+                    ce_commit_insert_string(&buffer_state->commit_tail, &soft_beginning, cursor, cursor,
+                                            strdup(VIM_COMMENT_STRING));
+               }
+          }
+     } break;
+     case VCT_UNCOMMENT:
+     {
+          for(int64_t i = sorted_start->y; i <= sorted_end->y; ++i){
+               Point_t soft_beginning = {0, i};
+               ce_move_cursor_to_soft_beginning_of_line(buffer, &soft_beginning);
+
+               if(strncmp(buffer->lines[i] + soft_beginning.x, VIM_COMMENT_STRING,
+                          strlen(VIM_COMMENT_STRING)) != 0) continue;
+
+               if(ce_remove_string(buffer, &soft_beginning, strlen(VIM_COMMENT_STRING))){
+                    ce_commit_remove_string(&buffer_state->commit_tail, &soft_beginning, cursor, cursor,
+                                            strdup(VIM_COMMENT_STRING));
+               }
           }
      } break;
      case VCT_FLIP_CASE:

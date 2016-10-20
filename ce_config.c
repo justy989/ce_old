@@ -2713,12 +2713,12 @@ void update_completion_buffer(Buffer_t* completion_buffer, AutoComplete_t* auto_
           if(strncmp(itr->option, match, match_len) == 0){
                ce_append_line_readonly(completion_buffer, itr->option);
                line_count++;
-          }
 
-          if(itr == auto_complete->current){
-               int64_t last_index = line_count - 1;
-               completion_buffer->highlight_start = (Point_t){0, last_index};
-               completion_buffer->highlight_end = (Point_t){strlen(completion_buffer->lines[last_index]), last_index};
+               if(itr == auto_complete->current){
+                    int64_t last_index = line_count - 1;
+                    completion_buffer->highlight_start = (Point_t){0, last_index};
+                    completion_buffer->highlight_end = (Point_t){strlen(completion_buffer->lines[last_index]), last_index};
+               }
           }
 
           itr = itr->next;

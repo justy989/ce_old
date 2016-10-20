@@ -1828,7 +1828,7 @@ bool ce_move_cursor_to_end_of_line(const Buffer_t* buffer, Point_t* cursor)
      return true;
 }
 
-bool ce_set_cursor(const Buffer_t* buffer, Point_t* cursor, Point_t location)
+bool ce_set_cursor(const Buffer_t* buffer, Point_t* cursor, Point_t location, MoveFlag_t flag)
 {
 
      assert(cursor->x >= 0);
@@ -1851,7 +1851,7 @@ bool ce_set_cursor(const Buffer_t* buffer, Point_t* cursor, Point_t location)
           if(!line_len){
                dst.x = 0;
           }else if(dst.x >= line_len){
-               dst.x = line_len - 1;
+               dst.x = line_len - ((flag & MF_ALLOW_EOL) ? 0 : 1);
           }
      }else{
           dst.x = 0;
@@ -1863,12 +1863,12 @@ bool ce_set_cursor(const Buffer_t* buffer, Point_t* cursor, Point_t location)
 }
 
 // modifies cursor and also returns a pointer to cursor for convience
-Point_t* ce_clamp_cursor(const Buffer_t* buffer, Point_t* cursor){
-     ce_move_cursor(buffer, cursor, (Point_t){0,0});
+Point_t* ce_clamp_cursor(const Buffer_t* buffer, Point_t* cursor, MoveFlag_t flag){
+     ce_move_cursor(buffer, cursor, (Point_t){0,0}, flag);
      return cursor;
 }
 
-bool ce_move_cursor(const Buffer_t* buffer, Point_t* cursor, Point_t delta)
+bool ce_move_cursor(const Buffer_t* buffer, Point_t* cursor, Point_t delta, MoveFlag_t flag)
 {
 
      if(!buffer->line_count){
@@ -1890,7 +1890,7 @@ bool ce_move_cursor(const Buffer_t* buffer, Point_t* cursor, Point_t delta)
           if(!line_len){
                dst.x = 0;
           }else if(dst.x >= line_len){
-               dst.x = line_len - 1;
+               dst.x = line_len - ((flag & MF_ALLOW_EOL) ? 0 : 1);
           }
      }else{
           dst.x = 0;
@@ -2161,7 +2161,7 @@ bool ce_commit_undo(Buffer_t* buffer, BufferCommitNode_t** tail, Point_t* cursor
           break;
      }
 
-     *cursor = *ce_clamp_cursor(buffer, &(*tail)->commit.undo_cursor);
+     *cursor = *ce_clamp_cursor(buffer, &(*tail)->commit.undo_cursor, MF_DEFAULT);
      *tail = (*tail)->prev;
 
      return true;

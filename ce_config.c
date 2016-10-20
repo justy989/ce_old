@@ -526,7 +526,7 @@ void remove_visual_range(Buffer_t* buffer, Point_t* cursor, Point_t* visual_star
      int64_t remove_len = ce_compute_length(buffer, *a, *b);
      if(config_remove_string(g_config_state, buffer, *a, remove_len)){
           ce_commit_remove_string(&buffer_state->commit_tail, *a, *cursor, *a, removed_str);
-          ce_set_cursor(buffer, cursor, *a);
+          ce_set_cursor(buffer, cursor, *a, MF_DEFAULT);
      }else{
           free(removed_str);
      }
@@ -552,7 +552,7 @@ void remove_visual_lines(Buffer_t* buffer, Point_t* cursor, Point_t* visual_star
      if(config_remove_string(g_config_state, buffer, start, remove_len)){
           ce_commit_remove_string(&buffer_state->commit_tail, start, *cursor, start,
                                   removed_str);
-          ce_set_cursor(buffer, cursor, start);
+          ce_set_cursor(buffer, cursor, start, MF_DEFAULT);
      }else{
           free(removed_str);
      }
@@ -996,23 +996,16 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                case VMT_NONE:
                     break;
                case VMT_LEFT:
-                    end.x--;
-                    if(end.x < 0) end.x = 0;
+                    ce_move_cursor(buffer, &end, (Point_t){-1, 0}, MF_ALLOW_EOL);
                     break;
                case VMT_RIGHT:
-               {
-                    int64_t line_len = strlen(buffer->lines[end.y]);
-                    end.x++;
-                    if(end.x > line_len) end.x = line_len;
-               } break;
+                    ce_move_cursor(buffer, &end, (Point_t){1, 0}, MF_ALLOW_EOL);
+                    break;
                case VMT_UP:
-                    end.y--;
-                    if(end.y < 0) end.y = 0;
+                    ce_move_cursor(buffer, &end, (Point_t){0, -1}, MF_ALLOW_EOL);
                     break;
                case VMT_DOWN:
-                    end.y++;
-                    if(end.y >= buffer->line_count) end.y = buffer->line_count - 1;
-                    if(end.y < 0) end.y = 0;
+                    ce_move_cursor(buffer, &end, (Point_t){0, 1}, MF_ALLOW_EOL);
                     break;
                case VMT_WORD_LITTLE:
                     ce_move_cursor_to_next_word(buffer, &end, true);
@@ -1260,7 +1253,10 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
      case VCT_MOTION:
           *cursor = end;
           if(action->end_in_vim_mode != VM_INSERT){
-               ce_clamp_cursor(buffer, cursor);
+               ce_clamp_cursor(buffer, cursor, MF_DEFAULT);
+          }
+          else {
+               ce_clamp_cursor(buffer, cursor, MF_ALLOW_EOL);
           }
           if(vim_mode == VM_VISUAL_RANGE){
                // expand the selection for some motions
@@ -1373,7 +1369,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                     ce_commit_insert_string(&buffer_state->commit_tail,
                                             insert_loc, *cursor, cursor_loc,
                                             save_str);
-                    *cursor = cursor_loc;
+                    ce_set_cursor(buffer, cursor, cursor_loc, MF_DEFAULT);
                }
           } break;
           }
@@ -2049,6 +2045,8 @@ void input_cancel(ConfigState_t* config_state)
 {
      if(config_state->input_key == '/' || config_state->input_key == '?'){
           config_state->tab_current->view_input_save->cursor = config_state->start_search;
+          ce_set_cursor(config_state->tab_current->view_input_save->buffer,
+                        &config_state->tab_current->view_input_save->cursor, config_state->start_search, MF_DEFAULT);
           center_view(config_state->tab_current->view_input_save);
      }
      input_end(config_state);
@@ -2453,7 +2451,7 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
      if(new_buffer){
           view->buffer = new_buffer;
           Point_t dst = {0, atoi(line_number_tmp) - 1}; // line numbers are 1 indexed
-          ce_set_cursor(new_buffer, &view->cursor, dst);
+          ce_set_cursor(new_buffer, &view->cursor, dst, MF_DEFAULT);
 
           // check for optional column number
           char* third_colon = strchr(line_number_end_delim + 1, ':');
@@ -2473,7 +2471,7 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
                if(all_digits){
                     dst.x = atoi(line_number_tmp) - 1; // column numbers are 1 indexed
                     assert(dst.x >= 0);
-                    ce_set_cursor(new_buffer, &view->cursor, dst);
+                    ce_set_cursor(new_buffer, &view->cursor, dst, MF_DEFAULT);
                }else{
                     ce_move_cursor_to_soft_beginning_of_line(new_buffer, &view->cursor);
                }
@@ -2585,7 +2583,7 @@ void handle_mouse_event(ConfigState_t* config_state, Buffer_t* buffer, BufferSta
           bool enter_insert;
           if((enter_insert = config_state->vim_mode == VM_INSERT)){
                commit_insert_mode_changes(&config_state->insert_state, buffer, buffer_state, cursor);
-               ce_clamp_cursor(buffer, cursor);
+               ce_clamp_cursor(buffer, cursor, MF_DEFAULT);
                enter_normal_mode(config_state);
           }
 #ifdef MOUSE_DIAG
@@ -2648,7 +2646,7 @@ void handle_mouse_event(ConfigState_t* config_state, Buffer_t* buffer, BufferSta
                                   event.y - (config_state->tab_current->view_current->top_left.y - config_state->tab_current->view_current->top_row)};
                ce_set_cursor(config_state->tab_current->view_current->buffer,
                              &config_state->tab_current->view_current->cursor,
-                             click);
+                             click, MF_DEFAULT);
           }
 #ifdef SCROLL_SUPPORT
           // This feature is currently unreliable and is only known to work for Ryan :)
@@ -2682,14 +2680,14 @@ void half_page_up(BufferView_t* view)
 {
      int64_t view_height = view->bottom_right.y - view->top_left.y;
      Point_t delta = { 0, -view_height / 2 };
-     ce_move_cursor(view->buffer, &view->cursor, delta);
+     ce_move_cursor(view->buffer, &view->cursor, delta, MF_DEFAULT);
 }
 
 void half_page_down(BufferView_t* view)
 {
      int64_t view_height = view->bottom_right.y - view->top_left.y;
      Point_t delta = { 0, view_height / 2 };
-     ce_move_cursor(view->buffer, &view->cursor, delta);
+     ce_move_cursor(view->buffer, &view->cursor, delta, MF_DEFAULT);
 }
 
 bool iterate_history_input(ConfigState_t* config_state, bool previous)
@@ -3176,7 +3174,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                }else{
                     ce_message("no matches found to replace");
                }
-               *cursor = begin;
+               ce_set_cursor(buffer, cursor, begin, MF_DEFAULT);
                center_view(buffer_view);
                free(replace_str);
           } break;
@@ -3232,7 +3230,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           if(!itr) return;
 
           buffer_view->buffer = itr->buffer;
-          *cursor = itr->buffer->cursor;
+          ce_set_cursor(buffer, cursor, itr->buffer->cursor, MF_DEFAULT);
           center_view(buffer_view);
      }else if(config_state->tab_current->view_current->buffer == config_state->shell_command_buffer){
           BufferView_t* view_to_change = buffer_view;
@@ -3297,7 +3295,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           {
                commit_insert_mode_changes(insert_state, buffer, buffer_state, cursor);
                enter_normal_mode(config_state);
-               ce_clamp_cursor(buffer, cursor);
+               ce_clamp_cursor(buffer, cursor, MF_DEFAULT);
           } break;
           case KEY_MOUSE:
                handle_mouse_event(config_state, buffer, buffer_state, buffer_view, cursor);
@@ -3320,8 +3318,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
 
                               if(config_remove_line(g_config_state, buffer, cursor->y)){
                                    backspace_push(&buffer_state->backspace_head, '\n');
-                                   cursor->y--;
-                                   cursor->x = prev_line_len;
+                                   ce_set_cursor(buffer, cursor, (Point_t){prev_line_len, cursor->y-1}, MF_ALLOW_EOL);
                                    if(insert_state->leftmost.y > cursor->y){
                                         insert_state->leftmost = *cursor;
                                         insert_state->backspaces++;
@@ -3352,8 +3349,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                                              insert_state->leftmost.x = previous.x;
                                              insert_state->backspaces++;
                                         }
-                                        // cannot use move_cursor due to not being able to be ahead of the last character
-                                        cursor->x--;
+                                        ce_move_cursor(buffer, cursor, (Point_t){-1, 0}, MF_ALLOW_EOL);
                                    }
                               }
                          }
@@ -3383,8 +3379,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     const char* complete = config_state->auto_complete.current->option + offset;
                     int64_t complete_len = strlen(complete);
                     if(config_insert_string(config_state, buffer, *cursor, complete)){
-                         ce_move_cursor(buffer, cursor, (Point_t){complete_len, cursor->y});
-                         cursor->x++;
+                         ce_move_cursor(buffer, cursor, (Point_t){complete_len, cursor->y}, MF_ALLOW_EOL);
 
                          calc_auto_complete_start_and_path(&config_state->auto_complete,
                                                            buffer->lines[cursor->y],
@@ -3393,8 +3388,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     }
                }else{
                     config_insert_string(config_state, buffer, *cursor, TAB_STRING);
-                    ce_move_cursor(buffer, cursor, (Point_t){strlen(TAB_STRING) - 1, 0});
-                    cursor->x++; // we want to be after the tabs
+                    ce_move_cursor(buffer, cursor, (Point_t){strlen(TAB_STRING), 0}, MF_ALLOW_EOL);
                }
           } break;
           case KEY_ENTER: // return
@@ -3412,8 +3406,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     if(to_end_of_line_len){
                          config_remove_string(g_config_state, buffer, *cursor, to_end_of_line_len);
                     }
-                    cursor->y++;
-                    cursor->x = 0;
+                    ce_set_cursor(buffer, cursor, (Point_t){0, cursor->y+1}, MF_ALLOW_EOL);
 
                     // indent if necessary
                     Point_t prev_line = {0, cursor->y-1};
@@ -3441,7 +3434,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     commit_insert_mode_changes(insert_state, buffer, buffer_state, cursor);
                }
                insert_state->used_arrow_key = true;
-               ce_move_cursor(buffer, cursor, (Point_t){0, (key == KEY_DOWN) ? 1 : -1});
+               ce_move_cursor(buffer, cursor, (Point_t){0, (key == KEY_DOWN) ? 1 : -1}, MF_DEFAULT);
                break;
           case KEY_LEFT:
           case KEY_RIGHT:
@@ -3449,9 +3442,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     commit_insert_mode_changes(insert_state, buffer, buffer_state, cursor);
                }
                insert_state->used_arrow_key = true;
-               cursor->x += key == KEY_RIGHT? 1 : -1;
-               if(cursor->x > (int64_t) strlen(buffer->lines[cursor->y])) cursor->x--;
-               if(cursor->x < 0) cursor->x++;
+               ce_move_cursor(buffer, cursor, (Point_t){(key == KEY_RIGHT) ? 1 : -1, 0}, MF_ALLOW_EOL);
                break;
           case '}':
           {
@@ -3488,7 +3479,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                                         if(!config_insert_char(config_state, buffer, (Point_t){cursor->x + i, cursor->y}, ' ')) assert(0);
                                    }
 
-                                   cursor->x = sbol_match.x;
+                                   ce_set_cursor(buffer, cursor, (Point_t){sbol_match.x, cursor->y}, MF_ALLOW_EOL);
                               }
                               else{
                                    int64_t n_deletes = CE_MIN((int64_t) strlen(TAB_STRING), cursor->x - sbol_match.x);
@@ -3502,7 +3493,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                                    }
 
                                    if(can_unindent){
-                                        cursor->x -= n_deletes;
+                                        ce_move_cursor(buffer, cursor, (Point_t){-n_deletes, 0}, MF_ALLOW_EOL);
                                         if(config_remove_string(g_config_state, buffer, *cursor, n_deletes)){
                                              if(insert_state->leftmost.y == cursor->y &&
                                                 insert_state->leftmost.x > cursor->x){
@@ -3519,7 +3510,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
 
                     }
 
-                    cursor->x++;
+                    ce_move_cursor(buffer, cursor, (Point_t){1, 0}, MF_ALLOW_EOL);
                     if(auto_completing(&config_state->auto_complete)){
                          calc_auto_complete_start_and_path(&config_state->auto_complete,
                                                            buffer->lines[cursor->y],
@@ -3543,7 +3534,8 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
 
                if(config_state->input){
                     if(iterate_history_input(config_state, false)){
-                         if(buffer->line_count && buffer->lines[cursor->y][0]) cursor->x++;
+                         if(buffer->line_count && buffer->lines[cursor->y][0])
+                              ce_move_cursor(buffer, cursor, (Point_t){1, 0}, MF_ALLOW_EOL);
                          enter_normal_mode(config_state);
                     }
                }
@@ -3563,7 +3555,8 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
 
                if(config_state->input){
                     if(iterate_history_input(config_state, true)){
-                         if(buffer->line_count && buffer->lines[cursor->y][0]) cursor->x++;
+                         if(buffer->line_count && buffer->lines[cursor->y][0])
+                              ce_move_cursor(buffer, cursor, (Point_t){1, 0}, MF_ALLOW_EOL);
                          enter_normal_mode(config_state);
                     }
                }
@@ -3578,7 +3571,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                }
 
                if(config_insert_char(config_state, buffer, *cursor, key)){
-                    cursor->x++;
+                    ce_move_cursor(buffer, cursor, (Point_t){1, 0}, MF_ALLOW_EOL);
                     if(auto_completing(&config_state->auto_complete)){
                          calc_auto_complete_start_and_path(&config_state->auto_complete,
                                                            buffer->lines[cursor->y],
@@ -3691,7 +3684,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                char mark = key;
                marked_location = find_mark(buffer_state, mark);
                if(marked_location) {
-                    cursor->y = marked_location->y;
+                    ce_set_cursor(buffer, cursor, (Point_t){cursor->x, marked_location->y}, MF_DEFAULT);
                     center_view(buffer_view);
                }
           } break;
@@ -3828,7 +3821,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     indent_nl[indent_len + 1] = '\0';
 
                     if(config_insert_string(config_state, buffer, begin_line, indent_nl)){
-                         *cursor = (Point_t){indent_len, cursor->y};
+                         ce_set_cursor(buffer, cursor, (Point_t){indent_len, cursor->y}, MF_DEFAULT);
                          ce_commit_insert_string(&buffer_state->commit_tail, begin_line, *cursor, *cursor, indent_nl);
                          enter_insert_mode(config_state, cursor);
                     }
@@ -3847,7 +3840,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
 
                     if(config_insert_string(config_state, buffer, end_of_line, nl_indent)){
                          Point_t save_cursor = *cursor;
-                         *cursor = (Point_t){indent_len, cursor->y + 1};
+                         ce_set_cursor(buffer, cursor, (Point_t){indent_len, cursor->y + 1}, MF_DEFAULT);
                          ce_commit_insert_string(&buffer_state->commit_tail, end_of_line, save_cursor, *cursor,
                                                  nl_indent);
                          enter_insert_mode(config_state, cursor);
@@ -3964,7 +3957,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     char c;
                     if(ce_get_char(buffer, *cursor, &c) && config_remove_char(g_config_state, buffer, *cursor)){
                          ce_commit_remove_char(&buffer_state->commit_tail, *cursor, *cursor, *cursor, c);
-                         ce_clamp_cursor(buffer, cursor);
+                         ce_clamp_cursor(buffer, cursor, MF_DEFAULT);
                     }
                }
                break;
@@ -4021,21 +4014,21 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                {
                     // move cursor to top line of view
                     Point_t location = {cursor->x, buffer_view->top_row};
-                    ce_set_cursor(buffer, cursor, location);
+                    ce_set_cursor(buffer, cursor, location, MF_DEFAULT);
                } break;
                case 'M':
                {
                     // move cursor to middle line of view
                     int64_t view_height = buffer_view->bottom_right.y - buffer_view->top_left.y;
                     Point_t location = {cursor->x, buffer_view->top_row + (view_height/2)};
-                    ce_set_cursor(buffer, cursor, location);
+                    ce_set_cursor(buffer, cursor, location, MF_DEFAULT);
                } break;
                case 'L':
                {
                     // move cursor to bottom line of view
                     int64_t view_height = buffer_view->bottom_right.y - buffer_view->top_left.y;
                     Point_t location = {cursor->x, buffer_view->top_row + view_height};
-                    ce_set_cursor(buffer, cursor, location);
+                    ce_set_cursor(buffer, cursor, location, MF_DEFAULT);
                } break;
                case 'z':
                break;
@@ -4128,7 +4121,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          assert(yank->mode == YANK_NORMAL);
                          Point_t match;
                          if(ce_find_string(buffer, *cursor, yank->text, &match, config_state->search_command.direction)){
-                              ce_set_cursor(buffer, cursor, match);
+                              ce_set_cursor(buffer, cursor, match, MF_DEFAULT);
                               center_view(config_state->tab_current->view_current);
                          }
                     }
@@ -4140,7 +4133,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          assert(yank->mode == YANK_NORMAL);
                          Point_t match;
                          if(ce_find_string(buffer, *cursor, yank->text, &match, ce_reverse_direction(config_state->search_command.direction))){
-                              ce_set_cursor(buffer, cursor, match);
+                              ce_set_cursor(buffer, cursor, match, MF_DEFAULT);
                               center_view(config_state->tab_current->view_current);
                          }
                     }
@@ -4254,8 +4247,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                               }
 #endif
                          }
-                         cursor->x = 0;
-                         cursor->y = 0;
+                         ce_set_cursor(buffer, cursor, (Point_t){0, 0}, MF_DEFAULT);
                          if(!ce_advance_cursor(buffer, cursor, cursor_position-1))
                               ce_message("failed to advance cursor");
 
@@ -4370,7 +4362,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     }
 
                     ce_load_file(buffer, buffer->filename);
-                    ce_clamp_cursor(buffer, &buffer_view->cursor);
+                    ce_clamp_cursor(buffer, &buffer_view->cursor, MF_DEFAULT);
                } break;
                }
           }
@@ -4383,7 +4375,9 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
      // incremental search
      if(config_state->input && (config_state->input_key == '/' || config_state->input_key == '?')){
           if(config_state->view_input->buffer->lines == NULL){
-               config_state->tab_current->view_input_save->cursor = config_state->start_search;
+               ce_set_cursor(config_state->tab_current->view_input_save->buffer,
+                             &config_state->tab_current->view_input_save->cursor,
+                             config_state->start_search, MF_DEFAULT);
           }else{
                const char* search_str = config_state->view_input->buffer->lines[0];
                Point_t match = {};
@@ -4392,10 +4386,12 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                                  config_state->start_search, search_str, &match,
                                  config_state->search_command.direction)){
                     ce_set_cursor(config_state->tab_current->view_input_save->buffer,
-                                  &config_state->tab_current->view_input_save->cursor, match);
+                                  &config_state->tab_current->view_input_save->cursor, match, MF_DEFAULT);
                     center_view(config_state->tab_current->view_input_save);
                }else{
-                    config_state->tab_current->view_input_save->cursor = config_state->start_search;
+                    ce_set_cursor(config_state->tab_current->view_input_save->buffer,
+                                  &config_state->tab_current->view_input_save->cursor,
+                                  config_state->start_search, MF_DEFAULT);
                }
           }
      }

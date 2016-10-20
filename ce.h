@@ -244,12 +244,15 @@ bool ce_find_string              (const Buffer_t* buffer, Point_t location, cons
 bool ce_get_word_at_location     (const Buffer_t* buffer, Point_t location, Point_t* word_start, Point_t* word_end); // TODO: Is location necessary?
 bool ce_get_homogenous_adjacents (const Buffer_t* buffer, Point_t* start, Point_t* end, int (*is_homogenous)(int));
 
-
+typedef enum{
+     MF_DEFAULT   = 0,
+     MF_ALLOW_EOL = 1,
+}MoveFlag_t; // bit mask to modify movement behavior
 // Cursor Movement Functions
-Point_t* ce_clamp_cursor                          (const Buffer_t* buffer, Point_t* cursor);
+Point_t* ce_clamp_cursor                          (const Buffer_t* buffer, Point_t* cursor, MoveFlag_t flag);
 bool     ce_advance_cursor                        (const Buffer_t* buffer, Point_t* cursor, int64_t delta);
-bool     ce_move_cursor                           (const Buffer_t* buffer, Point_t* cursor, Point_t delta);
-bool     ce_set_cursor                            (const Buffer_t* buffer, Point_t* cursor, Point_t location);
+bool     ce_move_cursor                           (const Buffer_t* buffer, Point_t* cursor, Point_t delta, MoveFlag_t flag);
+bool     ce_set_cursor                            (const Buffer_t* buffer, Point_t* cursor, Point_t location, MoveFlag_t flag);
 bool     ce_move_cursor_to_beginning_of_word      (const Buffer_t* buffer, Point_t* cursor, bool punctuation_word_boundaries);
 bool     ce_move_cursor_to_end_of_word            (const Buffer_t* buffer, Point_t* cursor, bool punctuation_word_boundaries);
 bool     ce_move_cursor_to_next_word              (const Buffer_t* buffer, Point_t* cursor, bool punctuation_word_boundaries);

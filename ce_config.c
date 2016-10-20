@@ -3246,33 +3246,63 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                }
 
                if(ce_insert_char(buffer, cursor, key)){
+                    bool do_indentation = true;
+                    for(int i = 0; i < cursor->x; i++){
+                         char blank_c;
+                         Point_t itr = {i, cursor->y};
+                         if(ce_get_char(buffer, &itr, &blank_c)){
+                              // we only change the indentation if everything to the left of the cursor is blank
+                              if(!isblank(blank_c)){
+                                   do_indentation = false;
+                                   break;
+                              }
+                         }
+                         else assert(0);
+                    }
 
-                    Point_t match = *cursor;
-                    if(ce_move_cursor_to_matching_pair(buffer, &match) && match.y != cursor->y){
+                    if(do_indentation){
+                         Point_t match = *cursor;
+                         if(ce_move_cursor_to_matching_pair(buffer, &match) && match.y != cursor->y){
 
-                         // get the match's sbol (that's the indentation we're matching)
-                         Point_t sbol_match = {0, match.y};
-                         ce_move_cursor_to_soft_beginning_of_line(buffer, &sbol_match);
+                              // get the match's sbol (that's the indentation we're matching)
+                              Point_t sbol_match = {0, match.y};
+                              ce_move_cursor_to_soft_beginning_of_line(buffer, &sbol_match);
+                              if(cursor->x < sbol_match.x){
+                                   // we are adding spaces
+                                   int64_t n_spaces = sbol_match.x - cursor->x;
+                                   for(int64_t i = 0; i < n_spaces; i++){
+                                        Point_t itr = {cursor->x + i, cursor->y};
+                                        if(!ce_insert_char(buffer, &itr, ' ')) assert(0);
+                                   }
+                                   cursor->x = sbol_match.x;
+                              }
+                              else{
+                                   int64_t n_deletes = CE_MIN((int64_t) strlen(TAB_STRING), cursor->x - sbol_match.x);
 
-                         int64_t n_deletes = CE_MIN((int64_t) strlen(TAB_STRING), cursor->x - sbol_match.x);
+                                   bool can_unindent = true;
+                                   for(Point_t iter = {0, cursor->y}; ce_point_on_buffer(buffer, &iter) && iter.x < n_deletes; iter.x++){
+                                        if(!isblank(ce_get_char_raw(buffer, &iter))){
+                                             can_unindent = false;
+                                             break;
+                                        }
+                                   }
 
-                         bool can_unindent = true;
-                         for(Point_t iter = {0, cursor->y}; ce_point_on_buffer(buffer, &iter) && iter.x < n_deletes; iter.x++)
-                              can_unindent &= isblank(ce_get_char_raw(buffer, &iter));
-
-                         if(can_unindent){
-                              cursor->x -= n_deletes;
-                              if(ce_remove_string(buffer, cursor, n_deletes)){
-                                   if(insert_state->leftmost.y == cursor->y &&
-                                      insert_state->leftmost.x > cursor->x){
-                                        insert_state->leftmost.x = cursor->x;
-                                        for(int i = 0; i < n_deletes; ++i){
-                                             backspace_push(&buffer_state->backspace_head, ' ');
-                                             insert_state->backspaces++;
+                                   if(can_unindent){
+                                        cursor->x -= n_deletes;
+                                        if(ce_remove_string(buffer, cursor, n_deletes)){
+                                             if(insert_state->leftmost.y == cursor->y &&
+                                                insert_state->leftmost.x > cursor->x){
+                                                  insert_state->leftmost.x = cursor->x;
+                                                  for(int i = 0; i < n_deletes; ++i){
+                                                       backspace_push(&buffer_state->backspace_head, ' ');
+                                                       insert_state->backspaces++;
+                                                  }
+                                             }
                                         }
                                    }
                               }
                          }
+
                     }
 
                     cursor->x++;

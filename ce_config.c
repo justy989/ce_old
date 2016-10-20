@@ -39,6 +39,7 @@ typedef struct{
 ShellCommandData_t shell_command_data;
 pthread_mutex_t draw_lock;
 pthread_mutex_t shell_buffer_lock;
+pthread_mutex_t view_input_save_lock;
 
 int64_t count_digits(int64_t n)
 {
@@ -1783,7 +1784,9 @@ void input_start(ConfigState_t* config_state, const char* input_message, char in
      config_state->view_input->cursor = (Point_t){0, 0};
      config_state->input_message = input_message;
      config_state->input_key = input_key;
+     pthread_mutex_lock(&view_input_save_lock);
      config_state->tab_current->view_input_save = config_state->tab_current->view_current;
+     pthread_mutex_unlock(&view_input_save_lock);
      config_state->tab_current->view_current = config_state->view_input;
      enter_insert_mode(config_state, &config_state->view_input->cursor);
 
@@ -1802,7 +1805,9 @@ void input_end(ConfigState_t* config_state)
 void input_cancel(ConfigState_t* config_state)
 {
      if(config_state->input_key == '/' || config_state->input_key == '?'){
+          pthread_mutex_lock(&view_input_save_lock);
           config_state->tab_current->view_input_save->cursor = config_state->start_search;
+          pthread_mutex_unlock(&view_input_save_lock);
           center_view(config_state->tab_current->view_input_save);
      }
      input_end(config_state);
@@ -2605,6 +2610,7 @@ void* run_shell_commands(void* user_data)
                }
 
                if(ioctl(out_fd, FIONREAD, &count) != -1){
+                    if(count >= BUFSIZ) count = BUFSIZ - 1;
                     count = read(out_fd, tmp + 1, count);
                }
 
@@ -2814,6 +2820,8 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                     command_view->cursor = (Point_t){0, 0};
                     command_view->top_row = 0;
                }else{
+                    // save the cursor before switching buffers
+                    buffer_view->buffer->cursor = buffer_view->cursor;
                     buffer_view->buffer = command_buffer;
                     buffer_view->cursor = (Point_t){0, 0};
                     buffer_view->top_row = 0;
@@ -3401,7 +3409,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                }
           }
 
-          if(!handled_key && isprint(key)){
+          if(!handled_key && key >= 0 && key < 256 && isprint(key)){
                if(config_state->command_len >= VIM_COMMAND_MAX){
                     config_state->command_len = 0;
                }
@@ -4062,7 +4070,9 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
      // incremental search
      if(config_state->input && (config_state->input_key == '/' || config_state->input_key == '?')){
           if(config_state->view_input->buffer->lines == NULL){
+               pthread_mutex_lock(&view_input_save_lock);
                config_state->tab_current->view_input_save->cursor = config_state->start_search;
+               pthread_mutex_unlock(&view_input_save_lock);
           }else{
                const char* search_str = config_state->view_input->buffer->lines[0];
                Point_t match = {};
@@ -4070,11 +4080,15 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                   ce_find_string(config_state->tab_current->view_input_save->buffer,
                                  &config_state->start_search, search_str, &match,
                                  config_state->search_command.direction)){
+                    pthread_mutex_lock(&view_input_save_lock);
                     ce_set_cursor(config_state->tab_current->view_input_save->buffer,
                                   &config_state->tab_current->view_input_save->cursor, &match);
+                    pthread_mutex_unlock(&view_input_save_lock);
                     center_view(config_state->tab_current->view_input_save);
                }else{
+                    pthread_mutex_lock(&view_input_save_lock);
                     config_state->tab_current->view_input_save->cursor = config_state->start_search;
+                    pthread_mutex_unlock(&view_input_save_lock);
                }
           }
      }
@@ -4149,16 +4163,20 @@ void view_drawer(const BufferNode_t* head, void* user_data)
      if(config_state->input){
           input_view_height = config_state->view_input->buffer->line_count;
           if(input_view_height) input_view_height--;
+          pthread_mutex_lock(&view_input_save_lock);
           input_top_left = (Point_t){config_state->tab_current->view_input_save->top_left.x,
                                    (config_state->tab_current->view_input_save->bottom_right.y - input_view_height) - 1};
-          if(input_top_left.y < 1) input_top_left.y = 1; // clamp to growing to 1, account for input message
           input_bottom_right = config_state->tab_current->view_input_save->bottom_right;
+          pthread_mutex_unlock(&view_input_save_lock);
+          if(input_top_left.y < 1) input_top_left.y = 1; // clamp to growing to 1, account for input message
           if(input_bottom_right.y == g_terminal_dimensions->y - 2){
                input_top_left.y++;
                input_bottom_right.y++; // account for bottom status bar
           }
           ce_calc_views(config_state->view_input, &input_top_left, &input_bottom_right);
+          pthread_mutex_lock(&view_input_save_lock);
           config_state->tab_current->view_input_save->bottom_right.y = input_top_left.y - 1;
+          pthread_mutex_unlock(&view_input_save_lock);
      }
 
      view_follow_cursor(buffer_view);

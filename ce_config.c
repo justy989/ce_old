@@ -1501,7 +1501,7 @@ typedef struct{
      VimMode_t vim_mode;
      bool input;
      const char* input_message;
-     char input_key;
+     int input_key;
      Buffer_t* shell_command_buffer; // Allocate so it can be part of the buffer list and get free'd at the end
      Buffer_t* completion_buffer; // same as shell_command_buffer (let's see how quickly this comment gets out of date!)
      Buffer_t input_buffer;
@@ -1529,6 +1529,7 @@ typedef struct{
      pthread_t shell_input_thread;
      AutoComplete_t auto_complete;
      VimAction_t last_vim_action;
+     bool quit;
 } ConfigState_t;
 
 typedef struct MarkNode_t{
@@ -1776,7 +1777,7 @@ InputHistory_t* history_from_input_key(ConfigState_t* config_state)
      return history;
 }
 
-void input_start(ConfigState_t* config_state, const char* input_message, char input_key)
+void input_start(ConfigState_t* config_state, const char* input_message, int input_key)
 {
      ce_clear_lines(config_state->view_input->buffer);
      ce_alloc_lines(config_state->view_input->buffer, 1);
@@ -2764,6 +2765,13 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           switch(config_state->input_key) {
           default:
                break;
+          case KEY_CLOSE: // Ctrl + q
+               if(config_state->view_input->buffer->line_count){
+                    if(tolower(config_state->view_input->buffer->lines[0][0]) == 'y'){
+                         config_state->quit = true;
+                    }
+               }
+               break;
           case ':':
           {
                if(config_state->view_input->buffer->line_count){
@@ -3576,6 +3584,27 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          break;
                     }
 
+                    // try to quit if there is nothing left to do!
+                    if(config_state->tab_current == config_state->tab_head &&
+                       config_state->tab_current->next == NULL &&
+                       config_state->tab_current->view_current == config_state->tab_current->view_head &&
+                       config_state->tab_current->view_current->next_horizontal == NULL &&
+                       config_state->tab_current->view_current->next_vertical == NULL ){
+                         uint64_t unsaved_buffers = 0;
+                         BufferNode_t* itr = head;
+                         while(itr){
+                              if(!itr->buffer->readonly && itr->buffer->modified) unsaved_buffers++;
+                              itr = itr->next;
+                         }
+
+                         if(unsaved_buffers){
+                              input_start(config_state, "Unsaved buffers... Quit anyway? (y/n)", key);
+                              break;
+                         }
+
+                         return false;
+                    }
+
                     Point_t save_cursor_on_terminal = get_cursor_on_terminal(cursor, buffer_view);
                     config_state->tab_current->view_current->buffer->cursor = config_state->tab_current->view_current->cursor;
 
@@ -3589,8 +3618,6 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                                    tab_view_remove(&config_state->tab_head, tmp);
                                    break;
                               }else{
-                                   // Quit !
-                                   if(config_state->tab_current == config_state->tab_head) return false;
 
                                    TabView_t* itr = config_state->tab_head;
                                    while(itr && itr->next != config_state->tab_current) itr = itr->next;
@@ -4092,6 +4119,8 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                }
           }
      }
+
+     if(config_state->quit) return false;
 
      config_state->last_key = key;
      return true;

@@ -3831,7 +3831,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     indent_nl[indent_len + 1] = '\0';
 
                     if(config_insert_string(config_state, buffer, begin_line, indent_nl)){
-                         ce_set_cursor(buffer, cursor, (Point_t){indent_len, cursor->y}, MF_DEFAULT);
+                         ce_set_cursor(buffer, cursor, (Point_t){indent_len, cursor->y}, MF_ALLOW_EOL);
                          ce_commit_insert_string(&buffer_state->commit_tail, begin_line, *cursor, *cursor, indent_nl);
                          enter_insert_mode(config_state, cursor);
                     }
@@ -3850,7 +3850,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
 
                     if(config_insert_string(config_state, buffer, end_of_line, nl_indent)){
                          Point_t save_cursor = *cursor;
-                         ce_set_cursor(buffer, cursor, (Point_t){indent_len, cursor->y + 1}, MF_DEFAULT);
+                         ce_set_cursor(buffer, cursor, (Point_t){indent_len, cursor->y + 1}, MF_ALLOW_EOL);
                          ce_commit_insert_string(&buffer_state->commit_tail, end_of_line, save_cursor, *cursor,
                                                  nl_indent);
                          enter_insert_mode(config_state, cursor);

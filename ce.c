@@ -2210,7 +2210,7 @@ bool ce_commit_redo(Buffer_t* buffer, BufferCommitNode_t** tail, Point_t* cursor
           break;
      }
 
-     *cursor = (*tail)->commit.redo_cursor;
+     *cursor = *ce_clamp_cursor(buffer, &(*tail)->commit.redo_cursor, MF_DEFAULT);
      return true;
 }
 

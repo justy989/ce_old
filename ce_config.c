@@ -29,7 +29,6 @@ typedef struct{
      Point_t start;
 } AutoComplete_t;
 
-
 // TODO: move this to ce.h
 typedef struct InputHistoryNode_t {
      char* entry;
@@ -1913,12 +1912,12 @@ void enter_normal_mode(ConfigState_t* config_state)
      auto_complete_end(&config_state->auto_complete);
 }
 
-void enter_insert_mode(ConfigState_t* config_state, Point_t* cursor)
+void enter_insert_mode(ConfigState_t* config_state, Point_t cursor)
 {
      if(config_state->tab_current->view_current->buffer->readonly) return;
      config_state->vim_mode = VM_INSERT;
-     config_state->insert_state.leftmost = *cursor;
-     config_state->insert_state.entered = *cursor;
+     config_state->insert_state.leftmost = cursor;
+     config_state->insert_state.entered = cursor;
      config_state->insert_state.backspaces = 0;
      free(config_state->insert_state.string);
      config_state->insert_state.string = NULL;
@@ -2037,7 +2036,7 @@ void input_start(ConfigState_t* config_state, const char* input_message, char in
      config_state->input_key = input_key;
      config_state->tab_current->view_input_save = config_state->tab_current->view_current;
      config_state->tab_current->view_current = config_state->view_input;
-     enter_insert_mode(config_state, &config_state->view_input->cursor);
+     enter_insert_mode(config_state, config_state->view_input->cursor);
 
      // reset input history back to tail
      InputHistory_t* history = history_from_input_key(config_state);
@@ -2682,7 +2681,7 @@ void handle_mouse_event(ConfigState_t* config_state, Buffer_t* buffer, BufferSta
           (void) buffer_view;
 #endif
           // if we left insert and haven't switched views, enter insert mode
-          if(enter_insert && config_state->tab_current->view_current == buffer_view) enter_insert_mode(config_state, cursor);
+          if(enter_insert && config_state->tab_current->view_current == buffer_view) enter_insert_mode(config_state, *cursor);
      }
 }
 
@@ -3312,7 +3311,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                break;
           case KEY_BACKSPACE:
                if(insert_state->used_arrow_key){
-                    enter_insert_mode(config_state, cursor);
+                    enter_insert_mode(config_state, *cursor);
                     insert_state->used_arrow_key = false;
                }
 
@@ -3380,7 +3379,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           case '\t':
           {
                if(insert_state->used_arrow_key){
-                    enter_insert_mode(config_state, cursor);
+                    enter_insert_mode(config_state, *cursor);
                     insert_state->used_arrow_key = false;
                }
 
@@ -3404,7 +3403,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           case KEY_ENTER: // return
           {
                if(insert_state->used_arrow_key){
-                    enter_insert_mode(config_state, cursor);
+                    enter_insert_mode(config_state, *cursor);
                     insert_state->used_arrow_key = false;
                }
 
@@ -3457,7 +3456,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
           case '}':
           {
                if(insert_state->used_arrow_key){
-                    enter_insert_mode(config_state, cursor);
+                    enter_insert_mode(config_state, *cursor);
                     insert_state->used_arrow_key = false;
                }
 
@@ -3576,7 +3575,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                break;
           default:
                if(insert_state->used_arrow_key){
-                    enter_insert_mode(config_state, cursor);
+                    enter_insert_mode(config_state, *cursor);
                     insert_state->used_arrow_key = false;
                }
 
@@ -3744,7 +3743,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                               default:
                                    break;
                               case VM_INSERT:
-                                   enter_insert_mode(config_state, cursor);
+                                   enter_insert_mode(config_state, *cursor);
                                    break;
                               case VM_NORMAL:
                                    enter_normal_mode(config_state);
@@ -3831,9 +3830,10 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     indent_nl[indent_len + 1] = '\0';
 
                     if(config_insert_string(config_state, buffer, begin_line, indent_nl)){
-                         ce_set_cursor(buffer, cursor, (Point_t){indent_len, cursor->y}, MF_ALLOW_EOL);
-                         ce_commit_insert_string(&buffer_state->commit_tail, begin_line, *cursor, *cursor, indent_nl);
-                         enter_insert_mode(config_state, cursor);
+                         Point_t next_cursor = (Point_t){indent_len, cursor->y};
+                         ce_commit_insert_string(&buffer_state->commit_tail, begin_line, next_cursor, next_cursor, indent_nl);
+                         enter_insert_mode(config_state, next_cursor);
+                         ce_set_cursor(buffer, cursor, next_cursor, MF_ALLOW_EOL);
                     }
                } break;
                case 'o':
@@ -3849,11 +3849,11 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     nl_indent[1 + indent_len] = '\0';
 
                     if(config_insert_string(config_state, buffer, end_of_line, nl_indent)){
-                         Point_t save_cursor = *cursor;
-                         ce_set_cursor(buffer, cursor, (Point_t){indent_len, cursor->y + 1}, MF_ALLOW_EOL);
-                         ce_commit_insert_string(&buffer_state->commit_tail, end_of_line, save_cursor, *cursor,
-                                                 nl_indent);
-                         enter_insert_mode(config_state, cursor);
+                         Point_t next_cursor = *cursor;
+                         ce_set_cursor(buffer, &next_cursor, (Point_t){indent_len, cursor->y + 1}, MF_ALLOW_EOL);
+                         ce_commit_insert_string(&buffer_state->commit_tail, end_of_line, *cursor, next_cursor, nl_indent);
+                         enter_insert_mode(config_state, next_cursor);
+                         ce_set_cursor(buffer, cursor, next_cursor, MF_ALLOW_EOL);
                     }
                } break;
                case KEY_SAVE:

@@ -226,6 +226,7 @@ bool config_append_line_readonly   (ConfigState_t* config_state, Buffer_t* buffe
 bool config_join_line              (ConfigState_t* config_state, Buffer_t* buffer, int64_t line);
 bool config_insert_newline         (ConfigState_t* config_state, Buffer_t* buffer, int64_t line);
 bool config_save_buffer            (ConfigState_t* config_state, Buffer_t* buffer, const char* filename);
+bool config_set_insert_mode_cursor (ConfigState_t* config_state, Buffer_t* buffer, Point_t* cursor, Point_t location);
 bool config_set_cursor             (ConfigState_t* config_state, Buffer_t* buffer, Point_t* cursor, Point_t location);
 bool config_move_cursor            (ConfigState_t* config_state, Buffer_t* buffer, Point_t* cursor, Point_t delta);
 bool config_move_cursor_to_beginning_of_word       (ConfigState_t* config_state, Buffer_t* buffer, Point_t* cursor, bool punctuation_word_boundaries);
@@ -1264,7 +1265,13 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
      default:
           break;
      case VCT_MOTION:
-          config_set_cursor(g_config_state, buffer, cursor, end);
+          if(action->end_in_vim_mode == VM_INSERT){
+               config_set_insert_mode_cursor(g_config_state, buffer, cursor, end);
+          }
+          else {
+               assert(g_config_state->vim_mode != VM_INSERT);
+               config_set_cursor(g_config_state, buffer, cursor, end);
+          }
           if(vim_mode == VM_VISUAL_RANGE){
                // expand the selection for some motions
                if(ce_point_after(*visual_start, *cursor) &&
@@ -1779,6 +1786,15 @@ bool config_commit_undo(ConfigState_t* config_state, Buffer_t* buffer, BufferCom
 }
 
 // BEGIN CONFIG CURSOR MOVEMENT FUNCTIONS
+bool config_set_insert_mode_cursor(ConfigState_t* config_state, Buffer_t* buffer, Point_t* cursor, Point_t location)
+{
+     if(!ce_set_cursor(buffer, cursor, location, MF_ALLOW_EOL)) return false;
+     if(((BufferState_t*)buffer->user_data)->type == BT_NETWORK){
+          return client_set_cursor(&config_state->client_state, config_state->client_state.server_list_head, buffer->network_id, *cursor);
+     }
+     return true;
+}
+
 bool config_set_cursor(ConfigState_t* config_state, Buffer_t* buffer, Point_t* cursor, Point_t location)
 {
      if(!ce_set_cursor(buffer, cursor, location, (config_state->vim_mode == VM_INSERT) ? MF_ALLOW_EOL : MF_DEFAULT)) return false;

@@ -16,10 +16,10 @@ typedef struct Server{
 } Server_t;
 
 typedef struct{
-     Server_t* server_list_head; // TODO: eventually support connecting to multiple servers?
+     Server_t* server_list_head; // TODO: eventually support connecting to multiple servers? // TODO: free these
      void* config_user_data;
      BufferNode_t* buffer_list_head;
-     CursorNode_t* cursor_list_head;
+     CursorNode_t* cursor_list_head; // TODO: I need to free these
      pthread_t command_thread;
      bool command_rc;
      sem_t* command_sem; // clients wait on this when they send a command and post
@@ -28,6 +28,7 @@ typedef struct{
 
 // client side functions
 bool ce_client_init(ClientState_t* client_state, const char* server_addr);
+// TODO: ce_client_fini
 
 bool client_free_buffer            (ClientState_t* client_state, Server_t* server, NetworkId_t buffer);
 bool client_alloc_lines            (ClientState_t* client_state, Server_t* server, NetworkId_t buffer, int64_t line_count);

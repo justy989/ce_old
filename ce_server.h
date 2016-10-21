@@ -16,13 +16,14 @@ typedef struct{
      int server_socket;
      NetworkId_t current_client_id;
      NetworkId_t current_buffer_id; // used for generating unique network id's
-     Client_t* client_list_head;
+     Client_t* client_list_head; // TODO: free these
      BufferNode_t* buffer_list_head; // TODO: eventually make this a **
-     CursorNode_t* cursor_list_head;
+     CursorNode_t* cursor_list_head; // TODO: free these
      pthread_t thread;
 } ServerState_t;
 
 // server side functions
 bool ce_server_init(ServerState_t* server_state);
+// TODO: ce_server_fini
 
 #endif // CE_SERVER_H

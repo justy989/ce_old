@@ -1285,7 +1285,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
           break;
      case VCT_DELETE:
      {
-          *cursor = *sorted_start;
+          config_set_cursor(g_config_state, buffer, cursor, *sorted_start);
 
           char* commit_string = ce_dupe_string(buffer, *sorted_start, *sorted_end);
           int64_t len = ce_compute_length(buffer, *sorted_start, *sorted_end);
@@ -3418,11 +3418,11 @@ void repeat_insert_actions(InsertModeState_t* insert_state, Buffer_t* buffer, Po
                ce_commit_change_string(&buffer_state->commit_tail, replay, *cursor,
                                        end, strdup(insert_state->string),
                                        removed_string);
-               *cursor = end;
+               config_set_cursor(g_config_state, buffer, cursor, end);
           }else{
                ce_commit_remove_string(&buffer_state->commit_tail, replay, *cursor,
                                        replay, removed_string);
-               *cursor = replay;
+               config_set_cursor(g_config_state, buffer, cursor, replay);
           }
      }else if(insert_state->string){
           config_insert_string(g_config_state, buffer, replay, insert_state->string);
@@ -3430,7 +3430,7 @@ void repeat_insert_actions(InsertModeState_t* insert_state, Buffer_t* buffer, Po
           ce_advance_cursor(buffer, &end, strlen(insert_state->string));
           ce_commit_insert_string(&buffer_state->commit_tail, replay, *cursor,
                                   end, strdup(insert_state->string));
-          *cursor = end;
+          config_set_cursor(g_config_state, buffer, cursor, end);
      }
 }
 

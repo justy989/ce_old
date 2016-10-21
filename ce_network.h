@@ -48,7 +48,7 @@ typedef enum{
 const char* cmd_to_str(NetworkCommand_t cmd);
 
 typedef uint64_t NetworkId_t;
-Buffer_t* id_to_buffer(BufferNode_t* head, NetworkId_t id);
+Buffer_t* id_to_buffer(const BufferNode_t* head, NetworkId_t id);
 
 // list of cursors associated with a client and a buffer
 typedef struct CursorNode{

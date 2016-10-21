@@ -4745,6 +4745,31 @@ void view_drawer(const BufferNode_t* head, void* user_data)
           }
      }
 
+     // draw remote cursors
+     CursorNode_t* itr = config_state->client_state.cursor_list_head;
+     while(itr){
+          Buffer_t* cursor_buf = id_to_buffer(head, itr->network_id);
+          if(cursor_buf){
+               BufferView_t* cursor_view = ce_buffer_in_view(config_state->tab_current->view_head, cursor_buf);
+               if(cursor_view){
+                    Point_t draw_loc = get_cursor_on_terminal(&itr->cursor, cursor_view);
+                    if(ce_point_after(*g_terminal_dimensions, draw_loc)
+                       && ce_point_after(draw_loc, (Point_t){0, 0})){
+                         chtype cur_char = mvinch(draw_loc.y, draw_loc.x);
+                         cur_char |= A_REVERSE;
+                         addch(cur_char);
+                    }
+#if 0
+                    short color_pair = (short)(cur_type & A_COLOR);
+                    short fg_color, bg_color;
+                    pair_content(color_pair, &fg_color, &bg_color);
+#endif
+               }
+          }
+
+          itr = itr->next;
+     }
+
      // reset the cursor
      move(terminal_cursor.y, terminal_cursor.x);
 

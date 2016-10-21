@@ -17,6 +17,7 @@ const char* cmd_to_str(NetworkCommand_t cmd)
           CMD_CASE(NC_CLEAR_LINES_READONLY)
           CMD_CASE(NC_LOAD_STRING)
           CMD_CASE(NC_LOAD_FILE)
+          CMD_CASE(NC_SET_CURSOR)
           CMD_CASE(NC_INSERT_CHAR)
           CMD_CASE(NC_INSERT_CHAR_READONLY)
           CMD_CASE(NC_APPEND_CHAR)
@@ -409,6 +410,7 @@ bool network_read(int socket, void* buf, size_t buf_len)
           ssize_t n_bytes = read(socket, buf + n_bytes_read, buf_len - n_bytes_read);
           if(n_bytes < 0){
                int err = errno; // useful for looking at errno in a coredump
+               if(err == ECONNRESET) return false;
                assert(n_bytes >= 0);
                ce_message("read() failed with error %s", strerror(err));
                return false;
@@ -453,6 +455,7 @@ bool network_write(int socket, const void* buf, size_t buf_len)
           ssize_t n_bytes = write(socket, buf + n_bytes_written, buf_len - n_bytes_written);
           if(n_bytes < 0){
                int err = errno; // useful for looking at errno in a coredump
+               if(err == ECONNRESET) return false;
                assert(n_bytes >= 0);
                ce_message("write() failed with error %s", strerror(err));
                return false;
@@ -712,6 +715,7 @@ bool network_save_buffer(int socket, NetworkId_t buffer, const char* filename)
 //typedef bool (*SetCursorFn_t)(NetworkId_t buffer, Point_t location);
 bool network_set_cursor(int socket, NetworkId_t buffer, Point_t location)
 {
+     assert(buffer);
      NETWORK_WRITE_CMD(NC_SET_CURSOR);
      NETWORK_WRITE(buffer);
      NETWORK_WRITE(location);

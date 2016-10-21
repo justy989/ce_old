@@ -56,17 +56,12 @@ static bool _handle_load_file(NetworkId_t buffer, const char* filename, const ch
      return true;
 }
 
-#define PARSE_ARGS \
-     ClientServer_t* client_server = user_data; \
-     ClientState_t* client_state = client_server->client_state; \
-     Server_t* server = client_server->server; \
-     Buffer_t* buf = id_to_buffer(client_state->buffer_list_head, buffer); \
-     assert(buf); /* a client should not tell us about a buffer we don't know about */ \
-     if(!buf) return false;
-
 static bool _handle_set_cursor(NetworkId_t buffer, Point_t location, void* user_data)
 {
-     PARSE_ARGS
+     ClientServer_t* client_server = user_data;
+     ClientState_t* client_state = client_server->client_state;
+     Server_t* server = client_server->server;
+
      // add to the buffer's list of cursors if it isn't already there
      CursorNode_t* head = client_state->cursor_list_head;
      while(head){
@@ -77,7 +72,7 @@ static bool _handle_set_cursor(NetworkId_t buffer, Point_t location, void* user_
      if(!head){
          // add the cursor to the list
         head = malloc(sizeof(*head));
-        *head = (CursorNode_t){buffer, location, head, client_state->cursor_list_head};
+        *head = (CursorNode_t){buffer, location, NULL, client_state->cursor_list_head};
         if(head->next) head->next->prev = head;
         client_state->cursor_list_head = head;
      }
@@ -87,6 +82,13 @@ static bool _handle_set_cursor(NetworkId_t buffer, Point_t location, void* user_
      // NOTE: we don't block on cursor movements in client_set_cursor, so we don't need to sem_post here
      return true;
 }
+
+#define PARSE_ARGS \
+     ClientServer_t* client_server = user_data; \
+     ClientState_t* client_state = client_server->client_state; \
+     Server_t* server = client_server->server; \
+     Buffer_t* buf = id_to_buffer(client_state->buffer_list_head, buffer); \
+     if(!buf) return false;
 
 static bool _handle_insert_char(NetworkId_t buffer, Point_t location, char c, void* user_data)
 {
@@ -145,7 +147,7 @@ static bool _handle_set_char(NetworkId_t buffer, Point_t location, char c, void*
 static bool _handle_insert_string(NetworkId_t buffer, Point_t location, const char* string, void* user_data)
 {
      PARSE_ARGS
-     if(!ce_insert_string(buf, location, string)) return false;
+     if(!ce_insert_string(buf, location, string)) assert(0);
      if(CLIENT_ID(buffer) == server->id) sem_post(client_state->command_sem);
      else view_drawer(client_state->buffer_list_head, client_state->config_user_data);
      return true;

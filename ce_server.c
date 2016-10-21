@@ -179,7 +179,7 @@ static bool _handle_set_cursor(NetworkId_t buffer, Point_t location, void* user_
      if(!head){
          // add the cursor to the list
         head = malloc(sizeof(*head));
-        *head = (CursorNode_t){buffer, location, head, server_state->cursor_list_head};
+        *head = (CursorNode_t){buffer, location, NULL, server_state->cursor_list_head};
         if(head->next) head->next->prev = head;
         server_state->cursor_list_head = head;
      }
@@ -187,9 +187,10 @@ static bool _handle_set_cursor(NetworkId_t buffer, Point_t location, void* user_
      // relay command to all other clients
      Client_t* client = server_state->client_list_head;
      while(client){
-          if(client->id == CLIENT_ID(buffer)) continue;
-          if(!network_set_cursor(client->socket, buffer, location)){
-               _close_client(server_state, client);
+          if(client->id != CLIENT_ID(buffer)){
+               if(!network_set_cursor(client->socket, buffer, location)){
+                    _close_client(server_state, client);
+               }
           }
           client = client->next;
      }
@@ -534,6 +535,7 @@ static void _handle_client_command(ServerState_t* server_state, Client_t* client
           break;
      case NC_INSERT_CHAR:
           rc = apply_insert_char(client->socket, server_state, _handle_insert_char);
+          assert(rc == APPLY_SUCCESS);
           break;
      case NC_INSERT_CHAR_READONLY:
           rc = apply_insert_char_readonly(client->socket, server_state, _handle_insert_char_readonly);
@@ -591,6 +593,8 @@ static void _handle_client_command(ServerState_t* server_state, Client_t* client
           break;
      case NC_SAVE_BUFFER:
           break;
+     default:
+          assert(0);
      }
 
      if(rc == APPLY_FAILED){

@@ -387,6 +387,14 @@ ApplyRC_t apply_save_buffer(int socket, void* user_data, SaveBufferFn_t fn)
      return fn(buffer, filename, user_data) ? APPLY_SUCCESS : APPLY_FAILED;
 }
 
+// move the client's cursor for any given buffer to the specified location
+//typedef bool (*SetCursorFn_t)(NetworkId_t buffer, Point_t location, void* user_data);
+ApplyRC_t apply_set_cursor(int socket, void* user_data, SetCursorFn_t fn)
+{
+    APPLY_READ(NetworkId_t, buffer);
+    APPLY_READ(Point_t, location);
+    return fn(buffer, location, user_data) ? APPLY_SUCCESS : APPLY_FAILED;
+}
 
 
 
@@ -698,5 +706,14 @@ bool network_save_buffer(int socket, NetworkId_t buffer, const char* filename)
      NETWORK_WRITE_CMD(NC_SAVE_BUFFER);
      NETWORK_WRITE(buffer);
      NETWORK_WRITE_STR(filename);
+     return true;
+}
+
+//typedef bool (*SetCursorFn_t)(NetworkId_t buffer, Point_t location);
+bool network_set_cursor(int socket, NetworkId_t buffer, Point_t location)
+{
+     NETWORK_WRITE_CMD(NC_SET_CURSOR);
+     NETWORK_WRITE(buffer);
+     NETWORK_WRITE(location);
      return true;
 }

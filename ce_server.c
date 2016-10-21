@@ -166,6 +166,36 @@ static void _handle_load_file(ServerState_t* server_state, Client_t* client)
      assert(buf); /* a client should not tell us about a buffer we don't know about */ \
      if(!buf) return false;
 
+static bool _handle_set_cursor(NetworkId_t buffer, Point_t location, void* user_data)
+{
+     PARSE_ARGS
+     // add to the buffer's list of cursors if it isn't already there
+     CursorNode_t* head = server_state->cursor_list_head;
+     while(head){
+         if(head->network_id == CLIENT_ID(buffer)) break;
+         head = head->next;
+     }
+
+     if(!head){
+         // add the cursor to the list
+        head = malloc(sizeof(*head));
+        *head = (CursorNode_t){buffer, location, head, server_state->cursor_list_head};
+        if(head->next) head->next->prev = head;
+        server_state->cursor_list_head = head;
+     }
+
+     // relay command to all other clients
+     Client_t* client = server_state->client_list_head;
+     while(client){
+          if(client->id == CLIENT_ID(buffer)) continue;
+          if(!network_set_cursor(client->socket, buffer, location)){
+               _close_client(server_state, client);
+          }
+          client = client->next;
+     }
+     return true;
+}
+
 static bool _handle_insert_char(NetworkId_t buffer, Point_t location, char c, void* user_data)
 {
      PARSE_ARGS
@@ -498,6 +528,9 @@ static void _handle_client_command(ServerState_t* server_state, Client_t* client
           break;
      case NC_LOAD_FILE:
           _handle_load_file(server_state, client);
+          break;
+     case NC_SET_CURSOR:
+          rc = apply_set_cursor(client->socket, server_state, _handle_set_cursor);
           break;
      case NC_INSERT_CHAR:
           rc = apply_insert_char(client->socket, server_state, _handle_insert_char);

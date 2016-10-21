@@ -18,6 +18,7 @@ typedef struct{
      NetworkId_t current_buffer_id; // used for generating unique network id's
      Client_t* client_list_head;
      BufferNode_t* buffer_list_head; // TODO: eventually make this a **
+     CursorNode_t* cursor_list_head;
      pthread_t thread;
 } ServerState_t;
 

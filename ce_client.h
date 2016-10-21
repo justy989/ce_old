@@ -19,6 +19,7 @@ typedef struct{
      Server_t* server_list_head; // TODO: eventually support connecting to multiple servers?
      void* config_user_data;
      BufferNode_t* buffer_list_head;
+     CursorNode_t* cursor_list_head;
      pthread_t command_thread;
      bool command_rc;
      sem_t* command_sem; // clients wait on this when they send a command and post
@@ -54,5 +55,6 @@ bool client_append_line_readonly   (ClientState_t* client_state, Server_t* serve
 bool client_join_line              (ClientState_t* client_state, Server_t* server, NetworkId_t buffer, int64_t line);
 bool client_insert_newline         (ClientState_t* client_state, Server_t* server, NetworkId_t buffer, int64_t line);
 bool client_save_buffer            (ClientState_t* client_state, Server_t* server, NetworkId_t buffer, const char* filename);
+bool client_set_cursor             (ClientState_t* client_state, Server_t* server, NetworkId_t buffer, Point_t location);
 
 #endif // CE_CLIENT_H

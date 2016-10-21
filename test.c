@@ -1010,7 +1010,7 @@ TEST(clamp_cursor_horizontal)
      buffer.lines[2] = strdup("AWESOME");
 
      Point_t cursor = {50, 0};
-     ce_clamp_cursor(&buffer, &cursor);
+     ce_clamp_cursor(&buffer, &cursor, MF_DEFAULT);
 
      EXPECT(cursor.x == 4);
      EXPECT(cursor.y == 0);
@@ -1028,7 +1028,7 @@ TEST(clamp_cursor_vertical)
      buffer.lines[2] = strdup("AWESOME");
 
      Point_t cursor = {4, 50};
-     ce_clamp_cursor(&buffer, &cursor);
+     ce_clamp_cursor(&buffer, &cursor, MF_DEFAULT);
 
      EXPECT(cursor.x == 4);
      EXPECT(cursor.y == 2);
@@ -1046,7 +1046,7 @@ TEST(sanity_move_cursor)
      buffer.lines[2] = strdup("AWESOME");
 
      Point_t cursor = {2, 0};
-     ce_move_cursor(&buffer, &cursor, (Point_t){2, 1});
+     ce_move_cursor(&buffer, &cursor, (Point_t){2, 1}, MF_DEFAULT);
 
      EXPECT(cursor.x == 4);
      EXPECT(cursor.y == 1);
@@ -1065,7 +1065,7 @@ TEST(sanity_set_cursor)
 
      Point_t cursor = {2, 0};
      Point_t end_loc = {4, 2};
-     ce_set_cursor(&buffer, &cursor, end_loc);
+     ce_set_cursor(&buffer, &cursor, end_loc, MF_DEFAULT);
 
      EXPECT(cursor.x == 4);
      EXPECT(cursor.y == 2);

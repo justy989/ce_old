@@ -42,12 +42,21 @@ typedef enum{
      NC_JOIN_LINE,
      NC_INSERT_NEWLINE,
      NC_SAVE_BUFFER,
+     NC_SET_CURSOR,
 }NetworkCommand_t;
 
 const char* cmd_to_str(NetworkCommand_t cmd);
 
 typedef uint64_t NetworkId_t;
 Buffer_t* id_to_buffer(BufferNode_t* head, NetworkId_t id);
+
+// list of cursors associated with a client and a buffer
+typedef struct CursorNode{
+     NetworkId_t network_id; // includes client and buffer id
+     Point_t cursor;
+     struct CursorNode* next;
+     struct CursorNode* prev;
+} CursorNode_t;
 
 // apply functions with arguments read from the specified socket
 typedef enum {
@@ -121,6 +130,9 @@ ApplyRC_t apply_insert_newline         (int socket, void* user_data, InsertNewli
 typedef bool (*SaveBufferFn_t)         (NetworkId_t buffer, const char* filename, void* user_data);
 ApplyRC_t apply_save_buffer            (int socket, void* user_data, SaveBufferFn_t fn);
 
+// move the client's cursor for any given buffer to the specified location
+typedef bool (*SetCursorFn_t)          (NetworkId_t buffer, Point_t location, void* user_data);
+ApplyRC_t apply_set_cursor             (int socket, void* user_data, SetCursorFn_t fn);
 
 bool network_free_buffer            (int socket, NetworkId_t buffer);
 bool network_alloc_lines            (int socket, NetworkId_t buffer, int64_t line_count);
@@ -148,6 +160,7 @@ bool network_append_line_readonly   (int socket, NetworkId_t buffer, const char*
 bool network_join_line              (int socket, NetworkId_t buffer, int64_t line);
 bool network_insert_newline         (int socket, NetworkId_t buffer, int64_t line);
 bool network_save_buffer            (int socket, NetworkId_t buffer, const char* filename);
+bool network_set_cursor             (int socket, NetworkId_t buffer, Point_t location);
 
 bool network_write(int socket, const void* buf, size_t buf_len);
 bool network_read(int socket, void* buf, size_t buf_len);

@@ -64,6 +64,30 @@ static bool _handle_load_file(NetworkId_t buffer, const char* filename, const ch
      assert(buf); /* a client should not tell us about a buffer we don't know about */ \
      if(!buf) return false;
 
+static bool _handle_set_cursor(NetworkId_t buffer, Point_t location, void* user_data)
+{
+     PARSE_ARGS
+     // add to the buffer's list of cursors if it isn't already there
+     CursorNode_t* head = client_state->cursor_list_head;
+     while(head){
+         if(head->network_id == CLIENT_ID(buffer)) break;
+         head = head->next;
+     }
+
+     if(!head){
+         // add the cursor to the list
+        head = malloc(sizeof(*head));
+        *head = (CursorNode_t){buffer, location, head, client_state->cursor_list_head};
+        if(head->next) head->next->prev = head;
+        client_state->cursor_list_head = head;
+     }
+
+     assert(CLIENT_ID(buffer) != server->id);
+     view_drawer(client_state->buffer_list_head, client_state->config_user_data);
+     // NOTE: we don't block on cursor movements in client_set_cursor, so we don't need to sem_post here
+     return true;
+}
+
 static bool _handle_insert_char(NetworkId_t buffer, Point_t location, char c, void* user_data)
 {
      PARSE_ARGS
@@ -266,6 +290,12 @@ static bool _handle_command(ClientState_t* client_state, Server_t* server)
           break;
      case NC_LOAD_FILE:
           apply_load_file(server->socket, &client_server, _handle_load_file);
+          break;
+     case NC_SET_CURSOR:
+          if(apply_set_cursor(server->socket, &client_server, _handle_set_cursor) == APPLY_SOCKET_DISCONNECTED){
+               //_disconnect_client(&client_server, client);
+               return false;
+          }
           break;
      case NC_INSERT_CHAR:
           if(apply_insert_char(server->socket, &client_server, _handle_insert_char) == APPLY_SOCKET_DISCONNECTED){
@@ -672,4 +702,11 @@ bool client_save_buffer(ClientState_t* client_state, Server_t* server, NetworkId
      sem_wait(client_state->command_sem);
      return client_state->command_rc;
 }
+
+bool client_set_cursor(ClientState_t* client_state __attribute__((unused)), Server_t* server, NetworkId_t buffer, Point_t location)
+{
+     if(!network_set_cursor(server->socket, buffer, location)) return false;
+     return true;
+}
+
 

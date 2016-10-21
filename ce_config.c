@@ -4774,7 +4774,7 @@ void view_drawer(const BufferNode_t* head, void* user_data)
      move(terminal_cursor.y, terminal_cursor.x);
 
      // update the screen with what we drew
-     refresh();
+     doupdate();
 
      pthread_mutex_unlock(&shell_buffer_lock);
      pthread_mutex_unlock(&draw_lock);

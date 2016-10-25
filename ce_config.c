@@ -39,6 +39,7 @@ typedef struct{
 ShellCommandData_t shell_command_data;
 pthread_mutex_t draw_lock;
 pthread_mutex_t shell_buffer_lock;
+pthread_mutex_t view_input_save_lock;
 
 int64_t count_digits(int64_t n)
 {
@@ -350,6 +351,8 @@ void remove_visual_lines(Buffer_t* buffer, Point_t* cursor, Point_t* visual_star
      }
 }
 
+#define VIM_COMMENT_STRING "// "
+
 typedef enum{
      VM_NORMAL,
      VM_INSERT,
@@ -368,6 +371,8 @@ typedef enum{
      VCT_YANK,
      VCT_INDENT,
      VCT_UNINDENT,
+     VCT_COMMENT,
+     VCT_UNCOMMENT,
      VCT_FLIP_CASE,
 } VimChangeType_t;
 
@@ -591,6 +596,21 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
           }
           get_motion = false;
           break;
+     case 'g':
+     {
+          built_action.end_in_vim_mode = vim_mode;
+          char next_ch = *(itr + 1);
+          if(next_ch == 'c'){
+               built_action.change.type = VCT_COMMENT;
+          }else if(next_ch == 'u'){
+               built_action.change.type = VCT_UNCOMMENT;
+          }else if(next_ch == 0){
+               return VCS_CONTINUE;
+          }else{
+               built_action.change.type = VCT_MOTION;
+               if(visual_mode) get_motion = true;
+          }
+     } break;
      case 'p':
           built_action.change.type = VCT_PASTE_AFTER;
           get_motion = false;
@@ -598,9 +618,6 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
      case 'P':
           built_action.change.type = VCT_PASTE_BEFORE;
           get_motion = false;
-          break;
-     case 'g':
-          built_action.change.type = VCT_MOTION;
           break;
      case 'y':
           built_action.change.type = VCT_YANK;
@@ -760,11 +777,20 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
                     return VCS_INVALID;
                }
           break;
+          case 'u':
+               if(change_char == 'g') {
+                    built_action.motion.type = VMT_LINE;
+               }else{
+                    return VCS_INVALID;
+               }
+          break;
           case 'G':
           built_action.motion.type = VMT_END_OF_FILE;
           break;
           case 'c':
                if(change_char == 'c') {
+                    built_action.motion.type = VMT_LINE;
+               }else if(change_char == 'g') {
                     built_action.motion.type = VMT_LINE;
                }else{
                     return VCS_INVALID;
@@ -1305,6 +1331,35 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                return false;
           }
      } break;
+     case VCT_COMMENT:
+     {
+          for(int64_t i = sorted_start->y; i <= sorted_end->y; ++i){
+               if(!strlen(buffer->lines[i])) continue;
+
+               Point_t soft_beginning = {0, i};
+               ce_move_cursor_to_soft_beginning_of_line(buffer, &soft_beginning);
+
+               if(ce_insert_string(buffer, &soft_beginning, VIM_COMMENT_STRING)){
+                    ce_commit_insert_string(&buffer_state->commit_tail, &soft_beginning, cursor, cursor,
+                                            strdup(VIM_COMMENT_STRING));
+               }
+          }
+     } break;
+     case VCT_UNCOMMENT:
+     {
+          for(int64_t i = sorted_start->y; i <= sorted_end->y; ++i){
+               Point_t soft_beginning = {0, i};
+               ce_move_cursor_to_soft_beginning_of_line(buffer, &soft_beginning);
+
+               if(strncmp(buffer->lines[i] + soft_beginning.x, VIM_COMMENT_STRING,
+                          strlen(VIM_COMMENT_STRING)) != 0) continue;
+
+               if(ce_remove_string(buffer, &soft_beginning, strlen(VIM_COMMENT_STRING))){
+                    ce_commit_remove_string(&buffer_state->commit_tail, &soft_beginning, cursor, cursor,
+                                            strdup(VIM_COMMENT_STRING));
+               }
+          }
+     } break;
      case VCT_FLIP_CASE:
      {
           Point_t itr = *sorted_start;
@@ -1500,7 +1555,7 @@ typedef struct{
      VimMode_t vim_mode;
      bool input;
      const char* input_message;
-     char input_key;
+     int input_key;
      Buffer_t* shell_command_buffer; // Allocate so it can be part of the buffer list and get free'd at the end
      Buffer_t* completion_buffer; // same as shell_command_buffer (let's see how quickly this comment gets out of date!)
      Buffer_t input_buffer;
@@ -1528,6 +1583,7 @@ typedef struct{
      pthread_t shell_input_thread;
      AutoComplete_t auto_complete;
      VimAction_t last_vim_action;
+     bool quit;
 } ConfigState_t;
 
 typedef struct MarkNode_t{
@@ -1775,7 +1831,7 @@ InputHistory_t* history_from_input_key(ConfigState_t* config_state)
      return history;
 }
 
-void input_start(ConfigState_t* config_state, const char* input_message, char input_key)
+void input_start(ConfigState_t* config_state, const char* input_message, int input_key)
 {
      ce_clear_lines(config_state->view_input->buffer);
      ce_alloc_lines(config_state->view_input->buffer, 1);
@@ -1783,7 +1839,9 @@ void input_start(ConfigState_t* config_state, const char* input_message, char in
      config_state->view_input->cursor = (Point_t){0, 0};
      config_state->input_message = input_message;
      config_state->input_key = input_key;
+     pthread_mutex_lock(&view_input_save_lock);
      config_state->tab_current->view_input_save = config_state->tab_current->view_current;
+     pthread_mutex_unlock(&view_input_save_lock);
      config_state->tab_current->view_current = config_state->view_input;
      enter_insert_mode(config_state, &config_state->view_input->cursor);
 
@@ -1802,7 +1860,9 @@ void input_end(ConfigState_t* config_state)
 void input_cancel(ConfigState_t* config_state)
 {
      if(config_state->input_key == '/' || config_state->input_key == '?'){
+          pthread_mutex_lock(&view_input_save_lock);
           config_state->tab_current->view_input_save->cursor = config_state->start_search;
+          pthread_mutex_unlock(&view_input_save_lock);
           center_view(config_state->tab_current->view_input_save);
      }
      input_end(config_state);
@@ -2605,6 +2665,7 @@ void* run_shell_commands(void* user_data)
                }
 
                if(ioctl(out_fd, FIONREAD, &count) != -1){
+                    if(count >= BUFSIZ) count = BUFSIZ - 1;
                     count = read(out_fd, tmp + 1, count);
                }
 
@@ -2646,11 +2707,20 @@ void update_completion_buffer(Buffer_t* completion_buffer, AutoComplete_t* auto_
      ce_clear_lines_readonly(completion_buffer);
 
      int64_t match_len = strlen(match);
+     int64_t line_count = 0;
      CompleteNode_t* itr = auto_complete->head;
      while(itr){
           if(strncmp(itr->option, match, match_len) == 0){
                ce_append_line_readonly(completion_buffer, itr->option);
+               line_count++;
+
+               if(itr == auto_complete->current){
+                    int64_t last_index = line_count - 1;
+                    completion_buffer->highlight_start = (Point_t){0, last_index};
+                    completion_buffer->highlight_end = (Point_t){strlen(completion_buffer->lines[last_index]), last_index};
+               }
           }
+
           itr = itr->next;
      }
 }
@@ -2758,6 +2828,13 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           switch(config_state->input_key) {
           default:
                break;
+          case KEY_CLOSE: // Ctrl + q
+               if(config_state->view_input->buffer->line_count){
+                    if(tolower(config_state->view_input->buffer->lines[0][0]) == 'y'){
+                         config_state->quit = true;
+                    }
+               }
+               break;
           case ':':
           {
                if(config_state->view_input->buffer->line_count){
@@ -2814,6 +2891,8 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                     command_view->cursor = (Point_t){0, 0};
                     command_view->top_row = 0;
                }else{
+                    // save the cursor before switching buffers
+                    buffer_view->buffer->cursor = buffer_view->cursor;
                     buffer_view->buffer = command_buffer;
                     buffer_view->cursor = (Point_t){0, 0};
                     buffer_view->top_row = 0;
@@ -3167,33 +3246,63 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                }
 
                if(ce_insert_char(buffer, cursor, key)){
+                    bool do_indentation = true;
+                    for(int i = 0; i < cursor->x; i++){
+                         char blank_c;
+                         Point_t itr = {i, cursor->y};
+                         if(ce_get_char(buffer, &itr, &blank_c)){
+                              // we only change the indentation if everything to the left of the cursor is blank
+                              if(!isblank(blank_c)){
+                                   do_indentation = false;
+                                   break;
+                              }
+                         }
+                         else assert(0);
+                    }
 
-                    Point_t match = *cursor;
-                    if(ce_move_cursor_to_matching_pair(buffer, &match) && match.y != cursor->y){
+                    if(do_indentation){
+                         Point_t match = *cursor;
+                         if(ce_move_cursor_to_matching_pair(buffer, &match) && match.y != cursor->y){
 
-                         // get the match's sbol (that's the indentation we're matching)
-                         Point_t sbol_match = {0, match.y};
-                         ce_move_cursor_to_soft_beginning_of_line(buffer, &sbol_match);
+                              // get the match's sbol (that's the indentation we're matching)
+                              Point_t sbol_match = {0, match.y};
+                              ce_move_cursor_to_soft_beginning_of_line(buffer, &sbol_match);
+                              if(cursor->x < sbol_match.x){
+                                   // we are adding spaces
+                                   int64_t n_spaces = sbol_match.x - cursor->x;
+                                   for(int64_t i = 0; i < n_spaces; i++){
+                                        Point_t itr = {cursor->x + i, cursor->y};
+                                        if(!ce_insert_char(buffer, &itr, ' ')) assert(0);
+                                   }
+                                   cursor->x = sbol_match.x;
+                              }
+                              else{
+                                   int64_t n_deletes = CE_MIN((int64_t) strlen(TAB_STRING), cursor->x - sbol_match.x);
 
-                         int64_t n_deletes = CE_MIN((int64_t) strlen(TAB_STRING), cursor->x - sbol_match.x);
+                                   bool can_unindent = true;
+                                   for(Point_t iter = {0, cursor->y}; ce_point_on_buffer(buffer, &iter) && iter.x < n_deletes; iter.x++){
+                                        if(!isblank(ce_get_char_raw(buffer, &iter))){
+                                             can_unindent = false;
+                                             break;
+                                        }
+                                   }
 
-                         bool can_unindent = true;
-                         for(Point_t iter = {0, cursor->y}; ce_point_on_buffer(buffer, &iter) && iter.x < n_deletes; iter.x++)
-                              can_unindent &= isblank(ce_get_char_raw(buffer, &iter));
-
-                         if(can_unindent){
-                              cursor->x -= n_deletes;
-                              if(ce_remove_string(buffer, cursor, n_deletes)){
-                                   if(insert_state->leftmost.y == cursor->y &&
-                                      insert_state->leftmost.x > cursor->x){
-                                        insert_state->leftmost.x = cursor->x;
-                                        for(int i = 0; i < n_deletes; ++i){
-                                             backspace_push(&buffer_state->backspace_head, ' ');
-                                             insert_state->backspaces++;
+                                   if(can_unindent){
+                                        cursor->x -= n_deletes;
+                                        if(ce_remove_string(buffer, cursor, n_deletes)){
+                                             if(insert_state->leftmost.y == cursor->y &&
+                                                insert_state->leftmost.x > cursor->x){
+                                                  insert_state->leftmost.x = cursor->x;
+                                                  for(int i = 0; i < n_deletes; ++i){
+                                                       backspace_push(&buffer_state->backspace_head, ' ');
+                                                       insert_state->backspaces++;
+                                                  }
+                                             }
                                         }
                                    }
                               }
                          }
+
                     }
 
                     cursor->x++;
@@ -3401,7 +3510,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                }
           }
 
-          if(!handled_key && isprint(key)){
+          if(!handled_key && key >= 0 && key < 256 && isprint(key)){
                if(config_state->command_len >= VIM_COMMAND_MAX){
                     config_state->command_len = 0;
                }
@@ -3568,6 +3677,27 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          break;
                     }
 
+                    // try to quit if there is nothing left to do!
+                    if(config_state->tab_current == config_state->tab_head &&
+                       config_state->tab_current->next == NULL &&
+                       config_state->tab_current->view_current == config_state->tab_current->view_head &&
+                       config_state->tab_current->view_current->next_horizontal == NULL &&
+                       config_state->tab_current->view_current->next_vertical == NULL ){
+                         uint64_t unsaved_buffers = 0;
+                         BufferNode_t* itr = head;
+                         while(itr){
+                              if(!itr->buffer->readonly && itr->buffer->modified) unsaved_buffers++;
+                              itr = itr->next;
+                         }
+
+                         if(unsaved_buffers){
+                              input_start(config_state, "Unsaved buffers... Quit anyway? (y/n)", key);
+                              break;
+                         }
+
+                         return false;
+                    }
+
                     Point_t save_cursor_on_terminal = get_cursor_on_terminal(cursor, buffer_view);
                     config_state->tab_current->view_current->buffer->cursor = config_state->tab_current->view_current->cursor;
 
@@ -3581,8 +3711,6 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                                    tab_view_remove(&config_state->tab_head, tmp);
                                    break;
                               }else{
-                                   // Quit !
-                                   if(config_state->tab_current == config_state->tab_head) return false;
 
                                    TabView_t* itr = config_state->tab_head;
                                    while(itr && itr->next != config_state->tab_current) itr = itr->next;
@@ -4062,7 +4190,9 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
      // incremental search
      if(config_state->input && (config_state->input_key == '/' || config_state->input_key == '?')){
           if(config_state->view_input->buffer->lines == NULL){
+               pthread_mutex_lock(&view_input_save_lock);
                config_state->tab_current->view_input_save->cursor = config_state->start_search;
+               pthread_mutex_unlock(&view_input_save_lock);
           }else{
                const char* search_str = config_state->view_input->buffer->lines[0];
                Point_t match = {};
@@ -4070,14 +4200,20 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                   ce_find_string(config_state->tab_current->view_input_save->buffer,
                                  &config_state->start_search, search_str, &match,
                                  config_state->search_command.direction)){
+                    pthread_mutex_lock(&view_input_save_lock);
                     ce_set_cursor(config_state->tab_current->view_input_save->buffer,
                                   &config_state->tab_current->view_input_save->cursor, &match);
+                    pthread_mutex_unlock(&view_input_save_lock);
                     center_view(config_state->tab_current->view_input_save);
                }else{
+                    pthread_mutex_lock(&view_input_save_lock);
                     config_state->tab_current->view_input_save->cursor = config_state->start_search;
+                    pthread_mutex_unlock(&view_input_save_lock);
                }
           }
      }
+
+     if(config_state->quit) return false;
 
      config_state->last_key = key;
      return true;
@@ -4149,16 +4285,20 @@ void view_drawer(const BufferNode_t* head, void* user_data)
      if(config_state->input){
           input_view_height = config_state->view_input->buffer->line_count;
           if(input_view_height) input_view_height--;
+          pthread_mutex_lock(&view_input_save_lock);
           input_top_left = (Point_t){config_state->tab_current->view_input_save->top_left.x,
                                    (config_state->tab_current->view_input_save->bottom_right.y - input_view_height) - 1};
-          if(input_top_left.y < 1) input_top_left.y = 1; // clamp to growing to 1, account for input message
           input_bottom_right = config_state->tab_current->view_input_save->bottom_right;
+          pthread_mutex_unlock(&view_input_save_lock);
+          if(input_top_left.y < 1) input_top_left.y = 1; // clamp to growing to 1, account for input message
           if(input_bottom_right.y == g_terminal_dimensions->y - 2){
                input_top_left.y++;
                input_bottom_right.y++; // account for bottom status bar
           }
           ce_calc_views(config_state->view_input, &input_top_left, &input_bottom_right);
+          pthread_mutex_lock(&view_input_save_lock);
           config_state->tab_current->view_input_save->bottom_right.y = input_top_left.y - 1;
+          pthread_mutex_unlock(&view_input_save_lock);
      }
 
      view_follow_cursor(buffer_view);

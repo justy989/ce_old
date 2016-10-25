@@ -4168,12 +4168,14 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                {
                     input_start(config_state, "Load File", key);
                     calc_auto_complete_start_and_path(&config_state->auto_complete,
-                                                      config_state->view_input->buffer->lines[cursor->y],
+                                                      config_state->view_input->buffer->lines[0],
                                                       *cursor,
                                                       config_state->completion_buffer);
                     if(config_state->tab_current->view_overrideable){
                          config_state->tab_current->overriden_buffer = config_state->tab_current->view_overrideable->buffer;
                          config_state->tab_current->view_overrideable->buffer = config_state->completion_buffer;
+                    }else{
+                         config_state->tab_current->view_input_save->buffer = config_state->completion_buffer;
                     }
                } break;
                case 20: // Ctrl + t

@@ -2763,15 +2763,17 @@ bool calc_auto_complete_start_and_path(AutoComplete_t* auto_complete, const char
      const char* last_slash = NULL;
 
      // if the cursor is not on the null terminator, skip
-     if(*path_begin != '\0') return false;
+     if(cursor.x > 0){
+          if(*path_begin != '\0') return false;
 
-     while(path_begin >= line){
-          if(!last_slash && *path_begin == '/') last_slash = path_begin;
-          if(isblank(*path_begin)) break;
-          path_begin--;
+          while(path_begin >= line){
+               if(!last_slash && *path_begin == '/') last_slash = path_begin;
+               if(isblank(*path_begin)) break;
+               path_begin--;
+          }
+
+          path_begin++; // account for iterating 1 too far
      }
-
-     path_begin++; // account for iterating 1 too far
 
      // generate based on the path
      bool rc = false;
@@ -4145,6 +4147,10 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                case 6: // Ctrl + f
                {
                     input_start(config_state, "Load File", key);
+                    calc_auto_complete_start_and_path(&config_state->auto_complete,
+                                                      config_state->view_input->buffer->lines[cursor->y],
+                                                      *cursor,
+                                                      config_state->completion_buffer);
                } break;
                case 20: // Ctrl + t
                {

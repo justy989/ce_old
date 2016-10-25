@@ -1399,6 +1399,8 @@ typedef struct TabView_t{
      BufferView_t* view_current;
      BufferView_t* view_previous;
      BufferView_t* view_input_save;
+     BufferView_t* view_overrideable;
+     Buffer_t* overriden_buffer;
      struct TabView_t* next;
 } TabView_t;
 
@@ -2857,6 +2859,9 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                          config_state->tab_current->view_current->cursor = (Point_t){0, 0};
                     }
                }
+               if(config_state->tab_current->overriden_buffer){
+                    config_state->tab_current->view_overrideable->buffer = config_state->tab_current->overriden_buffer;
+               }
                break;
           case '/':
                if(config_state->view_input->buffer->line_count){
@@ -2893,12 +2898,19 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                     command_view->cursor = (Point_t){0, 0};
                     command_view->top_row = 0;
                }else{
-                    // save the cursor before switching buffers
-                    buffer_view->buffer->cursor = buffer_view->cursor;
-                    buffer_view->buffer = command_buffer;
-                    buffer_view->cursor = (Point_t){0, 0};
-                    buffer_view->top_row = 0;
-                    command_view = buffer_view;
+                    if(config_state->tab_current->view_overrideable){
+                         config_state->tab_current->overriden_buffer = config_state->tab_current->view_overrideable->buffer;
+                         config_state->tab_current->view_overrideable->buffer = command_buffer;
+                         config_state->tab_current->view_overrideable->cursor = (Point_t){0, 0};
+                         config_state->tab_current->view_overrideable->top_row = 0;
+                    }else{
+                         // save the cursor before switching buffers
+                         buffer_view->buffer->cursor = buffer_view->cursor;
+                         buffer_view->buffer = command_buffer;
+                         buffer_view->cursor = (Point_t){0, 0};
+                         buffer_view->top_row = 0;
+                         command_view = buffer_view;
+                    }
                }
 
                shell_command_data.command_count = config_state->view_input->buffer->line_count;
@@ -3482,6 +3494,10 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     Buffer_t* file_buffer = open_file_buffer(head, filename);
                     if(file_buffer) buffer_view->buffer = file_buffer;
                } break;
+               case 'v':
+                    config_state->tab_current->view_overrideable = config_state->tab_current->view_current;
+                    config_state->tab_current->overriden_buffer = NULL;
+                    break;
                }
                if(handled_key) config_state->command_len = 0;
           } break;
@@ -3704,6 +3720,10 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     config_state->tab_current->view_current->buffer->cursor = config_state->tab_current->view_current->cursor;
 
                     if(ce_remove_view(&config_state->tab_current->view_head, config_state->tab_current->view_current)){
+                         if(config_state->tab_current->view_current == config_state->tab_current->view_overrideable){
+                              config_state->tab_current->view_overrideable = NULL;
+                         }
+
                          // if head is NULL, then we have removed the view head, and there were no other views, head is NULL
                          if(!config_state->tab_current->view_head){
                               if(config_state->tab_current->next){
@@ -4151,6 +4171,10 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                                                       config_state->view_input->buffer->lines[cursor->y],
                                                       *cursor,
                                                       config_state->completion_buffer);
+                    if(config_state->tab_current->view_overrideable){
+                         config_state->tab_current->overriden_buffer = config_state->tab_current->view_overrideable->buffer;
+                         config_state->tab_current->view_overrideable->buffer = config_state->completion_buffer;
+                    }
                } break;
                case 20: // Ctrl + t
                {
@@ -4225,11 +4249,11 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
      return true;
 }
 
-void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, VimMode_t vim_mode, int last_key)
+void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferView_t* overrideable_view, VimMode_t vim_mode, int last_key)
 {
      Buffer_t* buffer = view->buffer;
-     if(view->next_horizontal) draw_view_statuses(view->next_horizontal, current_view, vim_mode, last_key);
-     if(view->next_vertical) draw_view_statuses(view->next_vertical, current_view, vim_mode, last_key);
+     if(view->next_horizontal) draw_view_statuses(view->next_horizontal, current_view, overrideable_view, vim_mode, last_key);
+     if(view->next_vertical) draw_view_statuses(view->next_vertical, current_view, overrideable_view, vim_mode, last_key);
 
      // NOTE: mode names need space at the end for OCD ppl like me
      static const char* mode_names[] = {
@@ -4251,6 +4275,7 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, VimMode_
 #ifndef NDEBUG
      if(view == current_view) printw("%s %d ", keyname(last_key), last_key);
 #endif
+     if(view == overrideable_view) printw("O ");
      int64_t line = view->cursor.y + 1;
      int64_t digits_in_line = count_digits(line);
      mvprintw(view->bottom_right.y, (view->bottom_right.x - (digits_in_line + 3)), " %"PRId64" ", line);
@@ -4348,7 +4373,7 @@ void view_drawer(const BufferNode_t* head, void* user_data)
      ce_draw_views(config_state->tab_current->view_head, search);
 
      draw_view_statuses(config_state->tab_current->view_head, config_state->tab_current->view_current,
-                        config_state->vim_mode, config_state->last_key);
+                        config_state->tab_current->view_overrideable, config_state->vim_mode, config_state->last_key);
 
      // draw input status
      if(config_state->input){
@@ -4375,7 +4400,7 @@ void view_drawer(const BufferNode_t* head, void* user_data)
 
           ce_draw_views(config_state->view_input, NULL);
           draw_view_statuses(config_state->view_input, config_state->tab_current->view_current,
-                             config_state->vim_mode, config_state->last_key);
+                             NULL, config_state->vim_mode, config_state->last_key);
      }
 
      // draw auto complete

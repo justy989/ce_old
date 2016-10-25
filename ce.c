@@ -271,7 +271,12 @@ bool insert_string_impl(Buffer_t* buffer, const Point_t* location, const char* n
           // pass
      }else{
           if(!ce_point_on_buffer(buffer, location)){
-               return false;
+               if(location->x == 0 && location->y == buffer->line_count){
+                    // append to end of file
+                    return insert_line_impl(buffer, location->y, new_string);
+               }else{
+                    return false;
+               }
           }
      }
 
@@ -1096,6 +1101,11 @@ bool ce_remove_string(Buffer_t* buffer, const Point_t* location, int64_t length)
      // don't delete the rest of the first line yet, we'll do this when we mash the first and last lines
      length -= rest_of_the_line_len + 1; // account for newline
      buffer->lines[location->y][location->x] = '\0';
+     if(length == 0){
+          ce_remove_line(buffer, location->y);
+          buffer->modified = true;
+          return true;
+     }
 
      // hard case: string spans multiple lines
      int64_t delete_index = location->y + 1;

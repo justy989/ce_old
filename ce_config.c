@@ -4176,6 +4176,8 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          config_state->tab_current->view_overrideable->buffer = config_state->completion_buffer;
                     }else{
                          config_state->tab_current->view_input_save->buffer = config_state->completion_buffer;
+                         config_state->tab_current->view_input_save->cursor = (Point_t){0, 0};
+                         config_state->tab_current->view_input_save->top_row = 0;
                     }
                } break;
                case 20: // Ctrl + t

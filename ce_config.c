@@ -4305,9 +4305,11 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferVi
      if(view == current_view) printw("%s %d ", keyname(last_key), last_key);
 #endif
      if(view == overrideable_view) printw("O ");
-     int64_t line = view->cursor.y + 1;
-     int64_t digits_in_line = count_digits(line);
-     mvprintw(view->bottom_right.y, (view->bottom_right.x - (digits_in_line + 3)), " %"PRId64" ", line);
+     int64_t row = view->cursor.y + 1;
+     int64_t column = view->cursor.x + 1;
+     int64_t digits_in_line = count_digits(row);
+     digits_in_line += count_digits(column);
+     mvprintw(view->bottom_right.y, (view->bottom_right.x - (digits_in_line + 5)), " %"PRId64", %"PRId64" ", column, row);
 }
 
 void view_drawer(const BufferNode_t* head, void* user_data)

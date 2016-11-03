@@ -3867,12 +3867,25 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
 
                          if(empty_first_line) ce_remove_line(config_state->view_input->buffer, 0);
                     }else{
+                         // try to find a better place to put the cursor to start
+                         BufferNode_t* itr = head;
+                         int64_t buffer_index = 1;
+                         while(itr){
+                              if(!itr->buffer->readonly && !ce_buffer_in_view(config_state->tab_current->view_head, itr->buffer)){
+                                   config_state->tab_current->view_current->cursor.y = buffer_index;
+                                   break;
+                              }
+                              itr = itr->next;
+                              buffer_index++;
+                         }
+
                          update_buffer_list_buffer(config_state, head);
                          config_state->buffer_list_buffer.readonly = true;
                          config_state->tab_current->view_current->buffer->cursor = *cursor;
                          config_state->tab_current->view_current->buffer = &config_state->buffer_list_buffer;
-                         config_state->tab_current->view_current->cursor = (Point_t){0, 1};
                          config_state->tab_current->view_current->top_row = 0;
+                         config_state->tab_current->view_current->cursor = (Point_t){0, buffer_index};
+
                     }
                     break;
                case 'u':

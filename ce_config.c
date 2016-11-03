@@ -225,6 +225,11 @@ int isnotquote(int c)
      return c != '"';
 }
 
+int isnotsinglequote(int c)
+{
+     return c != '\'';
+}
+
 typedef struct{
      BufferCommitNode_t* commit_tail;
      BackspaceNode_t* backspace_head;
@@ -746,6 +751,10 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
                     built_action.motion.type = VMT_INSIDE_PAIR;
                     built_action.motion.inside_pair = ch;
                     break;
+               case '\'':
+                    built_action.motion.type = VMT_INSIDE_PAIR;
+                    built_action.motion.inside_pair = ch;
+                    break;
                }
           } break;
           case 'a': // around
@@ -1020,7 +1029,11 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                     ce_move_cursor_to_end_of_file(buffer, &end);
                     break;
                case VMT_INSIDE_PAIR:
-                    if(!ce_get_homogenous_adjacents(buffer, &start, &end, isnotquote)) return false;
+                    if(action->motion.inside_pair == '"'){
+                         if(!ce_get_homogenous_adjacents(buffer, &start, &end, isnotquote)) return false;
+                    }else if(action->motion.inside_pair == '\''){
+                         if(!ce_get_homogenous_adjacents(buffer, &start, &end, isnotsinglequote)) return false;
+                    }
                     if(start.x == end.x && start.y == end.y) return false;
                     if(start.x == 0) return false;
                     break;
@@ -2044,9 +2057,21 @@ bool initializer(BufferNode_t* head, Point_t* terminal_dimensions, int argc, cha
      init_pair(S_DIFF_ADD_HIGHLIGHTED, COLOR_GREEN, COLOR_WHITE);
      init_pair(S_DIFF_REMOVE_HIGHLIGHTED, COLOR_RED, COLOR_WHITE);
 
+     init_pair(S_NORMAL_CURRENT_LINE, COLOR_FOREGROUND, COLOR_BRIGHT_BLACK);
+     init_pair(S_KEYWORD_CURRENT_LINE, COLOR_BLUE, COLOR_BRIGHT_BLACK);
+     init_pair(S_TYPE_CURRENT_LINE, COLOR_BRIGHT_BLUE, COLOR_BRIGHT_BLACK);
+     init_pair(S_CONTROL_CURRENT_LINE, COLOR_YELLOW, COLOR_BRIGHT_BLACK);
+     init_pair(S_COMMENT_CURRENT_LINE, COLOR_GREEN, COLOR_BRIGHT_BLACK);
+     init_pair(S_STRING_CURRENT_LINE, COLOR_RED, COLOR_BRIGHT_BLACK);
+     init_pair(S_CONSTANT_CURRENT_LINE, COLOR_MAGENTA, COLOR_BRIGHT_BLACK);
+     init_pair(S_PREPROCESSOR_CURRENT_LINE, COLOR_BRIGHT_MAGENTA, COLOR_BRIGHT_BLACK);
+     init_pair(S_FILEPATH_CURRENT_LINE, COLOR_BLUE, COLOR_BRIGHT_BLACK);
+     init_pair(S_DIFF_ADD_CURRENT_LINE, COLOR_GREEN, COLOR_BRIGHT_BLACK);
+     init_pair(S_DIFF_REMOVE_CURRENT_LINE, COLOR_RED, COLOR_BRIGHT_BLACK);
+
      init_pair(S_TRAILING_WHITESPACE, COLOR_FOREGROUND, COLOR_RED);
 
-     init_pair(S_BORDERS, COLOR_FOREGROUND, COLOR_BACKGROUND);
+     init_pair(S_BORDERS, COLOR_WHITE, COLOR_BACKGROUND);
 
      init_pair(S_TAB_NAME, COLOR_WHITE, COLOR_BACKGROUND);
      init_pair(S_CURRENT_TAB_NAME, COLOR_CYAN, COLOR_BACKGROUND);

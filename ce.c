@@ -1445,11 +1445,24 @@ int64_t ce_is_fullpath(const char* line, int64_t start_offset)
      return 0;
 }
 
-int set_color(Syntax_t syntax, bool highlighted)
+typedef enum {
+     HL_OFF,
+     HL_ON,
+     HL_CURRENT_LINE
+} HighlightType_t;
+
+int set_color(Syntax_t syntax, HighlightType_t highlight_type)
 {
      standend();
-     if(highlighted) attron(COLOR_PAIR(syntax + S_NORMAL_HIGHLIGHTED - 1));
-     else attron(COLOR_PAIR(syntax));
+
+     if(syntax < S_NORMAL_HIGHLIGHTED){
+          if(highlight_type == HL_ON) attron(COLOR_PAIR(syntax + S_NORMAL_HIGHLIGHTED - 1));
+          else if(highlight_type == HL_CURRENT_LINE) attron(COLOR_PAIR(syntax + S_NORMAL_CURRENT_LINE - 1));
+          else attron(COLOR_PAIR(syntax));
+     } else {
+          attron(COLOR_PAIR(syntax));
+     }
+
      return syntax;
 }
 
@@ -1549,6 +1562,7 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
           int64_t min = max_width < print_line_length ? max_width : print_line_length;
           const char* line_to_print = buffer_line + buffer_top_left->x;
 
+          // NOTE: we probably want to move this check outside the loop
           if(has_colors() == TRUE){
                bool inside_string = false;
                char last_quote_char = 0;
@@ -1557,7 +1571,7 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                int highlight_color = 0;
                bool diff_add = buffer->lines[i][0] == '+';
                bool diff_remove = buffer->lines[i][0] == '-';
-               bool inside_highlight = false;
+               HighlightType_t highlight_type = HL_OFF;
                int64_t highlighting_left = 0;
                int fg_color = 0;
 
@@ -1593,11 +1607,11 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
 
                     if(highlight_word && strncmp(buffer_line + c, highlight_word, highlight_word_len) == 0){
                          highlighting_left = highlight_word_len;
-                         inside_highlight = true;
-                    }else if(inside_highlight){
+                         highlight_type = HL_ON;
+                    }else if(highlight_type){
                          highlighting_left--;
                          if(!highlighting_left){
-                              inside_highlight = false;
+                              highlight_type = HL_OFF;
                          }
                     }
 
@@ -1666,42 +1680,45 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                // skip line if we are offset by too much and can't show the line
                if(line_length <= buffer_top_left->x) continue;
 
-               fg_color = set_color(S_NORMAL, inside_highlight);
+               fg_color = set_color(S_NORMAL, highlight_type);
 
                if(inside_comment || inside_multiline_comment){
-                    fg_color = set_color(S_COMMENT, inside_highlight);
+                    fg_color = set_color(S_COMMENT, highlight_type);
                }else if(inside_string){
-                    fg_color = set_color(S_STRING, inside_highlight);
+                    fg_color = set_color(S_STRING, highlight_type);
                }else if(color_left){
-                    fg_color = set_color(highlight_color, inside_highlight);
+                    fg_color = set_color(highlight_color, highlight_type);
                }else if(diff_add){
-                    fg_color = set_color(S_DIFF_ADD, inside_highlight);
+                    fg_color = set_color(S_DIFF_ADD, highlight_type);
                }else if(diff_remove){
-                    fg_color = set_color(S_DIFF_REMOVE, inside_highlight);
+                    fg_color = set_color(S_DIFF_REMOVE, highlight_type);
                }
 
                for(int64_t c = 0; c < min; ++c){
                     // check for the highlight
                     Point_t point = {c + buffer_top_left->x, i};
                     if(ce_point_in_range(point, buffer->highlight_start, buffer->highlight_end)){
-                         inside_highlight = true;
-                         set_color(fg_color, inside_highlight);
+                         highlight_type = HL_ON;
+                         set_color(fg_color, highlight_type);
+                    }else if(cursor->y == i){
+                         highlight_type = HL_CURRENT_LINE;
+                         set_color(fg_color, highlight_type);
                     }else{
                          if(highlight_word && strncmp(buffer_line + c + buffer_top_left->x, highlight_word,
                                                       highlight_word_len) == 0){
                               highlighting_left = highlight_word_len;
-                              inside_highlight = true;
-                              set_color(fg_color, inside_highlight);
-                         }else if(inside_highlight){
+                              highlight_type = HL_ON;
+                              set_color(fg_color, highlight_type);
+                         }else if(highlight_type){
                               if(highlighting_left){
                                    highlighting_left--;
                                    if(!highlighting_left){
-                                        inside_highlight = false;
-                                        set_color(fg_color, inside_highlight);
+                                        highlight_type = HL_OFF;
+                                        set_color(fg_color, highlight_type);
                                    }
                               }else{
-                                   inside_highlight = false;
-                                   set_color(fg_color, inside_highlight);
+                                   highlight_type = HL_OFF;
+                                   set_color(fg_color, highlight_type);
                               }
                          }
                     }
@@ -1711,35 +1728,35 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                          if(!inside_string){
                               color_left = ce_is_caps_var(line_to_print, c);
                               if(color_left){
-                                   fg_color = set_color(S_CONSTANT, inside_highlight);
+                                   fg_color = set_color(S_CONSTANT, highlight_type);
                               }
 
                               if(!inside_comment && !inside_multiline_comment){
                                    if(!color_left){
                                         color_left = ce_is_c_control(line_to_print, c);
                                         if(color_left){
-                                             fg_color = set_color(S_CONTROL, inside_highlight);
+                                             fg_color = set_color(S_CONTROL, highlight_type);
                                         }
                                    }
 
                                    if(!color_left){
                                         color_left = ce_is_c_typename(line_to_print, c);
                                         if(color_left){
-                                             fg_color = set_color(S_TYPE, inside_highlight);
+                                             fg_color = set_color(S_TYPE, highlight_type);
                                         }
                                    }
 
                                    if(!color_left){
                                         color_left = ce_is_c_keyword(line_to_print, c);
                                         if(color_left){
-                                             fg_color = set_color(S_KEYWORD, inside_highlight);
+                                             fg_color = set_color(S_KEYWORD, highlight_type);
                                         }
                                    }
 
                                    if(!color_left){
                                         color_left = ce_is_preprocessor(line_to_print, c);
                                         if(color_left){
-                                             fg_color = set_color(S_PREPROCESSOR, inside_highlight);
+                                             fg_color = set_color(S_PREPROCESSOR, highlight_type);
                                         }
                                    }
                               }
@@ -1747,7 +1764,7 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                               if(!color_left){
                                    color_left = ce_is_fullpath(line_to_print, c);
                                    if(color_left){
-                                        fg_color = set_color(S_FILEPATH, inside_highlight);
+                                        fg_color = set_color(S_FILEPATH, highlight_type);
                                    }
                               }
                          }
@@ -1758,11 +1775,11 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                               break;
                          case CT_SINGLE_LINE:
                               inside_comment = true;
-                              fg_color = set_color(S_COMMENT, inside_highlight);
+                              fg_color = set_color(S_COMMENT, highlight_type);
                               break;
                          case CT_BEGIN_MULTILINE:
                               inside_multiline_comment = true;
-                              fg_color = set_color(S_COMMENT, inside_highlight);
+                              fg_color = set_color(S_COMMENT, highlight_type);
                               break;
                          case CT_END_MULTILINE:
                               inside_multiline_comment = false;
@@ -1774,28 +1791,28 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
 
                          // if inside_string has changed, update the color
                          if(pre_quote_check != inside_string){
-                              if(inside_string) fg_color = set_color(S_STRING, inside_highlight);
+                              if(inside_string) fg_color = set_color(S_STRING, highlight_type);
                               else color_left = 1;
                          }
                     }else{
                          color_left--;
                          if(color_left == 0){
-                              fg_color = set_color(S_NORMAL, inside_highlight);
+                              fg_color = set_color(S_NORMAL, highlight_type);
 
                               if(inside_comment || inside_multiline_comment){
-                                   fg_color = set_color(S_COMMENT, inside_highlight);
+                                   fg_color = set_color(S_COMMENT, highlight_type);
                               }else if(inside_string){
-                                   fg_color = set_color(S_STRING, inside_highlight);
+                                   fg_color = set_color(S_STRING, highlight_type);
                               }else if(diff_add){
-                                   fg_color = set_color(S_DIFF_ADD, inside_highlight);
+                                   fg_color = set_color(S_DIFF_ADD, highlight_type);
                               }else if(diff_remove){
-                                   fg_color = set_color(S_DIFF_REMOVE, inside_highlight);
+                                   fg_color = set_color(S_DIFF_REMOVE, highlight_type);
                               }
                          }
                     }
 
                     if(c >= begin_trailing_whitespace){
-                         fg_color = set_color(S_TRAILING_WHITESPACE, inside_highlight);
+                         fg_color = set_color(S_TRAILING_WHITESPACE, highlight_type);
                     }
 
                     // print each character

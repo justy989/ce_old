@@ -748,10 +748,9 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
                     built_action.motion.type = VMT_INSIDE_WORD_BIG;
                     break;
                case '"':
-                    built_action.motion.type = VMT_INSIDE_PAIR;
-                    built_action.motion.inside_pair = ch;
-                    break;
                case '\'':
+               case ')':
+               case '(':
                     built_action.motion.type = VMT_INSIDE_PAIR;
                     built_action.motion.inside_pair = ch;
                     break;
@@ -773,6 +772,9 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
                     built_action.motion.type = VMT_AROUND_WORD_BIG;
                     break;
                case '"':
+               case '\'':
+               case ')':
+               case '(':
                     built_action.motion.type = VMT_AROUND_PAIR;
                     built_action.motion.around_pair = ch;
                     break;
@@ -1029,11 +1031,27 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                     ce_move_cursor_to_end_of_file(buffer, &end);
                     break;
                case VMT_INSIDE_PAIR:
-                    if(action->motion.inside_pair == '"'){
+                    switch(action->motion.inside_pair){
+                    case '"':
                          if(!ce_get_homogenous_adjacents(buffer, &start, &end, isnotquote)) return false;
-                    }else if(action->motion.inside_pair == '\''){
+                         break;
+                    case '\'':
                          if(!ce_get_homogenous_adjacents(buffer, &start, &end, isnotsinglequote)) return false;
+                         break;
+                    case '(':
+                         break;
+                    case ')':
+                         // TODO: this is the simplest rule right now, and won't work as expected in some cases
+                         //       we need to make it behave more like ce_move_cursor_to_matching pair
+                         if(!ce_move_cursor_backward_to_char(buffer, &start, '(')) return false;
+                         if(!ce_move_cursor_forward_to_char(buffer, &end, ')')) return false;
+                         start.x++;
+                         end.x--;
+                         break;
+                    default:
+                         return false;
                     }
+
                     if(start.x == end.x && start.y == end.y) return false;
                     if(start.x == 0) return false;
                     break;
@@ -1053,7 +1071,27 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                     }
                } break;
                case VMT_AROUND_PAIR:
-                    if(!ce_get_homogenous_adjacents(buffer, &start, &end, isnotquote)) return false;
+                    switch(action->motion.inside_pair){
+                    case '"':
+                         if(!ce_get_homogenous_adjacents(buffer, &start, &end, isnotquote)) return false;
+                         break;
+                    case '\'':
+                         if(!ce_get_homogenous_adjacents(buffer, &start, &end, isnotsinglequote)) return false;
+                         break;
+                    case '(':
+                         break;
+                    case ')':
+                         // TODO: this is the simplest rule right now, and won't work as expected in some cases
+                         //       we need to make it behave more like ce_move_cursor_to_matching pair
+                         if(!ce_move_cursor_backward_to_char(buffer, &start, '(')) return false;
+                         if(!ce_move_cursor_forward_to_char(buffer, &end, ')')) return false;
+                         start.x++;
+                         end.x--;
+                         break;
+                    default:
+                         return false;
+                    }
+
                     if(start.x == end.x && start.y == end.y) return false;
                     start.x--;
                     end.x++;

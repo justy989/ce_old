@@ -1417,18 +1417,18 @@ TEST(sanity_follow_cursor)
 
      Point_t cursor = {0, 0};
 
-     ce_follow_cursor(cursor, &left_column, &top_row, view_width, view_height, false, false);
+     ce_follow_cursor(cursor, &left_column, &top_row, view_width, view_height, false, false, LNT_NONE, 0);
      EXPECT(left_column == 0);
      EXPECT(top_row == 0);
 
      cursor = (Point_t){3, 0};
-     ce_follow_cursor(cursor, &left_column, &top_row, view_width, view_height, false, false);
+     ce_follow_cursor(cursor, &left_column, &top_row, view_width, view_height, false, false, LNT_NONE, 0);
      EXPECT(left_column == 1);
      EXPECT(top_row == 0);
 
      left_column = 0;
      cursor = (Point_t){0, 4};
-     ce_follow_cursor(cursor, &left_column, &top_row, view_width, view_height, false, false);
+     ce_follow_cursor(cursor, &left_column, &top_row, view_width, view_height, false, false, LNT_NONE, 0);
      EXPECT(left_column == 0);
      EXPECT(top_row == 1);
 }

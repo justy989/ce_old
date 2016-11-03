@@ -2773,19 +2773,22 @@ int64_t ce_compute_length(const Buffer_t* buffer, Point_t start, Point_t end)
      assert(ce_point_on_buffer(buffer, start));
      assert(ce_point_on_buffer(buffer, end));
 
-     ce_sort_points(&start, &end);
+     const Point_t* sorted_start = &start;
+     const Point_t* sorted_end = &end;
+
+     ce_sort_points(&sorted_start, &sorted_end);
 
      size_t length = 0;
 
-     if(start.y < end.y){
-          length = strlen(buffer->lines[start.y] + start.x) + 1; // account for newline
-          for(int64_t i = start.y + 1; i < end.y; ++i){
+     if(sorted_start->y < sorted_end->y){
+          length = strlen(buffer->lines[sorted_start->y] + sorted_start->x) + 1; // account for newline
+          for(int64_t i = sorted_start->y + 1; i < sorted_end->y; ++i){
                length += strlen(buffer->lines[i]) + 1; // account for newline
           }
-          length += end.x+1; // do not account for newline. end is inclusive
+          length += sorted_end->x+1; // do not account for newline. end is inclusive
      }else{
-          assert(start.y == end.y);
-          length += end.x+1 - start.x;
+          assert(sorted_start->y == sorted_end->y);
+          length += sorted_end->x+1 - sorted_start->x;
      }
 
      return length;
@@ -2883,12 +2886,12 @@ bool ce_point_after(Point_t a, Point_t b)
 }
 
 // if a > b, swap a and b
-void ce_sort_points(const Point_t* a, const Point_t* b)
+void ce_sort_points(const Point_t** a, const Point_t** b)
 {
-     if(ce_point_after(*a, *b)){
-          const Point_t* temp = a;
-          a = b;
-          b = temp;
+     if(ce_point_after(**a, **b)){
+          const Point_t* temp = *a;
+          *a = *b;
+          *b = temp;
      }
 }
 

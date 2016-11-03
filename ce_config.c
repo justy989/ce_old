@@ -280,7 +280,7 @@ void yank_visual_range(Buffer_t* buffer, Point_t* cursor, Point_t* visual_start,
      const Point_t* a = &start;
      const Point_t* b = &end;
 
-     ce_sort_points(a, b);
+     ce_sort_points(&a, &b);
 
      add_yank(yank_head, '0', ce_dupe_string(buffer, *a, *b), YANK_NORMAL);
      add_yank(yank_head, '"', ce_dupe_string(buffer, *a, *b), YANK_NORMAL);
@@ -313,7 +313,7 @@ void remove_visual_range(Buffer_t* buffer, Point_t* cursor, Point_t* visual_star
      const Point_t* a = &start;
      const Point_t* b = &end;
 
-     ce_sort_points(a, b);
+     ce_sort_points(&a, &b);
 
      char* removed_str = ce_dupe_string(buffer, *a, *b);
      int64_t remove_len = ce_compute_length(buffer, *a, *b);
@@ -888,7 +888,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
           const Point_t* a = cursor;
           const Point_t* b = &calc_visual_start;
 
-          ce_sort_points(a, b);
+          ce_sort_points(&a, &b);
 
           start = *a;
           end = *b;
@@ -1156,7 +1156,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
      const Point_t* sorted_start = &start;
      const Point_t* sorted_end = &end;
 
-     ce_sort_points(sorted_start, sorted_end);
+     ce_sort_points(&sorted_start, &sorted_end);
 
      // perform action on range
      switch(action->change.type){
@@ -4337,7 +4337,7 @@ void view_drawer(const BufferNode_t* head, void* user_data)
           const Point_t* start = &config_state->visual_start;
           const Point_t* end = &config_state->tab_current->view_current->cursor;
 
-          ce_sort_points(start, end);
+          ce_sort_points(&start, &end);
 
           buffer->highlight_start = *start;
           buffer->highlight_end = *end;

@@ -297,7 +297,7 @@ int64_t ce_is_caps_var      (const char* line, int64_t start_offset);
 // Misc. Utility Functions
 int64_t ce_count_string_lines   (const char* string);
 bool    ce_point_after          (Point_t a, Point_t b);
-void    ce_sort_points          (const Point_t* a, const Point_t* b);
+void    ce_sort_points          (const Point_t** a, const Point_t** b);
 int     ce_ispunct              (int c);
 int     ce_iswordchar           (int c);
 void*   ce_memrchr              (const void* s, int c, size_t n);

@@ -107,8 +107,7 @@ bool ce_load_file(Buffer_t* buffer, const char* filename)
 
 bool ce_load_string(Buffer_t* buffer, const char* str)
 {
-     Point_t start = {0, 0};
-     return ce_insert_string(buffer, &start, str);
+     return ce_insert_string(buffer, (Point_t){0, 0}, str);
 }
 
 void ce_free_buffer(Buffer_t* buffer)
@@ -153,22 +152,22 @@ void ce_clear_lines_readonly(Buffer_t* buffer)
      clear_lines_impl(buffer);
 }
 
-bool ce_point_on_buffer(const Buffer_t* buffer, const Point_t* location)
+bool ce_point_on_buffer(const Buffer_t* buffer, Point_t location)
 {
-     if(location->y < 0 || location->x < 0){
+     if(location.y < 0 || location.x < 0){
           return false;
      }
 
-     if(location->y >= buffer->line_count){
+     if(location.y >= buffer->line_count){
           return false;
      }
 
-     char* line = buffer->lines[location->y];
+     char* line = buffer->lines[location.y];
      int64_t line_len = 0;
 
      if(line) line_len = strlen(line);
 
-     if(location->x > line_len){
+     if(location.x > line_len){
           return false;
      }
 
@@ -177,33 +176,32 @@ bool ce_point_on_buffer(const Buffer_t* buffer, const Point_t* location)
 
 bool insert_line_impl(Buffer_t* buffer, int64_t line, const char* string);
 
-bool insert_char_impl(Buffer_t* buffer, const Point_t* location, char c)
+bool insert_char_impl(Buffer_t* buffer, Point_t location, char c)
 {
      CE_CHECK_PTR_ARG(buffer);
-     CE_CHECK_PTR_ARG(location);
 
-     if(buffer->line_count == 0 && location->x == 0 && location->y == 0) ce_alloc_lines(buffer, 1);
+     if(buffer->line_count == 0 && location.x == 0 && location.y == 0) ce_alloc_lines(buffer, 1);
 
      if(!ce_point_on_buffer(buffer, location)){
           return false;
      }
 
-     char* line = buffer->lines[location->y];
+     char* line = buffer->lines[location.y];
 
      if(c == NEWLINE){
           // copy the rest of the line to the next line
-          if(!insert_line_impl(buffer, location->y + 1, line + location->x)){
+          if(!insert_line_impl(buffer, location.y + 1, line + location.x)){
                return false;
           }
 
           // kill the rest of the current line
-          char* new_line = realloc(line, location->x + 1);
+          char* new_line = realloc(line, location.x + 1);
           if(!new_line){
                ce_message("%s() failed to alloc new line after split", __FUNCTION__);
                return false;
           }
-          new_line[location->x] = 0;
-          buffer->lines[location->y] = new_line;
+          new_line[location.x] = 0;
+          buffer->lines[location.y] = new_line;
           return true;
      }
 
@@ -219,24 +217,24 @@ bool insert_char_impl(Buffer_t* buffer, const Point_t* location, char c)
      }
 
      // copy before the insert, add the new char, copy after the insert
-     memmove(new_line + location->x + 1, new_line + location->x, line_len - location->x);
-     new_line[location->x] = c;
+     memmove(new_line + location.x + 1, new_line + location.x, line_len - location.x);
+     new_line[location.x] = c;
 
      // NULL terminate the newline, and free the old line
      new_line[new_len - 1] = 0;
-     buffer->lines[location->y] = new_line;
+     buffer->lines[location.y] = new_line;
      buffer->modified = true;
      return true;
 }
 
-bool ce_insert_char(Buffer_t* buffer, const Point_t* location, char c)
+bool ce_insert_char(Buffer_t* buffer, Point_t location, char c)
 {
      if(buffer->readonly) return false;
 
      return insert_char_impl(buffer, location, c);
 }
 
-bool ce_insert_char_readonly(Buffer_t* buffer, const Point_t* location, char c)
+bool ce_insert_char_readonly(Buffer_t* buffer, Point_t location, char c)
 {
      if(!buffer->readonly) return false;
 
@@ -251,7 +249,7 @@ bool ce_append_char(Buffer_t* buffer, char c)
           end.x = strlen(buffer->lines[end.y]);
      }
 
-     return ce_insert_char(buffer, &end, c);
+     return ce_insert_char(buffer, end, c);
 }
 
 bool ce_append_char_readonly(Buffer_t* buffer, char c)
@@ -262,18 +260,18 @@ bool ce_append_char_readonly(Buffer_t* buffer, char c)
           end.x = strlen(buffer->lines[end.y]);
      }
 
-     return ce_insert_char_readonly(buffer, &end, c);
+     return ce_insert_char_readonly(buffer, end, c);
 }
 
-bool insert_string_impl(Buffer_t* buffer, const Point_t* location, const char* new_string)
+bool insert_string_impl(Buffer_t* buffer, Point_t location, const char* new_string)
 {
-     if(location->x == 0 && location->y == 0){
+     if(location.x == 0 && location.y == 0){
           // pass
      }else{
           if(!ce_point_on_buffer(buffer, location)){
-               if(location->x == 0 && location->y == buffer->line_count){
+               if(location.x == 0 && location.y == buffer->line_count){
                     // append to end of file
-                    return insert_line_impl(buffer, location->y, new_string);
+                    return insert_line_impl(buffer, location.y, new_string);
                }else{
                     return false;
                }
@@ -317,11 +315,11 @@ bool insert_string_impl(Buffer_t* buffer, const Point_t* location, const char* n
           return true;
      }
 
-     char* current_line = buffer->lines[location->y];
+     char* current_line = buffer->lines[location.y];
      const char* first_part = current_line;
-     const char* second_part = current_line + location->x;
+     const char* second_part = current_line + location.x;
 
-     int64_t first_length = location->x;
+     int64_t first_length = location.x;
      int64_t second_length = strlen(second_part);
 
      // find the first line range
@@ -338,10 +336,10 @@ bool insert_string_impl(Buffer_t* buffer, const Point_t* location, const char* n
                return false;
           }
 
-          memmove(new_line + first_length + new_string_length, new_line + location->x, second_length);
+          memmove(new_line + first_length + new_string_length, new_line + location.x, second_length);
           memcpy(new_line + first_length, new_string, new_string_length);
           new_line[new_line_length] = 0;
-          buffer->lines[location->y] = new_line;
+          buffer->lines[location.y] = new_line;
      }else{
           // include the first part and the string up to the newline
           const char* itr = new_string;
@@ -359,7 +357,7 @@ bool insert_string_impl(Buffer_t* buffer, const Point_t* location, const char* n
           strncpy(new_line + first_length, new_string, first_new_line_length);
           new_line[new_line_length] = 0;
 
-          buffer->lines[location->y] = new_line;
+          buffer->lines[location.y] = new_line;
 
           // now start inserting lines
           int64_t lines_added = 1;
@@ -375,16 +373,16 @@ bool insert_string_impl(Buffer_t* buffer, const Point_t* location, const char* n
                     strncpy(new_line, itr, next_line_length);
                     memcpy(new_line + next_line_length, second_part, second_length);
                     new_line[new_line_length] = 0;
-                    insert_line_impl(buffer, location->y + lines_added, new_line);
+                    insert_line_impl(buffer, location.y + lines_added, new_line);
                     free(new_line);
                }else if(itr == end_of_line){
-                    insert_line_impl(buffer, location->y + lines_added, NULL);
+                    insert_line_impl(buffer, location.y + lines_added, NULL);
                }else{
                     new_line_length = end_of_line - itr;
                     new_line = malloc(new_line_length + 1);
                     strncpy(new_line, itr, new_line_length);
                     new_line[new_line_length] = 0;
-                    insert_line_impl(buffer, location->y + lines_added, new_line);
+                    insert_line_impl(buffer, location.y + lines_added, new_line);
                     free(new_line);
                }
 
@@ -397,10 +395,9 @@ bool insert_string_impl(Buffer_t* buffer, const Point_t* location, const char* n
      return true;
 }
 
-bool ce_insert_string(Buffer_t* buffer, const Point_t* location, const char* new_string)
+bool ce_insert_string(Buffer_t* buffer, Point_t location, const char* new_string)
 {
      CE_CHECK_PTR_ARG(buffer);
-     CE_CHECK_PTR_ARG(location);
      CE_CHECK_PTR_ARG(new_string);
 
      if(buffer->readonly) return false;
@@ -408,10 +405,9 @@ bool ce_insert_string(Buffer_t* buffer, const Point_t* location, const char* new
      return insert_string_impl(buffer, location, new_string);
 }
 
-bool ce_insert_string_readonly(Buffer_t* buffer, const Point_t* location, const char* new_string)
+bool ce_insert_string_readonly(Buffer_t* buffer, Point_t location, const char* new_string)
 {
      CE_CHECK_PTR_ARG(buffer);
-     CE_CHECK_PTR_ARG(location);
      CE_CHECK_PTR_ARG(new_string);
 
      if(!buffer->readonly) return false;
@@ -422,43 +418,42 @@ bool ce_insert_string_readonly(Buffer_t* buffer, const Point_t* location, const 
 bool ce_prepend_string(Buffer_t* buffer, int64_t line, const char* new_string)
 {
      Point_t beginning_of_line = {0, line};
-     return ce_insert_string(buffer, &beginning_of_line, new_string);
+     return ce_insert_string(buffer, beginning_of_line, new_string);
 }
 
 bool ce_append_string(Buffer_t* buffer, int64_t line, const char* new_string)
 {
      Point_t end_of_line = {0, line};
      if(buffer->line_count > line) end_of_line.x = strlen(buffer->lines[line]);
-     return ce_insert_string(buffer, &end_of_line, new_string);
+     return ce_insert_string(buffer, end_of_line, new_string);
 }
 
 bool ce_append_string_readonly(Buffer_t* buffer, int64_t line, const char* new_string)
 {
      Point_t end_of_line = {0, line};
      if(buffer->line_count > line) end_of_line.x = strlen(buffer->lines[line]);
-     return ce_insert_string_readonly(buffer, &end_of_line, new_string);
+     return ce_insert_string_readonly(buffer, end_of_line, new_string);
 }
 
-bool ce_remove_char(Buffer_t* buffer, const Point_t* location)
+bool ce_remove_char(Buffer_t* buffer, Point_t location)
 {
      CE_CHECK_PTR_ARG(buffer);
-     CE_CHECK_PTR_ARG(location);
 
      if(buffer->readonly) return false;
 
      if(!ce_point_on_buffer(buffer, location)) return false;
 
-     char* line = buffer->lines[location->y];
+     char* line = buffer->lines[location.y];
      int64_t line_len = strlen(line);
 
      // remove the line from the list if it is empty
      if(line_len == 0){
-          return ce_remove_line(buffer, location->y);
+          return ce_remove_line(buffer, location.y);
      }
 
-     if(location->x == line_len){
+     if(location.x == line_len){
           // removing the newline at the end of the line
-          return ce_join_line(buffer, location->y);
+          return ce_join_line(buffer, location.y);
      }
 
      // NOTE: mallocing a new line because I'm thinking about overall memory usage here
@@ -466,35 +461,33 @@ bool ce_remove_char(Buffer_t* buffer, const Point_t* location)
      char* new_line = malloc(line_len);
 
      // copy before the removed char copy after the removed char
-     for(int64_t i = 0; i <= location->x; ++i){new_line[i] = line[i];}
-     for(int64_t i = location->x + 1; i < line_len; ++i){new_line[i-1] = line[i];}
+     for(int64_t i = 0; i <= location.x; ++i){new_line[i] = line[i];}
+     for(int64_t i = location.x + 1; i < line_len; ++i){new_line[i-1] = line[i];}
      new_line[line_len-1] = 0;
 
      free(line);
-     buffer->lines[location->y] = new_line;
+     buffer->lines[location.y] = new_line;
 
      buffer->modified = true;
      return true;
 }
 
-char* ce_dupe_string(const Buffer_t* buffer, const Point_t* start, const Point_t* end)
+char* ce_dupe_string(const Buffer_t* buffer, Point_t start, Point_t end)
 {
      CE_CHECK_PTR_ARG(buffer);
-     CE_CHECK_PTR_ARG(start);
-     CE_CHECK_PTR_ARG(end);
 
      int64_t total_len = ce_compute_length(buffer, start, end);
      assert(total_len);
 
-     if(start->y == end->y){
+     if(start.y == end.y){
           // single line allocation
           char* new_str = malloc(total_len + 1);
           if(!new_str){
                ce_message("%s() failed to alloc string", __FUNCTION__);
                return NULL;
           }
-          memcpy(new_str, buffer->lines[start->y] + start->x, total_len);
-          if(start->x != start->y && !new_str[total_len-1]) new_str[total_len-1] = '\n';
+          memcpy(new_str, buffer->lines[start.y] + start.x, total_len);
+          if(start.x != start.y && !new_str[total_len-1]) new_str[total_len-1] = '\n';
           new_str[total_len] = 0;
 
           return new_str;
@@ -510,19 +503,19 @@ char* ce_dupe_string(const Buffer_t* buffer, const Point_t* start, const Point_t
      }
 
      char* itr = new_str;
-     int64_t len = strlen(buffer->lines[start->y] + start->x);
-     if(len) memcpy(itr, buffer->lines[start->y] + start->x, len);
+     int64_t len = strlen(buffer->lines[start.y] + start.x);
+     if(len) memcpy(itr, buffer->lines[start.y] + start.x, len);
      itr[len] = '\n'; // add newline
      itr += len + 1;
 
-     for(int64_t i = start->y + 1; i < end->y; ++i){
+     for(int64_t i = start.y + 1; i < end.y; ++i){
           len = strlen(buffer->lines[i]);
           memcpy(itr, buffer->lines[i], len);
           itr[len] = '\n';
           itr += len + 1;
      }
 
-     memcpy(itr, buffer->lines[end->y], end->x+1);
+     memcpy(itr, buffer->lines[end.y], end.x+1);
      // if the end cursor is on the NUL terminator, append newline
      if(!new_str[total_len-1]) new_str[total_len-1] = '\n';
      new_str[total_len] = 0;
@@ -609,7 +602,7 @@ char* ce_dupe_buffer(const Buffer_t* buffer)
      Point_t start = {0, 0};
      Point_t end = {0, 0};
      ce_move_cursor_to_end_of_file(buffer, &end);
-     return ce_dupe_string(buffer, &start, &end);
+     return ce_dupe_string(buffer, start, end);
 }
 
 // returns the delta to the matching character; return success
@@ -619,7 +612,7 @@ bool ce_move_cursor_to_matching_pair(const Buffer_t* buffer, Point_t* location)
      CE_CHECK_PTR_ARG(location);
 
      char matchee, match;
-     if(!ce_get_char(buffer, location, &matchee)) return false;
+     if(!ce_get_char(buffer, *location, &matchee)) return false;
 
      Direction_t d;
      switch(matchee){
@@ -670,8 +663,8 @@ bool ce_move_cursor_to_matching_pair(const Buffer_t* buffer, Point_t* location)
           if(iter.y != location->y) iter.x = (d == CE_UP) ? ce_last_index(buffer->lines[iter.y]) : 0;
 
           // loop over buffer
-          for(; ce_point_on_buffer(buffer, &iter); iter.x +=d){
-               ce_get_char(buffer, &iter, &curr);
+          for(; ce_point_on_buffer(buffer, iter); iter.x +=d){
+               ce_get_char(buffer, iter, &curr);
 
                // loop over line
                if(curr == match){
@@ -688,14 +681,13 @@ bool ce_move_cursor_to_matching_pair(const Buffer_t* buffer, Point_t* location)
 }
 
 // returns Point_t at the next matching string; return success
-bool ce_find_string(const Buffer_t* buffer, const Point_t* location, const char* search_str, Point_t* match, Direction_t direction)
+bool ce_find_string(const Buffer_t* buffer, Point_t location, const char* search_str, Point_t* match, Direction_t direction)
 {
      CE_CHECK_PTR_ARG(buffer);
-     CE_CHECK_PTR_ARG(location);
      CE_CHECK_PTR_ARG(search_str);
      CE_CHECK_PTR_ARG(match);
 
-     Point_t search_loc = *location;
+     Point_t search_loc = location;
      ce_advance_cursor(buffer, &search_loc, 1);
      char* line_str = &buffer->lines[search_loc.y][search_loc.x];
 
@@ -716,7 +708,7 @@ bool ce_find_string(const Buffer_t* buffer, const Point_t* location, const char*
 
 void ce_move_cursor_to_beginning_of_line(const Buffer_t* buffer __attribute__((unused)), Point_t* cursor)
 {
-     assert(ce_point_on_buffer(buffer, cursor));
+     assert(ce_point_on_buffer(buffer, *cursor));
      cursor->x = 0;
 }
 
@@ -725,7 +717,7 @@ bool ce_move_cursor_to_soft_beginning_of_line(const Buffer_t* buffer, Point_t* c
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
 
-     if(!ce_point_on_buffer(buffer, cursor)) return false;
+     if(!ce_point_on_buffer(buffer, *cursor)) return false;
      const char* line = buffer->lines[cursor->y];
      int64_t line_len = strlen(line);
      int i;
@@ -740,7 +732,7 @@ bool ce_move_cursor_to_soft_end_of_line(const Buffer_t* buffer, Point_t* cursor)
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
 
-     if(!ce_point_on_buffer(buffer, cursor)) return false;
+     if(!ce_point_on_buffer(buffer, *cursor)) return false;
      const char* line = buffer->lines[cursor->y];
      int64_t i = CE_MAX((int64_t) strlen(line) - 1, 0);
      while(i>0 && isblank(line[i])) i--;
@@ -761,7 +753,7 @@ bool ce_move_cursor_to_beginning_of_word(const Buffer_t* buffer, Point_t* cursor
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
 
-     assert(ce_point_on_buffer(buffer, cursor));
+     assert(ce_point_on_buffer(buffer, *cursor));
 
      const char* line = buffer->lines[cursor->y];
      while(cursor->x > 0){
@@ -786,7 +778,7 @@ bool ce_move_cursor_to_end_of_word(const Buffer_t* buffer, Point_t* location, bo
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
 
-     if(!ce_point_on_buffer(buffer, location)) return false;
+     if(!ce_point_on_buffer(buffer, *location)) return false;
      const char* line = buffer->lines[location->y];
      int line_len = strlen(line);
      bool start_outside_word = false;
@@ -829,7 +821,7 @@ bool ce_move_cursor_to_next_word(const Buffer_t* buffer, Point_t* location, bool
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
 
-     if(!ce_point_on_buffer(buffer, location)) return false;
+     if(!ce_point_on_buffer(buffer, *location)) return false;
      const char* line = buffer->lines[location->y];
      int line_len = strlen(line);
      int64_t first_check = location->x + 1;
@@ -861,7 +853,7 @@ bool ce_move_cursor_forward_to_char(const Buffer_t* buffer, Point_t* location, c
 
      Point_t next_location = {location->x + 1, location->y};
 
-     if(!ce_point_on_buffer(buffer, &next_location)) return false;
+     if(!ce_point_on_buffer(buffer, next_location)) return false;
 
      char* line = buffer->lines[next_location.y];
      const char* found_char = strchr(line + next_location.x, c);
@@ -876,7 +868,7 @@ bool ce_move_cursor_backward_to_char(const Buffer_t* buffer, Point_t* location, 
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
 
-     if(!ce_point_on_buffer(buffer, location)) return false;
+     if(!ce_point_on_buffer(buffer, *location)) return false;
 
      char* line = buffer->lines[location->y];
      const char* found_char = memrchr(line, c, location->x);
@@ -886,33 +878,30 @@ bool ce_move_cursor_backward_to_char(const Buffer_t* buffer, Point_t* location, 
      return true;
 }
 
-bool ce_get_char(const Buffer_t* buffer, const Point_t* location, char* c)
+bool ce_get_char(const Buffer_t* buffer, Point_t location, char* c)
 {
      CE_CHECK_PTR_ARG(buffer);
-     CE_CHECK_PTR_ARG(location);
      // NOTE: this assert seems to be pretty useful for debugging
 
      if(!ce_point_on_buffer(buffer, location)) return false;
 
-     *c = buffer->lines[location->y][location->x];
+     *c = buffer->lines[location.y][location.x];
 
      if(*c == 0) *c = NEWLINE;
 
      return true;
 }
 
-char ce_get_char_raw(const Buffer_t* buffer, const Point_t* location)
+char ce_get_char_raw(const Buffer_t* buffer, Point_t location)
 {
      CE_CHECK_PTR_ARG(buffer);
-     CE_CHECK_PTR_ARG(location);
 
-     return buffer->lines[location->y][location->x];
+     return buffer->lines[location.y][location.x];
 }
 
-bool ce_set_char(Buffer_t* buffer, const Point_t* location, char c)
+bool ce_set_char(Buffer_t* buffer, Point_t location, char c)
 {
      CE_CHECK_PTR_ARG(buffer);
-     CE_CHECK_PTR_ARG(location);
 
      if(buffer->readonly) return false;
 
@@ -920,7 +909,7 @@ bool ce_set_char(Buffer_t* buffer, const Point_t* location, char c)
 
      if(c == NEWLINE) return ce_insert_string(buffer, location, "\n");
 
-     buffer->lines[location->y][location->x] = c;
+     buffer->lines[location.y][location.x] = c;
      buffer->modified = true;
      return true;
 }
@@ -1063,10 +1052,9 @@ bool ce_remove_line(Buffer_t* buffer, int64_t line)
      return true;
 }
 
-bool ce_remove_string(Buffer_t* buffer, const Point_t* location, int64_t length)
+bool ce_remove_string(Buffer_t* buffer, Point_t location, int64_t length)
 {
      CE_CHECK_PTR_ARG(buffer);
-     CE_CHECK_PTR_ARG(location);
 
      if(buffer->readonly) return false;
 
@@ -1077,20 +1065,20 @@ bool ce_remove_string(Buffer_t* buffer, const Point_t* location, int64_t length)
 
      if(!ce_point_on_buffer(buffer, location)) return false;
 
-     int64_t current_line_len = strlen(buffer->lines[location->y]);
-     int64_t rest_of_the_line_len = (current_line_len - location->x);
+     int64_t current_line_len = strlen(buffer->lines[location.y]);
+     int64_t rest_of_the_line_len = (current_line_len - location.x);
 
      // easy case: string is on a single line
      if(length <= rest_of_the_line_len){
           int64_t new_line_len = current_line_len - length;
-          memmove(buffer->lines[location->y] + location->x,
-                  buffer->lines[location->y] + location->x + length,
-                  current_line_len - (location->x + length));
-          buffer->lines[location->y][new_line_len] = 0;
+          memmove(buffer->lines[location.y] + location.x,
+                  buffer->lines[location.y] + location.x + length,
+                  current_line_len - (location.x + length));
+          buffer->lines[location.y][new_line_len] = 0;
 
           // shrink the allocation now that we have fixed up the line
-          buffer->lines[location->y] = realloc(buffer->lines[location->y], new_line_len + 1);
-          if(!buffer->lines[location->y]){
+          buffer->lines[location.y] = realloc(buffer->lines[location.y], new_line_len + 1);
+          if(!buffer->lines[location.y]){
                ce_message("%s() failed to realloc new line", __FUNCTION__);
                return false;
           }
@@ -1100,15 +1088,15 @@ bool ce_remove_string(Buffer_t* buffer, const Point_t* location, int64_t length)
 
      // don't delete the rest of the first line yet, we'll do this when we mash the first and last lines
      length -= rest_of_the_line_len + 1; // account for newline
-     buffer->lines[location->y][location->x] = '\0';
+     buffer->lines[location.y][location.x] = '\0';
      if(length == 0){
-          ce_remove_line(buffer, location->y);
+          ce_remove_line(buffer, location.y);
           buffer->modified = true;
           return true;
      }
 
      // hard case: string spans multiple lines
-     int64_t delete_index = location->y + 1;
+     int64_t delete_index = location.y + 1;
 
      while(length >= 0){
           assert(delete_index <= buffer->line_count);
@@ -1123,17 +1111,17 @@ bool ce_remove_string(Buffer_t* buffer, const Point_t* location, int64_t length)
                // NOTE: this is only run once
                // slurp up end of first line and beginning of last line
                int64_t next_line_part_len = next_line_len - length;
-               int64_t new_line_len = location->x + next_line_part_len;
-               buffer->lines[location->y] = realloc(buffer->lines[location->y], new_line_len + 1);
-               if(!buffer->lines[location->y]){
+               int64_t new_line_len = location.x + next_line_part_len;
+               buffer->lines[location.y] = realloc(buffer->lines[location.y], new_line_len + 1);
+               if(!buffer->lines[location.y]){
                     ce_message("%s() failed to realloc new line", __FUNCTION__);
                     return false;
                }
 
-               assert(buffer->lines[location->y+1][length+next_line_part_len] == '\0');
-               memcpy(buffer->lines[location->y] + location->x,
-                      buffer->lines[location->y+1] + length, next_line_part_len + 1);
-               ce_remove_line(buffer, location->y+1);
+               assert(buffer->lines[location.y+1][length+next_line_part_len] == '\0');
+               memcpy(buffer->lines[location.y] + location.x,
+                      buffer->lines[location.y+1] + length, next_line_part_len + 1);
+               ce_remove_line(buffer, location.y+1);
                break;
           }
      }
@@ -1467,7 +1455,7 @@ int set_color(Syntax_t syntax, bool highlighted)
 
 static const char non_printable_repr = '~';
 
-bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor,const Point_t* term_top_left,
+bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t* term_top_left,
                     const Point_t* term_bottom_right, const Point_t* buffer_top_left, const char* highlight_word)
 {
      CE_CHECK_PTR_ARG(buffer);
@@ -1695,7 +1683,7 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor,const Point_t*
                for(int64_t c = 0; c < min; ++c){
                     // check for the highlight
                     Point_t point = {c + buffer_top_left->x, i};
-                    if(ce_point_in_range(&point, &buffer->highlight_start, &buffer->highlight_end)){
+                    if(ce_point_in_range(point, buffer->highlight_start, buffer->highlight_end)){
                          inside_highlight = true;
                          set_color(fg_color, inside_highlight);
                     }else{
@@ -1898,18 +1886,17 @@ bool ce_move_cursor_to_end_of_line(const Buffer_t* buffer, Point_t* cursor)
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
 
-     if(!ce_point_on_buffer(buffer, cursor)) return false;
+     if(!ce_point_on_buffer(buffer, *cursor)) return false;
 
      cursor->x = strlen(buffer->lines[cursor->y])-1;
      if(cursor->x < 0) cursor->x = 0;
      return true;
 }
 
-bool ce_set_cursor(const Buffer_t* buffer, Point_t* cursor, const Point_t* location)
+bool ce_set_cursor(const Buffer_t* buffer, Point_t* cursor, Point_t location)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
-     CE_CHECK_PTR_ARG(location);
 
      assert(cursor->x >= 0);
      assert(cursor->y >= 0);
@@ -1919,7 +1906,7 @@ bool ce_set_cursor(const Buffer_t* buffer, Point_t* cursor, const Point_t* locat
           return false;
      }
 
-     Point_t dst = *location;
+     Point_t dst = location;
 
      if(dst.x < 0) dst.x = 0;
      if(dst.y < 0) dst.y = 0;
@@ -1988,7 +1975,7 @@ bool ce_advance_cursor(const Buffer_t* buffer, Point_t* cursor, int64_t delta)
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
 
-     if(!ce_point_on_buffer(buffer, cursor)) return false;
+     if(!ce_point_on_buffer(buffer, *cursor)) return false;
      if(!delta) return true;
 
      Direction_t d = (delta > 0 ) ? CE_DOWN : CE_UP;
@@ -2051,33 +2038,32 @@ bool ce_move_cursor_to_beginning_of_file(const Buffer_t* buffer, Point_t* cursor
 }
 
 // TODO: Threshold for top, left, bottom and right before scrolling happens
-bool ce_follow_cursor(const Point_t* cursor, int64_t* left_column, int64_t* top_row, int64_t view_width, int64_t view_height,
+bool ce_follow_cursor(Point_t cursor, int64_t* left_column, int64_t* top_row, int64_t view_width, int64_t view_height,
                       bool at_terminal_width_edge, bool at_terminal_height_edge)
 {
-     CE_CHECK_PTR_ARG(cursor);
      CE_CHECK_PTR_ARG(top_row);
 
-     assert(cursor->x >= 0);
-     assert(cursor->y >= 0);
+     assert(cursor.x >= 0);
+     assert(cursor.y >= 0);
 
      if(!at_terminal_width_edge) view_width--;
      if(!at_terminal_height_edge) view_height--;
 
      int64_t bottom_row = *top_row + view_height;
 
-     if(cursor->y < *top_row){
-          *top_row = cursor->y;
-     }else if(cursor->y > bottom_row){
-          bottom_row = cursor->y;
+     if(cursor.y < *top_row){
+          *top_row = cursor.y;
+     }else if(cursor.y > bottom_row){
+          bottom_row = cursor.y;
           *top_row = bottom_row - view_height;
      }
 
      int64_t right_column = *left_column + view_width;
 
-     if(cursor->x < *left_column){
-          *left_column = cursor->x;
-     }else if(cursor->x > right_column){
-          right_column = cursor->x;
+     if(cursor.x < *left_column){
+          *left_column = cursor.x;
+     }else if(cursor.x > right_column){
+          right_column = cursor.x;
           *left_column = right_column - view_width;
      }
 
@@ -2087,108 +2073,90 @@ bool ce_follow_cursor(const Point_t* cursor, int64_t* left_column, int64_t* top_
      return true;
 }
 
-bool ce_commit_insert_char(BufferCommitNode_t** tail, const Point_t* start, const Point_t* undo_cursor, const Point_t* redo_cursor, char c)
+bool ce_commit_insert_char(BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor, char c)
 {
      CE_CHECK_PTR_ARG(tail);
-     CE_CHECK_PTR_ARG(start);
-     CE_CHECK_PTR_ARG(undo_cursor);
-     CE_CHECK_PTR_ARG(redo_cursor);
 
      BufferCommit_t change;
      change.type = BCT_INSERT_CHAR;
-     change.start = *start;
-     change.undo_cursor = *undo_cursor;
-     change.redo_cursor = *redo_cursor;
+     change.start = start;
+     change.undo_cursor = undo_cursor;
+     change.redo_cursor = redo_cursor;
      change.c = c;
 
      return ce_commit_change(tail, &change);
 }
 
-bool ce_commit_insert_string(BufferCommitNode_t** tail, const Point_t* start, const Point_t* undo_cursor, const Point_t* redo_cursor,  char* string)
+bool ce_commit_insert_string(BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor,  char* string)
 {
      CE_CHECK_PTR_ARG(tail);
-     CE_CHECK_PTR_ARG(start);
-     CE_CHECK_PTR_ARG(undo_cursor);
-     CE_CHECK_PTR_ARG(redo_cursor);
      CE_CHECK_PTR_ARG(string);
 
      BufferCommit_t change;
      change.type = BCT_INSERT_STRING;
-     change.start = *start;
-     change.undo_cursor = *undo_cursor;
-     change.redo_cursor = *redo_cursor;
+     change.start = start;
+     change.undo_cursor = undo_cursor;
+     change.redo_cursor = redo_cursor;
      change.str = string;
 
      return ce_commit_change(tail, &change);
 }
 
-bool ce_commit_remove_char(BufferCommitNode_t** tail, const Point_t* start, const Point_t* undo_cursor, const Point_t* redo_cursor, char c)
+bool ce_commit_remove_char(BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor, char c)
 {
      CE_CHECK_PTR_ARG(tail);
-     CE_CHECK_PTR_ARG(start);
-     CE_CHECK_PTR_ARG(undo_cursor);
-     CE_CHECK_PTR_ARG(redo_cursor);
 
      BufferCommit_t change;
      change.type = BCT_REMOVE_CHAR;
-     change.start = *start;
-     change.undo_cursor = *undo_cursor;
-     change.redo_cursor = *redo_cursor;
+     change.start = start;
+     change.undo_cursor = undo_cursor;
+     change.redo_cursor = redo_cursor;
      change.c = c;
 
      return ce_commit_change(tail, &change);
 }
 
-bool ce_commit_remove_string(BufferCommitNode_t** tail, const Point_t* start, const Point_t* undo_cursor, const Point_t* redo_cursor,  char* string)
+bool ce_commit_remove_string(BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor,  char* string)
 {
      CE_CHECK_PTR_ARG(tail);
-     CE_CHECK_PTR_ARG(start);
-     CE_CHECK_PTR_ARG(undo_cursor);
-     CE_CHECK_PTR_ARG(redo_cursor);
      CE_CHECK_PTR_ARG(string);
 
      BufferCommit_t change;
      change.type = BCT_REMOVE_STRING;
-     change.start = *start;
-     change.undo_cursor = *undo_cursor;
-     change.redo_cursor = *redo_cursor;
+     change.start = start;
+     change.undo_cursor = undo_cursor;
+     change.redo_cursor = redo_cursor;
      change.str = string;
 
      return ce_commit_change(tail, &change);
 }
 
-bool ce_commit_change_char(BufferCommitNode_t** tail, const Point_t* start, const Point_t* undo_cursor, const Point_t* redo_cursor, char c, char prev_c)
+bool ce_commit_change_char(BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor, char c, char prev_c)
 {
      CE_CHECK_PTR_ARG(tail);
-     CE_CHECK_PTR_ARG(start);
-     CE_CHECK_PTR_ARG(undo_cursor);
-     CE_CHECK_PTR_ARG(redo_cursor);
 
      BufferCommit_t change;
      change.type = BCT_CHANGE_CHAR;
-     change.start = *start;
-     change.undo_cursor = *undo_cursor;
-     change.redo_cursor = *redo_cursor;
+     change.start = start;
+     change.undo_cursor = undo_cursor;
+     change.redo_cursor = redo_cursor;
      change.c = c;
      change.prev_c = prev_c;
 
      return ce_commit_change(tail, &change);
 }
 
-bool ce_commit_change_string(BufferCommitNode_t** tail, const Point_t* start, const Point_t* undo_cursor, const Point_t* redo_cursor, char* new_string,  char* prev_string)
+bool ce_commit_change_string(BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor, char* new_string,  char* prev_string)
 {
      CE_CHECK_PTR_ARG(tail);
-     CE_CHECK_PTR_ARG(start);
-     CE_CHECK_PTR_ARG(undo_cursor);
-     CE_CHECK_PTR_ARG(redo_cursor);
      CE_CHECK_PTR_ARG(new_string);
      CE_CHECK_PTR_ARG(prev_string);
 
      BufferCommit_t change;
      change.type = BCT_CHANGE_STRING;
-     change.start = *start;
-     change.undo_cursor = *undo_cursor;
-     change.redo_cursor = *redo_cursor;
+     change.start = start;
+     change.undo_cursor = undo_cursor;
+     change.redo_cursor = redo_cursor;
      change.str = new_string;
      change.prev_str = prev_string;
 
@@ -2265,23 +2233,23 @@ bool ce_commit_undo(Buffer_t* buffer, BufferCommitNode_t** tail, Point_t* cursor
           ce_message("%s() empty undo history", __FUNCTION__);
           return false;
      case BCT_INSERT_CHAR:
-          ce_remove_char(buffer, &commit->start);
+          ce_remove_char(buffer, commit->start);
           break;
      case BCT_INSERT_STRING:
-          ce_remove_string(buffer, &commit->start, strlen(commit->str));
+          ce_remove_string(buffer, commit->start, strlen(commit->str));
           break;
      case BCT_REMOVE_CHAR:
-          ce_insert_char(buffer, &commit->start, commit->c);
+          ce_insert_char(buffer, commit->start, commit->c);
           break;
      case BCT_REMOVE_STRING:
-          ce_insert_string(buffer, &commit->start, commit->str);
+          ce_insert_string(buffer, commit->start, commit->str);
           break;
      case BCT_CHANGE_CHAR:
-          ce_set_char(buffer, &commit->start, commit->prev_c);
+          ce_set_char(buffer, commit->start, commit->prev_c);
           break;
      case BCT_CHANGE_STRING:
-          ce_remove_string(buffer, &commit->start, strlen(commit->str));
-          ce_insert_string(buffer, &commit->start, commit->prev_str);
+          ce_remove_string(buffer, commit->start, strlen(commit->str));
+          ce_insert_string(buffer, commit->start, commit->prev_str);
           break;
      }
 
@@ -2317,23 +2285,23 @@ bool ce_commit_redo(Buffer_t* buffer, BufferCommitNode_t** tail, Point_t* cursor
           ce_message("unsupported BufferCommitType_t: %d", commit->type);
           return false;
      case BCT_INSERT_CHAR:
-          ce_insert_char(buffer, &commit->start, commit->c);
+          ce_insert_char(buffer, commit->start, commit->c);
           break;
      case BCT_INSERT_STRING:
-          ce_insert_string(buffer, &commit->start, commit->str);
+          ce_insert_string(buffer, commit->start, commit->str);
           break;
      case BCT_REMOVE_CHAR:
-          ce_remove_char(buffer, &commit->start);
+          ce_remove_char(buffer, commit->start);
           break;
      case BCT_REMOVE_STRING:
-          ce_remove_string(buffer, &commit->start, strlen(commit->str));
+          ce_remove_string(buffer, commit->start, strlen(commit->str));
           break;
      case BCT_CHANGE_CHAR:
-          ce_set_char(buffer, &commit->start, commit->c);
+          ce_set_char(buffer, commit->start, commit->c);
           break;
      case BCT_CHANGE_STRING:
-          ce_remove_string(buffer, &commit->start, strlen(commit->prev_str));
-          ce_insert_string(buffer, &commit->start, commit->str);
+          ce_remove_string(buffer, commit->start, strlen(commit->prev_str));
+          ce_insert_string(buffer, commit->start, commit->str);
           break;
      }
 
@@ -2505,9 +2473,9 @@ bool ce_free_views(BufferView_t** head)
      return true;
 }
 
-bool calc_vertical_views(BufferView_t* view, const Point_t* top_left, const Point_t* bottom_right, bool already_calculated);
+bool calc_vertical_views(BufferView_t* view, Point_t top_left, Point_t bottom_right, bool already_calculated);
 
-bool calc_horizontal_views(BufferView_t* view, const Point_t* top_left, const Point_t* bottom_right, bool already_calculated)
+bool calc_horizontal_views(BufferView_t* view, Point_t top_left, Point_t bottom_right, bool already_calculated)
 {
      int64_t view_count = 0;
      BufferView_t* itr = view;
@@ -2516,9 +2484,9 @@ bool calc_horizontal_views(BufferView_t* view, const Point_t* top_left, const Po
           view_count++;
      }
 
-     int64_t shift = ((bottom_right->x - top_left->x) + 1) / view_count;
-     Point_t new_top_left = *top_left;
-     Point_t new_bottom_right = *bottom_right;
+     int64_t shift = ((bottom_right.x - top_left.x) + 1) / view_count;
+     Point_t new_top_left = top_left;
+     Point_t new_bottom_right = bottom_right;
      new_bottom_right.x = new_top_left.x + (shift - 1);
 
      itr = view;
@@ -2527,8 +2495,8 @@ bool calc_horizontal_views(BufferView_t* view, const Point_t* top_left, const Po
           // or if this is any view other than the first view
           // and we have a vertical view below us, then calculate the vertical views
           if(((!already_calculated && itr == view) || (itr != view)) && itr->next_vertical){
-               if(!itr->next_horizontal) new_bottom_right.x = bottom_right->x;
-               calc_vertical_views(itr, &new_top_left, &new_bottom_right, true);
+               if(!itr->next_horizontal) new_bottom_right.x = bottom_right.x;
+               calc_vertical_views(itr, new_top_left, new_bottom_right, true);
           }else{
                itr->top_left = new_top_left;
                itr->bottom_right = new_bottom_right;
@@ -2539,7 +2507,7 @@ bool calc_horizontal_views(BufferView_t* view, const Point_t* top_left, const Po
           if(itr->next_horizontal){
                new_bottom_right.x = new_top_left.x + (shift - 1);
           }else{
-               itr->bottom_right.x = bottom_right->x;
+               itr->bottom_right.x = bottom_right.x;
           }
 
           itr = itr->next_horizontal;
@@ -2548,7 +2516,7 @@ bool calc_horizontal_views(BufferView_t* view, const Point_t* top_left, const Po
      return true;
 }
 
-bool calc_vertical_views(BufferView_t* view, const Point_t* top_left, const Point_t* bottom_right, bool already_calculated)
+bool calc_vertical_views(BufferView_t* view, Point_t top_left, Point_t bottom_right, bool already_calculated)
 {
      int64_t view_count = 0;
      BufferView_t* itr = view;
@@ -2557,9 +2525,9 @@ bool calc_vertical_views(BufferView_t* view, const Point_t* top_left, const Poin
           view_count++;
      }
 
-     int64_t shift = ((bottom_right->y - top_left->y) + 1) / view_count;
-     Point_t new_top_left = *top_left;
-     Point_t new_bottom_right = *bottom_right;
+     int64_t shift = ((bottom_right.y - top_left.y) + 1) / view_count;
+     Point_t new_top_left = top_left;
+     Point_t new_bottom_right = bottom_right;
      new_bottom_right.y = new_top_left.y + (shift - 1);
 
      itr = view;
@@ -2568,8 +2536,8 @@ bool calc_vertical_views(BufferView_t* view, const Point_t* top_left, const Poin
           // or if this is any view other than the first view
           // and we have a horizontal view below us, then calculate the horizontal views
           if(((!already_calculated && itr == view) || (itr != view)) && itr->next_horizontal){
-               if(!itr->next_vertical) new_bottom_right.y = bottom_right->y;
-               calc_horizontal_views(itr, &new_top_left, &new_bottom_right, true);
+               if(!itr->next_vertical) new_bottom_right.y = bottom_right.y;
+               calc_horizontal_views(itr, new_top_left, new_bottom_right, true);
           }else{
                itr->top_left = new_top_left;
                itr->bottom_right = new_bottom_right;
@@ -2580,7 +2548,7 @@ bool calc_vertical_views(BufferView_t* view, const Point_t* top_left, const Poin
           if(itr->next_vertical){
                new_bottom_right.y = new_top_left.y + (shift - 1);
           }else{
-               itr->bottom_right.y = bottom_right->y;
+               itr->bottom_right.y = bottom_right.y;
           }
 
           itr = itr->next_vertical;
@@ -2589,7 +2557,7 @@ bool calc_vertical_views(BufferView_t* view, const Point_t* top_left, const Poin
      return true;
 }
 
-bool ce_calc_views(BufferView_t* view, const Point_t *top_left, const Point_t* bottom_right)
+bool ce_calc_views(BufferView_t* view, Point_t top_left, Point_t bottom_right)
 {
      CE_CHECK_PTR_ARG(view);
 
@@ -2664,15 +2632,13 @@ bool draw_vertical_views(const BufferView_t* view, bool already_drawn, const cha
      return true;
 }
 
-bool ce_connect_border_lines(const Point_t* location)
+bool ce_connect_border_lines(Point_t location)
 {
-     CE_CHECK_PTR_ARG(location);
-
      // connect the bottom and right borders based on ruleset
-     chtype left = mvinch(location->y, location->x - 1);
-     chtype right = mvinch(location->y, location->x + 1);
-     chtype top = mvinch(location->y - 1, location->x);
-     chtype bottom = mvinch(location->y + 1, location->x);
+     chtype left = mvinch(location.y, location.x - 1);
+     chtype right = mvinch(location.y, location.x + 1);
+     chtype top = mvinch(location.y - 1, location.x);
+     chtype bottom = mvinch(location.y + 1, location.x);
 
      // strip out the color info from each adjacent chtype
      left &= ~A_COLOR;
@@ -2681,27 +2647,27 @@ bool ce_connect_border_lines(const Point_t* location)
      bottom &= ~A_COLOR;
 
      if(left == ACS_HLINE && right == ACS_HLINE && top == ACS_VLINE){
-          move(location->y, location->x);
+          move(location.y, location.x);
           addch(ACS_BTEE);
      }
 
      if(left == ACS_HLINE && right == ACS_HLINE && bottom == ACS_VLINE){
-          move(location->y, location->x);
+          move(location.y, location.x);
           addch(ACS_TTEE);
      }
 
      if(top == ACS_VLINE && bottom == ACS_VLINE && left == ACS_HLINE){
-          move(location->y, location->x);
+          move(location.y, location.x);
           addch(ACS_RTEE);
      }
 
      if(top == ACS_VLINE && bottom == ACS_VLINE && right == ACS_HLINE){
-          move(location->y, location->x);
+          move(location.y, location.x);
           addch(ACS_LTEE);
      }
 
      if(top == ACS_VLINE && bottom == ACS_VLINE && right == ACS_HLINE && left == ACS_HLINE){
-          move(location->y, location->x);
+          move(location.y, location.x);
           addch(ACS_PLUS);
      }
 
@@ -2720,8 +2686,8 @@ bool connect_borders(const BufferView_t* view)
      Point_t bottom_right = {view->bottom_right.x, view->bottom_right.y};
      Point_t bottom_left = {view->top_left.x, view->bottom_right.y};
 
-     return ce_connect_border_lines(&top_left) && ce_connect_border_lines(&top_right) &&
-            ce_connect_border_lines(&bottom_right) && ce_connect_border_lines(&bottom_left);
+     return ce_connect_border_lines(top_left) && ce_connect_border_lines(top_right) &&
+            ce_connect_border_lines(bottom_right) && ce_connect_border_lines(bottom_left);
 }
 
 bool ce_draw_views(const BufferView_t* view, const char* highlight_word)
@@ -2736,10 +2702,10 @@ bool ce_draw_views(const BufferView_t* view, const char* highlight_word)
      return connect_borders(view);
 }
 
-BufferView_t* find_view_at_point(BufferView_t* view, const Point_t* point)
+BufferView_t* find_view_at_point(BufferView_t* view, Point_t point)
 {
-     if(point->x >= view->top_left.x && point->x <= view->bottom_right.x &&
-        point->y >= view->top_left.y && point->y <= view->bottom_right.y){
+     if(point.x >= view->top_left.x && point.x <= view->bottom_right.x &&
+        point.y >= view->top_left.y && point.y <= view->bottom_right.y){
           return view;
      }
 
@@ -2756,10 +2722,9 @@ BufferView_t* find_view_at_point(BufferView_t* view, const Point_t* point)
      return result;
 }
 
-BufferView_t* ce_find_view_at_point(BufferView_t* head, const Point_t* point)
+BufferView_t* ce_find_view_at_point(BufferView_t* head, Point_t point)
 {
      CE_CHECK_PTR_ARG(head);
-     CE_CHECK_PTR_ARG(point);
 
      return find_view_at_point(head, point);
 }
@@ -2801,11 +2766,9 @@ void* ce_memrchr(const void* s, int c, size_t n)
      return NULL;
 }
 
-int64_t ce_compute_length(const Buffer_t* buffer, const Point_t* start, const Point_t* end)
+int64_t ce_compute_length(const Buffer_t* buffer, Point_t start, Point_t end)
 {
      CE_CHECK_PTR_ARG(buffer);
-     CE_CHECK_PTR_ARG(start);
-     CE_CHECK_PTR_ARG(end);
 
      assert(ce_point_on_buffer(buffer, start));
      assert(ce_point_on_buffer(buffer, end));
@@ -2814,15 +2777,15 @@ int64_t ce_compute_length(const Buffer_t* buffer, const Point_t* start, const Po
 
      size_t length = 0;
 
-     if(start->y < end->y){
-          length = strlen(buffer->lines[start->y] + start->x) + 1; // account for newline
-          for(int64_t i = start->y + 1; i < end->y; ++i){
+     if(start.y < end.y){
+          length = strlen(buffer->lines[start.y] + start.x) + 1; // account for newline
+          for(int64_t i = start.y + 1; i < end.y; ++i){
                length += strlen(buffer->lines[i]) + 1; // account for newline
           }
-          length += end->x+1; // do not account for newline. end is inclusive
+          length += end.x+1; // do not account for newline. end is inclusive
      }else{
-          assert(start->y == end->y);
-          length += end->x+1 - start->x;
+          assert(start.y == end.y);
+          length += end.x+1 - start.x;
      }
 
      return length;
@@ -2840,18 +2803,18 @@ bool ce_get_homogenous_adjacents(const Buffer_t* buffer, Point_t* start, Point_t
      assert(memcmp(start, end, sizeof *start) == 0);
 
      char curr_char;
-     if(!ce_get_char(buffer, start, &curr_char)) return false;
+     if(!ce_get_char(buffer, *start, &curr_char)) return false;
 
      do{
           start->x--;
-          if(!ce_get_char(buffer, start, &curr_char)) break;
+          if(!ce_get_char(buffer, *start, &curr_char)) break;
      }while((*is_homogenous)(curr_char));
 
      start->x++; // the last character wasn't homogenous
 
      do{
           end->x++;
-          if(!ce_get_char(buffer, end, &curr_char)) break;
+          if(!ce_get_char(buffer, *end, &curr_char)) break;
      }while((*is_homogenous)(curr_char));
 
      end->x--; // the last character wasn't homogenous
@@ -2860,17 +2823,16 @@ bool ce_get_homogenous_adjacents(const Buffer_t* buffer, Point_t* start, Point_t
 }
 
 // word_start is inclusive, word_end is exclusive
-bool ce_get_word_at_location(const Buffer_t* buffer, const Point_t* location, Point_t* word_start, Point_t* word_end)
+bool ce_get_word_at_location(const Buffer_t* buffer, Point_t location, Point_t* word_start, Point_t* word_end)
 {
      CE_CHECK_PTR_ARG(buffer);
-     CE_CHECK_PTR_ARG(location);
      CE_CHECK_PTR_ARG(word_start);
      CE_CHECK_PTR_ARG(word_end);
 
-     *word_start = *location;
-     *word_end = *location;
+     *word_start = location;
+     *word_end = location;
      char curr_char;
-     bool success = ce_get_char(buffer, word_start, &curr_char);
+     bool success = ce_get_char(buffer, *word_start, &curr_char);
      if(!success) return false;
 
      if(ce_ispunct(curr_char)){
@@ -2887,24 +2849,23 @@ bool ce_get_word_at_location(const Buffer_t* buffer, const Point_t* location, Po
      return true;
 }
 
-int64_t ce_get_indentation_for_next_line(const Buffer_t* buffer, const Point_t* location, int64_t tab_len)
+int64_t ce_get_indentation_for_next_line(const Buffer_t* buffer, Point_t location, int64_t tab_len)
 {
      CE_CHECK_PTR_ARG(buffer);
-     CE_CHECK_PTR_ARG(location);
 
      // first, match this line's indentation
-     Point_t bol = *location;
+     Point_t bol = location;
      ce_move_cursor_to_soft_beginning_of_line(buffer, &bol);
      int64_t indent = bol.x;
 
      // then, check the line for a '{' that is unmatched on location's line + indent if you find one
      char curr;
-     for(Point_t iter = {ce_last_index(buffer->lines[location->y]), location->y};
-         ce_get_char(buffer, &iter, &curr);
+     for(Point_t iter = {ce_last_index(buffer->lines[location.y]), location.y};
+         ce_get_char(buffer, iter, &curr);
          iter.x--){
           if(curr == '{'){
                Point_t match = iter;
-               if(!ce_move_cursor_to_matching_pair(buffer, &match) || match.y != location->y){
+               if(!ce_move_cursor_to_matching_pair(buffer, &match) || match.y != location.y){
                     // '{' is globally unmatched, or unmatched on our line
                     indent += tab_len;
                     break; // if a line has "{{", we don't want to double tab the next line!
@@ -2916,25 +2877,25 @@ int64_t ce_get_indentation_for_next_line(const Buffer_t* buffer, const Point_t* 
 }
 
 // return a > b
-bool ce_point_after(const Point_t* a, const Point_t* b)
+bool ce_point_after(Point_t a, Point_t b)
 {
-     return b->y < a->y || (b->y == a->y && b->x < a->x);
+     return b.y < a.y || (b.y == a.y && b.x < a.x);
 }
 
 // if a > b, swap a and b
-void ce_sort_points(const Point_t** a, const Point_t** b)
+void ce_sort_points(const Point_t* a, const Point_t* b)
 {
      if(ce_point_after(*a, *b)){
-          const Point_t* temp = *a;
-          *a = *b;
-          *b = temp;
+          const Point_t* temp = a;
+          a = b;
+          b = temp;
      }
 }
 
-bool ce_point_in_range(const Point_t* p, const Point_t* start, const Point_t* end)
+bool ce_point_in_range(Point_t p, Point_t start, Point_t end)
 {
-    if( ((p->y == start->y && p->x >= start->x) || (p->y > start->y)) &&
-        ((p->y == end->y && p->x <= end->x) || (p->y < end->y )) ){
+    if( ((p.y == start.y && p.x >= start.x) || (p.y > start.y)) &&
+        ((p.y == end.y && p.x <= end.x) || (p.y < end.y )) ){
          return true;
     }
 

@@ -1527,7 +1527,7 @@ TEST(sanity_split_view)
      // draw views
      // NOTE: we are not initializing curses or anything, so the calls should be nops? We make the call to 
      //       ensure no crashes, but can't really validate anything
-     EXPECT(ce_draw_views(head, NULL));
+     EXPECT(ce_draw_views(head, NULL, LNT_NONE));
 
      // remove views
      ASSERT(ce_remove_view(&head, vertical_split_view) == true);

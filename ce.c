@@ -1728,9 +1728,6 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                     if(ce_point_in_range(point, buffer->highlight_start, buffer->highlight_end)){
                          highlight_type = HL_ON;
                          set_color(fg_color, highlight_type);
-                    }else if(cursor->y == i){
-                         highlight_type = HL_CURRENT_LINE;
-                         set_color(fg_color, highlight_type);
                     }else{
                          if(highlight_word && strncmp(buffer_line + c + buffer_top_left->x, highlight_word,
                                                       highlight_word_len) == 0){
@@ -1741,13 +1738,23 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                               if(highlighting_left){
                                    highlighting_left--;
                                    if(!highlighting_left){
-                                        highlight_type = HL_OFF;
+                                        if(cursor->y == i){
+                                             highlight_type = HL_CURRENT_LINE;
+                                        }else{
+                                             highlight_type = HL_OFF;
+                                        }
                                         set_color(fg_color, highlight_type);
                                    }
+                              }else if(cursor->y == i){
+                                   highlight_type = HL_CURRENT_LINE;
+                                   set_color(fg_color, highlight_type);
                               }else{
                                    highlight_type = HL_OFF;
                                    set_color(fg_color, highlight_type);
                               }
+                         }else if(cursor->y == i){
+                              highlight_type = HL_CURRENT_LINE;
+                              set_color(fg_color, highlight_type);
                          }
                     }
 

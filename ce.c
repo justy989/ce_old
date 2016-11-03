@@ -1451,7 +1451,7 @@ typedef enum {
      HL_CURRENT_LINE
 } HighlightType_t;
 
-int set_color(Syntax_t syntax, HighlightType_t highlight_type)
+static int set_color(Syntax_t syntax, HighlightType_t highlight_type)
 {
      standend();
 
@@ -1466,10 +1466,22 @@ int set_color(Syntax_t syntax, HighlightType_t highlight_type)
      return syntax;
 }
 
+static int64_t count_digits(int64_t n)
+{
+     int count = 0;
+     while(n > 0){
+          n /= 10;
+          count++;
+     }
+
+     return count;
+}
+
 static const char non_printable_repr = '~';
 
 bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t* term_top_left,
-                    const Point_t* term_bottom_right, const Point_t* buffer_top_left, const char* highlight_word)
+                    const Point_t* term_bottom_right, const Point_t* buffer_top_left, const char* highlight_word,
+                    LineNumberType_t line_number_type)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(term_top_left);
@@ -1550,8 +1562,22 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
 
      standend();
 
+     int64_t line_number_size = 0;
+     if(line_number_type != LNT_NONE){
+          line_number_size = count_digits(buffer->line_count);
+          max_width -= (line_number_size + 1);
+     }
+
      for(int64_t i = buffer_top_left->y; i <= last_line; ++i) {
           move(term_top_left->y + (i - buffer_top_left->y), term_top_left->x);
+
+          if(line_number_type){
+               set_color(S_LINE_NUMBERS, HL_OFF);
+               long value = i;
+               if(line_number_type == LNT_RELATIVE) value = abs((int)(cursor->y - i));
+               printw("%*d ", line_number_size, value);
+               standend();
+          }
 
           if(!buffer->lines[i][0]) continue;
           const char* buffer_line = buffer->lines[i];
@@ -2601,9 +2627,9 @@ void draw_view_bottom_right_borders(const BufferView_t* view)
      }
 }
 
-bool draw_vertical_views(const BufferView_t* view, bool already_drawn, const char* highlight_word);
+bool draw_vertical_views(const BufferView_t* view, bool already_drawn, const char* highlight_word, LineNumberType_t line_number_type);
 
-bool draw_horizontal_views(const BufferView_t* view, bool already_drawn, const char* highlight_word)
+bool draw_horizontal_views(const BufferView_t* view, bool already_drawn, const char* highlight_word, LineNumberType_t line_number_type)
 {
      const BufferView_t* itr = view;
      while(itr){
@@ -2611,13 +2637,13 @@ bool draw_horizontal_views(const BufferView_t* view, bool already_drawn, const c
           // or if this is any view other than the first view
           // and we have a horizontal view below us, then draw the horizontal views
           if(((!already_drawn && itr == view) || (itr != view)) && itr->next_vertical){
-               draw_vertical_views(itr, true, highlight_word);
+               draw_vertical_views(itr, true, highlight_word, line_number_type);
           }else{
                assert(itr->left_column >= 0);
                assert(itr->top_row >= 0);
                Point_t buffer_top_left = {itr->left_column, itr->top_row};
                ce_draw_buffer(itr->buffer, &itr->cursor, &itr->top_left, &itr->bottom_right, &buffer_top_left,
-                              highlight_word);
+                              highlight_word, line_number_type);
                draw_view_bottom_right_borders(itr);
           }
 
@@ -2627,7 +2653,7 @@ bool draw_horizontal_views(const BufferView_t* view, bool already_drawn, const c
      return true;
 }
 
-bool draw_vertical_views(const BufferView_t* view, bool already_drawn, const char* highlight_word)
+bool draw_vertical_views(const BufferView_t* view, bool already_drawn, const char* highlight_word, LineNumberType_t line_number_type)
 {
      const BufferView_t* itr = view;
      while(itr){
@@ -2635,11 +2661,11 @@ bool draw_vertical_views(const BufferView_t* view, bool already_drawn, const cha
           // or if this is any view other than the first view
           // and we have a vertical view below us, then draw the vertical views
           if(((!already_drawn && itr == view) || (itr != view)) && itr->next_horizontal){
-               draw_horizontal_views(itr, true, highlight_word);
+               draw_horizontal_views(itr, true, highlight_word, line_number_type);
           }else{
                Point_t buffer_top_left = {itr->left_column, itr->top_row};
                ce_draw_buffer(itr->buffer, &itr->cursor, &itr->top_left, &itr->bottom_right, &buffer_top_left,
-                              highlight_word);
+                              highlight_word, line_number_type);
                draw_view_bottom_right_borders(itr);
           }
 
@@ -2707,11 +2733,11 @@ bool connect_borders(const BufferView_t* view)
             ce_connect_border_lines(bottom_right) && ce_connect_border_lines(bottom_left);
 }
 
-bool ce_draw_views(const BufferView_t* view, const char* highlight_word)
+bool ce_draw_views(const BufferView_t* view, const char* highlight_word, LineNumberType_t line_number_type)
 {
      CE_CHECK_PTR_ARG(view);
 
-     if(!draw_horizontal_views(view, false, highlight_word)){
+     if(!draw_horizontal_views(view, false, highlight_word, line_number_type)){
           return false;
      }
 

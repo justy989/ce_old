@@ -61,6 +61,8 @@ typedef enum {
      S_DIFF_ADD_CURRENT_LINE,
      S_DIFF_REMOVE_CURRENT_LINE,
 
+     S_LINE_NUMBERS,
+
      S_TRAILING_WHITESPACE,
 
      S_BORDERS,
@@ -73,6 +75,12 @@ typedef enum {
 
      S_AUTO_COMPLETE,
 } Syntax_t;
+
+typedef enum {
+     LNT_NONE,
+     LNT_ABSOLUTE,
+     LNT_RELATIVE,
+} LineNumberType_t;
 
 #define CE_CHECK_PTR_ARG(arg)                                                 \
      if(!arg){                                                                \
@@ -194,7 +202,7 @@ bool ce_remove_buffer_from_list        (BufferNode_t* head, BufferNode_t** node)
 BufferView_t* ce_split_view       (BufferView_t* view, Buffer_t* buffer, bool horizontal);
 bool ce_remove_view               (BufferView_t** head, BufferView_t* view);
 bool ce_calc_views                (BufferView_t* head, Point_t top_left, Point_t top_right);
-bool ce_draw_views                (const BufferView_t* head, const char* highlight_word);
+bool ce_draw_views                (const BufferView_t* head, const char* highlight_word, LineNumberType_t line_number_type);
 bool ce_free_views                (BufferView_t** view);
 BufferView_t* ce_find_view_at_point (BufferView_t* head, Point_t point);
 BufferView_t* ce_buffer_in_view(BufferView_t* head, const Buffer_t* buffer);
@@ -239,7 +247,7 @@ bool ce_insert_newline          (Buffer_t* buffer, int64_t line);
 // Buffer Inspection Functions
 bool    ce_draw_buffer                   (const Buffer_t* buffer, const Point_t* cursor, const Point_t* term_top_left,
                                           const Point_t* term_bottom_right, const Point_t* buffer_top_left,
-                                          const char* highlight_word);
+                                          const char* highlight_word, LineNumberType_t line_number_type);
 bool    ce_save_buffer                   (Buffer_t* buffer, const char* filename);
 bool    ce_point_on_buffer               (const Buffer_t* buffer, Point_t location);
 bool    ce_get_char                      (const Buffer_t* buffer, Point_t location, char* c);

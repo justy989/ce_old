@@ -1596,6 +1596,7 @@ typedef struct{
      pthread_t shell_input_thread;
      AutoComplete_t auto_complete;
      VimAction_t last_vim_action;
+     LineNumberType_t line_number_type;
      bool quit;
 } ConfigState_t;
 
@@ -2027,6 +2028,8 @@ bool initializer(BufferNode_t* head, Point_t* terminal_dimensions, int argc, cha
           if(i == 0 && node) config_state->tab_current->view_current->buffer = node->buffer;
      }
 
+     config_state->line_number_type = LNT_ABSOLUTE;
+
      input_history_init(&config_state->shell_command_history);
      input_history_init(&config_state->shell_input_history);
      input_history_init(&config_state->search_history);
@@ -2068,6 +2071,8 @@ bool initializer(BufferNode_t* head, Point_t* terminal_dimensions, int argc, cha
      init_pair(S_FILEPATH_CURRENT_LINE, COLOR_BLUE, COLOR_BRIGHT_BLACK);
      init_pair(S_DIFF_ADD_CURRENT_LINE, COLOR_GREEN, COLOR_BRIGHT_BLACK);
      init_pair(S_DIFF_REMOVE_CURRENT_LINE, COLOR_RED, COLOR_BRIGHT_BLACK);
+
+     init_pair(S_LINE_NUMBERS, COLOR_WHITE, COLOR_BACKGROUND);
 
      init_pair(S_TRAILING_WHITESPACE, COLOR_FOREGROUND, COLOR_RED);
 
@@ -2561,10 +2566,11 @@ void update_buffer_list_buffer(ConfigState_t* config_state, const BufferNode_t* 
      config_state->buffer_list_buffer.readonly = true;
 }
 
-Point_t get_cursor_on_terminal(const Point_t* cursor, const BufferView_t* buffer_view)
+Point_t get_cursor_on_terminal(const Point_t* cursor, const BufferView_t* buffer_view, LineNumberType_t line_number_type)
 {
      Point_t p = {cursor->x - buffer_view->left_column + buffer_view->top_left.x,
-                cursor->y - buffer_view->top_row + buffer_view->top_left.y};
+                  cursor->y - buffer_view->top_row + buffer_view->top_left.y};
+     if(line_number_type) p.x += count_digits(buffer_view->buffer->line_count) + 1;
      return p;
 }
 
@@ -3735,7 +3741,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          return false;
                     }
 
-                    Point_t save_cursor_on_terminal = get_cursor_on_terminal(cursor, buffer_view);
+                    Point_t save_cursor_on_terminal = get_cursor_on_terminal(cursor, buffer_view, config_state->line_number_type);
                     config_state->tab_current->view_current->buffer->cursor = config_state->tab_current->view_current->cursor;
 
                     if(ce_remove_view(&config_state->tab_current->view_head, config_state->tab_current->view_current)){
@@ -4393,7 +4399,7 @@ void view_drawer(const BufferNode_t* head, void* user_data)
      }
 
      // NOTE: always draw from the head
-     ce_draw_views(config_state->tab_current->view_head, search);
+     ce_draw_views(config_state->tab_current->view_head, search, config_state->line_number_type);
 
      draw_view_statuses(config_state->tab_current->view_head, config_state->tab_current->view_current,
                         config_state->tab_current->view_overrideable, config_state->vim_mode, config_state->last_key);
@@ -4421,14 +4427,16 @@ void view_drawer(const BufferNode_t* head, void* user_data)
                }
           }
 
-          ce_draw_views(config_state->view_input, NULL);
+          ce_draw_views(config_state->view_input, NULL, LNT_NONE);
           draw_view_statuses(config_state->view_input, config_state->tab_current->view_current,
                              NULL, config_state->vim_mode, config_state->last_key);
      }
 
      // draw auto complete
      // TODO: don't draw over borders!
-     Point_t terminal_cursor = get_cursor_on_terminal(cursor, buffer_view);
+     Point_t terminal_cursor = get_cursor_on_terminal(cursor, buffer_view,
+                                                      buffer_view == config_state->view_input ? LNT_NONE :
+                                                                                                config_state->line_number_type);
      if(auto_completing(&config_state->auto_complete)){
           move(terminal_cursor.y, terminal_cursor.x);
           int64_t offset = cursor->x - config_state->auto_complete.start.x;

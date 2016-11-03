@@ -284,7 +284,8 @@ bool     ce_move_cursor_forward_to_char           (const Buffer_t* buffer, Point
 bool     ce_move_cursor_backward_to_char          (const Buffer_t* buffer, Point_t* cursor, char c);
 bool     ce_move_cursor_to_matching_pair          (const Buffer_t* buffer, Point_t* cursor);
 bool     ce_follow_cursor                         (Point_t cursor, int64_t* left_column, int64_t* top_row, int64_t view_width, int64_t view_height,
-                                                   bool at_terminal_width_edge, bool at_terminal_height_edge);
+                                                   bool at_terminal_width_edge, bool at_terminal_height_edge,
+                                                   LineNumberType_t line_number_type, int64_t line_count);
 
 // Undo/Redo Functions
 bool ce_commit_insert_char   (BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor, char c);

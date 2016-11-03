@@ -2367,23 +2367,24 @@ bool commit_input_to_history(Buffer_t* input_buffer, InputHistory_t* history)
      return true;
 }
 
-void view_follow_cursor(BufferView_t* current_view)
+void view_follow_cursor(BufferView_t* current_view, LineNumberType_t line_number_type)
 {
      ce_follow_cursor(current_view->cursor, &current_view->left_column, &current_view->top_row,
                       current_view->bottom_right.x - current_view->top_left.x,
                       current_view->bottom_right.y - current_view->top_left.y,
                       current_view->bottom_right.x == (g_terminal_dimensions->x - 1),
-                      current_view->bottom_right.y == (g_terminal_dimensions->y - 2));
+                      current_view->bottom_right.y == (g_terminal_dimensions->y - 2),
+                      line_number_type, current_view->buffer->line_count);
 }
 
-void split_view(BufferView_t* head_view, BufferView_t* current_view, bool horizontal)
+void split_view(BufferView_t* head_view, BufferView_t* current_view, bool horizontal, LineNumberType_t line_number_type)
 {
      BufferView_t* new_view = ce_split_view(current_view, current_view->buffer, horizontal);
      if(new_view){
           Point_t top_left = {0, 0};
           Point_t bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 1};
           ce_calc_views(head_view, top_left, bottom_right);
-          view_follow_cursor(current_view);
+          view_follow_cursor(current_view, line_number_type);
           new_view->cursor = current_view->cursor;
           new_view->top_row = current_view->top_row;
           new_view->left_column = current_view->left_column;
@@ -3745,11 +3746,11 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     break;
                case 7: // Ctrl + g
                {
-                    split_view(config_state->tab_current->view_head, config_state->tab_current->view_current, false);
+                    split_view(config_state->tab_current->view_head, config_state->tab_current->view_current, false, config_state->line_number_type);
                } break;
                case 22: // Ctrl + v
                {
-                    split_view(config_state->tab_current->view_head, config_state->tab_current->view_current, true);
+                    split_view(config_state->tab_current->view_head, config_state->tab_current->view_current, true, config_state->line_number_type);
                } break;
                case KEY_CLOSE: // Ctrl + q
                {
@@ -4401,7 +4402,7 @@ void view_drawer(const BufferNode_t* head, void* user_data)
           pthread_mutex_unlock(&view_input_save_lock);
      }
 
-     view_follow_cursor(buffer_view);
+     view_follow_cursor(buffer_view, config_state->line_number_type);
 
      // setup highlight
      if(config_state->vim_mode == VM_VISUAL_RANGE){

@@ -2091,12 +2091,15 @@ bool ce_move_cursor_to_beginning_of_file(const Buffer_t* buffer, Point_t* cursor
 
 // TODO: Threshold for top, left, bottom and right before scrolling happens
 bool ce_follow_cursor(Point_t cursor, int64_t* left_column, int64_t* top_row, int64_t view_width, int64_t view_height,
-                      bool at_terminal_width_edge, bool at_terminal_height_edge)
+                      bool at_terminal_width_edge, bool at_terminal_height_edge, LineNumberType_t line_number_type,
+                      int64_t line_count)
 {
      CE_CHECK_PTR_ARG(top_row);
 
      assert(cursor.x >= 0);
      assert(cursor.y >= 0);
+
+     if(line_number_type) cursor.x += count_digits(line_count) + 1;
 
      if(!at_terminal_width_edge) view_width--;
      if(!at_terminal_height_edge) view_height--;

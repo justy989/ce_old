@@ -2099,12 +2099,15 @@ bool ce_follow_cursor(Point_t cursor, int64_t* left_column, int64_t* top_row, in
      assert(cursor.x >= 0);
      assert(cursor.y >= 0);
 
-     if(line_number_type) cursor.x += count_digits(line_count) + 1;
-
      if(!at_terminal_width_edge) view_width--;
      if(!at_terminal_height_edge) view_height--;
 
      int64_t bottom_row = *top_row + view_height;
+     int64_t right_column = *left_column + view_width;
+     int64_t line_number_adjustment = 0;
+
+     // adjust based on line numbers
+     if(line_number_type) line_number_adjustment = (count_digits(line_count) + 1);
 
      if(cursor.y < *top_row){
           *top_row = cursor.y;
@@ -2113,12 +2116,10 @@ bool ce_follow_cursor(Point_t cursor, int64_t* left_column, int64_t* top_row, in
           *top_row = bottom_row - view_height;
      }
 
-     int64_t right_column = *left_column + view_width;
-
      if(cursor.x < *left_column){
           *left_column = cursor.x;
-     }else if(cursor.x > right_column){
-          right_column = cursor.x;
+     }else if(cursor.x > (right_column - line_number_adjustment)){
+          right_column = cursor.x + line_number_adjustment;
           *left_column = right_column - view_width;
      }
 

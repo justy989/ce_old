@@ -233,6 +233,7 @@ int isnotsinglequote(int c)
 typedef struct{
      BufferCommitNode_t* commit_tail;
      BackspaceNode_t* backspace_head;
+     int64_t cursor_save_column;
      struct MarkNode_t* mark_head;
 } BufferState_t;
 
@@ -1215,6 +1216,12 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
           break;
      case VCT_MOTION:
           *cursor = end;
+
+          if(action->motion.type == VMT_UP ||
+             action->motion.type == VMT_DOWN){
+               cursor->x = buffer_state->cursor_save_column;
+          }
+
           if(vim_mode == VM_VISUAL_RANGE){
                // expand the selection for some motions
                if(ce_point_after(*visual_start, *cursor) &&
@@ -1437,7 +1444,13 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
      *final_mode = action->end_in_vim_mode;
 
      if(action->end_in_vim_mode != VM_INSERT){
+          Point_t old_cursor = *cursor;
           ce_clamp_cursor(buffer, cursor);
+
+          if(old_cursor.x == cursor->x &&
+             old_cursor.y == cursor->y){
+               buffer_state->cursor_save_column = cursor->x;
+          }
      }
 
      return true;

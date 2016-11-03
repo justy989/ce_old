@@ -3870,9 +3870,11 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          // try to find a better place to put the cursor to start
                          BufferNode_t* itr = head;
                          int64_t buffer_index = 1;
+                         bool found_good_buffer = false;
                          while(itr){
                               if(!itr->buffer->readonly && !ce_buffer_in_view(config_state->tab_current->view_head, itr->buffer)){
                                    config_state->tab_current->view_current->cursor.y = buffer_index;
+                                   found_good_buffer = true;
                                    break;
                               }
                               itr = itr->next;
@@ -3884,7 +3886,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          config_state->tab_current->view_current->buffer->cursor = *cursor;
                          config_state->tab_current->view_current->buffer = &config_state->buffer_list_buffer;
                          config_state->tab_current->view_current->top_row = 0;
-                         config_state->tab_current->view_current->cursor = (Point_t){0, buffer_index};
+                         config_state->tab_current->view_current->cursor = (Point_t){0, found_good_buffer ? buffer_index : 1};
 
                     }
                     break;

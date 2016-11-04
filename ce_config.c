@@ -503,6 +503,8 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
           get_motion = false;
           built_action.motion.type = VMT_VISUAL_LINE;
           built_action.motion.visual_lines = visual_start->y - cursor->y;
+          if(built_action.motion.visual_lines < 0) built_action.motion.visual_lines = -built_action.motion.visual_lines;
+          built_action.motion.visual_start_after = ce_point_after(*visual_start, *cursor);
      }
 
      // get the change
@@ -899,7 +901,13 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
           action_range->start = *cursor;
           action_range->end = calc_visual_start;
      }else if(action->motion.type == VMT_VISUAL_LINE){
-          Point_t calc_visual_start = {cursor->x, cursor->y + action->motion.visual_lines};
+          Point_t calc_visual_start = *cursor;
+
+          if(action->motion.visual_start_after){
+               calc_visual_start.y += action->motion.visual_lines;
+          }else{
+               calc_visual_start.y -= action->motion.visual_lines;
+          }
 
           // in visual line mode, we need to figure out which points are first/last so that we can set the
           // start/end 'x's accordingly, to the beginning and end of line
@@ -3736,6 +3744,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
                               if(vim_action.change.type != VCT_MOTION || vim_action.end_in_vim_mode == VM_INSERT){
                                    config_state->last_vim_action = vim_action;
+                                   // always use the cursor as the start of the visual selection
+                                   config_state->last_vim_action.motion.visual_start_after = true;
                               }
                               // allow the command to be cleared
                          }

@@ -1270,7 +1270,7 @@ int64_t ce_is_c_typename(const char* line, int64_t start_offset)
      itr = line + start_offset;
      if(count >= 2 && itr[count-2] == '_' && itr[count-1] == 't') return count;
 
-#if 0
+#if 1
      // NOTE: Justin uses this while working on Bryte!
      if(isupper(*itr)){
           return count;
@@ -2129,7 +2129,7 @@ bool ce_follow_cursor(Point_t cursor, int64_t* left_column, int64_t* top_row, in
      return true;
 }
 
-bool ce_commit_insert_char(BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor, char c)
+bool ce_commit_insert_char(BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor, char c, BufferCommitChain_t chain)
 {
      CE_CHECK_PTR_ARG(tail);
 
@@ -2139,11 +2139,12 @@ bool ce_commit_insert_char(BufferCommitNode_t** tail, Point_t start, Point_t und
      change.undo_cursor = undo_cursor;
      change.redo_cursor = redo_cursor;
      change.c = c;
+     change.chain = chain;
 
      return ce_commit_change(tail, &change);
 }
 
-bool ce_commit_insert_string(BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor,  char* string)
+bool ce_commit_insert_string(BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor,  char* string, BufferCommitChain_t chain)
 {
      CE_CHECK_PTR_ARG(tail);
      CE_CHECK_PTR_ARG(string);
@@ -2154,11 +2155,12 @@ bool ce_commit_insert_string(BufferCommitNode_t** tail, Point_t start, Point_t u
      change.undo_cursor = undo_cursor;
      change.redo_cursor = redo_cursor;
      change.str = string;
+     change.chain = chain;
 
      return ce_commit_change(tail, &change);
 }
 
-bool ce_commit_remove_char(BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor, char c)
+bool ce_commit_remove_char(BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor, char c, BufferCommitChain_t chain)
 {
      CE_CHECK_PTR_ARG(tail);
 
@@ -2168,11 +2170,12 @@ bool ce_commit_remove_char(BufferCommitNode_t** tail, Point_t start, Point_t und
      change.undo_cursor = undo_cursor;
      change.redo_cursor = redo_cursor;
      change.c = c;
+     change.chain = chain;
 
      return ce_commit_change(tail, &change);
 }
 
-bool ce_commit_remove_string(BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor,  char* string)
+bool ce_commit_remove_string(BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor,  char* string, BufferCommitChain_t chain)
 {
      CE_CHECK_PTR_ARG(tail);
      CE_CHECK_PTR_ARG(string);
@@ -2183,11 +2186,12 @@ bool ce_commit_remove_string(BufferCommitNode_t** tail, Point_t start, Point_t u
      change.undo_cursor = undo_cursor;
      change.redo_cursor = redo_cursor;
      change.str = string;
+     change.chain = chain;
 
      return ce_commit_change(tail, &change);
 }
 
-bool ce_commit_change_char(BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor, char c, char prev_c)
+bool ce_commit_change_char(BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor, char c, char prev_c, BufferCommitChain_t chain)
 {
      CE_CHECK_PTR_ARG(tail);
 
@@ -2198,11 +2202,12 @@ bool ce_commit_change_char(BufferCommitNode_t** tail, Point_t start, Point_t und
      change.redo_cursor = redo_cursor;
      change.c = c;
      change.prev_c = prev_c;
+     change.chain = chain;
 
      return ce_commit_change(tail, &change);
 }
 
-bool ce_commit_change_string(BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor, char* new_string,  char* prev_string)
+bool ce_commit_change_string(BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor, char* new_string,  char* prev_string, BufferCommitChain_t chain)
 {
      CE_CHECK_PTR_ARG(tail);
      CE_CHECK_PTR_ARG(new_string);
@@ -2215,6 +2220,7 @@ bool ce_commit_change_string(BufferCommitNode_t** tail, Point_t start, Point_t u
      change.redo_cursor = redo_cursor;
      change.str = new_string;
      change.prev_str = prev_string;
+     change.chain = chain;
 
      return ce_commit_change(tail, &change);
 }
@@ -2278,39 +2284,42 @@ bool ce_commit_undo(Buffer_t* buffer, BufferCommitNode_t** tail, Point_t* cursor
           return false;
      }
 
-     BufferCommitNode_t* undo_commit = *tail;
-     BufferCommit_t* commit = &undo_commit->commit;
+     BufferCommit_t* commit;
 
-     switch(commit->type){
-     default:
-          ce_message("unsupported BufferCommitType_t: %d", commit->type);
-          return false;
-     case BCT_NONE:
-          ce_message("%s() empty undo history", __FUNCTION__);
-          return false;
-     case BCT_INSERT_CHAR:
-          ce_remove_char(buffer, commit->start);
-          break;
-     case BCT_INSERT_STRING:
-          ce_remove_string(buffer, commit->start, strlen(commit->str));
-          break;
-     case BCT_REMOVE_CHAR:
-          ce_insert_char(buffer, commit->start, commit->c);
-          break;
-     case BCT_REMOVE_STRING:
-          ce_insert_string(buffer, commit->start, commit->str);
-          break;
-     case BCT_CHANGE_CHAR:
-          ce_set_char(buffer, commit->start, commit->prev_c);
-          break;
-     case BCT_CHANGE_STRING:
-          ce_remove_string(buffer, commit->start, strlen(commit->str));
-          ce_insert_string(buffer, commit->start, commit->prev_str);
-          break;
-     }
+     do {
+          commit = &((*tail)->commit);
 
-     *cursor = *ce_clamp_cursor(buffer, &(*tail)->commit.undo_cursor);
-     *tail = (*tail)->prev;
+          switch(commit->type){
+          default:
+               ce_message("unsupported BufferCommitType_t: %d", commit->type);
+               return false;
+          case BCT_NONE:
+               ce_message("%s() empty undo history", __FUNCTION__);
+               return false;
+          case BCT_INSERT_CHAR:
+               ce_remove_char(buffer, commit->start);
+               break;
+          case BCT_INSERT_STRING:
+               ce_remove_string(buffer, commit->start, strlen(commit->str));
+               break;
+          case BCT_REMOVE_CHAR:
+               ce_insert_char(buffer, commit->start, commit->c);
+               break;
+          case BCT_REMOVE_STRING:
+               ce_insert_string(buffer, commit->start, commit->str);
+               break;
+          case BCT_CHANGE_CHAR:
+               ce_set_char(buffer, commit->start, commit->prev_c);
+               break;
+          case BCT_CHANGE_STRING:
+               ce_remove_string(buffer, commit->start, strlen(commit->str));
+               ce_insert_string(buffer, commit->start, commit->prev_str);
+               break;
+          }
+
+          *cursor = *ce_clamp_cursor(buffer, &(*tail)->commit.undo_cursor);
+          *tail = (*tail)->prev;
+     }while(*tail && (*tail)->commit.chain == BCC_KEEP_GOING);
 
      return true;
 }

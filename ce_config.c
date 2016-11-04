@@ -324,7 +324,7 @@ void remove_visual_range(Buffer_t* buffer, Point_t* cursor, Point_t* visual_star
      char* removed_str = ce_dupe_string(buffer, *a, *b);
      int64_t remove_len = ce_compute_length(buffer, *a, *b);
      if(ce_remove_string(buffer, *a, remove_len)){
-          ce_commit_remove_string(&buffer_state->commit_tail, *a, *cursor, *a, removed_str);
+          ce_commit_remove_string(&buffer_state->commit_tail, *a, *cursor, *a, removed_str, BCC_STOP);
           ce_set_cursor(buffer, cursor, *a);
      }else{
           free(removed_str);
@@ -349,7 +349,7 @@ void remove_visual_lines(Buffer_t* buffer, Point_t* cursor, Point_t* visual_star
      char* removed_str = ce_dupe_lines(buffer, start.y, end.y);
      int64_t remove_len = strlen(removed_str);
      if(ce_remove_string(buffer, start, remove_len)){
-          ce_commit_remove_string(&buffer_state->commit_tail, start, *cursor, start, removed_str);
+          ce_commit_remove_string(&buffer_state->commit_tail, start, *cursor, start, removed_str, BCC_STOP);
           ce_set_cursor(buffer, cursor, start);
      }else{
           free(removed_str);
@@ -848,7 +848,7 @@ void indent_line(Buffer_t* buffer, BufferCommitNode_t** commit_tail, int64_t lin
      if(!buffer->lines[line][0]) return;
      Point_t loc = {0, line};
      ce_insert_string(buffer, loc, TAB_STRING);
-     ce_commit_insert_string(commit_tail, loc, *cursor, *cursor, strdup(TAB_STRING));
+     ce_commit_insert_string(commit_tail, loc, *cursor, *cursor, strdup(TAB_STRING), BCC_STOP);
 }
 
 void unindent_line(Buffer_t* buffer, BufferCommitNode_t** commit_tail, int64_t line, Point_t* cursor)
@@ -870,7 +870,7 @@ void unindent_line(Buffer_t* buffer, BufferCommitNode_t** commit_tail, int64_t l
      if(whitespace_count){
           Point_t loc = {0, line};
           ce_remove_string(buffer, loc, whitespace_count);
-          ce_commit_remove_string(commit_tail, loc, *cursor, *cursor, strdup(TAB_STRING));
+          ce_commit_remove_string(commit_tail, loc, *cursor, *cursor, strdup(TAB_STRING), BCC_STOP);
      }
 }
 
@@ -1251,7 +1251,8 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                add_yank(yank_head, '"', yank_string, yank_mode);
           }
 
-          ce_commit_remove_string(&buffer_state->commit_tail, *sorted_start, *cursor, *sorted_start, commit_string);
+          BufferCommitChain_t chain = (action->end_in_vim_mode == VM_INSERT) ? BCC_KEEP_GOING : BCC_STOP;
+          ce_commit_remove_string(&buffer_state->commit_tail, *sorted_start, *cursor, *sorted_start, commit_string, chain);
      } break;
      case VCT_PASTE_BEFORE:
      {
@@ -1267,7 +1268,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                if(ce_insert_string(buffer, *sorted_start, yank->text)){
                     ce_commit_insert_string(&buffer_state->commit_tail,
                                             *sorted_start, *sorted_start, *sorted_start,
-                                            strdup(yank->text));
+                                            strdup(yank->text), BCC_STOP);
                }
           } break;
           case YANK_LINE:
@@ -1284,7 +1285,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                     if(ce_insert_string(buffer, insert_loc, save_str)){
                          ce_commit_insert_string(&buffer_state->commit_tail,
                                                  insert_loc, *cursor, cursor_loc,
-                                                 save_str);
+                                                 save_str, BCC_STOP);
                     }
           } break;
           }
@@ -1315,7 +1316,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                if(ce_insert_string(buffer, insert_cursor, yank->text)){
                     ce_commit_insert_string(&buffer_state->commit_tail,
                                             insert_cursor, *sorted_start, *sorted_start,
-                                            strdup(yank->text));
+                                            strdup(yank->text), BCC_STOP);
                     ce_advance_cursor(buffer, cursor, yank_len);
                }
           } break;
@@ -1332,7 +1333,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                if(ce_insert_string(buffer, insert_loc, save_str)){
                     ce_commit_insert_string(&buffer_state->commit_tail,
                                             insert_loc, *cursor, cursor_loc,
-                                            save_str);
+                                            save_str, BCC_STOP);
                     *cursor = cursor_loc;
                }
           } break;
@@ -1346,7 +1347,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
           if(!ce_set_char(buffer, *sorted_start, action->change.change_char)) return false;
 
           ce_commit_change_char(&buffer_state->commit_tail, *sorted_start, *cursor, *sorted_start,
-                                action->change.change_char, prev_char);
+                                action->change.change_char, prev_char, BCC_STOP);
      } break;
      case VCT_YANK:
      {
@@ -1398,7 +1399,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
 
                if(ce_insert_string(buffer, soft_beginning, VIM_COMMENT_STRING)){
                     ce_commit_insert_string(&buffer_state->commit_tail, soft_beginning, *cursor, *cursor,
-                                            strdup(VIM_COMMENT_STRING));
+                                            strdup(VIM_COMMENT_STRING), BCC_STOP);
                }
           }
      } break;
@@ -1413,7 +1414,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
 
                if(ce_remove_string(buffer, soft_beginning, strlen(VIM_COMMENT_STRING))){
                     ce_commit_remove_string(&buffer_state->commit_tail, soft_beginning, *cursor, *cursor,
-                                            strdup(VIM_COMMENT_STRING));
+                                            strdup(VIM_COMMENT_STRING), BCC_STOP);
                }
           }
      } break;
@@ -1433,7 +1434,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                          new_char = toupper(prev_char);
                     }
                     if(!ce_set_char(buffer, itr, new_char)) return false;
-                    ce_commit_change_char(&buffer_state->commit_tail, itr, itr, itr, new_char, prev_char);
+                    ce_commit_change_char(&buffer_state->commit_tail, itr, itr, itr, new_char, prev_char, BCC_STOP);
                }
 
                ce_advance_cursor(buffer, &itr, 1);
@@ -1823,7 +1824,8 @@ void commit_insert_mode_changes(InsertModeState_t* insert_state, Buffer_t* buffe
                                        insert_state->leftmost,
                                        insert_state->entered,
                                        *cursor,
-                                       inserted);
+                                       inserted,
+                                       BCC_STOP);
                insert_state->string = strdup(inserted);
                // NOTE: we could have added backspaces and just not used them
                backspace_free(&buffer_state->backspace_head);
@@ -1836,7 +1838,8 @@ void commit_insert_mode_changes(InsertModeState_t* insert_state, Buffer_t* buffe
                                             *cursor,
                                             insert_state->entered,
                                             *cursor,
-                                            backspace_get_string(buffer_state->backspace_head));
+                                            backspace_get_string(buffer_state->backspace_head),
+                                            BCC_STOP);
                     backspace_free(&buffer_state->backspace_head);
                }else{
                     // mixture of inserts and backspaces
@@ -1847,7 +1850,8 @@ void commit_insert_mode_changes(InsertModeState_t* insert_state, Buffer_t* buffe
                                             insert_state->entered,
                                             *cursor,
                                             inserted,
-                                            backspace_get_string(buffer_state->backspace_head));
+                                            backspace_get_string(buffer_state->backspace_head),
+                                            BCC_STOP);
                     insert_state->string = strdup(inserted);
                     backspace_free(&buffer_state->backspace_head);
                }
@@ -3045,7 +3049,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                          if(!ce_insert_string(buffer, match, replace_str)) break;
                     }
                     ce_commit_change_string(&buffer_state->commit_tail, match, match, match, strdup(replace_str),
-                                            strdup(search_str));
+                                            strdup(search_str), BCC_STOP);
                     begin = match;
                     replace_count++;
                }
@@ -3143,11 +3147,11 @@ void repeat_insert_actions(InsertModeState_t* insert_state, Buffer_t* buffer, Po
                                  insert_state->backspaces);
                ce_commit_change_string(&buffer_state->commit_tail, replay, *cursor,
                                        end, strdup(insert_state->string),
-                                       removed_string);
+                                       removed_string, BCC_STOP);
                *cursor = end;
           }else{
                ce_commit_remove_string(&buffer_state->commit_tail, replay, *cursor,
-                                       replay, removed_string);
+                                       replay, removed_string, BCC_STOP);
                *cursor = replay;
           }
      }else if(insert_state->string){
@@ -3155,7 +3159,7 @@ void repeat_insert_actions(InsertModeState_t* insert_state, Buffer_t* buffer, Po
           Point_t end = *cursor;
           ce_advance_cursor(buffer, &end, strlen(insert_state->string));
           ce_commit_insert_string(&buffer_state->commit_tail, replay, *cursor,
-                                  end, strdup(insert_state->string));
+                                  end, strdup(insert_state->string), BCC_STOP);
           *cursor = end;
      }
 }
@@ -3715,7 +3719,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     assert(save_str[0] == '\n');
                     if(ce_remove_string(buffer, join_loc, ce_compute_length(buffer, join_loc, end_join_loc))){
                          ce_insert_string(buffer, join_loc, " ");
-                         ce_commit_change_string(&buffer_state->commit_tail, join_loc, *cursor, *cursor, strdup("\n"), save_str);
+                         ce_commit_change_string(&buffer_state->commit_tail, join_loc, *cursor, *cursor, strdup("\n"), save_str, BCC_STOP);
                     }
                } break;
                case 'O':
@@ -3731,7 +3735,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
 
                     if(ce_insert_string(buffer, begin_line, indent_nl)){
                          *cursor = (Point_t){indent_len, cursor->y};
-                         ce_commit_insert_string(&buffer_state->commit_tail, begin_line, *cursor, *cursor, indent_nl);
+                         ce_commit_insert_string(&buffer_state->commit_tail, begin_line, *cursor, *cursor, indent_nl, BCC_STOP);
                          enter_insert_mode(config_state, cursor);
                     }
                } break;
@@ -3750,7 +3754,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     if(ce_insert_string(buffer, end_of_line, nl_indent)){
                          Point_t save_cursor = *cursor;
                          *cursor = (Point_t){indent_len, cursor->y + 1};
-                         ce_commit_insert_string(&buffer_state->commit_tail, end_of_line, save_cursor, *cursor, nl_indent);
+                         ce_commit_insert_string(&buffer_state->commit_tail, end_of_line, save_cursor, *cursor, nl_indent, BCC_STOP);
                          enter_insert_mode(config_state, cursor);
                     }
                } break;
@@ -3902,7 +3906,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                {
                     char c;
                     if(ce_get_char(buffer, *cursor, &c) && ce_remove_char(buffer, *cursor)){
-                         ce_commit_remove_char(&buffer_state->commit_tail, *cursor, *cursor, *cursor, c);
+                         ce_commit_remove_char(&buffer_state->commit_tail, *cursor, *cursor, *cursor, c, BCC_STOP);
                          ce_clamp_cursor(buffer, cursor);
                     }
                }

@@ -139,8 +139,14 @@ typedef enum {
      BCT_CHANGE_STRING,
 } BufferCommitType_t;
 
+typedef enum {
+     BCC_STOP,
+     BCC_KEEP_GOING,
+} BufferCommitChain_t;
+
 typedef struct {
      BufferCommitType_t type;
+     BufferCommitChain_t chain;
      Point_t start;
      Point_t undo_cursor;
      Point_t redo_cursor;
@@ -288,13 +294,13 @@ bool     ce_follow_cursor                         (Point_t cursor, int64_t* left
                                                    LineNumberType_t line_number_type, int64_t line_count);
 
 // Undo/Redo Functions
-bool ce_commit_insert_char   (BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor, char c);
-bool ce_commit_remove_char   (BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor, char c);
-bool ce_commit_change_char   (BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor, char c, char prev_c);
+bool ce_commit_insert_char   (BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor, char c, BufferCommitChain_t chain);
+bool ce_commit_remove_char   (BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor, char c, BufferCommitChain_t chain);
+bool ce_commit_change_char   (BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor, char c, char prev_c, BufferCommitChain_t chain);
 
-bool ce_commit_insert_string (BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor, char* string);
-bool ce_commit_remove_string (BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor, char* string);
-bool ce_commit_change_string (BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor, char* new_string, char* prev_string);
+bool ce_commit_insert_string (BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor, char* string, BufferCommitChain_t chain);
+bool ce_commit_remove_string (BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor, char* string, BufferCommitChain_t chain);
+bool ce_commit_change_string (BufferCommitNode_t** tail, Point_t start, Point_t undo_cursor, Point_t redo_cursor, char* new_string, char* prev_string, BufferCommitChain_t chain);
 
 bool ce_commit_undo          (Buffer_t* buffer, BufferCommitNode_t** tail, Point_t* cursor);
 bool ce_commit_redo          (Buffer_t* buffer, BufferCommitNode_t** tail, Point_t* cursor);

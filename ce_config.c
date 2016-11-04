@@ -356,7 +356,7 @@ void remove_visual_lines(Buffer_t* buffer, Point_t* cursor, Point_t* visual_star
      }
 }
 
-#define VIM_COMMENT_STRING "// "
+#define VIM_COMMENT_STRING "//"
 
 typedef enum{
      VM_NORMAL,
@@ -874,15 +874,21 @@ void unindent_line(Buffer_t* buffer, BufferCommitNode_t** commit_tail, int64_t l
      }
 }
 
-bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, VimMode_t vim_mode,
-                      YankNode_t** yank_head, VimMode_t* final_mode, Point_t* visual_start,
-                      FindState_t* find_state)
-{
-     BufferState_t* buffer_state = buffer->user_data;
-     Point_t start = *cursor;
-     Point_t end = start;
+typedef struct {
+     Point_t start;
+     Point_t end;
+     const Point_t* sorted_start;
+     const Point_t* sorted_end;
+     YankMode_t yank_mode;
+} VimActionRange_t;
 
-     YankMode_t yank_mode = YANK_NORMAL;
+bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, FindState_t* find_state,
+                          VimActionRange_t* action_range)
+{
+     action_range->start = *cursor;
+     action_range->end = action_range->start;
+
+     action_range->yank_mode = YANK_NORMAL;
 
      // setup the start and end if we are in visual mode
      if(action->motion.type == VMT_VISUAL_RANGE){
@@ -890,8 +896,8 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
           int64_t visual_length = action->motion.visual_length;
           if(!action->motion.visual_start_after) visual_length = -visual_length;
           ce_advance_cursor(buffer, &calc_visual_start, visual_length);
-          start = *cursor;
-          end = calc_visual_start;
+          action_range->start = *cursor;
+          action_range->end = calc_visual_start;
      }else if(action->motion.type == VMT_VISUAL_LINE){
           Point_t calc_visual_start = {cursor->x, cursor->y + action->motion.visual_lines};
 
@@ -902,11 +908,11 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
 
           ce_sort_points(&a, &b);
 
-          start = *a;
-          end = *b;
-          start.x = 0;
-          end.x = strlen(buffer->lines[end.y]);
-          yank_mode = YANK_LINE;
+          action_range->start = *a;
+          action_range->end = *b;
+          action_range->start.x = 0;
+          action_range->end.x = strlen(buffer->lines[action_range->end.y]);
+          action_range->yank_mode = YANK_LINE;
      }else{
           int64_t multiplier = action->multiplier * action->motion.multiplier;
 
@@ -917,199 +923,199 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                case VMT_NONE:
                     break;
                case VMT_LEFT:
-                    end.x--;
-                    if(end.x < 0) end.x = 0;
+                    action_range->end.x--;
+                    if(action_range->end.x < 0) action_range->end.x = 0;
                     break;
                case VMT_RIGHT:
                {
-                    int64_t line_len = strlen(buffer->lines[end.y]);
-                    end.x++;
-                    if(end.x > line_len) end.x = line_len;
+                    int64_t line_len = strlen(buffer->lines[action_range->end.y]);
+                    action_range->end.x++;
+                    if(action_range->end.x > line_len) action_range->end.x = line_len;
                } break;
                case VMT_UP:
-                    end.y--;
-                    if(end.y < 0) end.y = 0;
+                    action_range->end.y--;
+                    if(action_range->end.y < 0) action_range->end.y = 0;
                     break;
                case VMT_DOWN:
-                    end.y++;
-                    if(end.y >= buffer->line_count) end.y = buffer->line_count - 1;
-                    if(end.y < 0) end.y = 0;
+                    action_range->end.y++;
+                    if(action_range->end.y >= buffer->line_count) action_range->end.y = buffer->line_count - 1;
+                    if(action_range->end.y < 0) action_range->end.y = 0;
                     break;
                case VMT_WORD_LITTLE:
-                    ce_move_cursor_to_next_word(buffer, &end, true);
+                    ce_move_cursor_to_next_word(buffer, &action_range->end, true);
                     break;
                case VMT_WORD_BIG:
-                    ce_move_cursor_to_next_word(buffer, &end, false);
+                    ce_move_cursor_to_next_word(buffer, &action_range->end, false);
                     break;
                case VMT_WORD_BEGINNING_LITTLE:
-                    ce_move_cursor_to_beginning_of_word(buffer, &end, true);
+                    ce_move_cursor_to_beginning_of_word(buffer, &action_range->end, true);
                     break;
                case VMT_WORD_BEGINNING_BIG:
-                    ce_move_cursor_to_beginning_of_word(buffer, &end, false);
+                    ce_move_cursor_to_beginning_of_word(buffer, &action_range->end, false);
                     break;
                case VMT_WORD_END_LITTLE:
-                    ce_move_cursor_to_end_of_word(buffer, &end, true);
+                    ce_move_cursor_to_end_of_word(buffer, &action_range->end, true);
                     break;
                case VMT_WORD_END_BIG:
-                    ce_move_cursor_to_end_of_word(buffer, &end, false);
+                    ce_move_cursor_to_end_of_word(buffer, &action_range->end, false);
                     break;
                case VMT_LINE:
-                    start.x = 0;
-                    end.x = strlen(buffer->lines[end.y]);
-                    yank_mode = YANK_LINE;
+                    action_range->start.x = 0;
+                    action_range->end.x = strlen(buffer->lines[action_range->end.y]);
+                    action_range->yank_mode = YANK_LINE;
                     break;
                case VMT_LINE_UP:
-                    start.x = 0;
-                    start.y--;
-                    if(start.y < 0) start.y = 0;
-                    end.x = strlen(buffer->lines[end.y]);
-                    yank_mode = YANK_LINE;
+                    action_range->start.x = 0;
+                    action_range->start.y--;
+                    if(action_range->start.y < 0) action_range->start.y = 0;
+                    action_range->end.x = strlen(buffer->lines[action_range->end.y]);
+                    action_range->yank_mode = YANK_LINE;
                     break;
                case VMT_LINE_DOWN:
-                    start.x = 0;
-                    end.y++;
-                    if(end.y >= buffer->line_count) end.y = buffer->line_count - 1;
-                    if(end.y < 0) end.y = 0;
-                    end.x = strlen(buffer->lines[end.y]);
-                    yank_mode = YANK_LINE;
+                    action_range->start.x = 0;
+                    action_range->end.y++;
+                    if(action_range->end.y >= buffer->line_count) action_range->end.y = buffer->line_count - 1;
+                    if(action_range->end.y < 0) action_range->end.y = 0;
+                    action_range->end.x = strlen(buffer->lines[action_range->end.y]);
+                    action_range->yank_mode = YANK_LINE;
                     break;
                case VMT_FIND_NEXT_MATCHING_CHAR:
-                    if(ce_move_cursor_forward_to_char(buffer, &end, action->motion.match_char)){
+                    if(ce_move_cursor_forward_to_char(buffer, &action_range->end, action->motion.match_char)){
                          find_state->motion_type = action->motion.type;
                          find_state->ch = action->motion.match_char;
                     }
                     break;
                case VMT_FIND_PREV_MATCHING_CHAR:
-                    if(ce_move_cursor_backward_to_char(buffer, &end, action->motion.match_char)){
+                    if(ce_move_cursor_backward_to_char(buffer, &action_range->end, action->motion.match_char)){
                          find_state->motion_type = action->motion.type;
                          find_state->ch = action->motion.match_char;
                     }
                     break;
                case VMT_TO_NEXT_MATCHING_CHAR:
-                    end.x++;
-                    if(ce_move_cursor_forward_to_char(buffer, &end, action->motion.match_char)){
+                    action_range->end.x++;
+                    if(ce_move_cursor_forward_to_char(buffer, &action_range->end, action->motion.match_char)){
                          find_state->motion_type = action->motion.type;
                          find_state->ch = action->motion.match_char;
-                         end.x--;
-                         if(end.x < 0) end.x = 0;
+                         action_range->end.x--;
+                         if(action_range->end.x < 0) action_range->end.x = 0;
                     }else{
-                         end.x--;
+                         action_range->end.x--;
                     }
                     break;
                case VMT_TO_PREV_MATCHING_CHAR:
                {
-                    end.x--;
-                    if(ce_move_cursor_backward_to_char(buffer, &end, action->motion.match_char)){
+                    action_range->end.x--;
+                    if(ce_move_cursor_backward_to_char(buffer, &action_range->end, action->motion.match_char)){
                          find_state->motion_type = action->motion.type;
                          find_state->ch = action->motion.match_char;
-                         end.x++;
-                         int64_t line_len = strlen(buffer->lines[end.y]);
-                         if(end.x > line_len) end.x = line_len;
+                         action_range->end.x++;
+                         int64_t line_len = strlen(buffer->lines[action_range->end.y]);
+                         if(action_range->end.x > line_len) action_range->end.x = line_len;
                     }else{
-                         end.x++;
+                         action_range->end.x++;
                     }
                }break;
                case VMT_BEGINNING_OF_FILE:
-                    ce_move_cursor_to_beginning_of_file(buffer, &end);
+                    ce_move_cursor_to_beginning_of_file(buffer, &action_range->end);
                     break;
                case VMT_BEGINNING_OF_LINE_HARD:
-                    ce_move_cursor_to_beginning_of_line(buffer, &end);
+                    ce_move_cursor_to_beginning_of_line(buffer, &action_range->end);
                     break;
                case VMT_BEGINNING_OF_LINE_SOFT:
-                    ce_move_cursor_to_soft_beginning_of_line(buffer, &end);
+                    ce_move_cursor_to_soft_beginning_of_line(buffer, &action_range->end);
                     break;
                case VMT_END_OF_LINE_PASSED:
-                    ce_move_cursor_to_end_of_line(buffer, &end);
-                    end.x++;
+                    ce_move_cursor_to_end_of_line(buffer, &action_range->end);
+                    action_range->end.x++;
                     break;
                case VMT_END_OF_LINE_HARD:
-                    ce_move_cursor_to_end_of_line(buffer, &end);
+                    ce_move_cursor_to_end_of_line(buffer, &action_range->end);
                     break;
                case VMT_END_OF_LINE_SOFT:
-                    ce_move_cursor_to_soft_end_of_line(buffer, &end);
+                    ce_move_cursor_to_soft_end_of_line(buffer, &action_range->end);
                     break;
                case VMT_END_OF_FILE:
-                    ce_move_cursor_to_end_of_file(buffer, &end);
+                    ce_move_cursor_to_end_of_file(buffer, &action_range->end);
                     break;
                case VMT_INSIDE_PAIR:
                     switch(action->motion.inside_pair){
                     case '"':
-                         if(!ce_get_homogenous_adjacents(buffer, &start, &end, isnotquote)) return false;
+                         if(!ce_get_homogenous_adjacents(buffer, &action_range->start, &action_range->end, isnotquote)) return false;
                          break;
                     case '\'':
-                         if(!ce_get_homogenous_adjacents(buffer, &start, &end, isnotsinglequote)) return false;
+                         if(!ce_get_homogenous_adjacents(buffer, &action_range->start, &action_range->end, isnotsinglequote)) return false;
                          break;
                     case '(':
                          break;
                     case ')':
                          // TODO: this is the simplest rule right now, and won't work as expected in some cases
                          //       we need to make it behave more like ce_move_cursor_to_matching pair
-                         if(!ce_move_cursor_backward_to_char(buffer, &start, '(')) return false;
-                         if(!ce_move_cursor_forward_to_char(buffer, &end, ')')) return false;
-                         start.x++;
-                         end.x--;
+                         if(!ce_move_cursor_backward_to_char(buffer, &action_range->start, '(')) return false;
+                         if(!ce_move_cursor_forward_to_char(buffer, &action_range->end, ')')) return false;
+                         action_range->start.x++;
+                         action_range->end.x--;
                          break;
                     default:
                          return false;
                     }
 
-                    if(start.x == end.x && start.y == end.y) return false;
-                    if(start.x == 0) return false;
+                    if(action_range->start.x == action_range->end.x && action_range->start.y == action_range->end.y) return false;
+                    if(action_range->start.x == 0) return false;
                     break;
                case VMT_INSIDE_WORD_LITTLE:
-                    ce_get_word_at_location(buffer, *cursor, &start, &end);
+                    ce_get_word_at_location(buffer, *cursor, &action_range->start, &action_range->end);
                     break;
                case VMT_INSIDE_WORD_BIG:
                {
                     char curr_char;
-                    if(!ce_get_char(buffer, start, &curr_char)) return false;
+                    if(!ce_get_char(buffer, action_range->start, &curr_char)) return false;
 
                     if(isblank(curr_char)){
-                         ce_get_homogenous_adjacents(buffer, &start, &end, isblank);
+                         ce_get_homogenous_adjacents(buffer, &action_range->start, &action_range->end, isblank);
                     }else{
                          assert(ispunct_or_iswordchar(curr_char));
-                         ce_get_homogenous_adjacents(buffer, &start, &end, ispunct_or_iswordchar);
+                         ce_get_homogenous_adjacents(buffer, &action_range->start, &action_range->end, ispunct_or_iswordchar);
                     }
                } break;
                case VMT_AROUND_PAIR:
                     switch(action->motion.inside_pair){
                     case '"':
-                         if(!ce_get_homogenous_adjacents(buffer, &start, &end, isnotquote)) return false;
+                         if(!ce_get_homogenous_adjacents(buffer, &action_range->start, &action_range->end, isnotquote)) return false;
                          break;
                     case '\'':
-                         if(!ce_get_homogenous_adjacents(buffer, &start, &end, isnotsinglequote)) return false;
+                         if(!ce_get_homogenous_adjacents(buffer, &action_range->start, &action_range->end, isnotsinglequote)) return false;
                          break;
                     case '(':
                          break;
                     case ')':
                          // TODO: this is the simplest rule right now, and won't work as expected in some cases
                          //       we need to make it behave more like ce_move_cursor_to_matching pair
-                         if(!ce_move_cursor_backward_to_char(buffer, &start, '(')) return false;
-                         if(!ce_move_cursor_forward_to_char(buffer, &end, ')')) return false;
-                         start.x++;
-                         end.x--;
+                         if(!ce_move_cursor_backward_to_char(buffer, &action_range->start, '(')) return false;
+                         if(!ce_move_cursor_forward_to_char(buffer, &action_range->end, ')')) return false;
+                         action_range->start.x++;
+                         action_range->end.x--;
                          break;
                     default:
                          return false;
                     }
 
-                    if(start.x == end.x && start.y == end.y) return false;
-                    start.x--;
-                    end.x++;
+                    if(action_range->start.x == action_range->end.x && action_range->start.y == action_range->end.y) return false;
+                    action_range->start.x--;
+                    action_range->end.x++;
                     break;
                     // TIME TO SLURP
 #define SLURP_RIGHT(condition)                                                              \
-                    do{ end.x++; if(!ce_get_char(buffer, end, &c)) break; }while(condition(c)); \
-                    end.x--;
+                    do{ action_range->end.x++; if(!ce_get_char(buffer, action_range->end, &c)) break; }while(condition(c)); \
+                    action_range->end.x--;
 
 #define SLURP_LEFT(condition)                                                                   \
-                    do{ start.x--; if(!ce_get_char(buffer, start, &c)) break; }while(condition(c)); \
-                    start.x++;
+                    do{ action_range->start.x--; if(!ce_get_char(buffer, action_range->start, &c)) break; }while(condition(c)); \
+                    action_range->start.x++;
 
                case VMT_AROUND_WORD_LITTLE:
                {
                     char c;
-                    if(!ce_get_char(buffer, start, &c)) return false;
+                    if(!ce_get_char(buffer, action_range->start, &c)) return false;
 
                     if(ce_iswordchar(c)){
                          SLURP_RIGHT(ce_iswordchar);
@@ -1160,7 +1166,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                case VMT_AROUND_WORD_BIG:
                {
                     char c;
-                    if(!ce_get_char(buffer, start, &c)) return false;
+                    if(!ce_get_char(buffer, action_range->start, &c)) return false;
 
                     if(ispunct_or_iswordchar(c)){
                          SLURP_RIGHT(ispunct_or_iswordchar);
@@ -1190,32 +1196,45 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
      // when we are not executing a motion delete up to the next word
      if(action->change.type != VCT_MOTION){
           if(action->motion.type == VMT_WORD_LITTLE || action->motion.type == VMT_WORD_BIG){
-               end.x--;
-               if(end.x < 0) end.x = 0;
+               action_range->end.x--;
+               if(action_range->end.x < 0) action_range->end.x = 0;
           }else if(action->motion.type == VMT_WORD_BEGINNING_LITTLE || action->motion.type == VMT_WORD_BEGINNING_BIG){
-               start.x--;
-               if(start.x < 0) start.x = 0;
+               action_range->start.x--;
+               if(action_range->start.x < 0) action_range->start.x = 0;
           }else if(action->motion.type == VMT_RIGHT){
-               end.x--;
-               if(end.x < 0) end.x = 0;
+               action_range->end.x--;
+               if(action_range->end.x < 0) action_range->end.x = 0;
           }else if(action->motion.type == VMT_LEFT){
-               if(end.x + 1 <= ce_last_index(buffer->lines[start.y])){
-                    end.x++;
+               if(action_range->end.x + 1 <= ce_last_index(buffer->lines[action_range->start.y])){
+                    action_range->end.x++;
                }
           }
      }
 
-     const Point_t* sorted_start = &start;
-     const Point_t* sorted_end = &end;
+     action_range->sorted_start = &action_range->start;
+     action_range->sorted_end = &action_range->end;
 
-     ce_sort_points(&sorted_start, &sorted_end);
+     ce_sort_points(&action_range->sorted_start, &action_range->sorted_end);
+
+     return true;
+}
+
+bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, VimMode_t vim_mode,
+                      YankNode_t** yank_head, VimMode_t* final_mode, Point_t* visual_start,
+                      FindState_t* find_state)
+{
+     VimActionRange_t action_range;
+
+     if(!vim_action_get_range(action, buffer, cursor, find_state, &action_range) ) return false;
+
+     BufferState_t* buffer_state = buffer->user_data;
 
      // perform action on range
      switch(action->change.type){
      default:
           break;
      case VCT_MOTION:
-          *cursor = end;
+          *cursor = action_range.end;
 
           if(action->motion.type == VMT_UP ||
              action->motion.type == VMT_DOWN){
@@ -1225,34 +1244,34 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
           if(vim_mode == VM_VISUAL_RANGE){
                // expand the selection for some motions
                if(ce_point_after(*visual_start, *cursor) &&
-                  ce_point_after(*sorted_end, *visual_start)){
-                     *visual_start = *sorted_end;
+                  ce_point_after(*action_range.sorted_end, *visual_start)){
+                     *visual_start = *action_range.sorted_end;
                }else if(ce_point_after(*cursor, *visual_start) &&
-                        ce_point_after(*visual_start, *sorted_start)){
-                     *visual_start = *sorted_start;
+                        ce_point_after(*visual_start, *action_range.sorted_start)){
+                     *visual_start = *action_range.sorted_start;
                }
           }
           break;
      case VCT_DELETE:
      {
-          *cursor = *sorted_start;
+          *cursor = *action_range.sorted_start;
 
-          char* commit_string = ce_dupe_string(buffer, *sorted_start, *sorted_end);
-          int64_t len = ce_compute_length(buffer, *sorted_start, *sorted_end);
+          char* commit_string = ce_dupe_string(buffer, *action_range.sorted_start, *action_range.sorted_end);
+          int64_t len = ce_compute_length(buffer, *action_range.sorted_start, *action_range.sorted_end);
 
-          if(!ce_remove_string(buffer, *sorted_start, len)){
+          if(!ce_remove_string(buffer, *action_range.sorted_start, len)){
                free(commit_string);
                return false;
           }
 
           if(action->yank){
                char* yank_string = strdup(commit_string);
-               if(yank_mode == YANK_LINE && yank_string[len-1] == NEWLINE) yank_string[len-1] = 0;
-               add_yank(yank_head, '"', yank_string, yank_mode);
+               if(action_range.yank_mode == YANK_LINE && yank_string[len-1] == NEWLINE) yank_string[len-1] = 0;
+               add_yank(yank_head, '"', yank_string, action_range.yank_mode);
           }
 
           BufferCommitChain_t chain = (action->end_in_vim_mode == VM_INSERT) ? BCC_KEEP_GOING : BCC_STOP;
-          ce_commit_remove_string(&buffer_state->commit_tail, *sorted_start, *cursor, *sorted_start, commit_string, chain);
+          ce_commit_remove_string(&buffer_state->commit_tail, *action_range.sorted_start, *cursor, *action_range.sorted_start, commit_string, chain);
      } break;
      case VCT_PASTE_BEFORE:
      {
@@ -1265,9 +1284,9 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                break;
           case YANK_NORMAL:
           {
-               if(ce_insert_string(buffer, *sorted_start, yank->text)){
+               if(ce_insert_string(buffer, *action_range.sorted_start, yank->text)){
                     ce_commit_insert_string(&buffer_state->commit_tail,
-                                            *sorted_start, *sorted_start, *sorted_start,
+                                            *action_range.sorted_start, *action_range.sorted_start, *action_range.sorted_start,
                                             strdup(yank->text), BCC_STOP);
                }
           } break;
@@ -1315,7 +1334,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
 
                if(ce_insert_string(buffer, insert_cursor, yank->text)){
                     ce_commit_insert_string(&buffer_state->commit_tail,
-                                            insert_cursor, *sorted_start, *sorted_start,
+                                            insert_cursor, *action_range.sorted_start, *action_range.sorted_start,
                                             strdup(yank->text), BCC_STOP);
                     ce_advance_cursor(buffer, cursor, yank_len);
                }
@@ -1343,18 +1362,18 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
      {
           char prev_char;
 
-          if(!ce_get_char(buffer, *sorted_start, &prev_char)) return false;
-          if(!ce_set_char(buffer, *sorted_start, action->change.change_char)) return false;
+          if(!ce_get_char(buffer, *action_range.sorted_start, &prev_char)) return false;
+          if(!ce_set_char(buffer, *action_range.sorted_start, action->change.change_char)) return false;
 
-          ce_commit_change_char(&buffer_state->commit_tail, *sorted_start, *cursor, *sorted_start,
+          ce_commit_change_char(&buffer_state->commit_tail, *action_range.sorted_start, *cursor, *action_range.sorted_start,
                                 action->change.change_char, prev_char, BCC_STOP);
      } break;
      case VCT_YANK:
      {
-          char* save_zero = ce_dupe_string(buffer, *sorted_start, *sorted_end);
-          char* save_quote = ce_dupe_string(buffer, *sorted_start, *sorted_end);
+          char* save_zero = ce_dupe_string(buffer, *action_range.sorted_start, *action_range.sorted_end);
+          char* save_quote = ce_dupe_string(buffer, *action_range.sorted_start, *action_range.sorted_end);
 
-          if(yank_mode == YANK_LINE){
+          if(action_range.yank_mode == YANK_LINE){
                int64_t last_index = strlen(save_zero) - 1;
                if(last_index >= 0 && save_zero[last_index] == NEWLINE){
                     save_zero[last_index] = 0;
@@ -1362,15 +1381,15 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                }
           }
 
-          add_yank(yank_head, '0', save_zero, yank_mode);
-          add_yank(yank_head, '"', save_quote, yank_mode);
+          add_yank(yank_head, '0', save_zero, action_range.yank_mode);
+          add_yank(yank_head, '"', save_quote, action_range.yank_mode);
      } break;
      case VCT_INDENT:
      {
           if(action->motion.type == VMT_LINE || action->motion.type == VMT_LINE_UP ||
              action->motion.type == VMT_LINE_DOWN || action->motion.type == VMT_VISUAL_RANGE ||
              action->motion.type == VMT_VISUAL_LINE){
-               for(int i = sorted_start->y; i <= sorted_end->y; ++i){
+               for(int i = action_range.sorted_start->y; i <= action_range.sorted_end->y; ++i){
                     indent_line(buffer, &buffer_state->commit_tail, i, cursor);
                }
           }else{
@@ -1382,7 +1401,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
           if(action->motion.type == VMT_LINE || action->motion.type == VMT_LINE_UP ||
              action->motion.type == VMT_LINE_DOWN || action->motion.type == VMT_VISUAL_RANGE ||
              action->motion.type == VMT_VISUAL_LINE){
-               for(int i = sorted_start->y; i <= sorted_end->y; ++i){
+               for(int i = action_range.sorted_start->y; i <= action_range.sorted_end->y; ++i){
                     unindent_line(buffer, &buffer_state->commit_tail, i, cursor);
                }
           }else{
@@ -1391,7 +1410,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
      } break;
      case VCT_COMMENT:
      {
-          for(int64_t i = sorted_start->y; i <= sorted_end->y; ++i){
+          for(int64_t i = action_range.sorted_start->y; i <= action_range.sorted_end->y; ++i){
                if(!strlen(buffer->lines[i])) continue;
 
                Point_t soft_beginning = {0, i};
@@ -1405,7 +1424,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
      } break;
      case VCT_UNCOMMENT:
      {
-          for(int64_t i = sorted_start->y; i <= sorted_end->y; ++i){
+          for(int64_t i = action_range.sorted_start->y; i <= action_range.sorted_end->y; ++i){
                Point_t soft_beginning = {0, i};
                ce_move_cursor_to_soft_beginning_of_line(buffer, &soft_beginning);
 
@@ -1420,7 +1439,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
      } break;
      case VCT_FLIP_CASE:
      {
-          Point_t itr = *sorted_start;
+          Point_t itr = *action_range.sorted_start;
 
           do{
                char prev_char = 0;
@@ -1438,7 +1457,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                }
 
                ce_advance_cursor(buffer, &itr, 1);
-          } while(!ce_point_after(itr, *sorted_end));
+          } while(!ce_point_after(itr, *action_range.sorted_end));
      } break;
      }
 
@@ -1990,6 +2009,41 @@ Buffer_t* open_file_buffer(BufferNode_t* head, const char* filename)
      ce_message("file %s not found", filename);
 
      return NULL;
+}
+
+bool delete_buffer_at_index(BufferNode_t** head, TabView_t* tab_head, int64_t buffer_index)
+{
+     // find which buffer the user wants to delete
+     Buffer_t* delete_buffer = NULL;
+     BufferNode_t* itr = *head;
+     while(itr){
+          if(buffer_index == 0){
+               delete_buffer = itr->buffer;
+               break;
+          }
+          buffer_index--;
+          itr = itr->next;
+     }
+
+     // remove buffer
+     ce_remove_buffer_from_list(head, delete_buffer);
+
+     // change views that are showing this buffer for all tabs
+     if(head){
+          TabView_t* tab_itr = tab_head;
+          while(tab_itr){
+               ce_change_buffer_in_views(tab_itr->view_head, delete_buffer, (*head)->buffer);
+               tab_itr = tab_itr->next;
+          }
+     }else{
+          return false;
+     }
+
+     // free the buffer and it's state
+     free_buffer_state(delete_buffer->user_data);
+     ce_free_buffer(delete_buffer);
+
+     return true;
 }
 
 bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, char** argv, void** user_data)
@@ -3586,49 +3640,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                }
                if(handled_key) config_state->command_len = 0;
           } break;
-          case 'd':
-          {
-               if(key == 'd' && config_state->tab_current->view_current->buffer == &config_state->buffer_list_buffer){
-                    handled_key = true;
-
-                    // find which buffer the user wants to delete
-                    Buffer_t* delete_buffer = NULL;
-                    BufferNode_t* itr = *head;
-                    int64_t buffer_index = cursor->y;
-                    while(itr){
-                         buffer_index--;
-                         if(buffer_index == 0){
-                              delete_buffer = itr->buffer;
-                              break;
-                         }
-                         itr = itr->next;
-                    }
-
-                    // remove buffer
-                    ce_remove_buffer_from_list(head, delete_buffer);
-
-                    // change views that are showing this buffer for all tabs
-                    if(head){
-                         TabView_t* tab_itr = config_state->tab_head;
-                         while(tab_itr){
-                              ce_change_buffer_in_views(tab_itr->view_head, delete_buffer, (*head)->buffer);
-                              tab_itr = tab_itr->next;
-                         }
-                    }else{
-                         return false; // quit !
-                    }
-
-                    // free the buffer and it's state
-                    free_buffer_state(delete_buffer->user_data);
-                    ce_free_buffer(delete_buffer);
-
-                    update_buffer_list_buffer(config_state, *head);
-                    if(cursor->y >= config_state->buffer_list_buffer.line_count) cursor->y = config_state->buffer_list_buffer.line_count - 1;
-
-                    // reset key so we don't come in here on the very next iteration
-                    key = 0;
-               }
-          } break;
           case 'm':
           {
                handled_key = true;
@@ -3682,34 +3693,52 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     break;
                case VCS_COMPLETE:
                {
-                    VimMode_t final_mode = config_state->vim_mode;
-                    VimMode_t original_mode = final_mode;
-                    if(vim_action_apply(&vim_action, buffer, cursor, config_state->vim_mode,
-                                        &config_state->yank_head, &final_mode, &config_state->visual_start,
-                                        &config_state->find_state)){
-                         if(final_mode != original_mode){
-                              switch(final_mode){
-                              default:
-                                   break;
-                              case VM_INSERT:
-                                   enter_insert_mode(config_state, cursor);
-                                   break;
-                              case VM_NORMAL:
-                                   enter_normal_mode(config_state);
-                                   break;
-                              case VM_VISUAL_RANGE:
-                                   enter_visual_range_mode(config_state, buffer_view);
-                                   break;
-                              case VM_VISUAL_LINE:
-                                   enter_visual_line_mode(config_state, buffer_view);
-                                   break;
+                    if(config_state->tab_current->view_current->buffer == &config_state->buffer_list_buffer && vim_action.change.type == VCT_DELETE){
+                         VimActionRange_t action_range;
+                         if(!vim_action_get_range(&vim_action, buffer, cursor, &config_state->find_state, &action_range)) break;
+
+                         int64_t delete_index = action_range.sorted_start->y - 1;
+                         int64_t buffers_to_delete = (action_range.sorted_end->y - action_range.sorted_start->y) + 1;
+                         for(int64_t b = 0; b < buffers_to_delete; ++b){
+                              if(!delete_buffer_at_index(head, config_state->tab_head, delete_index)){
+                                   return false; // quit !
                               }
                          }
 
-                         if(vim_action.change.type != VCT_MOTION || vim_action.end_in_vim_mode == VM_INSERT){
-                              config_state->last_vim_action = vim_action;
+                         update_buffer_list_buffer(config_state, *head);
+
+                         if(cursor->y >= config_state->buffer_list_buffer.line_count) cursor->y = config_state->buffer_list_buffer.line_count - 1;
+                         enter_normal_mode(config_state);
+                    }else{
+                         VimMode_t final_mode = config_state->vim_mode;
+                         VimMode_t original_mode = final_mode;
+                         if(vim_action_apply(&vim_action, buffer, cursor, config_state->vim_mode,
+                                             &config_state->yank_head, &final_mode, &config_state->visual_start,
+                                             &config_state->find_state)){
+                              if(final_mode != original_mode){
+                                   switch(final_mode){
+                                   default:
+                                        break;
+                                   case VM_INSERT:
+                                        enter_insert_mode(config_state, cursor);
+                                        break;
+                                   case VM_NORMAL:
+                                        enter_normal_mode(config_state);
+                                        break;
+                                   case VM_VISUAL_RANGE:
+                                        enter_visual_range_mode(config_state, buffer_view);
+                                        break;
+                                   case VM_VISUAL_LINE:
+                                        enter_visual_line_mode(config_state, buffer_view);
+                                        break;
+                                   }
+                              }
+
+                              if(vim_action.change.type != VCT_MOTION || vim_action.end_in_vim_mode == VM_INSERT){
+                                   config_state->last_vim_action = vim_action;
+                              }
+                              // allow the command to be cleared
                          }
-                         // allow the command to be cleared
                     }
                     handled_key = true;
                }    break;

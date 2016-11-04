@@ -2534,7 +2534,9 @@ bool ce_change_buffer_in_views(BufferView_t* head, Buffer_t* match, Buffer_t* ne
 
      if(head->buffer == match){
           head->buffer = new;
-          head->cursor = new->cursor;
+          head->cursor = (Point_t){0, 0};
+          head->top_row = 0;
+          head->left_column = 0;
      }
 
      return true;

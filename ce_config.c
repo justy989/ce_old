@@ -3588,7 +3588,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           } break;
           case 'd':
           {
-               if(config_state->tab_current->view_current->buffer == &config_state->buffer_list_buffer){
+               if(key == 'd' && config_state->tab_current->view_current->buffer == &config_state->buffer_list_buffer){
                     handled_key = true;
 
                     // find which buffer the user wants to delete
@@ -3620,6 +3620,9 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
                     update_buffer_list_buffer(config_state, *head);
                     if(cursor->y >= config_state->buffer_list_buffer.line_count) cursor->y = config_state->buffer_list_buffer.line_count - 1;
+
+                    // reset key so we don't come in here on the very next iteration
+                    key = 0;
                }
           } break;
           case 'm':

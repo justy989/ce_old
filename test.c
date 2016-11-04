@@ -1140,7 +1140,7 @@ TEST(commit_insert_char_undo_redo)
      Point_t start = {2, 0};
      Point_t undo = {2, 0};
      Point_t redo = {3, 0};
-     ce_commit_insert_char(&tail, start, undo, redo, 'C');
+     ce_commit_insert_char(&tail, start, undo, redo, 'C', BCC_STOP);
 
      Point_t cursor = {};
      ce_commit_undo(&buffer, &tail, &cursor);
@@ -1174,7 +1174,7 @@ TEST(commit_insert_string_undo_redo)
      Point_t start = {5, 0};
      Point_t undo = {5, 0};
      Point_t redo = {9, 0};
-     ce_commit_insert_string(&tail, start, undo, redo, strdup(" ARE"));
+     ce_commit_insert_string(&tail, start, undo, redo, strdup(" ARE"), BCC_STOP);
 
      Point_t cursor = {};
      ce_commit_undo(&buffer, &tail, &cursor);
@@ -1208,7 +1208,7 @@ TEST(commit_remove_char_undo_redo)
      Point_t start = {2, 0};
      Point_t undo = {2, 0};
      Point_t redo = {2, 0};
-     ce_commit_remove_char(&tail, start, undo, redo, 'C');
+     ce_commit_remove_char(&tail, start, undo, redo, 'C', BCC_STOP);
 
      Point_t cursor = {};
      ce_commit_undo(&buffer, &tail, &cursor);
@@ -1242,7 +1242,7 @@ TEST(commit_remove_string_undo_redo)
      Point_t start = {5, 0};
      Point_t undo = {9, 0};
      Point_t redo = {5, 0};
-     ce_commit_remove_string(&tail, start, undo, redo, strdup(" ARE"));
+     ce_commit_remove_string(&tail, start, undo, redo, strdup(" ARE"), BCC_STOP);
 
      Point_t cursor = {};
      ce_commit_undo(&buffer, &tail, &cursor);
@@ -1276,7 +1276,7 @@ TEST(commit_change_char_undo_redo)
      Point_t start = {2, 0};
      Point_t undo = {2, 0};
      Point_t redo = {2, 0};
-     ce_commit_change_char(&tail, start, undo, redo, 'L', 'C');
+     ce_commit_change_char(&tail, start, undo, redo, 'L', 'C', BCC_STOP);
 
      Point_t cursor = {};
      ce_commit_undo(&buffer, &tail, &cursor);
@@ -1310,7 +1310,7 @@ TEST(commit_change_string_undo_redo)
      Point_t start = {5, 0};
      Point_t undo = {9, 0};
      Point_t redo = {5, 0};
-     ce_commit_change_string(&tail, start, undo, redo, strdup(" BE"), strdup(" ARE"));
+     ce_commit_change_string(&tail, start, undo, redo, strdup(" BE"), strdup(" ARE"), BCC_STOP);
 
      Point_t cursor = {};
      ce_commit_undo(&buffer, &tail, &cursor);

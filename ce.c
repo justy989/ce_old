@@ -1912,21 +1912,27 @@ BufferNode_t* ce_append_buffer_to_list(BufferNode_t* head, Buffer_t* buffer)
      return new;
 }
 
-bool ce_remove_buffer_from_list(BufferNode_t* head, BufferNode_t** node)
+bool ce_remove_buffer_from_list(BufferNode_t** head, Buffer_t* buffer)
 {
      CE_CHECK_PTR_ARG(head);
-     CE_CHECK_PTR_ARG(node);
+     CE_CHECK_PTR_ARG(buffer);
 
-     BufferNode_t* tmp = head;
-     while(head){
-          if(head == *node){
-               tmp->next = head->next;
-               free(head);
-               *node = NULL;
+     BufferNode_t* itr = *head;
+     BufferNode_t* prev = NULL;
+     while(itr){
+          if(itr->buffer == buffer){
+               // patch up the previous node's next point
+               if(prev) prev->next = itr->next;
+
+               // advance head if are deleting it
+               if(itr == *head) *head = itr->next;
+
+               free(itr);
                return true;
           }
-          tmp = head;
-          head = head->next;
+
+          prev = itr;
+          itr = itr->next;
      }
 
      // didn't find the node to remove
@@ -2512,6 +2518,23 @@ bool ce_remove_view(BufferView_t** head, BufferView_t* view)
           }
 
           free(view);
+     }
+
+     return true;
+}
+
+bool ce_change_buffer_in_views(BufferView_t* head, Buffer_t* match, Buffer_t* new)
+{
+     CE_CHECK_PTR_ARG(head);
+     CE_CHECK_PTR_ARG(match);
+     CE_CHECK_PTR_ARG(new);
+
+     if(head->next_horizontal) ce_change_buffer_in_views(head->next_horizontal, match, new);
+     if(head->next_vertical) ce_change_buffer_in_views(head->next_vertical, match, new);
+
+     if(head->buffer == match){
+          head->buffer = new;
+          head->cursor = new->cursor;
      }
 
      return true;

@@ -1454,15 +1454,15 @@ TEST(sanity_buffer_list)
      ASSERT(head->next->buffer == &two);
      ASSERT(head->next->next->buffer == &three);
 
-     EXPECT(ce_remove_buffer_from_list(head, &two_node) == true);
-     EXPECT(ce_remove_buffer_from_list(head, &two_node) == false);
+     EXPECT(ce_remove_buffer_from_list(&head, &two) == true);
+     EXPECT(ce_remove_buffer_from_list(&head, &two) == false);
 
      ASSERT(head);
      ASSERT(head->next);
      ASSERT(head->next->buffer == &three);
      ASSERT(head->next->next == NULL);
 
-     EXPECT(ce_remove_buffer_from_list(head, &three_node) == true);
+     EXPECT(ce_remove_buffer_from_list(&head, &three) == true);
 
      ASSERT(head);
      ASSERT(head->buffer == &one);

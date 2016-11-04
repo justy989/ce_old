@@ -276,7 +276,7 @@ int main(int argc, char** argv)
           fclose(file);
      }
 
-     current_config.initializer(buffer_list_head, g_terminal_dimensions, argc - parsed_args, argv + parsed_args, &user_data);
+     current_config.initializer(&buffer_list_head, g_terminal_dimensions, argc - parsed_args, argv + parsed_args, &user_data);
 
      signal(SIGQUIT, SIG_IGN);
      struct sigaction sa = {};
@@ -300,7 +300,7 @@ int main(int argc, char** argv)
                }
                ce_message("loaded config crashed with SIGSEGV. restoring stable config.");
                using_stable_config = true;
-               current_config.initializer(buffer_list_head, g_terminal_dimensions, 0, NULL, &user_data);
+               current_config.initializer(&buffer_list_head, g_terminal_dimensions, 0, NULL, &user_data);
           }
      }
 
@@ -336,27 +336,27 @@ int main(int argc, char** argv)
           if(key == KEY_F(5)){
                // NOTE: maybe at startup we should do this, so when we crash we revert back to before we did the bad thing?
                if(access(current_config.path, F_OK) != -1){
-                    current_config.destroyer(buffer_list_head, user_data);
+                    current_config.destroyer(&buffer_list_head, user_data);
                     config_close(&current_config);
                     // TODO: specify the path for the test config to load here
                     if(config_open(&current_config, config)){
                          // TODO: pass main args, config needs to be able to handle getting the args again!
                          using_stable_config = false;
-                         current_config.initializer(buffer_list_head, g_terminal_dimensions, 0, NULL, &user_data);
+                         current_config.initializer(&buffer_list_head, g_terminal_dimensions, 0, NULL, &user_data);
                     }else{
                          if(!config_revert(&current_config, config, stable_config_contents, stable_config_size)){
                               ce_save_buffer(message_buffer, message_buffer->filename);
                               return -1;
                          }
                          using_stable_config = true;
-                         current_config.initializer(buffer_list_head, g_terminal_dimensions, 0, NULL, &user_data);
+                         current_config.initializer(&buffer_list_head, g_terminal_dimensions, 0, NULL, &user_data);
                     }
                }else{
                     ce_message("%s: %s", current_config.path, strerror(errno));
                }
           }
           // user-defined or default key_handler()
-          else if(!current_config.key_handler(key, buffer_list_head, user_data)){
+          else if(!current_config.key_handler(key, &buffer_list_head, user_data)){
                done = true;
           }
      }
@@ -367,7 +367,7 @@ int main(int argc, char** argv)
      if(save_messages_on_exit) ce_save_buffer(message_buffer, message_buffer->filename);
 
      if(!stable_sigsegvd){
-          current_config.destroyer(buffer_list_head, user_data);
+          current_config.destroyer(&buffer_list_head, user_data);
           config_close(&current_config);
      }
 

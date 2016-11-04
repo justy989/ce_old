@@ -193,15 +193,15 @@ typedef enum {
 extern Point_t* g_terminal_dimensions;
 
 // CE Configuration-Defined Functions
-typedef bool ce_initializer (BufferNode_t*, Point_t*, int, char**, void**);
-typedef void ce_destroyer   (BufferNode_t*, void*);
-typedef bool ce_key_handler (int, BufferNode_t*, void*);
+typedef bool ce_initializer (BufferNode_t**, Point_t*, int, char**, void**);
+typedef void ce_destroyer   (BufferNode_t**, void*);
+typedef bool ce_key_handler (int, BufferNode_t**, void*);
 typedef void ce_view_drawer (const BufferNode_t*, void*);
 
 
 // BufferList Manipulation Functions
 BufferNode_t* ce_append_buffer_to_list (BufferNode_t* head, Buffer_t* buffer); // NOTE: we may want to consider taking tail rather than head
-bool ce_remove_buffer_from_list        (BufferNode_t* head, BufferNode_t** node);
+bool ce_remove_buffer_from_list        (BufferNode_t** head, Buffer_t* buffer);
 
 
 // BufferView Manipulation Functions
@@ -209,6 +209,7 @@ BufferView_t* ce_split_view       (BufferView_t* view, Buffer_t* buffer, bool ho
 bool ce_remove_view               (BufferView_t** head, BufferView_t* view);
 bool ce_calc_views                (BufferView_t* head, Point_t top_left, Point_t top_right);
 bool ce_draw_views                (const BufferView_t* head, const char* highlight_word, LineNumberType_t line_number_type);
+bool ce_change_buffer_in_views    (BufferView_t* head, Buffer_t* match, Buffer_t* new);
 bool ce_free_views                (BufferView_t** view);
 BufferView_t* ce_find_view_at_point (BufferView_t* head, Point_t point);
 BufferView_t* ce_buffer_in_view(BufferView_t* head, const Buffer_t* buffer);

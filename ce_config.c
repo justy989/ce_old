@@ -1984,7 +1984,7 @@ Buffer_t* open_file_buffer(BufferNode_t* head, const char* filename)
      return NULL;
 }
 
-bool initializer(BufferNode_t* head, Point_t* terminal_dimensions, int argc, char** argv, void** user_data)
+bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, char** argv, void** user_data)
 {
      // NOTE: need to set these in this module
      g_terminal_dimensions = terminal_dimensions;
@@ -2028,7 +2028,7 @@ bool initializer(BufferNode_t* head, Point_t* terminal_dimensions, int argc, cha
      config_state->buffer_list_buffer.readonly = true;
 
      // if we reload, the shell command buffer may already exist, don't recreate it
-     BufferNode_t* itr = head;
+     BufferNode_t* itr = *head;
      while(itr){
           if(strcmp(itr->buffer->name, "shell_output") == 0){
                config_state->shell_command_buffer = itr->buffer;
@@ -2045,7 +2045,7 @@ bool initializer(BufferNode_t* head, Point_t* terminal_dimensions, int argc, cha
           config_state->shell_command_buffer->readonly = true;
           initialize_buffer(config_state->shell_command_buffer);
           ce_alloc_lines(config_state->shell_command_buffer, 1);
-          BufferNode_t* new_buffer_node = ce_append_buffer_to_list(head, config_state->shell_command_buffer);
+          BufferNode_t* new_buffer_node = ce_append_buffer_to_list(*head, config_state->shell_command_buffer);
           if(!new_buffer_node){
                ce_message("failed to add shell command buffer to list");
                return false;
@@ -2057,7 +2057,7 @@ bool initializer(BufferNode_t* head, Point_t* terminal_dimensions, int argc, cha
           config_state->completion_buffer->name = strdup("completions");
           config_state->completion_buffer->readonly = true;
           initialize_buffer(config_state->completion_buffer);
-          BufferNode_t* new_buffer_node = ce_append_buffer_to_list(head, config_state->completion_buffer);
+          BufferNode_t* new_buffer_node = ce_append_buffer_to_list(*head, config_state->completion_buffer);
           if(!new_buffer_node){
                ce_message("failed to add shell command buffer to list");
                return false;
@@ -2067,17 +2067,17 @@ bool initializer(BufferNode_t* head, Point_t* terminal_dimensions, int argc, cha
      *user_data = config_state;
 
      // setup state for each buffer
-     itr = head;
+     itr = *head;
      while(itr){
           initialize_buffer(itr->buffer);
           itr = itr->next;
      }
 
-     config_state->tab_current->view_head->buffer = head->buffer;
+     config_state->tab_current->view_head->buffer = (*head)->buffer;
      config_state->tab_current->view_current = config_state->tab_current->view_head;
 
      for(int i = 0; i < argc; ++i){
-          BufferNode_t* node = new_buffer_from_file(head, argv[i]);
+          BufferNode_t* node = new_buffer_from_file(*head, argv[i]);
 
           // if we loaded a file, set the view to point at the file
           if(i == 0 && node) config_state->tab_current->view_current->buffer = node->buffer;
@@ -2163,16 +2163,17 @@ bool initializer(BufferNode_t* head, Point_t* terminal_dimensions, int argc, cha
      return true;
 }
 
-bool destroyer(BufferNode_t* head, void* user_data)
+bool destroyer(BufferNode_t** head, void* user_data)
 {
-     while(head){
-          BufferState_t* buffer_state = head->buffer->user_data;
-          BufferCommitNode_t* itr = buffer_state->commit_tail;
-          while(itr->prev) itr = itr->prev;
-          ce_commits_free(itr);
+     BufferNode_t* itr = *head;
+     while(itr){
+          BufferState_t* buffer_state = itr->buffer->user_data;
+          BufferCommitNode_t* commit_itr = buffer_state->commit_tail;
+          while(commit_itr->prev) commit_itr = commit_itr->prev;
+          ce_commits_free(commit_itr);
           free(buffer_state);
-          head->buffer->user_data = NULL;
-          head = head->next;
+          itr->buffer->user_data = NULL;
+          itr = itr->next;
      }
 
      ConfigState_t* config_state = user_data;
@@ -3114,6 +3115,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           if(!itr) return;
 
           buffer_view->buffer = itr->buffer;
+          buffer_view->cursor = itr->buffer->cursor;
           *cursor = itr->buffer->cursor;
           center_view(buffer_view);
      }else if(config_state->tab_current->view_current->buffer == config_state->shell_command_buffer){
@@ -3164,7 +3166,7 @@ void repeat_insert_actions(InsertModeState_t* insert_state, Buffer_t* buffer, Po
      }
 }
 
-bool key_handler(int key, BufferNode_t* head, void* user_data)
+bool key_handler(int key, BufferNode_t** head, void* user_data)
 {
      ConfigState_t* config_state = user_data;
      Buffer_t* buffer = config_state->tab_current->view_current->buffer;
@@ -3452,7 +3454,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                }
                break;
           case 25: // Ctrl + y
-               confirm_action(config_state, head);
+               confirm_action(config_state, *head);
                break;
           default:
                if(insert_state->used_arrow_key){
@@ -3574,7 +3576,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     strncpy(filename, &buffer->lines[cursor->y][cursor->x], word_len);
                     filename[word_len] = '\0';
 
-                    Buffer_t* file_buffer = open_file_buffer(head, filename);
+                    Buffer_t* file_buffer = open_file_buffer(*head, filename);
                     if(file_buffer) buffer_view->buffer = file_buffer;
                } break;
                case 'v':
@@ -3583,6 +3585,42 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     break;
                }
                if(handled_key) config_state->command_len = 0;
+          } break;
+          case 'd':
+          {
+               if(config_state->tab_current->view_current->buffer == &config_state->buffer_list_buffer){
+                    handled_key = true;
+
+                    // find which buffer the user wants to delete
+                    Buffer_t* delete_buffer = NULL;
+                    BufferNode_t* itr = *head;
+                    int64_t buffer_index = cursor->y;
+                    while(itr){
+                         buffer_index--;
+                         if(buffer_index == 0){
+                              delete_buffer = itr->buffer;
+                              break;
+                         }
+                         itr = itr->next;
+                    }
+
+                    // remove buffer
+                    ce_remove_buffer_from_list(head, delete_buffer);
+
+                    // change views that are showing this buffer for all tabs
+                    if(head){
+                         TabView_t* tab_itr = config_state->tab_head;
+                         while(tab_itr){
+                              ce_change_buffer_in_views(tab_itr->view_head, delete_buffer, (*head)->buffer);
+                              tab_itr = tab_itr->next;
+                         }
+                    }else{
+                         return false; // quit !
+                    }
+
+                    update_buffer_list_buffer(config_state, *head);
+                    if(cursor->y >= config_state->buffer_list_buffer.line_count) cursor->y = config_state->buffer_list_buffer.line_count - 1;
+               }
           } break;
           case 'm':
           {
@@ -3783,7 +3821,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                        config_state->tab_current->view_current->next_horizontal == NULL &&
                        config_state->tab_current->view_current->next_vertical == NULL ){
                          uint64_t unsaved_buffers = 0;
-                         BufferNode_t* itr = head;
+                         BufferNode_t* itr = *head;
                          while(itr){
                               if(!itr->buffer->readonly && itr->buffer->modified) unsaved_buffers++;
                               itr = itr->next;
@@ -3872,7 +3910,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                          if(empty_first_line) ce_remove_line(config_state->view_input->buffer, 0);
                     }else{
                          // try to find a better place to put the cursor to start
-                         BufferNode_t* itr = head;
+                         BufferNode_t* itr = *head;
                          int64_t buffer_index = 1;
                          bool found_good_buffer = false;
                          while(itr){
@@ -3885,7 +3923,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                               buffer_index++;
                          }
 
-                         update_buffer_list_buffer(config_state, head);
+                         update_buffer_list_buffer(config_state, *head);
                          config_state->buffer_list_buffer.readonly = true;
                          config_state->tab_current->view_current->buffer->cursor = *cursor;
                          config_state->tab_current->view_current->buffer = &config_state->buffer_list_buffer;
@@ -3995,7 +4033,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     half_page_down(config_state->tab_current->view_current);
                } break;
                case 25: // Ctrl + y
-                    confirm_action(config_state, head);
+                    confirm_action(config_state, *head);
                     break;
                case 8: // Ctrl + h
                {
@@ -4250,14 +4288,14 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                     if(config_state->input){
                          iterate_history_input(config_state, false);
                     }else{
-                         jump_to_next_shell_command_file_destination(head, config_state, true);
+                         jump_to_next_shell_command_file_destination(*head, config_state, true);
                     }
                     break;
                case 16: // Ctrl + p
                     if(config_state->input){
                          iterate_history_input(config_state, true);
                     }else{
-                         jump_to_next_shell_command_file_destination(head, config_state, false);
+                         jump_to_next_shell_command_file_destination(*head, config_state, false);
                     }
                     break;
                case 6: // Ctrl + f
@@ -4298,7 +4336,7 @@ bool key_handler(int key, BufferNode_t* head, void* user_data)
                break;
                case 5: // Ctrl + e
                {
-                    Buffer_t* new_buffer = new_buffer_from_string(head, "unnamed", NULL);
+                    Buffer_t* new_buffer = new_buffer_from_string(*head, "unnamed", NULL);
                     ce_alloc_lines(new_buffer, 1);
                     config_state->tab_current->view_current->buffer = new_buffer;
                     *cursor = (Point_t){0, 0};

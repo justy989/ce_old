@@ -1957,6 +1957,14 @@ int nftw_find_file(const char* fpath, const struct stat *sb, int typeflag, struc
      return FTW_CONTINUE;
 }
 
+void free_buffer_state(BufferState_t* buffer_state)
+{
+     BufferCommitNode_t* itr = buffer_state->commit_tail;
+     while(itr->prev) itr = itr->prev;
+     ce_commits_free(itr);
+     free(buffer_state);
+}
+
 Buffer_t* open_file_buffer(BufferNode_t* head, const char* filename)
 {
      BufferNode_t* itr = head;
@@ -2167,11 +2175,7 @@ bool destroyer(BufferNode_t** head, void* user_data)
 {
      BufferNode_t* itr = *head;
      while(itr){
-          BufferState_t* buffer_state = itr->buffer->user_data;
-          BufferCommitNode_t* commit_itr = buffer_state->commit_tail;
-          while(commit_itr->prev) commit_itr = commit_itr->prev;
-          ce_commits_free(commit_itr);
-          free(buffer_state);
+          free_buffer_state(itr->buffer->user_data);
           itr->buffer->user_data = NULL;
           itr = itr->next;
      }
@@ -2195,11 +2199,7 @@ bool destroyer(BufferNode_t** head, void* user_data)
      // input buffer
      {
           ce_free_buffer(&config_state->input_buffer);
-          BufferState_t* buffer_state = config_state->input_buffer.user_data;
-          BufferCommitNode_t* itr = buffer_state->commit_tail;
-          while(itr->prev) itr = itr->prev;
-          ce_commits_free(itr);
-
+          free_buffer_state(config_state->input_buffer.user_data);
           free(config_state->view_input);
      }
 
@@ -3617,6 +3617,10 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     }else{
                          return false; // quit !
                     }
+
+                    // free the buffer and it's state
+                    free_buffer_state(delete_buffer->user_data);
+                    ce_free_buffer(delete_buffer);
 
                     update_buffer_list_buffer(config_state, *head);
                     if(cursor->y >= config_state->buffer_list_buffer.line_count) cursor->y = config_state->buffer_list_buffer.line_count - 1;

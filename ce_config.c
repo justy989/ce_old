@@ -3421,6 +3421,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           if(!itr) return;
 
           input_start(config_state, "Edit Macro", '@');
+          enter_normal_mode(config_state);
           char* char_command = command_string_to_char_string(itr->command);
           ce_insert_string(config_state->view_input->buffer, (Point_t){0,0}, char_command);
           free(char_command);

@@ -3854,6 +3854,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     }
                     enter_normal_mode(config_state);
                     key_free(&config_state->command_head);
+                    if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
                } break;
                case KEY_ESCAPE:
                {

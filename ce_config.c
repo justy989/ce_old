@@ -2134,7 +2134,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      initialize_buffer(&config_state->yank_list_buffer);
      config_state->yank_list_buffer.readonly = true;
 
-     config_state->macro_list_buffer.name = strdup("[marcos]");
+     config_state->macro_list_buffer.name = strdup("[macros]");
      initialize_buffer(&config_state->macro_list_buffer);
      config_state->macro_list_buffer.readonly = true;
 
@@ -2734,12 +2734,22 @@ void update_mark_list_buffer(ConfigState_t* config_state, const Buffer_t* buffer
      config_state->mark_list_buffer.readonly = false;
      ce_clear_lines(&config_state->mark_list_buffer);
 
-     snprintf(buffer_info, BUFSIZ, "+ reg loc");
+     snprintf(buffer_info, BUFSIZ, "+ reg line");
      ce_append_line(&config_state->mark_list_buffer, buffer_info);
 
+     int max_digits = 1;
      const MarkNode_t* itr = ((BufferState_t*)(buffer->user_data))->mark_head;
      while(itr){
-          snprintf(buffer_info, BUFSIZ, "  '%c' %"PRId64", %"PRId64"", itr->reg_char, itr->location.x, itr->location.y);
+          int digits = count_digits(itr->location.y);
+          if(digits > max_digits) max_digits = digits;
+          itr = itr->next;
+     }
+
+     itr = ((BufferState_t*)(buffer->user_data))->mark_head;
+     while(itr){
+          snprintf(buffer_info, BUFSIZ, "  '%c' %*"PRId64" %s",
+                   itr->reg_char, max_digits, itr->location.y,
+                   itr->location.y < buffer->line_count ? buffer->lines[itr->location.y] : "");
           ce_append_line(&config_state->mark_list_buffer, buffer_info);
           itr = itr->next;
      }
@@ -2772,8 +2782,13 @@ void update_macro_list_buffer(ConfigState_t* config_state)
      config_state->macro_list_buffer.readonly = false;
      ce_clear_lines(&config_state->macro_list_buffer);
 
-     snprintf(buffer_info, BUFSIZ, "+ reg actions");
-     ce_append_line(&config_state->macro_list_buffer, buffer_info);
+     ce_append_line(&config_state->macro_list_buffer, "+ escape conversions");
+     ce_append_line(&config_state->macro_list_buffer, "+ \\b -> KEY_BACKSPACE");
+     ce_append_line(&config_state->macro_list_buffer, "+ \\e -> KEY_ESCAPE");
+     ce_append_line(&config_state->macro_list_buffer, "+ \\r -> KEY_ENTER");
+     ce_append_line(&config_state->macro_list_buffer, "+ \\t -> KEY_TAB");
+     ce_append_line(&config_state->macro_list_buffer, "");
+     ce_append_line(&config_state->macro_list_buffer, "+ reg actions");
 
      const MacroNode_t* itr = config_state->macro_head;
      while(itr){
@@ -3316,6 +3331,23 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           if(config_state->tab_current->view_overrideable){
                tab_view_restore_overrideable(config_state->tab_current);
           }
+     }else if(buffer_view->buffer == &config_state->macro_list_buffer){
+          int64_t line = cursor->y - 1; // account for buffer list row header
+          if(line < 0) return;
+          MacroNode_t* itr = config_state->macro_head;
+
+          while(line > 0){
+               itr = itr->next;
+               if(!itr) return;
+               line--;
+          }
+
+          if(!itr) return;
+
+          input_start(config_state, "Edit Macro", '@');
+          char* char_command = command_string_to_char_string(itr->command);
+          ce_append_line(config_state->view_input->buffer, char_command);
+          free(char_command);
      }
 }
 
@@ -3829,6 +3861,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          vim_key_handler(*macro_itr, head, user_data, true);
                          macro_itr++;
                     }
+
+                    if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
                }
 
                handled_key = true;
@@ -4655,8 +4689,9 @@ void view_drawer(const BufferNode_t* head, void* user_data)
           update_buffer_list_buffer(config_state, head);
      }
 
-     if(ce_buffer_in_view(config_state->tab_current->view_head, &config_state->mark_list_buffer)){
-          update_mark_list_buffer(config_state, config_state->buffer_before_query);
+     if(config_state->tab_current->view_current->buffer != &config_state->mark_list_buffer &&
+        ce_buffer_in_view(config_state->tab_current->view_head, &config_state->mark_list_buffer)){
+          update_mark_list_buffer(config_state, buffer);
      }
 
      if(ce_buffer_in_view(config_state->tab_current->view_head, &config_state->yank_list_buffer)){

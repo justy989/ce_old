@@ -1569,6 +1569,8 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
              old_cursor.y == cursor->y){
                buffer_state->cursor_save_column = cursor->x;
           }
+     }else{
+          if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_KEEP_GOING;
      }
 
      return true;

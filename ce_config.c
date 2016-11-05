@@ -3324,10 +3324,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           center_view(buffer_view);
 
           if(config_state->tab_current->view_overrideable){
-               tab_view_save_overrideable(config_state->tab_current);
-               config_state->tab_current->view_overrideable->buffer = config_state->completion_buffer;
-               config_state->tab_current->view_overrideable->cursor = (Point_t){0, 0};
-               center_view(config_state->tab_current->view_overrideable);
+               tab_view_restore_overrideable(config_state->tab_current);
           }
      }
 }
@@ -3740,6 +3737,10 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
                if(key == '?'){
                     update_mark_list_buffer(config_state, buffer);
+
+                    if(config_state->tab_current->view_overrideable){
+                         tab_view_save_overrideable(config_state->tab_current);
+                    }
 
                     config_state->buffer_before_query = config_state->tab_current->view_current->buffer;
                     config_state->tab_current->view_current->buffer->cursor = *cursor;
@@ -4514,7 +4515,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                }
 
                if(itr) {
-                    tab_view_save_overrideable(config_state->tab_current);
                     config_state->tab_current->view_overrideable->buffer = config_state->buffer_before_query;
                     config_state->tab_current->view_overrideable->cursor.y = itr->location.y;
                     center_view(config_state->tab_current->view_overrideable);

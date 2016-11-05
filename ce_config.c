@@ -1739,6 +1739,7 @@ typedef struct{
      Buffer_t buffer_list_buffer;
      Buffer_t mark_list_buffer;
      Buffer_t yank_list_buffer;
+     Buffer_t macro_list_buffer;
      Buffer_t* buffer_before_query;
      int64_t last_command_buffer_jump;
      int last_key;
@@ -1763,6 +1764,9 @@ typedef struct{
      AutoComplete_t auto_complete;
      VimAction_t last_vim_action;
      LineNumberType_t line_number_type;
+     MacroNode_t* macro_head;
+     char recording_macro; // holds the register we are recording
+     KeyNode_t* record_macro_head;
      bool quit;
 } ConfigState_t;
 
@@ -2130,6 +2134,10 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      initialize_buffer(&config_state->yank_list_buffer);
      config_state->yank_list_buffer.readonly = true;
 
+     config_state->macro_list_buffer.name = strdup("macro");
+     initialize_buffer(&config_state->macro_list_buffer);
+     config_state->macro_list_buffer.readonly = true;
+
      // if we reload, the shell command buffer may already exist, don't recreate it
      BufferNode_t* itr = *head;
      while(itr){
@@ -2311,6 +2319,7 @@ bool destroyer(BufferNode_t** head, void* user_data)
      ce_free_buffer(&config_state->buffer_list_buffer);
      ce_free_buffer(&config_state->mark_list_buffer);
      ce_free_buffer(&config_state->yank_list_buffer);
+     ce_free_buffer(&config_state->macro_list_buffer);
 
      // history
      input_history_free(&config_state->shell_command_history);
@@ -2755,6 +2764,28 @@ void update_yank_list_buffer(ConfigState_t* config_state)
 
      config_state->yank_list_buffer.modified = false;
      config_state->yank_list_buffer.readonly = true;
+}
+
+void update_macro_list_buffer(ConfigState_t* config_state)
+{
+     char buffer_info[BUFSIZ];
+     config_state->macro_list_buffer.readonly = false;
+     ce_clear_lines(&config_state->macro_list_buffer);
+
+     snprintf(buffer_info, BUFSIZ, "register actions");
+     ce_append_line(&config_state->macro_list_buffer, buffer_info);
+
+     const MacroNode_t* itr = config_state->macro_head;
+     while(itr){
+          char* char_string = command_string_to_char_string(itr->command);
+          snprintf(buffer_info, BUFSIZ, "       %c %s", itr->reg, char_string);
+          ce_append_line(&config_state->macro_list_buffer, buffer_info);
+          free(char_string);
+          itr = itr->next;
+     }
+
+     config_state->macro_list_buffer.modified = false;
+     config_state->macro_list_buffer.readonly = true;
 }
 
 Point_t get_cursor_on_terminal(const Point_t* cursor, const BufferView_t* buffer_view, LineNumberType_t line_number_type)
@@ -3707,6 +3738,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           } break;
           case 'm':
           {
+               if(!isprint(key)) break;
+
                handled_key = true;
 
                if(key == '?'){
@@ -3727,6 +3760,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                }
           } break;
           case '"':
+               if(!isprint(key)) break;
                if(key == '?'){
                     update_yank_list_buffer(config_state);
 
@@ -3757,689 +3791,731 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     ce_save_buffer(buffer, buffer->filename);
                     return false; // quit
                }
+               break;
+          case 'q':
+               if(!isprint(key)) break;
+               if(key == '?'){
+                    update_macro_list_buffer(config_state);
+
+                    config_state->buffer_before_query = config_state->tab_current->view_current->buffer;
+                    config_state->tab_current->view_current->buffer->cursor = *cursor;
+                    config_state->tab_current->view_current->buffer = &config_state->macro_list_buffer;
+                    config_state->tab_current->view_current->top_row = 0;
+                    config_state->tab_current->view_current->cursor = (Point_t){0, 1};
+               }else{
+                    config_state->recording_macro = key;
+                    keys_free(&config_state->record_macro_head);
+               }
+               handled_key = true;
+               break;
+          case '@':
+          {
+               if(!isprint(key)) break;
+
+               MacroNode_t* macro = macro_find(config_state->macro_head, key);
+               if(!macro) break;
+
+               int* macro_itr = macro->command;
+               while(*macro_itr){
+                    vim_key_handler(*macro_itr, head, user_data, true);
+                    macro_itr++;
+               }
+          } break;
           }
      }
 
-     if(!handled_key && !vim_key_handler(key, head, user_data, false)){
-          switch(key){
-          case KEY_MOUSE:
-               handle_mouse_event(config_state, buffer, buffer_view, cursor);
-               break;
-          case KEY_DC:
-               // TODO: with our current insert mode undo implementation we can't support this
-               // ce_remove_char(buffer, cursor);
-               break;
-          case 14: // Ctrl + n
-               if(auto_completing(&config_state->auto_complete)){
-                    Point_t end = *cursor;
-                    end.x--;
-                    if(end.x < 0) end.x = 0;
-                    char* match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
-                    auto_complete_next(&config_state->auto_complete, match);
-                    update_completion_buffer(config_state->completion_buffer, &config_state->auto_complete,
-                                             match);
-                    free(match);
-                    break;
-               }
-
-               if(config_state->input){
-                    if(iterate_history_input(config_state, false)){
-                         if(buffer->line_count && buffer->lines[cursor->y][0]) cursor->x++;
-                         enter_normal_mode(config_state);
-                    }
-               }
-               break;
-          case 16: // Ctrl + p
-               if(auto_completing(&config_state->auto_complete)){
-                    Point_t end = *cursor;
-                    end.x--;
-                    if(end.x < 0) end.x = 0;
-                    char* match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
-                    auto_complete_prev(&config_state->auto_complete, match);
-                    update_completion_buffer(config_state->completion_buffer, &config_state->auto_complete,
-                                             match);
-                    free(match);
-                    break;
-               }
-
-               if(config_state->input){
-                    if(iterate_history_input(config_state, true)){
-                         if(buffer->line_count && buffer->lines[cursor->y][0]) cursor->x++;
-                         enter_normal_mode(config_state);
-                    }
-               }
-               break;
-          case 25: // Ctrl + y
-               confirm_action(config_state, *head);
-               keys_free(&config_state->command_head);
-               break;
-          }
-
-          if(config_state->vim_mode != VM_INSERT){
+     if(!handled_key){
+          if(vim_key_handler(key, head, user_data, false)){
+               keys_push(&config_state->record_macro_head, key);
+          }else{
                switch(key){
-               default:
+               case KEY_MOUSE:
+                    handle_mouse_event(config_state, buffer, buffer_view, cursor);
                     break;
-               case '.':
-               {
-                    if(!config_state->last_command_string) break;
-                    int* cmd_itr = config_state->last_command_string;
-                    while(*cmd_itr){
-                         vim_key_handler(*cmd_itr, head, user_data, true);
-                         cmd_itr++;
-                    }
-                    enter_normal_mode(config_state);
-                    keys_free(&config_state->command_head);
-                    if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
-               } break;
-               case KEY_ESCAPE:
-               {
-                    if(config_state->input){
-                         input_cancel(config_state);
-                    }
-               } break;
-               case 'J':
-               {
-                    if(cursor->y == buffer->line_count - 1) break; // nothing to join
-                    Point_t join_loc = {strlen(buffer->lines[cursor->y]), cursor->y};
-                    Point_t end_join_loc = {0, cursor->y+1};
-                    ce_move_cursor_to_soft_beginning_of_line(buffer, &end_join_loc);
-                    if(!end_join_loc.x) end_join_loc = join_loc;
-                    else end_join_loc.x--;
-                    char* save_str = ce_dupe_string(buffer, join_loc, end_join_loc);
-                    assert(save_str[0] == '\n');
-                    if(ce_remove_string(buffer, join_loc, ce_compute_length(buffer, join_loc, end_join_loc))){
-                         ce_insert_string(buffer, join_loc, " ");
-                         ce_commit_change_string(&buffer_state->commit_tail, join_loc, *cursor, *cursor, strdup("\n"), save_str, BCC_STOP);
-                    }
-               } break;
-               case 'O':
-               {
-                    Point_t begin_line = {0, cursor->y};
-
-                    // indent if necessary
-                    int64_t indent_len = ce_get_indentation_for_next_line(buffer, *cursor, strlen(TAB_STRING));
-                    char* indent_nl = malloc(sizeof '\n' + indent_len + sizeof '\0');
-                    memset(&indent_nl[0], ' ', indent_len);
-                    indent_nl[indent_len] = '\n';
-                    indent_nl[indent_len + 1] = '\0';
-
-                    if(ce_insert_string(buffer, begin_line, indent_nl)){
-                         *cursor = (Point_t){indent_len, cursor->y};
-                         ce_commit_insert_string(&buffer_state->commit_tail, begin_line, *cursor, *cursor, indent_nl, BCC_KEEP_GOING);
-                         enter_insert_mode(config_state);
-                    }
-               } break;
-               case 'o':
-               {
-                    Point_t end_of_line = *cursor;
-                    end_of_line.x = strlen(buffer->lines[cursor->y]);
-
-                    // indent if necessary
-                    int64_t indent_len = ce_get_indentation_for_next_line(buffer, *cursor, strlen(TAB_STRING));
-                    char* nl_indent = malloc(sizeof '\n' + indent_len + sizeof '\0');
-                    nl_indent[0] = '\n';
-                    memset(&nl_indent[1], ' ', indent_len);
-                    nl_indent[1 + indent_len] = '\0';
-
-                    if(ce_insert_string(buffer, end_of_line, nl_indent)){
-                         Point_t save_cursor = *cursor;
-                         *cursor = (Point_t){indent_len, cursor->y + 1};
-                         ce_commit_insert_string(&buffer_state->commit_tail, end_of_line, save_cursor, *cursor, nl_indent, BCC_KEEP_GOING);
-                         enter_insert_mode(config_state);
-                    }
-               } break;
-               case KEY_SAVE:
-                    ce_save_buffer(buffer, buffer->filename);
+               case KEY_DC:
+                    // TODO: with our current insert mode undo implementation we can't support this
+                    // ce_remove_char(buffer, cursor);
                     break;
-               case 7: // Ctrl + g
-               {
-                    split_view(config_state->tab_current->view_head, config_state->tab_current->view_current, false, config_state->line_number_type);
-               } break;
-               case 22: // Ctrl + v
-               {
-                    split_view(config_state->tab_current->view_head, config_state->tab_current->view_current, true, config_state->line_number_type);
-               } break;
-               case KEY_CLOSE: // Ctrl + q
-               {
-                    if(config_state->input){
-                         input_cancel(config_state);
-                         break;
-                    }
-
-                    // try to quit if there is nothing left to do!
-                    if(config_state->tab_current == config_state->tab_head &&
-                       config_state->tab_current->next == NULL &&
-                       config_state->tab_current->view_current == config_state->tab_current->view_head &&
-                       config_state->tab_current->view_current->next_horizontal == NULL &&
-                       config_state->tab_current->view_current->next_vertical == NULL ){
-                         uint64_t unsaved_buffers = 0;
-                         BufferNode_t* itr = *head;
-                         while(itr){
-                              if(!itr->buffer->readonly && itr->buffer->modified) unsaved_buffers++;
-                              itr = itr->next;
-                         }
-
-                         if(unsaved_buffers){
-                              input_start(config_state, "Unsaved buffers... Quit anyway? (y/n)", key);
-                              break;
-                         }
-
-                         return false;
-                    }
-
-                    Point_t save_cursor_on_terminal = get_cursor_on_terminal(cursor, buffer_view, config_state->line_number_type);
-                    config_state->tab_current->view_current->buffer->cursor = config_state->tab_current->view_current->cursor;
-
-                    if(ce_remove_view(&config_state->tab_current->view_head, config_state->tab_current->view_current)){
-                         if(config_state->tab_current->view_current == config_state->tab_current->view_overrideable){
-                              config_state->tab_current->view_overrideable = NULL;
-                         }
-
-                         // if head is NULL, then we have removed the view head, and there were no other views, head is NULL
-                         if(!config_state->tab_current->view_head){
-                              if(config_state->tab_current->next){
-                                   config_state->tab_current->next = config_state->tab_current->next;
-                                   TabView_t* tmp = config_state->tab_current;
-                                   config_state->tab_current = config_state->tab_current->next;
-                                   tab_view_remove(&config_state->tab_head, tmp);
-                                   break;
-                              }else{
-
-                                   TabView_t* itr = config_state->tab_head;
-                                   while(itr && itr->next != config_state->tab_current) itr = itr->next;
-                                   assert(itr);
-                                   assert(itr->next == config_state->tab_current);
-                                   tab_view_remove(&config_state->tab_head, config_state->tab_current);
-                                   config_state->tab_current = itr;
-                                   break;
-                              }
-                         }
-
-                         if(config_state->tab_current->view_current == config_state->tab_current->view_previous){
-                              config_state->tab_current->view_previous = NULL;
-                         }
-
-                         Point_t top_left;
-                         Point_t bottom_right;
-                         get_terminal_view_rect(config_state->tab_head, &top_left, &bottom_right);
-
-                         ce_calc_views(config_state->tab_current->view_head, top_left, bottom_right);
-                         BufferView_t* new_view = ce_find_view_at_point(config_state->tab_current->view_head, save_cursor_on_terminal);
-                         if(new_view){
-                              config_state->tab_current->view_current = new_view;
-                         }else{
-                              config_state->tab_current->view_current = config_state->tab_current->view_head;
-                         }
-                    }
-               } break;
-               case 2: // Ctrl + b
-                    if(config_state->input && config_state->tab_current->view_current == config_state->view_input){
-                         // dump input history on cursor line
-                         InputHistory_t* cur_hist = history_from_input_key(config_state);
-                         if(!cur_hist){
-                              ce_message("no history to dump");
-                              break;
-                         }
-
-                         // start the insertions after the cursor, unless the buffer is empty
-                         assert(config_state->view_input->buffer->line_count);
-                         int lines_added = 1;
-                         bool empty_first_line = !config_state->view_input->buffer->lines[0][0];
-
-                         // insert each line in history
-                         InputHistoryNode_t* node = cur_hist->head;
-                         while(node && node->entry){
-                              if(ce_insert_line(config_state->view_input->buffer,
-                                                config_state->view_input->cursor.y + lines_added,
-                                                node->entry)){
-                                   lines_added += ce_count_string_lines(node->entry);
-                              }else{
-                                   break;
-                              }
-                              node = node->next;
-                         }
-
-                         if(empty_first_line) ce_remove_line(config_state->view_input->buffer, 0);
-                    }else{
-                         // try to find a better place to put the cursor to start
-                         BufferNode_t* itr = *head;
-                         int64_t buffer_index = 1;
-                         bool found_good_buffer = false;
-                         while(itr){
-                              if(!itr->buffer->readonly && !ce_buffer_in_view(config_state->tab_current->view_head, itr->buffer)){
-                                   config_state->tab_current->view_current->cursor.y = buffer_index;
-                                   found_good_buffer = true;
-                                   break;
-                              }
-                              itr = itr->next;
-                              buffer_index++;
-                         }
-
-                         update_buffer_list_buffer(config_state, *head);
-                         config_state->tab_current->view_current->buffer->cursor = *cursor;
-                         config_state->tab_current->view_current->buffer = &config_state->buffer_list_buffer;
-                         config_state->tab_current->view_current->top_row = 0;
-                         config_state->tab_current->view_current->cursor = (Point_t){0, found_good_buffer ? buffer_index : 1};
-
-                    }
-                    break;
-               case 'u':
-                    if(buffer_state->commit_tail && buffer_state->commit_tail->commit.type != BCT_NONE){
-                         ce_commit_undo(buffer, &buffer_state->commit_tail, cursor);
-                         if(buffer_state->commit_tail->commit.type == BCT_NONE){
-                              buffer->modified = false;
-                         }
-                    }
-                    break;
-               case 'x':
-               {
-                    char c;
-                    if(ce_get_char(buffer, *cursor, &c) && ce_remove_char(buffer, *cursor)){
-                         ce_commit_remove_char(&buffer_state->commit_tail, *cursor, *cursor, *cursor, c, BCC_STOP);
-                         ce_clamp_cursor(buffer, cursor);
-                    }
-               }
-               break;
-               case KEY_REDO:
-               {
-                    if(buffer_state->commit_tail && buffer_state->commit_tail->next){
-                         ce_commit_redo(buffer, &buffer_state->commit_tail, cursor);
-                    }
-               } break;
-               case ';':
-               {
-                    VimAction_t action = {};
-                    FindState_t find_state; // dummy find state so our's doesn't get modified
-                    VimMode_t final_mode;
-                    action.multiplier = 1;
-                    action.change.type = VCT_MOTION;
-                    action.motion.type = config_state->find_state.motion_type;
-                    action.motion.multiplier = 1;
-                    action.motion.match_char = config_state->find_state.ch;
-                    vim_action_apply(&action, buffer, cursor, config_state->vim_mode,
-                                     &config_state->yank_head, &final_mode, &config_state->visual_start,
-                                     &find_state);
-               } break;
-               case ',':
-               {
-                    VimAction_t action = {};
-                    FindState_t find_state; // dummy find state so our's doesn't get modified
-                    VimMode_t final_mode;
-                    action.multiplier = 1;
-                    action.change.type = VCT_MOTION;
-                    action.motion.multiplier = 1;
-                    action.motion.match_char = config_state->find_state.ch;
-                    switch(config_state->find_state.motion_type){
-                    default:
-                         break;
-                    case VMT_FIND_NEXT_MATCHING_CHAR:
-                         action.motion.type = VMT_FIND_PREV_MATCHING_CHAR;
-                         break;
-                    case VMT_FIND_PREV_MATCHING_CHAR:
-                         action.motion.type = VMT_FIND_NEXT_MATCHING_CHAR;
-                         break;
-                    case VMT_TO_NEXT_MATCHING_CHAR:
-                         action.motion.type = VMT_TO_PREV_MATCHING_CHAR;
-                         break;
-                    case VMT_TO_PREV_MATCHING_CHAR:
-                         action.motion.type = VMT_TO_NEXT_MATCHING_CHAR;
-                         break;
-                    }
-                    vim_action_apply(&action, buffer, cursor, config_state->vim_mode,
-                                     &config_state->yank_head, &final_mode, &config_state->visual_start,
-                                     &find_state);
-               } break;
-               case 'H':
-               {
-                    // move cursor to top line of view
-                    Point_t location = {cursor->x, buffer_view->top_row};
-                    ce_set_cursor(buffer, cursor, location);
-               } break;
-               case 'M':
-               {
-                    // move cursor to middle line of view
-                    int64_t view_height = buffer_view->bottom_right.y - buffer_view->top_left.y;
-                    Point_t location = {cursor->x, buffer_view->top_row + (view_height/2)};
-                    ce_set_cursor(buffer, cursor, location);
-               } break;
-               case 'L':
-               {
-                    // move cursor to bottom line of view
-                    int64_t view_height = buffer_view->bottom_right.y - buffer_view->top_left.y;
-                    Point_t location = {cursor->x, buffer_view->top_row + view_height};
-                    ce_set_cursor(buffer, cursor, location);
-               } break;
-               case 'z':
-               break;
-               case '%':
-               {
-                    ce_move_cursor_to_matching_pair(buffer, cursor);
-               } break;
-               case KEY_NPAGE:
-               {
-                    half_page_up(config_state->tab_current->view_current);
-               } break;
-               case KEY_PPAGE:
-               {
-                    half_page_down(config_state->tab_current->view_current);
-               } break;
-               case 8: // Ctrl + h
-               {
-                   // TODO: consolidate into function for use with other window movement keys, and for use in insert mode?
-                   Point_t point = {config_state->tab_current->view_current->top_left.x - 2, // account for window separator
-                                    cursor->y - config_state->tab_current->view_current->top_row + config_state->tab_current->view_current->top_left.y};
-                   switch_to_view_at_point(config_state, point);
-               } break;
-               case 10: // Ctrl + j
-               {
-                    Point_t point = {cursor->x - config_state->tab_current->view_current->left_column + config_state->tab_current->view_current->top_left.x,
-                                     config_state->tab_current->view_current->bottom_right.y + 2}; // account for window separator
-                    switch_to_view_at_point(config_state, point);
-               } break;
-               case 11: // Ctrl + k
-               {
-                    Point_t point = {cursor->x - config_state->tab_current->view_current->left_column + config_state->tab_current->view_current->top_left.x,
-                                     config_state->tab_current->view_current->top_left.y - 2};
-                    switch_to_view_at_point(config_state, point);
-               } break;
-               case 12: // Ctrl + l
-               {
-                    Point_t point = {config_state->tab_current->view_current->bottom_right.x + 2, // account for window separator
-                                     cursor->y - config_state->tab_current->view_current->top_row + config_state->tab_current->view_current->top_left.y};
-                    switch_to_view_at_point(config_state, point);
-               } break;
-               case ':':
-               {
-                    input_start(config_state, "Goto Line", key);
-               }
-               break;
-               case '#':
-               {
-                    if(!buffer->lines || !buffer->lines[cursor->y]) break;
-
-                    Point_t word_start, word_end;
-                    if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) break;
-                    char* search_str = ce_dupe_string(buffer, word_start, word_end);
-                    add_yank(&config_state->yank_head, '/', search_str, YANK_NORMAL);
-                    config_state->search_command.direction = CE_UP;
-                    goto search;
-               } break;
-               case '*':
-               {
-                    if(!buffer->lines || !buffer->lines[cursor->y]) break;
-
-                    Point_t word_start, word_end;
-                    if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) break;
-                    char* search_str = ce_dupe_string(buffer, word_start, word_end);
-                    add_yank(&config_state->yank_head, '/', search_str, YANK_NORMAL);
-                    config_state->search_command.direction = CE_DOWN;
-                    goto search;
-               } break;
-               case '/':
-               {
-                    input_start(config_state, "Search", key);
-                    config_state->search_command.direction = CE_DOWN;
-                    config_state->start_search = *cursor;
-                    break;
-               }
-               case '?':
-               {
-                    input_start(config_state, "Reverse Search", key);
-                    config_state->search_command.direction = CE_UP;
-                    config_state->start_search = *cursor;
-                    break;
-               }
-               case 'n':
-     search:
-               {
-                    YankNode_t* yank = find_yank(config_state->yank_head, '/');
-                    if(yank){
-                         assert(yank->mode == YANK_NORMAL);
-                         Point_t match;
-                         if(ce_find_string(buffer, *cursor, yank->text, &match, config_state->search_command.direction)){
-                              ce_set_cursor(buffer, cursor, match);
-                              center_view(config_state->tab_current->view_current);
-                         }
-                    }
-               } break;
-               case 'N':
-               {
-                    YankNode_t* yank = find_yank(config_state->yank_head, '/');
-                    if(yank){
-                         assert(yank->mode == YANK_NORMAL);
-                         Point_t match;
-                         if(ce_find_string(buffer, *cursor, yank->text, &match, ce_reverse_direction(config_state->search_command.direction))){
-                              ce_set_cursor(buffer, cursor, match);
-                              center_view(config_state->tab_current->view_current);
-                         }
-                    }
-               } break;
-               break;
-               case '=':
-               {
-#if 0
-                    if(config_state->movement_keys[0] == MOVEMENT_CONTINUE) return true;
-                    else{
-                         int64_t begin_format_line;
-                         int64_t end_format_line;
-                         switch(key){
-                         case '=':
-                              begin_format_line = cursor->y;
-                              end_format_line = cursor->y;
-                              break;
-                         case 'G':
-                              begin_format_line = cursor->y;
-                              end_format_line = buffer->line_count-1;
-                              break;
-                         default:
-                              clear_keys(config_state);
-                              return true;
-                         }
-
-                         // TODO support undo with clang-format
-                         ce_commits_free(buffer_state->commit_tail);
-                         buffer_state->commit_tail = NULL;
-
-                         int in_fds[2]; // 0 = child stdin
-                         int out_fds[2]; // 1 = child stdout
-                         if(pipe(in_fds) == -1 || pipe(out_fds) == -1){
-                              ce_message("pipe failed %s", strerror(errno));
-                              return true;
-                         }
-                         pid_t pid = fork();
-                         if(pid == -1){
-                              ce_message("fork failed %s", strerror(errno));
-                              return true;
-                         }
-                         if(pid == 0){
-                              // child process
-                              close(in_fds[1]); // close parent fds
-                              close(out_fds[0]);
-
-                              close(0); // close stdin
-                              close(1); // close stdout
-                              dup(in_fds[0]); // new stdin
-                              dup(out_fds[1]); // new stdout
-                              int64_t cursor_position = cursor->x+1;
-                              for(int64_t y_itr = 0; y_itr < cursor->y; y_itr++){
-                                   cursor_position += strlen(buffer->lines[y_itr]);
-                              }
-                              char* cursor_arg;
-                              asprintf(&cursor_arg, "-cursor=%"PRId64, cursor_position);
-
-                              char* line_arg;
-                              asprintf(&line_arg, "-lines=%"PRId64":%"PRId64, begin_format_line+1, end_format_line+1);
-
-                              int ret __attribute__((unused)) = execlp("clang-format", "clang-format", line_arg, cursor_arg, (char *)NULL);
-                              assert(ret != -1);
-                              exit(1); // we should never reach here
-                         }
-
-                         // parent process
-                         close(in_fds[0]); // close child fds
-                         close(out_fds[1]);
-
-                         FILE* child_stdin = fdopen(in_fds[1], "w");
-                         FILE* child_stdout = fdopen(out_fds[0], "r");
-                         assert(child_stdin);
-                         assert(child_stdout);
-
-                         for(int i = 0; i < buffer->line_count; i++){
-                              if(fputs(buffer->lines[i], child_stdin) == EOF || fputc('\n', child_stdin) == EOF){
-                                   ce_message("issue with fputs");
-                                   return true;
-                              }
-                         }
-                         fclose(child_stdin);
-                         close(in_fds[1]);
-
-                         char formatted_line_buf[BUFSIZ];
-                         formatted_line_buf[0] = 0;
-
-                         // read cursor position
-                         fgets(formatted_line_buf, BUFSIZ, child_stdout);
-                         int cursor_position = -1;
-                         sscanf(formatted_line_buf, "{ \"Cursor\": %d", &cursor_position);
-
-                         // blow away all lines in the file
-                         for(int64_t i = buffer->line_count - 1; i >= 0; i--){
-                              ce_remove_line(buffer, i);
-                         }
-
-                         for(int64_t i = 0; ; i++){
-                              if(fgets(formatted_line_buf, BUFSIZ, child_stdout) == NULL) break;
-                              size_t new_line_len = strlen(formatted_line_buf) - 1;
-                              assert(formatted_line_buf[new_line_len] == '\n');
-                              formatted_line_buf[new_line_len] = 0;
-                              ce_insert_line(buffer, i, formatted_line_buf);
-#if 0
-                              if(cursor_position > 0){
-                                   cursor_position -= new_line_len+1;
-                                   if(cursor_position <= 0){
-                                        Point_t new_cursor_location = {-cursor_position, i};
-                                        ce_message("moving cursor to %ld", -cursor_position);
-                                        ce_set_cursor(buffer, cursor, &new_cursor_location);
-                                   }
-                              }
-#endif
-                         }
-                         cursor->x = 0;
-                         cursor->y = 0;
-                         if(!ce_advance_cursor(buffer, cursor, cursor_position-1))
-                              ce_message("failed to advance cursor");
-
-#if 0
-                         // TODO: use -output-replacements-xml to support undo
-                         char* formatted_line = strdup(formatted_line_buf);
-                         // save the current line in undo history
-                         Point_t delete_begin = {0, cursor->y};
-                         char* save_string = ce_dupe_line(buffer, cursor->y);
-                         if(!ce_remove_line(buffer, cursor->y)){
-                              ce_message("ce_remove_string failed");
-                              return true;
-                         }
-                         ce_insert_string(buffer, &delete_begin, formatted_line);
-                         ce_commit_change_string(&buffer_state->commit_tail, &delete_begin, cursor, cursor, formatted_line, save_string);
-#endif
-
-                         fclose(child_stdout);
-                         close(in_fds[0]);
-
-                         // wait for the child process to complete
-                         int wstatus;
-                         do {
-                              pid_t w = waitpid(pid, &wstatus, WUNTRACED | WCONTINUED);
-                              if (w == -1) {
-                                   perror("waitpid");
-                                   exit(EXIT_FAILURE);
-                              }
-
-                              if (WIFEXITED(wstatus) && WEXITSTATUS(wstatus) != 0) {
-                                   ce_message("clang-format process exited, status=%d\n", WEXITSTATUS(wstatus));
-                              } else if (WIFSIGNALED(wstatus)) {
-                                   ce_message("clang-format process killed by signal %d\n", WTERMSIG(wstatus));
-                              } else if (WIFSTOPPED(wstatus)) {
-                                   ce_message("clang-format process stopped by signal %d\n", WSTOPSIG(wstatus));
-                              } else if (WIFCONTINUED(wstatus)) {
-                                   ce_message("clang-format process continued\n");
-                              }
-                         } while (!WIFEXITED(wstatus) && !WIFSIGNALED(wstatus));
-                         config_state->command_key = '\0';
-                    }
-#endif
-               } break;
-               case 24: // Ctrl + x
-               {
-                    input_start(config_state, "Shell Command", key);
-               } break;
                case 14: // Ctrl + n
+                    if(auto_completing(&config_state->auto_complete)){
+                         Point_t end = *cursor;
+                         end.x--;
+                         if(end.x < 0) end.x = 0;
+                         char* match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
+                         auto_complete_next(&config_state->auto_complete, match);
+                         update_completion_buffer(config_state->completion_buffer, &config_state->auto_complete,
+                                                  match);
+                         free(match);
+                         break;
+                    }
+
                     if(config_state->input){
-                         iterate_history_input(config_state, false);
-                    }else{
-                         jump_to_next_shell_command_file_destination(*head, config_state, true);
+                         if(iterate_history_input(config_state, false)){
+                              if(buffer->line_count && buffer->lines[cursor->y][0]) cursor->x++;
+                              enter_normal_mode(config_state);
+                         }
                     }
                     break;
                case 16: // Ctrl + p
+                    if(auto_completing(&config_state->auto_complete)){
+                         Point_t end = *cursor;
+                         end.x--;
+                         if(end.x < 0) end.x = 0;
+                         char* match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
+                         auto_complete_prev(&config_state->auto_complete, match);
+                         update_completion_buffer(config_state->completion_buffer, &config_state->auto_complete,
+                                                  match);
+                         free(match);
+                         break;
+                    }
+
                     if(config_state->input){
-                         iterate_history_input(config_state, true);
-                    }else{
-                         jump_to_next_shell_command_file_destination(*head, config_state, false);
+                         if(iterate_history_input(config_state, true)){
+                              if(buffer->line_count && buffer->lines[cursor->y][0]) cursor->x++;
+                              enter_normal_mode(config_state);
+                         }
                     }
                     break;
-               case 6: // Ctrl + f
-               {
-                    input_start(config_state, "Load File", key);
-                    calc_auto_complete_start_and_path(&config_state->auto_complete,
-                                                      config_state->view_input->buffer->lines[0],
-                                                      *cursor,
-                                                      config_state->completion_buffer);
-                    if(config_state->tab_current->view_overrideable){
-                         tab_view_save_overrideable(config_state->tab_current);
+               case 25: // Ctrl + y
+                    confirm_action(config_state, *head);
+                    keys_free(&config_state->command_head);
+                    break;
+               }
 
-                         config_state->tab_current->view_overrideable->buffer = config_state->completion_buffer;
-                         config_state->tab_current->view_overrideable->cursor = (Point_t){0, 0};
-                         center_view(config_state->tab_current->view_overrideable);
-                    }else{
-                         config_state->buffer_before_query = config_state->tab_current->view_input_save->buffer;
-                         config_state->buffer_before_query->cursor = config_state->tab_current->view_input_save->cursor;
-                         config_state->tab_current->view_input_save->buffer = config_state->completion_buffer;
-                         config_state->tab_current->view_input_save->cursor = (Point_t){0, 0};
-                         config_state->tab_current->view_input_save->top_row = 0;
+               if(config_state->vim_mode != VM_INSERT){
+                    switch(key){
+                    default:
+                         break;
+                    case '.':
+                    {
+                         if(!config_state->last_command_string) break;
+                         int* cmd_itr = config_state->last_command_string;
+                         while(*cmd_itr){
+                              vim_key_handler(*cmd_itr, head, user_data, true);
+                              cmd_itr++;
+                         }
+                         enter_normal_mode(config_state);
+                         keys_free(&config_state->command_head);
+                         if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
+                    } break;
+                    case 'q':
+                         if(config_state->recording_macro){
+                              int* built_macro = keys_get_string(config_state->record_macro_head);
+                              macro_add(&config_state->macro_head, config_state->recording_macro, built_macro);
+                              config_state->recording_macro = 0;
+                              key = 0;
+                         }
+                         break;
+                    case KEY_ESCAPE:
+                    {
+                         if(config_state->input){
+                              input_cancel(config_state);
+                         }
+                    } break;
+                    case 'J':
+                    {
+                         if(cursor->y == buffer->line_count - 1) break; // nothing to join
+                         Point_t join_loc = {strlen(buffer->lines[cursor->y]), cursor->y};
+                         Point_t end_join_loc = {0, cursor->y+1};
+                         ce_move_cursor_to_soft_beginning_of_line(buffer, &end_join_loc);
+                         if(!end_join_loc.x) end_join_loc = join_loc;
+                         else end_join_loc.x--;
+                         char* save_str = ce_dupe_string(buffer, join_loc, end_join_loc);
+                         assert(save_str[0] == '\n');
+                         if(ce_remove_string(buffer, join_loc, ce_compute_length(buffer, join_loc, end_join_loc))){
+                              ce_insert_string(buffer, join_loc, " ");
+                              ce_commit_change_string(&buffer_state->commit_tail, join_loc, *cursor, *cursor, strdup("\n"), save_str, BCC_STOP);
+                         }
+                    } break;
+                    case 'O':
+                    {
+                         Point_t begin_line = {0, cursor->y};
+
+                         // indent if necessary
+                         int64_t indent_len = ce_get_indentation_for_next_line(buffer, *cursor, strlen(TAB_STRING));
+                         char* indent_nl = malloc(sizeof '\n' + indent_len + sizeof '\0');
+                         memset(&indent_nl[0], ' ', indent_len);
+                         indent_nl[indent_len] = '\n';
+                         indent_nl[indent_len + 1] = '\0';
+
+                         if(ce_insert_string(buffer, begin_line, indent_nl)){
+                              *cursor = (Point_t){indent_len, cursor->y};
+                              ce_commit_insert_string(&buffer_state->commit_tail, begin_line, *cursor, *cursor, indent_nl, BCC_KEEP_GOING);
+                              enter_insert_mode(config_state);
+                         }
+                    } break;
+                    case 'o':
+                    {
+                         Point_t end_of_line = *cursor;
+                         end_of_line.x = strlen(buffer->lines[cursor->y]);
+
+                         // indent if necessary
+                         int64_t indent_len = ce_get_indentation_for_next_line(buffer, *cursor, strlen(TAB_STRING));
+                         char* nl_indent = malloc(sizeof '\n' + indent_len + sizeof '\0');
+                         nl_indent[0] = '\n';
+                         memset(&nl_indent[1], ' ', indent_len);
+                         nl_indent[1 + indent_len] = '\0';
+
+                         if(ce_insert_string(buffer, end_of_line, nl_indent)){
+                              Point_t save_cursor = *cursor;
+                              *cursor = (Point_t){indent_len, cursor->y + 1};
+                              ce_commit_insert_string(&buffer_state->commit_tail, end_of_line, save_cursor, *cursor, nl_indent, BCC_KEEP_GOING);
+                              enter_insert_mode(config_state);
+                         }
+                    } break;
+                    case KEY_SAVE:
+                         ce_save_buffer(buffer, buffer->filename);
+                         break;
+                    case 7: // Ctrl + g
+                    {
+                         split_view(config_state->tab_current->view_head, config_state->tab_current->view_current, false, config_state->line_number_type);
+                    } break;
+                    case 22: // Ctrl + v
+                    {
+                         split_view(config_state->tab_current->view_head, config_state->tab_current->view_current, true, config_state->line_number_type);
+                    } break;
+                    case KEY_CLOSE: // Ctrl + q
+                    {
+                         if(config_state->input){
+                              input_cancel(config_state);
+                              break;
+                         }
+
+                         // try to quit if there is nothing left to do!
+                         if(config_state->tab_current == config_state->tab_head &&
+                            config_state->tab_current->next == NULL &&
+                            config_state->tab_current->view_current == config_state->tab_current->view_head &&
+                            config_state->tab_current->view_current->next_horizontal == NULL &&
+                            config_state->tab_current->view_current->next_vertical == NULL ){
+                              uint64_t unsaved_buffers = 0;
+                              BufferNode_t* itr = *head;
+                              while(itr){
+                                   if(!itr->buffer->readonly && itr->buffer->modified) unsaved_buffers++;
+                                   itr = itr->next;
+                              }
+
+                              if(unsaved_buffers){
+                                   input_start(config_state, "Unsaved buffers... Quit anyway? (y/n)", key);
+                                   break;
+                              }
+
+                              return false;
+                         }
+
+                         Point_t save_cursor_on_terminal = get_cursor_on_terminal(cursor, buffer_view, config_state->line_number_type);
+                         config_state->tab_current->view_current->buffer->cursor = config_state->tab_current->view_current->cursor;
+
+                         if(ce_remove_view(&config_state->tab_current->view_head, config_state->tab_current->view_current)){
+                              if(config_state->tab_current->view_current == config_state->tab_current->view_overrideable){
+                                   config_state->tab_current->view_overrideable = NULL;
+                              }
+
+                              // if head is NULL, then we have removed the view head, and there were no other views, head is NULL
+                              if(!config_state->tab_current->view_head){
+                                   if(config_state->tab_current->next){
+                                        config_state->tab_current->next = config_state->tab_current->next;
+                                        TabView_t* tmp = config_state->tab_current;
+                                        config_state->tab_current = config_state->tab_current->next;
+                                        tab_view_remove(&config_state->tab_head, tmp);
+                                        break;
+                                   }else{
+
+                                        TabView_t* itr = config_state->tab_head;
+                                        while(itr && itr->next != config_state->tab_current) itr = itr->next;
+                                        assert(itr);
+                                        assert(itr->next == config_state->tab_current);
+                                        tab_view_remove(&config_state->tab_head, config_state->tab_current);
+                                        config_state->tab_current = itr;
+                                        break;
+                                   }
+                              }
+
+                              if(config_state->tab_current->view_current == config_state->tab_current->view_previous){
+                                   config_state->tab_current->view_previous = NULL;
+                              }
+
+                              Point_t top_left;
+                              Point_t bottom_right;
+                              get_terminal_view_rect(config_state->tab_head, &top_left, &bottom_right);
+
+                              ce_calc_views(config_state->tab_current->view_head, top_left, bottom_right);
+                              BufferView_t* new_view = ce_find_view_at_point(config_state->tab_current->view_head, save_cursor_on_terminal);
+                              if(new_view){
+                                   config_state->tab_current->view_current = new_view;
+                              }else{
+                                   config_state->tab_current->view_current = config_state->tab_current->view_head;
+                              }
+                         }
+                    } break;
+                    case 2: // Ctrl + b
+                         if(config_state->input && config_state->tab_current->view_current == config_state->view_input){
+                              // dump input history on cursor line
+                              InputHistory_t* cur_hist = history_from_input_key(config_state);
+                              if(!cur_hist){
+                                   ce_message("no history to dump");
+                                   break;
+                              }
+
+                              // start the insertions after the cursor, unless the buffer is empty
+                              assert(config_state->view_input->buffer->line_count);
+                              int lines_added = 1;
+                              bool empty_first_line = !config_state->view_input->buffer->lines[0][0];
+
+                              // insert each line in history
+                              InputHistoryNode_t* node = cur_hist->head;
+                              while(node && node->entry){
+                                   if(ce_insert_line(config_state->view_input->buffer,
+                                                     config_state->view_input->cursor.y + lines_added,
+                                                     node->entry)){
+                                        lines_added += ce_count_string_lines(node->entry);
+                                   }else{
+                                        break;
+                                   }
+                                   node = node->next;
+                              }
+
+                              if(empty_first_line) ce_remove_line(config_state->view_input->buffer, 0);
+                         }else{
+                              // try to find a better place to put the cursor to start
+                              BufferNode_t* itr = *head;
+                              int64_t buffer_index = 1;
+                              bool found_good_buffer = false;
+                              while(itr){
+                                   if(!itr->buffer->readonly && !ce_buffer_in_view(config_state->tab_current->view_head, itr->buffer)){
+                                        config_state->tab_current->view_current->cursor.y = buffer_index;
+                                        found_good_buffer = true;
+                                        break;
+                                   }
+                                   itr = itr->next;
+                                   buffer_index++;
+                              }
+
+                              update_buffer_list_buffer(config_state, *head);
+                              config_state->tab_current->view_current->buffer->cursor = *cursor;
+                              config_state->tab_current->view_current->buffer = &config_state->buffer_list_buffer;
+                              config_state->tab_current->view_current->top_row = 0;
+                              config_state->tab_current->view_current->cursor = (Point_t){0, found_good_buffer ? buffer_index : 1};
+
+                         }
+                         break;
+                    case 'u':
+                         if(buffer_state->commit_tail && buffer_state->commit_tail->commit.type != BCT_NONE){
+                              ce_commit_undo(buffer, &buffer_state->commit_tail, cursor);
+                              if(buffer_state->commit_tail->commit.type == BCT_NONE){
+                                   buffer->modified = false;
+                              }
+                         }
+                         break;
+                    case 'x':
+                    {
+                         char c;
+                         if(ce_get_char(buffer, *cursor, &c) && ce_remove_char(buffer, *cursor)){
+                              ce_commit_remove_char(&buffer_state->commit_tail, *cursor, *cursor, *cursor, c, BCC_STOP);
+                              ce_clamp_cursor(buffer, cursor);
+                         }
                     }
-               } break;
-               case 20: // Ctrl + t
-               {
-                    TabView_t* new_tab = tab_view_insert(config_state->tab_head);
-                    if(!new_tab) break;
-
-                    // copy view attributes from the current view
-                    *new_tab->view_head = *config_state->tab_current->view_current;
-                    new_tab->view_head->next_horizontal = NULL;
-                    new_tab->view_head->next_vertical = NULL;
-                    new_tab->view_current = new_tab->view_head;
-
-                    config_state->tab_current = new_tab;
-               } break;
-               case 'R':
-                    if(config_state->vim_mode == VM_VISUAL_RANGE || config_state->vim_mode == VM_VISUAL_LINE){
-                         input_start(config_state, "Visual Replace", key);
-                    }else{
-                         input_start(config_state, "Replace", key);
+                    break;
+                    case KEY_REDO:
+                    {
+                         if(buffer_state->commit_tail && buffer_state->commit_tail->next){
+                              ce_commit_redo(buffer, &buffer_state->commit_tail, cursor);
+                         }
+                    } break;
+                    case ';':
+                    {
+                         VimAction_t action = {};
+                         FindState_t find_state; // dummy find state so our's doesn't get modified
+                         VimMode_t final_mode;
+                         action.multiplier = 1;
+                         action.change.type = VCT_MOTION;
+                         action.motion.type = config_state->find_state.motion_type;
+                         action.motion.multiplier = 1;
+                         action.motion.match_char = config_state->find_state.ch;
+                         vim_action_apply(&action, buffer, cursor, config_state->vim_mode,
+                                          &config_state->yank_head, &final_mode, &config_state->visual_start,
+                                          &find_state);
+                    } break;
+                    case ',':
+                    {
+                         VimAction_t action = {};
+                         FindState_t find_state; // dummy find state so our's doesn't get modified
+                         VimMode_t final_mode;
+                         action.multiplier = 1;
+                         action.change.type = VCT_MOTION;
+                         action.motion.multiplier = 1;
+                         action.motion.match_char = config_state->find_state.ch;
+                         switch(config_state->find_state.motion_type){
+                         default:
+                              break;
+                         case VMT_FIND_NEXT_MATCHING_CHAR:
+                              action.motion.type = VMT_FIND_PREV_MATCHING_CHAR;
+                              break;
+                         case VMT_FIND_PREV_MATCHING_CHAR:
+                              action.motion.type = VMT_FIND_NEXT_MATCHING_CHAR;
+                              break;
+                         case VMT_TO_NEXT_MATCHING_CHAR:
+                              action.motion.type = VMT_TO_PREV_MATCHING_CHAR;
+                              break;
+                         case VMT_TO_PREV_MATCHING_CHAR:
+                              action.motion.type = VMT_TO_NEXT_MATCHING_CHAR;
+                              break;
+                         }
+                         vim_action_apply(&action, buffer, cursor, config_state->vim_mode,
+                                          &config_state->yank_head, &final_mode, &config_state->visual_start,
+                                          &find_state);
+                    } break;
+                    case 'H':
+                    {
+                         // move cursor to top line of view
+                         Point_t location = {cursor->x, buffer_view->top_row};
+                         ce_set_cursor(buffer, cursor, location);
+                    } break;
+                    case 'M':
+                    {
+                         // move cursor to middle line of view
+                         int64_t view_height = buffer_view->bottom_right.y - buffer_view->top_left.y;
+                         Point_t location = {cursor->x, buffer_view->top_row + (view_height/2)};
+                         ce_set_cursor(buffer, cursor, location);
+                    } break;
+                    case 'L':
+                    {
+                         // move cursor to bottom line of view
+                         int64_t view_height = buffer_view->bottom_right.y - buffer_view->top_left.y;
+                         Point_t location = {cursor->x, buffer_view->top_row + view_height};
+                         ce_set_cursor(buffer, cursor, location);
+                    } break;
+                    case 'z':
+                    break;
+                    case '%':
+                    {
+                         ce_move_cursor_to_matching_pair(buffer, cursor);
+                    } break;
+                    case KEY_NPAGE:
+                    {
+                         half_page_up(config_state->tab_current->view_current);
+                    } break;
+                    case KEY_PPAGE:
+                    {
+                         half_page_down(config_state->tab_current->view_current);
+                    } break;
+                    case 8: // Ctrl + h
+                    {
+                        // TODO: consolidate into function for use with other window movement keys, and for use in insert mode?
+                        Point_t point = {config_state->tab_current->view_current->top_left.x - 2, // account for window separator
+                                         cursor->y - config_state->tab_current->view_current->top_row + config_state->tab_current->view_current->top_left.y};
+                        switch_to_view_at_point(config_state, point);
+                    } break;
+                    case 10: // Ctrl + j
+                    {
+                         Point_t point = {cursor->x - config_state->tab_current->view_current->left_column + config_state->tab_current->view_current->top_left.x,
+                                          config_state->tab_current->view_current->bottom_right.y + 2}; // account for window separator
+                         switch_to_view_at_point(config_state, point);
+                    } break;
+                    case 11: // Ctrl + k
+                    {
+                         Point_t point = {cursor->x - config_state->tab_current->view_current->left_column + config_state->tab_current->view_current->top_left.x,
+                                          config_state->tab_current->view_current->top_left.y - 2};
+                         switch_to_view_at_point(config_state, point);
+                    } break;
+                    case 12: // Ctrl + l
+                    {
+                         Point_t point = {config_state->tab_current->view_current->bottom_right.x + 2, // account for window separator
+                                          cursor->y - config_state->tab_current->view_current->top_row + config_state->tab_current->view_current->top_left.y};
+                         switch_to_view_at_point(config_state, point);
+                    } break;
+                    case ':':
+                    {
+                         input_start(config_state, "Goto Line", key);
                     }
-               break;
-               case 5: // Ctrl + e
-               {
-                    Buffer_t* new_buffer = new_buffer_from_string(*head, "unnamed", NULL);
-                    ce_alloc_lines(new_buffer, 1);
-                    config_state->tab_current->view_current->buffer = new_buffer;
-                    *cursor = (Point_t){0, 0};
-               } break;
-               case 1: // Ctrl + a
-                    input_start(config_state, "Save Buffer As", key);
-               break;
-               case 9: // Ctrl + i
-                    input_start(config_state, "Shell Command Input", key);
-               break;
+                    break;
+                    case '#':
+                    {
+                         if(!buffer->lines || !buffer->lines[cursor->y]) break;
+
+                         Point_t word_start, word_end;
+                         if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) break;
+                         char* search_str = ce_dupe_string(buffer, word_start, word_end);
+                         add_yank(&config_state->yank_head, '/', search_str, YANK_NORMAL);
+                         config_state->search_command.direction = CE_UP;
+                         goto search;
+                    } break;
+                    case '*':
+                    {
+                         if(!buffer->lines || !buffer->lines[cursor->y]) break;
+
+                         Point_t word_start, word_end;
+                         if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) break;
+                         char* search_str = ce_dupe_string(buffer, word_start, word_end);
+                         add_yank(&config_state->yank_head, '/', search_str, YANK_NORMAL);
+                         config_state->search_command.direction = CE_DOWN;
+                         goto search;
+                    } break;
+                    case '/':
+                    {
+                         input_start(config_state, "Search", key);
+                         config_state->search_command.direction = CE_DOWN;
+                         config_state->start_search = *cursor;
+                         break;
+                    }
+                    case '?':
+                    {
+                         input_start(config_state, "Reverse Search", key);
+                         config_state->search_command.direction = CE_UP;
+                         config_state->start_search = *cursor;
+                         break;
+                    }
+                    case 'n':
+          search:
+                    {
+                         YankNode_t* yank = find_yank(config_state->yank_head, '/');
+                         if(yank){
+                              assert(yank->mode == YANK_NORMAL);
+                              Point_t match;
+                              if(ce_find_string(buffer, *cursor, yank->text, &match, config_state->search_command.direction)){
+                                   ce_set_cursor(buffer, cursor, match);
+                                   center_view(config_state->tab_current->view_current);
+                              }
+                         }
+                    } break;
+                    case 'N':
+                    {
+                         YankNode_t* yank = find_yank(config_state->yank_head, '/');
+                         if(yank){
+                              assert(yank->mode == YANK_NORMAL);
+                              Point_t match;
+                              if(ce_find_string(buffer, *cursor, yank->text, &match, ce_reverse_direction(config_state->search_command.direction))){
+                                   ce_set_cursor(buffer, cursor, match);
+                                   center_view(config_state->tab_current->view_current);
+                              }
+                         }
+                    } break;
+                    break;
+                    case '=':
+                    {
+     #if 0
+                         if(config_state->movement_keys[0] == MOVEMENT_CONTINUE) return true;
+                         else{
+                              int64_t begin_format_line;
+                              int64_t end_format_line;
+                              switch(key){
+                              case '=':
+                                   begin_format_line = cursor->y;
+                                   end_format_line = cursor->y;
+                                   break;
+                              case 'G':
+                                   begin_format_line = cursor->y;
+                                   end_format_line = buffer->line_count-1;
+                                   break;
+                              default:
+                                   clear_keys(config_state);
+                                   return true;
+                              }
+
+                              // TODO support undo with clang-format
+                              ce_commits_free(buffer_state->commit_tail);
+                              buffer_state->commit_tail = NULL;
+
+                              int in_fds[2]; // 0 = child stdin
+                              int out_fds[2]; // 1 = child stdout
+                              if(pipe(in_fds) == -1 || pipe(out_fds) == -1){
+                                   ce_message("pipe failed %s", strerror(errno));
+                                   return true;
+                              }
+                              pid_t pid = fork();
+                              if(pid == -1){
+                                   ce_message("fork failed %s", strerror(errno));
+                                   return true;
+                              }
+                              if(pid == 0){
+                                   // child process
+                                   close(in_fds[1]); // close parent fds
+                                   close(out_fds[0]);
+
+                                   close(0); // close stdin
+                                   close(1); // close stdout
+                                   dup(in_fds[0]); // new stdin
+                                   dup(out_fds[1]); // new stdout
+                                   int64_t cursor_position = cursor->x+1;
+                                   for(int64_t y_itr = 0; y_itr < cursor->y; y_itr++){
+                                        cursor_position += strlen(buffer->lines[y_itr]);
+                                   }
+                                   char* cursor_arg;
+                                   asprintf(&cursor_arg, "-cursor=%"PRId64, cursor_position);
+
+                                   char* line_arg;
+                                   asprintf(&line_arg, "-lines=%"PRId64":%"PRId64, begin_format_line+1, end_format_line+1);
+
+                                   int ret __attribute__((unused)) = execlp("clang-format", "clang-format", line_arg, cursor_arg, (char *)NULL);
+                                   assert(ret != -1);
+                                   exit(1); // we should never reach here
+                              }
+
+                              // parent process
+                              close(in_fds[0]); // close child fds
+                              close(out_fds[1]);
+
+                              FILE* child_stdin = fdopen(in_fds[1], "w");
+                              FILE* child_stdout = fdopen(out_fds[0], "r");
+                              assert(child_stdin);
+                              assert(child_stdout);
+
+                              for(int i = 0; i < buffer->line_count; i++){
+                                   if(fputs(buffer->lines[i], child_stdin) == EOF || fputc('\n', child_stdin) == EOF){
+                                        ce_message("issue with fputs");
+                                        return true;
+                                   }
+                              }
+                              fclose(child_stdin);
+                              close(in_fds[1]);
+
+                              char formatted_line_buf[BUFSIZ];
+                              formatted_line_buf[0] = 0;
+
+                              // read cursor position
+                              fgets(formatted_line_buf, BUFSIZ, child_stdout);
+                              int cursor_position = -1;
+                              sscanf(formatted_line_buf, "{ \"Cursor\": %d", &cursor_position);
+
+                              // blow away all lines in the file
+                              for(int64_t i = buffer->line_count - 1; i >= 0; i--){
+                                   ce_remove_line(buffer, i);
+                              }
+
+                              for(int64_t i = 0; ; i++){
+                                   if(fgets(formatted_line_buf, BUFSIZ, child_stdout) == NULL) break;
+                                   size_t new_line_len = strlen(formatted_line_buf) - 1;
+                                   assert(formatted_line_buf[new_line_len] == '\n');
+                                   formatted_line_buf[new_line_len] = 0;
+                                   ce_insert_line(buffer, i, formatted_line_buf);
+     #if 0
+                                   if(cursor_position > 0){
+                                        cursor_position -= new_line_len+1;
+                                        if(cursor_position <= 0){
+                                             Point_t new_cursor_location = {-cursor_position, i};
+                                             ce_message("moving cursor to %ld", -cursor_position);
+                                             ce_set_cursor(buffer, cursor, &new_cursor_location);
+                                        }
+                                   }
+     #endif
+                              }
+                              cursor->x = 0;
+                              cursor->y = 0;
+                              if(!ce_advance_cursor(buffer, cursor, cursor_position-1))
+                                   ce_message("failed to advance cursor");
+
+     #if 0
+                              // TODO: use -output-replacements-xml to support undo
+                              char* formatted_line = strdup(formatted_line_buf);
+                              // save the current line in undo history
+                              Point_t delete_begin = {0, cursor->y};
+                              char* save_string = ce_dupe_line(buffer, cursor->y);
+                              if(!ce_remove_line(buffer, cursor->y)){
+                                   ce_message("ce_remove_string failed");
+                                   return true;
+                              }
+                              ce_insert_string(buffer, &delete_begin, formatted_line);
+                              ce_commit_change_string(&buffer_state->commit_tail, &delete_begin, cursor, cursor, formatted_line, save_string);
+     #endif
+
+                              fclose(child_stdout);
+                              close(in_fds[0]);
+
+                              // wait for the child process to complete
+                              int wstatus;
+                              do {
+                                   pid_t w = waitpid(pid, &wstatus, WUNTRACED | WCONTINUED);
+                                   if (w == -1) {
+                                        perror("waitpid");
+                                        exit(EXIT_FAILURE);
+                                   }
+
+                                   if (WIFEXITED(wstatus) && WEXITSTATUS(wstatus) != 0) {
+                                        ce_message("clang-format process exited, status=%d\n", WEXITSTATUS(wstatus));
+                                   } else if (WIFSIGNALED(wstatus)) {
+                                        ce_message("clang-format process killed by signal %d\n", WTERMSIG(wstatus));
+                                   } else if (WIFSTOPPED(wstatus)) {
+                                        ce_message("clang-format process stopped by signal %d\n", WSTOPSIG(wstatus));
+                                   } else if (WIFCONTINUED(wstatus)) {
+                                        ce_message("clang-format process continued\n");
+                                   }
+                              } while (!WIFEXITED(wstatus) && !WIFSIGNALED(wstatus));
+                              config_state->command_key = '\0';
+                         }
+     #endif
+                    } break;
+                    case 24: // Ctrl + x
+                    {
+                         input_start(config_state, "Shell Command", key);
+                    } break;
+                    case 14: // Ctrl + n
+                         if(config_state->input){
+                              iterate_history_input(config_state, false);
+                         }else{
+                              jump_to_next_shell_command_file_destination(*head, config_state, true);
+                         }
+                         break;
+                    case 16: // Ctrl + p
+                         if(config_state->input){
+                              iterate_history_input(config_state, true);
+                         }else{
+                              jump_to_next_shell_command_file_destination(*head, config_state, false);
+                         }
+                         break;
+                    case 6: // Ctrl + f
+                    {
+                         input_start(config_state, "Load File", key);
+                         calc_auto_complete_start_and_path(&config_state->auto_complete,
+                                                           config_state->view_input->buffer->lines[0],
+                                                           *cursor,
+                                                           config_state->completion_buffer);
+                         if(config_state->tab_current->view_overrideable){
+                              tab_view_save_overrideable(config_state->tab_current);
+
+                              config_state->tab_current->view_overrideable->buffer = config_state->completion_buffer;
+                              config_state->tab_current->view_overrideable->cursor = (Point_t){0, 0};
+                              center_view(config_state->tab_current->view_overrideable);
+                         }else{
+                              config_state->buffer_before_query = config_state->tab_current->view_input_save->buffer;
+                              config_state->buffer_before_query->cursor = config_state->tab_current->view_input_save->cursor;
+                              config_state->tab_current->view_input_save->buffer = config_state->completion_buffer;
+                              config_state->tab_current->view_input_save->cursor = (Point_t){0, 0};
+                              config_state->tab_current->view_input_save->top_row = 0;
+                         }
+                    } break;
+                    case 20: // Ctrl + t
+                    {
+                         TabView_t* new_tab = tab_view_insert(config_state->tab_head);
+                         if(!new_tab) break;
+
+                         // copy view attributes from the current view
+                         *new_tab->view_head = *config_state->tab_current->view_current;
+                         new_tab->view_head->next_horizontal = NULL;
+                         new_tab->view_head->next_vertical = NULL;
+                         new_tab->view_current = new_tab->view_head;
+
+                         config_state->tab_current = new_tab;
+                    } break;
+                    case 'R':
+                         if(config_state->vim_mode == VM_VISUAL_RANGE || config_state->vim_mode == VM_VISUAL_LINE){
+                              input_start(config_state, "Visual Replace", key);
+                         }else{
+                              input_start(config_state, "Replace", key);
+                         }
+                    break;
+                    case 5: // Ctrl + e
+                    {
+                         Buffer_t* new_buffer = new_buffer_from_string(*head, "unnamed", NULL);
+                         ce_alloc_lines(new_buffer, 1);
+                         config_state->tab_current->view_current->buffer = new_buffer;
+                         *cursor = (Point_t){0, 0};
+                    } break;
+                    case 1: // Ctrl + a
+                         input_start(config_state, "Save Buffer As", key);
+                    break;
+                    case 9: // Ctrl + i
+                         input_start(config_state, "Shell Command Input", key);
+                    break;
+                    }
                }
           }
      }else{
@@ -4502,11 +4578,12 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
      return true;
 }
 
-void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferView_t* overrideable_view, VimMode_t vim_mode, int last_key)
+void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferView_t* overrideable_view, VimMode_t vim_mode, int last_key,
+                        bool recording_macro)
 {
      Buffer_t* buffer = view->buffer;
-     if(view->next_horizontal) draw_view_statuses(view->next_horizontal, current_view, overrideable_view, vim_mode, last_key);
-     if(view->next_vertical) draw_view_statuses(view->next_vertical, current_view, overrideable_view, vim_mode, last_key);
+     if(view->next_horizontal) draw_view_statuses(view->next_horizontal, current_view, overrideable_view, vim_mode, last_key, recording_macro);
+     if(view->next_vertical) draw_view_statuses(view->next_vertical, current_view, overrideable_view, vim_mode, last_key, recording_macro);
 
      // NOTE: mode names need space at the end for OCD ppl like me
      static const char* mode_names[] = {
@@ -4528,7 +4605,8 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferVi
 #ifndef NDEBUG
      if(view == current_view) printw("%s %d ", keyname(last_key), last_key);
 #endif
-     if(view == overrideable_view) printw("O ");
+     if(view == overrideable_view) printw("^ ");
+     if(view == current_view && recording_macro) printw("RECORDING ");
      int64_t row = view->cursor.y + 1;
      int64_t column = view->cursor.x + 1;
      int64_t digits_in_line = count_digits(row);
@@ -4571,6 +4649,10 @@ void view_drawer(const BufferNode_t* head, void* user_data)
 
      if(ce_buffer_in_view(config_state->tab_current->view_head, &config_state->yank_list_buffer)){
           update_yank_list_buffer(config_state);
+     }
+
+     if(ce_buffer_in_view(config_state->tab_current->view_head, &config_state->macro_list_buffer)){
+          update_macro_list_buffer(config_state);
      }
 
      int64_t input_view_height = 0;
@@ -4636,7 +4718,8 @@ void view_drawer(const BufferNode_t* head, void* user_data)
      ce_draw_views(config_state->tab_current->view_head, search, config_state->line_number_type);
 
      draw_view_statuses(config_state->tab_current->view_head, config_state->tab_current->view_current,
-                        config_state->tab_current->view_overrideable, config_state->vim_mode, config_state->last_key);
+                        config_state->tab_current->view_overrideable, config_state->vim_mode, config_state->last_key,
+                        config_state->recording_macro);
 
      // draw input status
      if(config_state->input){
@@ -4663,7 +4746,8 @@ void view_drawer(const BufferNode_t* head, void* user_data)
 
           ce_draw_views(config_state->view_input, NULL, LNT_NONE);
           draw_view_statuses(config_state->view_input, config_state->tab_current->view_current,
-                             NULL, config_state->vim_mode, config_state->last_key);
+                             NULL, config_state->vim_mode, config_state->last_key,
+                             config_state->recording_macro);
      }
 
      // draw auto complete

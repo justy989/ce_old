@@ -124,11 +124,11 @@ void key_free(KeyNode_t** head)
      }
 }
 
-char* command_string_to_char_string(int* int_str)
+char* command_string_to_char_string(const int* int_str)
 {
      // build length
      size_t len = 1; // account for NULL terminator
-     int* int_itr = int_str;
+     const int* int_itr = int_str;
      while(*int_itr){
           if(isprint(*int_itr)){
                len++;
@@ -560,6 +560,9 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
      bool get_motion = true;
      VimAction_t built_action = {};
 
+     char* char_string = command_string_to_char_string(string);
+     ce_message("%s", char_string);
+
      built_action.multiplier = 1;
      built_action.motion.multiplier = 1;
 
@@ -598,8 +601,24 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           built_action.motion.visual_start_after = ce_point_after(*visual_start, *cursor);
      }
 
-     // get the change
      int change_char = *itr;
+
+     // check for yank registers
+     if(*itr == '"'){
+          itr++;
+
+          if(*itr == '\0'){
+               return VCS_CONTINUE;
+          } else if(!isprint(*itr) || *itr == '?'){
+               return VCS_INVALID;
+          }
+
+          built_action.change.yank_register = *itr;
+          itr++;
+     }
+
+     // get the change
+     change_char = *itr;
      switch(*itr){
      default:
           built_action.end_in_vim_mode = vim_mode;
@@ -1366,14 +1385,14 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
           if(action->yank){
                char* yank_string = strdup(commit_string);
                if(action_range.yank_mode == YANK_LINE && yank_string[len-1] == NEWLINE) yank_string[len-1] = 0;
-               add_yank(yank_head, '"', yank_string, action_range.yank_mode);
+               add_yank(yank_head, action->change.yank_register ? action->change.yank_register : '"', yank_string, action_range.yank_mode);
           }
 
           ce_commit_remove_string(&buffer_state->commit_tail, *action_range.sorted_start, *cursor, *action_range.sorted_start, commit_string, BCC_STOP);
      } break;
      case VCT_PASTE_BEFORE:
      {
-          YankNode_t* yank = find_yank(*yank_head, '"');
+          YankNode_t* yank = find_yank(*yank_head, action->change.yank_register ? action->change.yank_register : '"');
 
           if(!yank) return false;
 
@@ -1409,7 +1428,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
      } break;
      case VCT_PASTE_AFTER:
      {
-          YankNode_t* yank = find_yank(*yank_head, '"');
+          YankNode_t* yank = find_yank(*yank_head, action->change.yank_register ? action->change.yank_register : '"');
 
           if(!yank) return false;
 
@@ -1480,7 +1499,8 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
           }
 
           add_yank(yank_head, '0', save_zero, action_range.yank_mode);
-          add_yank(yank_head, '"', save_quote, action_range.yank_mode);
+          add_yank(yank_head, action->change.yank_register ? action->change.yank_register : '"', save_quote,
+                   action_range.yank_mode);
      } break;
      case VCT_INDENT:
      {
@@ -2740,6 +2760,24 @@ void update_mark_list_buffer(ConfigState_t* config_state, const Buffer_t* buffer
      config_state->mark_list_buffer.readonly = true;
 }
 
+void update_yank_list_buffer(ConfigState_t* config_state)
+{
+     char buffer_info[BUFSIZ];
+     config_state->yank_list_buffer.readonly = false;
+     ce_clear_lines(&config_state->yank_list_buffer);
+
+     const YankNode_t* itr = config_state->yank_head;
+     while(itr){
+          snprintf(buffer_info, BUFSIZ, "register: %c", itr->reg_char);
+          ce_append_line(&config_state->yank_list_buffer, buffer_info);
+          ce_append_line(&config_state->yank_list_buffer, itr->text);
+          itr = itr->next;
+     }
+
+     config_state->yank_list_buffer.modified = false;
+     config_state->yank_list_buffer.readonly = true;
+}
+
 Point_t get_cursor_on_terminal(const Point_t* cursor, const BufferView_t* buffer_view, LineNumberType_t line_number_type)
 {
      Point_t p = {cursor->x - buffer_view->left_column + buffer_view->top_left.x,
@@ -3478,7 +3516,6 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeati
                free(built_command);
                return false; // did not handle key
           case VCS_CONTINUE:
-               // no! don't clear the command
                free(built_command);
                break;
           case VCS_COMPLETE:
@@ -3547,6 +3584,7 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeati
                          }
                     }else{
                          free(built_command);
+                         key_free(&config_state->command_head);
                     }
                }
           } break;
@@ -3686,6 +3724,18 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     add_mark(buffer_state, mark, cursor);
                }
           } break;
+          case '"':
+               if(key == '?'){
+                    update_yank_list_buffer(config_state);
+
+                    config_state->buffer_before_query = config_state->tab_current->view_current->buffer;
+                    config_state->tab_current->view_current->buffer->cursor = *cursor;
+                    config_state->tab_current->view_current->buffer = &config_state->yank_list_buffer;
+                    config_state->tab_current->view_current->top_row = 0;
+                    config_state->tab_current->view_current->cursor = (Point_t){0, 1};
+                    handled_key = true;
+               }
+               break;
           case '\'':
           {
                handled_key = true;
@@ -4516,6 +4566,10 @@ void view_drawer(const BufferNode_t* head, void* user_data)
 
      if(ce_buffer_in_view(config_state->tab_current->view_head, &config_state->mark_list_buffer)){
           update_mark_list_buffer(config_state, config_state->buffer_before_query);
+     }
+
+     if(ce_buffer_in_view(config_state->tab_current->view_head, &config_state->yank_list_buffer)){
+          update_yank_list_buffer(config_state);
      }
 
      int64_t input_view_height = 0;

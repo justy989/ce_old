@@ -57,7 +57,9 @@ N|goto previous search match
 v|visual mode
 V|visual line mode
 m|set mark in register (next character typed)
-m?|view marks
+m?|view mark registers
+"|specify yank or paste from a specific register (next character typesd)
+"?|view yank registers
 zt|scroll view so cursor is at the top
 zz|scroll view so cursor is in the middle
 zb|scroll view so cursor is at the bottom

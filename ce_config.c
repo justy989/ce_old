@@ -3232,15 +3232,7 @@ bool vim_key_handler(int key, void* user_data, bool repeating)
                          key_push(&config_state->command_head, key);
                          Point_t undo_cursor = *cursor;
                          cursor->x++;
-
                          ce_commit_insert_char(&buffer_state->commit_tail, undo_cursor, undo_cursor, *cursor, key, BCC_KEEP_GOING);
-
-                         if(auto_completing(&config_state->auto_complete)){
-                              calc_auto_complete_start_and_path(&config_state->auto_complete,
-                                                                buffer->lines[cursor->y],
-                                                                *cursor,
-                                                                config_state->completion_buffer);
-                         }
                     }
                }else{
                     return false;
@@ -3304,12 +3296,6 @@ bool vim_key_handler(int key, void* user_data, bool repeating)
                          ce_commit_remove_char(&buffer_state->commit_tail, before_cursor, *cursor, before_cursor, ch, BCC_KEEP_GOING);
                          *cursor = before_cursor;
                          key_push(&config_state->command_head, key);
-                         if(auto_completing(&config_state->auto_complete)){
-                              calc_auto_complete_start_and_path(&config_state->auto_complete,
-                                                                buffer->lines[cursor->y],
-                                                                *cursor,
-                                                                config_state->completion_buffer);
-                         }
                     }
                }
            } break;
@@ -3324,11 +3310,6 @@ bool vim_key_handler(int key, void* user_data, bool repeating)
                          ce_move_cursor(buffer, cursor, (Point_t){complete_len, cursor->y});
                          cursor->x++;
                          ce_commit_insert_string(&buffer_state->commit_tail, save_cursor, save_cursor, *cursor, strdup(TAB_STRING), BCC_KEEP_GOING);
-
-                         calc_auto_complete_start_and_path(&config_state->auto_complete,
-                                                           buffer->lines[cursor->y],
-                                                           *cursor,
-                                                           config_state->completion_buffer);
                     }
                }else{
                     if(ce_insert_string(buffer, *cursor, TAB_STRING)){
@@ -3346,6 +3327,7 @@ bool vim_key_handler(int key, void* user_data, bool repeating)
                if(buffer_state->commit_tail){
                     buffer_state->commit_tail->commit.chain = BCC_STOP;
                }
+               key_free(&config_state->command_head);
                break;
           case KEY_LEFT:
           case KEY_RIGHT:
@@ -3355,6 +3337,7 @@ bool vim_key_handler(int key, void* user_data, bool repeating)
                if(buffer_state->commit_tail){
                     buffer_state->commit_tail->commit.chain = BCC_STOP;
                }
+               key_free(&config_state->command_head);
                break;
           case '}':
           {
@@ -3416,12 +3399,6 @@ bool vim_key_handler(int key, void* user_data, bool repeating)
                     }
 
                     cursor->x++;
-                    if(auto_completing(&config_state->auto_complete)){
-                         calc_auto_complete_start_and_path(&config_state->auto_complete,
-                                                           buffer->lines[cursor->y],
-                                                           *cursor,
-                                                           config_state->completion_buffer);
-                    }
                }
           } break;
           }
@@ -3716,6 +3693,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                break;
           case 25: // Ctrl + y
                confirm_action(config_state, *head);
+               key_free(&config_state->command_head);
                break;
           }
 
@@ -4346,8 +4324,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                }
           }
      }else{
-          if(!auto_completing(&config_state->auto_complete) && config_state->input &&
-             config_state->input_key == 6){
+          if(config_state->input && config_state->input_key == 6){
                calc_auto_complete_start_and_path(&config_state->auto_complete,
                                                  buffer->lines[cursor->y],
                                                  *cursor,

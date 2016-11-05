@@ -1593,6 +1593,20 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
      return true;
 }
 
+// location is {left_column, top_line} for the view
+void scroll_view_to_location(BufferView_t* buffer_view, const Point_t* location){
+     // TODO: we should be able to scroll the view above our first line
+     buffer_view->left_column = (location->x >= 0) ? location->x : 0;
+     buffer_view->top_row = (location->y >= 0) ? location->y : 0;
+}
+
+void center_view(BufferView_t* view)
+{
+     int64_t view_height = view->bottom_right.y - view->top_left.y;
+     Point_t location = (Point_t) {0, view->cursor.y - (view_height / 2)};
+     scroll_view_to_location(view, &location);
+}
+
 typedef struct TabView_t{
      BufferView_t* view_head;
      BufferView_t* view_current;
@@ -1644,6 +1658,19 @@ void tab_view_remove(TabView_t** head, TabView_t* view)
      while(tmp->next != view) tmp = tmp->next;
      tmp->next = view->next;
      free(view);
+}
+
+void tab_view_save_overrideable(TabView_t* tab)
+{
+     tab->overriden_buffer = tab->view_overrideable->buffer;
+     tab->overriden_buffer->cursor = tab->view_overrideable->cursor;
+}
+
+void tab_view_restore_overrideable(TabView_t* tab)
+{
+     tab->view_overrideable->buffer = tab->overriden_buffer;
+     tab->view_overrideable->cursor = tab->overriden_buffer->cursor;
+     center_view(tab->view_overrideable);
 }
 
 typedef struct CompleteNode_t{
@@ -1929,20 +1956,6 @@ void enter_visual_line_mode(ConfigState_t* config_state, BufferView_t* buffer_vi
      config_state->visual_start = buffer_view->cursor;
 }
 
-// location is {left_column, top_line} for the view
-void scroll_view_to_location(BufferView_t* buffer_view, const Point_t* location){
-     // TODO: we should be able to scroll the view above our first line
-     buffer_view->left_column = (location->x >= 0) ? location->x : 0;
-     buffer_view->top_row = (location->y >= 0) ? location->y : 0;
-}
-
-void center_view(BufferView_t* view)
-{
-     int64_t view_height = view->bottom_right.y - view->top_left.y;
-     Point_t location = (Point_t) {0, view->cursor.y - (view_height / 2)};
-     scroll_view_to_location(view, &location);
-}
-
 InputHistory_t* history_from_input_key(ConfigState_t* config_state)
 {
      InputHistory_t* history = NULL;
@@ -2003,9 +2016,7 @@ void input_cancel(ConfigState_t* config_state)
           center_view(config_state->tab_current->view_input_save);
      }else if(config_state->input_key == 6){
           if(config_state->tab_current->view_overrideable){
-               config_state->tab_current->view_overrideable->buffer = config_state->tab_current->overriden_buffer;
-               config_state->tab_current->view_overrideable->cursor = config_state->tab_current->overriden_buffer->cursor;
-               center_view(config_state->tab_current->view_overrideable);
+               tab_view_restore_overrideable(config_state->tab_current);
           }else{
                pthread_mutex_lock(&view_input_save_lock);
                config_state->tab_current->view_input_save->buffer = config_state->buffer_before_query;
@@ -3108,9 +3119,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                     }
                }
                if(config_state->tab_current->overriden_buffer){
-                    config_state->tab_current->view_overrideable->buffer = config_state->tab_current->overriden_buffer;
-                    config_state->tab_current->view_overrideable->cursor = config_state->tab_current->overriden_buffer->cursor;
-                    center_view(config_state->tab_current->view_overrideable);
+                    tab_view_restore_overrideable(config_state->tab_current);
                }
                break;
           case '/':
@@ -3149,8 +3158,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                     command_view->top_row = 0;
                }else{
                     if(config_state->tab_current->view_overrideable){
-                         config_state->tab_current->overriden_buffer = config_state->tab_current->view_overrideable->buffer;
-                         config_state->tab_current->overriden_buffer->cursor = config_state->tab_current->view_overrideable->cursor;
+                         tab_view_save_overrideable(config_state->tab_current);
                          config_state->tab_current->view_overrideable->buffer = command_buffer;
                          config_state->tab_current->view_overrideable->cursor = (Point_t){0, 0};
                          config_state->tab_current->view_overrideable->top_row = 0;
@@ -3314,6 +3322,13 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           buffer_view->buffer = config_state->buffer_before_query;
           buffer_view->cursor.y = itr->location.y;
           center_view(buffer_view);
+
+          if(config_state->tab_current->view_overrideable){
+               tab_view_save_overrideable(config_state->tab_current);
+               config_state->tab_current->view_overrideable->buffer = config_state->completion_buffer;
+               config_state->tab_current->view_overrideable->cursor = (Point_t){0, 0};
+               center_view(config_state->tab_current->view_overrideable);
+          }
      }
 }
 
@@ -4403,8 +4418,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                                       *cursor,
                                                       config_state->completion_buffer);
                     if(config_state->tab_current->view_overrideable){
-                         config_state->tab_current->overriden_buffer = config_state->tab_current->view_overrideable->buffer;
-                         config_state->tab_current->overriden_buffer->cursor = config_state->tab_current->view_overrideable->cursor;
+                         tab_view_save_overrideable(config_state->tab_current);
+
                          config_state->tab_current->view_overrideable->buffer = config_state->completion_buffer;
                          config_state->tab_current->view_overrideable->cursor = (Point_t){0, 0};
                          center_view(config_state->tab_current->view_overrideable);
@@ -4498,8 +4513,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                }
 
                if(itr) {
-                    config_state->tab_current->overriden_buffer = config_state->tab_current->view_overrideable->buffer;
-                    config_state->tab_current->overriden_buffer->cursor = config_state->tab_current->view_overrideable->cursor;
+                    tab_view_save_overrideable(config_state->tab_current);
                     config_state->tab_current->view_overrideable->buffer = config_state->buffer_before_query;
                     config_state->tab_current->view_overrideable->cursor.y = itr->location.y;
                     center_view(config_state->tab_current->view_overrideable);

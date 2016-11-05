@@ -59,7 +59,7 @@ typedef struct KeyNode_t{
      struct KeyNode_t* next;
 } KeyNode_t;
 
-KeyNode_t* key_push(KeyNode_t** head, int key)
+KeyNode_t* keys_push(KeyNode_t** head, int key)
 {
      KeyNode_t* new_node = malloc(sizeof(*new_node));
      if(!new_node){
@@ -88,7 +88,7 @@ KeyNode_t* key_push(KeyNode_t** head, int key)
 }
 
 // string is allocated and returned, it is the user's responsibility to free it
-int* key_get_string(KeyNode_t* head)
+int* keys_get_string(KeyNode_t* head)
 {
      int64_t len = 0;
      KeyNode_t* itr = head;
@@ -115,7 +115,7 @@ int* key_get_string(KeyNode_t* head)
      return str;
 }
 
-void key_free(KeyNode_t** head)
+void keys_free(KeyNode_t** head)
 {
      while(*head){
           KeyNode_t* tmp = *head;
@@ -3346,7 +3346,7 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeati
           default:
                if(isprint(key)){
                     if(ce_insert_char(buffer, *cursor, key)){
-                         key_push(&config_state->command_head, key);
+                         keys_push(&config_state->command_head, key);
                          Point_t undo_cursor = *cursor;
                          cursor->x++;
                          ce_commit_insert_char(&buffer_state->commit_tail, undo_cursor, undo_cursor, *cursor, key, BCC_KEEP_GOING);
@@ -3357,12 +3357,10 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeati
                break;
           case KEY_ESCAPE:
           {
-               int* built_command = key_get_string(config_state->command_head);
+               int* built_command = keys_get_string(config_state->command_head);
                if(config_state->last_command_string) free(config_state->last_command_string);
                config_state->last_command_string = built_command;
-               char* char_command_string = command_string_to_char_string(built_command);
-               free(char_command_string);
-               key_free(&config_state->command_head);
+               keys_free(&config_state->command_head);
 
                enter_normal_mode(config_state);
                ce_clamp_cursor(buffer, cursor);
@@ -3380,7 +3378,7 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeati
                     cursor->x = 0;
 
                     ce_commit_insert_char(&buffer_state->commit_tail, undo_cursor, undo_cursor, *cursor, key, BCC_KEEP_GOING);
-                    key_push(&config_state->command_head, KEY_ENTER);
+                    keys_push(&config_state->command_head, KEY_ENTER);
 
                     // indent if necessary
                     Point_t prev_line = {0, cursor->y-1};
@@ -3412,7 +3410,7 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeati
                     if(ce_remove_char(buffer, before_cursor)){
                          ce_commit_remove_char(&buffer_state->commit_tail, before_cursor, *cursor, before_cursor, ch, BCC_KEEP_GOING);
                          *cursor = before_cursor;
-                         key_push(&config_state->command_head, key);
+                         keys_push(&config_state->command_head, key);
                     }
                }
            } break;
@@ -3434,28 +3432,42 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeati
                          ce_move_cursor(buffer, cursor, (Point_t){strlen(TAB_STRING) - 1, 0});
                          cursor->x++; // we want to be after the tabs
                          ce_commit_insert_string(&buffer_state->commit_tail, save_cursor, save_cursor, *cursor, strdup(TAB_STRING), BCC_KEEP_GOING);
-                         key_push(&config_state->command_head, key);
+                         keys_push(&config_state->command_head, key);
                     }
                }
           } break;
           case KEY_UP:
           case KEY_DOWN:
+          {
                ce_move_cursor(buffer, cursor, (Point_t){0, (key == KEY_DOWN) ? 1 : -1});
                if(buffer_state->commit_tail){
                     buffer_state->commit_tail->commit.chain = BCC_STOP;
                }
-               key_free(&config_state->command_head);
-               break;
+
+               int* built_command = keys_get_string(config_state->command_head);
+               if(config_state->last_command_string) free(config_state->last_command_string);
+               config_state->last_command_string = built_command;
+               keys_free(&config_state->command_head);
+               keys_push(&config_state->command_head, 'i');
+
+          }    break;
           case KEY_LEFT:
           case KEY_RIGHT:
+          {
                cursor->x += key == KEY_RIGHT? 1 : -1;
                if(cursor->x > (int64_t) strlen(buffer->lines[cursor->y])) cursor->x--;
                if(cursor->x < 0) cursor->x++;
                if(buffer_state->commit_tail){
                     buffer_state->commit_tail->commit.chain = BCC_STOP;
                }
-               key_free(&config_state->command_head);
-               break;
+
+               int* built_command = keys_get_string(config_state->command_head);
+               if(config_state->last_command_string) free(config_state->last_command_string);
+               config_state->last_command_string = built_command;
+               keys_free(&config_state->command_head);
+               keys_push(&config_state->command_head, 'i');
+
+          }    break;
           case '}':
           {
                if(ce_insert_char(buffer, *cursor, key)){
@@ -3524,8 +3536,8 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeati
      case VM_VISUAL_LINE:
      case VM_NORMAL:
      {
-          key_push(&config_state->command_head, key);
-          int* built_command = key_get_string(config_state->command_head);
+          keys_push(&config_state->command_head, key);
+          int* built_command = keys_get_string(config_state->command_head);
 
           VimAction_t vim_action;
           VimCommandState_t command_state = vim_action_from_string(built_command, &vim_action,
@@ -3536,7 +3548,7 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeati
           default:
           case VCS_INVALID:
                // allow command to be cleared
-               key_free(&config_state->command_head);
+               keys_free(&config_state->command_head);
                free(built_command);
                return false; // did not handle key
           case VCS_CONTINUE:
@@ -3576,19 +3588,19 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeati
                                    break;
                               case VM_NORMAL:
                                    enter_normal_mode(config_state);
-                                   key_free(&config_state->command_head);
+                                   keys_free(&config_state->command_head);
                                    break;
                               case VM_VISUAL_RANGE:
                                    enter_visual_range_mode(config_state, buffer_view);
-                                   key_free(&config_state->command_head);
+                                   keys_free(&config_state->command_head);
                                    break;
                               case VM_VISUAL_LINE:
                                    enter_visual_line_mode(config_state, buffer_view);
-                                   key_free(&config_state->command_head);
+                                   keys_free(&config_state->command_head);
                                    break;
                               }
                          }else{
-                              key_free(&config_state->command_head);
+                              keys_free(&config_state->command_head);
                          }
 
                          if(vim_action.change.type != VCT_MOTION || vim_action.end_in_vim_mode == VM_INSERT){
@@ -3601,14 +3613,12 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeati
                          if(!repeating && vim_action.change.type != VCT_MOTION){
                               if(config_state->last_command_string) free(config_state->last_command_string);
                               config_state->last_command_string = built_command;
-                              char* char_command_string = command_string_to_char_string(built_command);
-                              free(char_command_string);
                          }else{
                               free(built_command);
                          }
                     }else{
                          free(built_command);
-                         key_free(&config_state->command_head);
+                         keys_free(&config_state->command_head);
                     }
                }
           } break;
@@ -3729,7 +3739,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     config_state->tab_current->overriden_buffer = NULL;
                     break;
                }
-               if(handled_key) key_free(&config_state->command_head);
+
+               if(handled_key) keys_free(&config_state->command_head);
           } break;
           case 'm':
           {
@@ -3837,7 +3848,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                break;
           case 25: // Ctrl + y
                confirm_action(config_state, *head);
-               key_free(&config_state->command_head);
+               keys_free(&config_state->command_head);
                break;
           }
 
@@ -3854,7 +3865,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          cmd_itr++;
                     }
                     enter_normal_mode(config_state);
-                    key_free(&config_state->command_head);
+                    keys_free(&config_state->command_head);
                     if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
                } break;
                case KEY_ESCAPE:

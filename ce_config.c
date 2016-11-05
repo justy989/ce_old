@@ -180,6 +180,10 @@ char* command_string_to_char_string(const int* int_str)
                     *char_itr = '\\'; char_itr++;
                     *char_itr = 't'; char_itr++;
                     break;
+               case '\\':
+                    *char_itr = '\\'; char_itr++;
+                    *char_itr = '\\'; char_itr++;
+                    break;
                }
           }
 
@@ -189,6 +193,59 @@ char* command_string_to_char_string(const int* int_str)
      char_str[len - 1] = 0;
 
      return char_str;
+}
+
+int* char_string_to_command_string(const char* char_str)
+{
+     // we can just use the strlen, and it'll be over allocated because the command string will always be
+     // the same size or small than the char string
+     size_t str_len = strlen(char_str);
+
+     int* int_str = malloc((str_len + 1) * sizeof(*int_str));
+     if(!int_str) return NULL;
+
+     int* int_itr = int_str;
+     const char* char_itr = char_str;
+     while(*char_itr){
+          if(!isprint(*char_itr)){
+               free(int_str);
+               return NULL;
+          }
+
+          if(*char_itr == '\\'){
+               char_itr++;
+               switch(*char_itr){
+               default:
+                    free(int_str);
+                    return NULL;
+               case 'b':
+                    *int_itr = KEY_BACKSPACE;
+                    break;
+               case 'e':
+                    *int_itr = KEY_ESCAPE;
+                    break;
+               case 'r':
+                    *int_itr = KEY_ENTER;
+                    break;
+               case 't':
+                    *int_itr = KEY_TAB;
+                    break;
+               case '\\':
+                    *int_itr = '\\';
+                    break;
+               }
+               char_itr++;
+               int_itr++;
+          }else{
+               *int_itr = *char_itr;
+               char_itr++;
+               int_itr++;
+          }
+     }
+
+     *int_itr = 0; // NULL terminate
+
+     return int_str;
 }
 
 // TODO: move this to ce.h
@@ -2782,12 +2839,6 @@ void update_macro_list_buffer(ConfigState_t* config_state)
      config_state->macro_list_buffer.readonly = false;
      ce_clear_lines(&config_state->macro_list_buffer);
 
-     ce_append_line(&config_state->macro_list_buffer, "+ escape conversions");
-     ce_append_line(&config_state->macro_list_buffer, "+ \\b -> KEY_BACKSPACE");
-     ce_append_line(&config_state->macro_list_buffer, "+ \\e -> KEY_ESCAPE");
-     ce_append_line(&config_state->macro_list_buffer, "+ \\r -> KEY_ENTER");
-     ce_append_line(&config_state->macro_list_buffer, "+ \\t -> KEY_TAB");
-     ce_append_line(&config_state->macro_list_buffer, "");
      ce_append_line(&config_state->macro_list_buffer, "+ reg actions");
 
      const MacroNode_t* itr = config_state->macro_head;
@@ -2798,6 +2849,14 @@ void update_macro_list_buffer(ConfigState_t* config_state)
           free(char_string);
           itr = itr->next;
      }
+
+     ce_append_line(&config_state->macro_list_buffer, "");
+     ce_append_line(&config_state->macro_list_buffer, "+ escape conversions");
+     ce_append_line(&config_state->macro_list_buffer, "+ \\b -> KEY_BACKSPACE");
+     ce_append_line(&config_state->macro_list_buffer, "+ \\e -> KEY_ESCAPE");
+     ce_append_line(&config_state->macro_list_buffer, "+ \\r -> KEY_ENTER");
+     ce_append_line(&config_state->macro_list_buffer, "+ \\t -> KEY_TAB");
+     ce_append_line(&config_state->macro_list_buffer, "+ \\\\ -> \\"); // HAHAHAHAHA
 
      config_state->macro_list_buffer.modified = false;
      config_state->macro_list_buffer.readonly = true;
@@ -3284,6 +3343,23 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                     write(shell_command_data.shell_command_input_fd, "\n", 1);
                }
           } break;
+          case '@':
+          {
+               int64_t line = config_state->tab_current->view_input_save->cursor.y - 1; // account for buffer list row header
+               if(line < 0) return;
+               MacroNode_t* itr = config_state->macro_head;
+
+               while(line > 0){
+                    itr = itr->next;
+                    if(!itr) return;
+                    line--;
+               }
+
+               if(!itr) return;
+
+               free(itr->command);
+               itr->command = char_string_to_command_string(config_state->view_input->buffer->lines[0]);
+          } break;
           }
      }else if(buffer_view->buffer == &config_state->buffer_list_buffer){
           int64_t line = cursor->y - 1; // account for buffer list row header
@@ -3346,7 +3422,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
 
           input_start(config_state, "Edit Macro", '@');
           char* char_command = command_string_to_char_string(itr->command);
-          ce_append_line(config_state->view_input->buffer, char_command);
+          ce_insert_string(config_state->view_input->buffer, (Point_t){0,0}, char_command);
           free(char_command);
      }
 }
@@ -3873,6 +3949,13 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
      if(!handled_key){
           if(vim_key_handler(key, head, user_data, false)){
                keys_push(&config_state->record_macro_head, key);
+
+               if(config_state->vim_mode == VM_INSERT && config_state->input && config_state->input_key == 6){
+                    calc_auto_complete_start_and_path(&config_state->auto_complete,
+                                                      buffer->lines[cursor->y],
+                                                      *cursor,
+                                                      config_state->completion_buffer);
+               }
           }else{
                switch(key){
                case KEY_MOUSE:
@@ -4563,13 +4646,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     break;
                     }
                }
-          }
-     }else{
-          if(config_state->input && config_state->input_key == 6){
-               calc_auto_complete_start_and_path(&config_state->auto_complete,
-                                                 buffer->lines[cursor->y],
-                                                 *cursor,
-                                                 config_state->completion_buffer);
           }
      }
 

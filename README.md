@@ -37,7 +37,7 @@ j|move cursor down
 k|move cursor up
 l|move cursor right|
 w|move by word
-e|m|ove to end of word
+e|move to end of word
 b|move to beginning of word
 c|change
 d|delete
@@ -56,6 +56,8 @@ n|goto next search match
 N|goto previous search match
 v|visual mode
 V|visual line mode
+m|set mark in register (next character typed)
+m?|view marks
 zt|scroll view so cursor is at the top
 zz|scroll view so cursor is in the middle
 zb|scroll view so cursor is at the bottom

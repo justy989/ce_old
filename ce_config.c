@@ -1734,6 +1734,9 @@ typedef struct{
      Buffer_t* completion_buffer; // same as shell_command_buffer (let's see how quickly this comment gets out of date!)
      Buffer_t input_buffer;
      Buffer_t buffer_list_buffer;
+     Buffer_t mark_list_buffer;
+     Buffer_t yank_list_buffer;
+     Buffer_t* buffer_before_query;
      int64_t last_command_buffer_jump;
      int last_key;
      KeyNode_t* command_head;
@@ -2120,6 +2123,14 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      initialize_buffer(&config_state->buffer_list_buffer);
      config_state->buffer_list_buffer.readonly = true;
 
+     config_state->mark_list_buffer.name = strdup("marks");
+     initialize_buffer(&config_state->mark_list_buffer);
+     config_state->mark_list_buffer.readonly = true;
+
+     config_state->yank_list_buffer.name = strdup("yanks");
+     initialize_buffer(&config_state->yank_list_buffer);
+     config_state->yank_list_buffer.readonly = true;
+
      // if we reload, the shell command buffer may already exist, don't recreate it
      BufferNode_t* itr = *head;
      while(itr){
@@ -2299,6 +2310,8 @@ bool destroyer(BufferNode_t** head, void* user_data)
      }
 
      ce_free_buffer(&config_state->buffer_list_buffer);
+     ce_free_buffer(&config_state->mark_list_buffer);
+     ce_free_buffer(&config_state->yank_list_buffer);
 
      // history
      input_history_free(&config_state->shell_command_history);
@@ -2705,6 +2718,26 @@ void update_buffer_list_buffer(ConfigState_t* config_state, const BufferNode_t* 
      }
      config_state->buffer_list_buffer.modified = false;
      config_state->buffer_list_buffer.readonly = true;
+}
+
+void update_mark_list_buffer(ConfigState_t* config_state, const Buffer_t* buffer)
+{
+     char buffer_info[BUFSIZ];
+     config_state->mark_list_buffer.readonly = false;
+     ce_clear_lines(&config_state->mark_list_buffer);
+
+     snprintf(buffer_info, BUFSIZ, "register location");
+     ce_append_line(&config_state->mark_list_buffer, buffer_info);
+
+     const MarkNode_t* itr = ((BufferState_t*)(buffer->user_data))->mark_head;
+     while(itr){
+          snprintf(buffer_info, BUFSIZ, "       %c %"PRId64", %"PRId64"", itr->reg_char, itr->location.x, itr->location.y);
+          ce_append_line(&config_state->mark_list_buffer, buffer_info);
+          itr = itr->next;
+     }
+
+     config_state->mark_list_buffer.modified = false;
+     config_state->mark_list_buffer.readonly = true;
 }
 
 Point_t get_cursor_on_terminal(const Point_t* cursor, const BufferView_t* buffer_view, LineNumberType_t line_number_type)
@@ -3171,18 +3204,22 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                commit_input_to_history(input_buffer, &config_state->shell_input_history);
 
                // put the line in the output buffer
-               const char* input = input_buffer->lines[0];
+               for(int64_t i = 0; i < input_buffer->line_count; ++i){
+                    const char* input = input_buffer->lines[i];
 
-               pthread_mutex_lock(&shell_buffer_lock);
-               ce_append_string_readonly(config_state->shell_command_buffer,
-                                         config_state->shell_command_buffer->line_count - 1,
-                                         input);
-               ce_append_char_readonly(config_state->shell_command_buffer, NEWLINE);
-               pthread_mutex_unlock(&shell_buffer_lock);
+#if 0
+                    pthread_mutex_lock(&shell_buffer_lock);
+                    ce_append_string_readonly(config_state->shell_command_buffer,
+                                              config_state->shell_command_buffer->line_count - 1,
+                                              input);
+                    ce_append_char_readonly(config_state->shell_command_buffer, NEWLINE);
+                    pthread_mutex_unlock(&shell_buffer_lock);
+#endif
 
-               // send the input to the shell command
-               write(shell_command_data.shell_command_input_fd, input, strlen(input));
-               write(shell_command_data.shell_command_input_fd, "\n", 1);
+                    // send the input to the shell command
+                    write(shell_command_data.shell_command_input_fd, input, strlen(input));
+                    write(shell_command_data.shell_command_input_fd, "\n", 1);
+               }
           } break;
           }
      }else if(buffer_view->buffer == &config_state->buffer_list_buffer){
@@ -3202,7 +3239,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           buffer_view->cursor = itr->buffer->cursor;
           *cursor = itr->buffer->cursor;
           center_view(buffer_view);
-     }else if(config_state->tab_current->view_current->buffer == config_state->shell_command_buffer){
+     }else if(buffer_view->buffer == config_state->shell_command_buffer){
           BufferView_t* view_to_change = buffer_view;
           if(config_state->tab_current->view_previous) view_to_change = config_state->tab_current->view_previous;
 
@@ -3211,6 +3248,22 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                                              &config_state->last_command_buffer_jump)){
                config_state->tab_current->view_current = view_to_change;
           }
+     }else if(buffer_view->buffer == &config_state->mark_list_buffer){
+          int64_t line = cursor->y - 1; // account for buffer list row header
+          if(line < 0) return;
+          MarkNode_t* itr = ((BufferState_t*)(config_state->buffer_before_query->user_data))->mark_head;
+
+          while(line > 0){
+               itr = itr->next;
+               if(!itr) return;
+               line--;
+          }
+
+          if(!itr) return;
+
+          buffer_view->buffer = config_state->buffer_before_query;
+          buffer_view->cursor.y = itr->location.y;
+          center_view(buffer_view);
      }
 }
 
@@ -3619,8 +3672,19 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           case 'm':
           {
                handled_key = true;
-               char mark = key;
-               add_mark(buffer_state, mark, cursor);
+
+               if(key == '?'){
+                    update_mark_list_buffer(config_state, buffer);
+
+                    config_state->buffer_before_query = config_state->tab_current->view_current->buffer;
+                    config_state->tab_current->view_current->buffer->cursor = *cursor;
+                    config_state->tab_current->view_current->buffer = &config_state->mark_list_buffer;
+                    config_state->tab_current->view_current->top_row = 0;
+                    config_state->tab_current->view_current->cursor = (Point_t){0, 1};
+               }else{
+                    char mark = key;
+                    add_mark(buffer_state, mark, cursor);
+               }
           } break;
           case '\'':
           {
@@ -3903,7 +3967,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          }
 
                          update_buffer_list_buffer(config_state, *head);
-                         config_state->buffer_list_buffer.readonly = true;
                          config_state->tab_current->view_current->buffer->cursor = *cursor;
                          config_state->tab_current->view_current->buffer = &config_state->buffer_list_buffer;
                          config_state->tab_current->view_current->top_row = 0;
@@ -4284,6 +4347,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     if(config_state->tab_current->view_overrideable){
                          config_state->tab_current->overriden_buffer = config_state->tab_current->view_overrideable->buffer;
                          config_state->tab_current->view_overrideable->buffer = config_state->completion_buffer;
+                         config_state->tab_current->view_overrideable->cursor = (Point_t){0, 0};
+                         center_view(config_state->tab_current->view_overrideable);
                     }else{
                          config_state->tab_current->view_input_save->buffer = config_state->completion_buffer;
                          config_state->tab_current->view_input_save->cursor = (Point_t){0, 0};
@@ -4360,6 +4425,26 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           }
      }
 
+     if(config_state->tab_current->view_overrideable && buffer_view->buffer == &config_state->mark_list_buffer){
+          int64_t line = cursor->y - 1; // account for buffer list row header
+          if(line >= 0){
+               MarkNode_t* itr = ((BufferState_t*)(config_state->buffer_before_query->user_data))->mark_head;
+
+               while(line > 0){
+                    itr = itr->next;
+                    if(!itr) break;
+                    line--;
+               }
+
+               if(itr) {
+                    config_state->tab_current->overriden_buffer = config_state->tab_current->view_overrideable->buffer;
+                    config_state->tab_current->view_overrideable->buffer = config_state->buffer_before_query;
+                    config_state->tab_current->view_overrideable->cursor.y = itr->location.y;
+                    center_view(config_state->tab_current->view_overrideable);
+               }
+          }
+     }
+
      if(config_state->quit) return false;
 
      config_state->last_key = key;
@@ -4427,6 +4512,10 @@ void view_drawer(const BufferNode_t* head, void* user_data)
 
      if(ce_buffer_in_view(config_state->tab_current->view_head, &config_state->buffer_list_buffer)){
           update_buffer_list_buffer(config_state, head);
+     }
+
+     if(ce_buffer_in_view(config_state->tab_current->view_head, &config_state->mark_list_buffer)){
+          update_mark_list_buffer(config_state, config_state->buffer_before_query);
      }
 
      int64_t input_view_height = 0;

@@ -1014,11 +1014,10 @@ bool ce_join_line(Buffer_t* buffer, int64_t line){
      size_t l1_len = strlen(l1);
      char* l2 = buffer->lines[line+1];
      size_t l2_len = strlen(l2);
-     buffer->lines[line] = realloc(l1, l1_len + l2_len + 2); //space and null
+     buffer->lines[line] = realloc(l1, l1_len + l2_len + 1);
      if(!buffer->lines[line]) return false; // TODO: ENOMEM
      l1 = buffer->lines[line];
-     l1[l1_len] = ' ';
-     memcpy(&l1[l1_len+1], l2, l2_len+1);
+     memcpy(&l1[l1_len], l2, l2_len+1);
      buffer->modified = true;
      return ce_remove_line(buffer, line+1);
 }
@@ -2380,7 +2379,8 @@ bool ce_commit_redo(Buffer_t* buffer, BufferCommitNode_t** tail, Point_t* cursor
           }
 
           *cursor = (*tail)->commit.redo_cursor;
-     }while(*tail && (*tail)->commit.chain == BCC_KEEP_GOING);
+     }while((*tail)->next && commit->chain == BCC_KEEP_GOING);
+
      return true;
 }
 

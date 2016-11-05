@@ -54,37 +54,50 @@ int64_t count_digits(int64_t n)
 
 void view_drawer(const BufferNode_t* head, void* user_data);
 
-typedef struct BackspaceNode_t{
-     char c;
-     struct BackspaceNode_t* next;
-} BackspaceNode_t;
+typedef struct KeyNode_t{
+     int key;
+     struct KeyNode_t* next;
+} KeyNode_t;
 
-BackspaceNode_t* backspace_push(BackspaceNode_t** head, char c)
+KeyNode_t* key_push(KeyNode_t** head, int key)
 {
-     BackspaceNode_t* new_node = malloc(sizeof(*new_node));
+     KeyNode_t* new_node = malloc(sizeof(*new_node));
      if(!new_node){
           ce_message("%s() failed to malloc node", __FUNCTION__);
           return NULL;
      }
 
-     new_node->c = c;
-     new_node->next = *head;
-     *head = new_node;
+     KeyNode_t* tail = *head;
+
+     if(tail){
+          while(tail->next){
+               tail = tail->next;
+          }
+     }
+
+     new_node->key = key;
+     new_node->next = NULL;
+
+     if(tail){
+          tail->next = new_node;
+     }else{
+          *head = new_node;
+     }
 
      return new_node;
 }
 
 // string is allocated and returned, it is the user's responsibility to free it
-char* backspace_get_string(BackspaceNode_t* head)
+int* key_get_string(KeyNode_t* head)
 {
      int64_t len = 0;
-     BackspaceNode_t* itr = head;
+     KeyNode_t* itr = head;
      while(itr){
           len++;
           itr = itr->next;
      }
 
-     char* str = malloc(len + 1);
+     int* str = malloc((len + 1) * sizeof(*str));
      if(!str){
           ce_message("%s() failed to alloc string", __FUNCTION__);
           return NULL;
@@ -93,7 +106,7 @@ char* backspace_get_string(BackspaceNode_t* head)
      int64_t s = 0;
      itr = head;
      while(itr){
-          str[s] = itr->c;
+          str[s] = itr->key;
           s++;
           itr = itr->next;
      }
@@ -102,13 +115,80 @@ char* backspace_get_string(BackspaceNode_t* head)
      return str;
 }
 
-void backspace_free(BackspaceNode_t** head)
+void key_free(KeyNode_t** head)
 {
      while(*head){
-          BackspaceNode_t* tmp = *head;
+          KeyNode_t* tmp = *head;
           *head = (*head)->next;
           free(tmp);
      }
+}
+
+char* command_string_to_char_string(int* int_str)
+{
+     // build length
+     size_t len = 1; // account for NULL terminator
+     int* int_itr = int_str;
+     while(*int_itr){
+          if(isprint(*int_itr)){
+               len++;
+          }else{
+               switch(*int_itr){
+               default:
+                    len++; // going to fill in with '~' for now
+                    break;
+               case KEY_BACKSPACE:
+               case KEY_ESCAPE:
+               case KEY_ENTER:
+               case KEY_TAB:
+                    len += 2;
+                    break;
+               }
+          }
+
+          int_itr++;
+     }
+
+     char* char_str = malloc(len);
+     if(!char_str) return NULL;
+
+     char* char_itr = char_str;
+     int_itr = int_str;
+     while(*int_itr){
+          if(isprint(*int_itr)){
+               *char_itr = *int_itr;
+               char_itr++;
+          }else{
+               switch(*int_itr){
+               default:
+                    *char_itr = '~';
+                    char_itr++;
+                    break;
+               case KEY_BACKSPACE:
+                    *char_itr = '\\'; char_itr++;
+                    *char_itr = 'b'; char_itr++;
+                    break;
+               case KEY_ESCAPE:
+                    *char_itr = '\\'; char_itr++;
+                    *char_itr = 'e'; char_itr++;
+                    break;
+               case KEY_ENTER:
+                    *char_itr = '\\'; char_itr++;
+                    *char_itr = 'r'; char_itr++;
+                    break;
+               case KEY_TAB:
+                    *char_itr = '\\'; char_itr++;
+                    *char_itr = 't'; char_itr++;
+                    break;
+               }
+          }
+
+          int_itr++;
+     }
+
+     char_str[len - 1] = 0;
+
+     return char_str;
 }
 
 // TODO: move this to ce.h
@@ -179,7 +259,6 @@ void input_history_free(InputHistory_t* history)
      history->tail = NULL;
      history->cur = NULL;
 }
-
 bool input_history_next(InputHistory_t* history)
 {
      if(!history->cur) return false;
@@ -232,7 +311,6 @@ int isnotsinglequote(int c)
 
 typedef struct{
      BufferCommitNode_t* commit_tail;
-     BackspaceNode_t* backspace_head;
      int64_t cursor_save_column;
      struct MarkNode_t* mark_head;
 } BufferState_t;
@@ -461,10 +539,23 @@ typedef struct{
      char ch;
 } FindState_t;
 
-VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action, VimMode_t vim_mode,
+int itoi(int* str)
+{
+     int value = 0;
+
+     while(*str){
+          if(!isdigit(*str)) return 0;
+          value = value * 10 + (*str - '0');
+          str++;
+     }
+
+     return value;
+}
+
+VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action, VimMode_t vim_mode,
                                          Buffer_t* buffer, Point_t* cursor, Point_t* visual_start)
 {
-     char tmp[BUFSIZ];
+     int tmp[BUFSIZ];
      bool visual_mode = false;
      bool get_motion = true;
      VimAction_t built_action = {};
@@ -473,13 +564,13 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
      built_action.motion.multiplier = 1;
 
      // get multiplier if there is one
-     const char* itr = string;
+     const int* itr = string;
      while(*itr && isdigit(*itr)) itr++;
      if(itr != string){
           int64_t len = itr - string;
-          strncpy(tmp, string, len);
+          memcpy(tmp, string, len * sizeof(*tmp));
           tmp[len + 1] = 0;
-          built_action.multiplier = atoi(tmp);
+          built_action.multiplier = itoi(tmp);
 
           if(built_action.multiplier == 0){
                // it's actually just a motion to move to the beginning of the line!
@@ -508,7 +599,7 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
      }
 
      // get the change
-     char change_char = *itr;
+     int change_char = *itr;
      switch(*itr){
      default:
           built_action.end_in_vim_mode = vim_mode;
@@ -648,13 +739,13 @@ VimCommandState_t vim_action_from_string(const char* string, VimAction_t* action
      if(get_motion){
           // get the motion multiplier
           itr++;
-          const char* start_itr = itr;
+          const int* start_itr = itr;
           while(*itr && isdigit(*itr)) itr++;
           if(itr != start_itr){
                int64_t len = itr - start_itr;
-               strncpy(tmp, start_itr, len);
+               memcpy(tmp, start_itr, len * sizeof(*tmp));
                tmp[len + 1] = 0;
-               built_action.motion.multiplier = atoi(tmp);
+               built_action.motion.multiplier = itoi(tmp);
 
                if(built_action.motion.multiplier == 0){
                     built_action.motion.multiplier = 1;
@@ -1278,8 +1369,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                add_yank(yank_head, '"', yank_string, action_range.yank_mode);
           }
 
-          BufferCommitChain_t chain = (action->end_in_vim_mode == VM_INSERT) ? BCC_KEEP_GOING : BCC_STOP;
-          ce_commit_remove_string(&buffer_state->commit_tail, *action_range.sorted_start, *cursor, *action_range.sorted_start, commit_string, chain);
+          ce_commit_remove_string(&buffer_state->commit_tail, *action_range.sorted_start, *cursor, *action_range.sorted_start, commit_string, BCC_STOP);
      } break;
      case VCT_PASTE_BEFORE:
      {
@@ -1634,16 +1724,6 @@ void auto_complete_prev(AutoComplete_t* auto_complete, const char* match)
 }
 
 typedef struct{
-     Point_t entered;
-     Point_t leftmost;
-     int64_t backspaces;
-     char* string;
-     bool used_arrow_key;
-} InsertModeState_t;
-
-#define VIM_COMMAND_MAX 128
-
-typedef struct{
      VimMode_t vim_mode;
      bool input;
      const char* input_message;
@@ -1654,13 +1734,12 @@ typedef struct{
      Buffer_t buffer_list_buffer;
      int64_t last_command_buffer_jump;
      int last_key;
-     char command[VIM_COMMAND_MAX];
-     int64_t command_len;
+     KeyNode_t* command_head;
+     int* last_command_string;
      FindState_t find_state;
      struct {
           Direction_t direction;
      } search_command;
-     InsertModeState_t insert_state;
      Point_t visual_start;
      struct YankNode_t* yank_head;
      TabView_t* tab_head;
@@ -1810,15 +1889,10 @@ void enter_normal_mode(ConfigState_t* config_state)
      auto_complete_end(&config_state->auto_complete);
 }
 
-void enter_insert_mode(ConfigState_t* config_state, Point_t* cursor)
+void enter_insert_mode(ConfigState_t* config_state)
 {
      if(config_state->tab_current->view_current->buffer->readonly) return;
      config_state->vim_mode = VM_INSERT;
-     config_state->insert_state.leftmost = *cursor;
-     config_state->insert_state.entered = *cursor;
-     config_state->insert_state.backspaces = 0;
-     free(config_state->insert_state.string);
-     config_state->insert_state.string = NULL;
 }
 
 void enter_visual_range_mode(ConfigState_t* config_state, BufferView_t* buffer_view)
@@ -1831,59 +1905,6 @@ void enter_visual_line_mode(ConfigState_t* config_state, BufferView_t* buffer_vi
 {
      config_state->vim_mode = VM_VISUAL_LINE;
      config_state->visual_start = buffer_view->cursor;
-}
-
-void commit_insert_mode_changes(InsertModeState_t* insert_state, Buffer_t* buffer, BufferState_t* buffer_state, Point_t* cursor)
-{
-     if(insert_state->leftmost.x == cursor->x &&
-        insert_state->leftmost.y == cursor->y &&
-        insert_state->entered.x == cursor->x &&
-        insert_state->entered.y == cursor->y){
-          // pass no change
-     }else{
-          if(insert_state->leftmost.x == insert_state->entered.x &&
-             insert_state->leftmost.y == insert_state->entered.y){
-               // TODO: assert cursor is after start_insert
-               // exclusively inserts
-               Point_t last_inserted_char = previous_point(buffer, *cursor);
-               char* inserted = ce_dupe_string(buffer, insert_state->leftmost, last_inserted_char);
-               ce_commit_insert_string(&buffer_state->commit_tail,
-                                       insert_state->leftmost,
-                                       insert_state->entered,
-                                       *cursor,
-                                       inserted,
-                                       BCC_STOP);
-               insert_state->string = strdup(inserted);
-               // NOTE: we could have added backspaces and just not used them
-               backspace_free(&buffer_state->backspace_head);
-          }else if(insert_state->leftmost.x < insert_state->entered.x ||
-                   insert_state->leftmost.y < insert_state->entered.y){
-               if(cursor->x == insert_state->leftmost.x &&
-                  cursor->y == insert_state->leftmost.y){
-                    // exclusively backspaces!
-                    ce_commit_remove_string(&buffer_state->commit_tail,
-                                            *cursor,
-                                            insert_state->entered,
-                                            *cursor,
-                                            backspace_get_string(buffer_state->backspace_head),
-                                            BCC_STOP);
-                    backspace_free(&buffer_state->backspace_head);
-               }else{
-                    // mixture of inserts and backspaces
-                    Point_t last_inserted_char = previous_point(buffer, *cursor);
-                    char* inserted = ce_dupe_string(buffer, insert_state->leftmost, last_inserted_char);
-                    ce_commit_change_string(&buffer_state->commit_tail,
-                                            insert_state->leftmost,
-                                            insert_state->entered,
-                                            *cursor,
-                                            inserted,
-                                            backspace_get_string(buffer_state->backspace_head),
-                                            BCC_STOP);
-                    insert_state->string = strdup(inserted);
-                    backspace_free(&buffer_state->backspace_head);
-               }
-          }
-     }
 }
 
 // location is {left_column, top_line} for the view
@@ -1937,7 +1958,7 @@ void input_start(ConfigState_t* config_state, const char* input_message, int inp
      config_state->tab_current->view_input_save = config_state->tab_current->view_current;
      pthread_mutex_unlock(&view_input_save_lock);
      config_state->tab_current->view_current = config_state->view_input;
-     enter_insert_mode(config_state, &config_state->view_input->cursor);
+     enter_insert_mode(config_state);
 
      // reset input history back to tail
      InputHistory_t* history = history_from_input_key(config_state);
@@ -2492,13 +2513,12 @@ void switch_to_view_at_point(ConfigState_t* config_state, Point_t point)
      }
 }
 
-void handle_mouse_event(ConfigState_t* config_state, Buffer_t* buffer, BufferState_t* buffer_state, BufferView_t* buffer_view, Point_t* cursor)
+void handle_mouse_event(ConfigState_t* config_state, Buffer_t* buffer, BufferView_t* buffer_view, Point_t* cursor)
 {
      MEVENT event;
      if(getmouse(&event) == OK){
           bool enter_insert;
           if((enter_insert = config_state->vim_mode == VM_INSERT)){
-               commit_insert_mode_changes(&config_state->insert_state, buffer, buffer_state, cursor);
                ce_clamp_cursor(buffer, cursor);
                enter_normal_mode(config_state);
           }
@@ -2588,7 +2608,7 @@ void handle_mouse_event(ConfigState_t* config_state, Buffer_t* buffer, BufferSta
           (void) buffer_view;
 #endif
           // if we left insert and haven't switched views, enter insert mode
-          if(enter_insert && config_state->tab_current->view_current == buffer_view) enter_insert_mode(config_state, cursor);
+          if(enter_insert && config_state->tab_current->view_current == buffer_view) enter_insert_mode(config_state);
      }
 }
 
@@ -3192,42 +3212,6 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
      }
 }
 
-void repeat_insert_actions(InsertModeState_t* insert_state, Buffer_t* buffer, Point_t* cursor)
-{
-     BufferState_t* buffer_state = buffer->user_data;
-
-     // remove any backspaces we made
-     Point_t replay = *cursor;
-     if(insert_state->backspaces){
-          ce_advance_cursor(buffer, &replay, -insert_state->backspaces);
-          Point_t previous = previous_point(buffer, *cursor);
-          char* removed_string = ce_dupe_string(buffer, replay, previous);
-          ce_remove_string(buffer, replay, insert_state->backspaces);
-
-          if(insert_state->string){
-               ce_insert_string(buffer, replay, insert_state->string);
-               Point_t end = *cursor;
-               ce_advance_cursor(buffer, &end, strlen(insert_state->string) -
-                                 insert_state->backspaces);
-               ce_commit_change_string(&buffer_state->commit_tail, replay, *cursor,
-                                       end, strdup(insert_state->string),
-                                       removed_string, BCC_STOP);
-               *cursor = end;
-          }else{
-               ce_commit_remove_string(&buffer_state->commit_tail, replay, *cursor,
-                                       replay, removed_string, BCC_STOP);
-               *cursor = replay;
-          }
-     }else if(insert_state->string){
-          ce_insert_string(buffer, replay, insert_state->string);
-          Point_t end = *cursor;
-          ce_advance_cursor(buffer, &end, strlen(insert_state->string));
-          ce_commit_insert_string(&buffer_state->commit_tail, replay, *cursor,
-                                  end, strdup(insert_state->string), BCC_STOP);
-          *cursor = end;
-     }
-}
-
 bool key_handler(int key, BufferNode_t** head, void* user_data)
 {
      ConfigState_t* config_state = user_data;
@@ -3237,100 +3221,65 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
      Point_t* cursor = &config_state->tab_current->view_current->cursor;
 
      if(config_state->vim_mode == VM_INSERT){
-          InsertModeState_t* insert_state = &config_state->insert_state;
           switch(key){
-          case 27: // ESC
+          case KEY_ESCAPE:
           {
-               commit_insert_mode_changes(insert_state, buffer, buffer_state, cursor);
+               int* built_command = key_get_string(config_state->command_head);
+               if(config_state->last_command_string) free(config_state->last_command_string);
+               config_state->last_command_string = built_command;
+               char* char_command_string = command_string_to_char_string(built_command);
+               ce_message("icmd: '%s'", char_command_string);
+               free(char_command_string);
+               key_free(&config_state->command_head);
+
                enter_normal_mode(config_state);
                ce_clamp_cursor(buffer, cursor);
+               if(buffer_state->commit_tail){
+                    buffer_state->commit_tail->commit.chain = BCC_STOP;
+               }
           } break;
           case KEY_MOUSE:
-               handle_mouse_event(config_state, buffer, buffer_state, buffer_view, cursor);
+               handle_mouse_event(config_state, buffer, buffer_view, cursor);
                break;
           case KEY_BACKSPACE:
-               if(insert_state->used_arrow_key){
-                    enter_insert_mode(config_state, cursor);
-                    insert_state->used_arrow_key = false;
+          {
+               Point_t before_cursor = {cursor->x - 1, cursor->y};
+               if(before_cursor.x < 0){
+                    if(!before_cursor.y) break; // don't do anything if the user tries to backspace at 0, 0
+                    before_cursor.x = strlen(buffer->lines[cursor->y - 1]);
+                    before_cursor.y--;
                }
 
-               if(buffer->line_count){
-                    if(cursor->x <= 0){
-                         if(cursor->y){
-                              int64_t prev_line_len = strlen(buffer->lines[cursor->y - 1]);
-                              int64_t cur_line_len = strlen(buffer->lines[cursor->y]);
-
-                              if(cur_line_len){
-                                   ce_append_string(buffer, cursor->y - 1, buffer->lines[cursor->y]);
-                              }
-
-                              if(ce_remove_line(buffer, cursor->y)){
-                                   backspace_push(&buffer_state->backspace_head, '\n');
-                                   cursor->y--;
-                                   cursor->x = prev_line_len;
-                                   if(insert_state->leftmost.y > cursor->y){
-                                        insert_state->leftmost = *cursor;
-                                        insert_state->backspaces++;
-                                   }
-                              }
+               char ch;
+               if(ce_get_char(buffer, before_cursor, &ch)){
+                    if(ce_remove_char(buffer, before_cursor)){
+                         ce_commit_remove_char(&buffer_state->commit_tail, before_cursor, *cursor, before_cursor, ch, BCC_KEEP_GOING);
+                         *cursor = before_cursor;
+                         key_push(&config_state->command_head, key);
+                         if(auto_completing(&config_state->auto_complete)){
+                              calc_auto_complete_start_and_path(&config_state->auto_complete,
+                                                                buffer->lines[cursor->y],
+                                                                *cursor,
+                                                                config_state->completion_buffer);
                          }
-                    }else{
-                         // figure out if we can slurp up a tab
-                         size_t n_backspaces = 1;
-                         if(cursor->x % strlen(TAB_STRING) == 0){
-                              n_backspaces = strlen(TAB_STRING);
-                              char c = 0;
-                              Point_t previous = *cursor;
-                              for(size_t n=0; n<n_backspaces; n++){
-                                  previous.x--;
-                                  if(!ce_get_char(buffer, previous, &c) || c != ' ') n_backspaces = 1;
-                              }
-                         }
-                         for(size_t n=0; n < n_backspaces; n++){
-                              // perform backspace
-                              Point_t previous = *cursor;
-                              previous.x--;
-                              char c = 0;
-                              if(ce_get_char(buffer, previous, &c)){
-                                   if(ce_remove_char(buffer, previous)){
-                                        if(previous.x < insert_state->leftmost.x){
-                                             backspace_push(&buffer_state->backspace_head, c);
-                                             insert_state->leftmost.x = previous.x;
-                                             insert_state->backspaces++;
-                                        }
-                                        // cannot use move_cursor due to not being able to be ahead of the last character
-                                        cursor->x--;
-                                   }
-                              }
-                         }
-                    }
-
-                    if(auto_completing(&config_state->auto_complete)){
-                         calc_auto_complete_start_and_path(&config_state->auto_complete,
-                                                           buffer->lines[cursor->y],
-                                                           *cursor,
-                                                           config_state->completion_buffer);
                     }
                }
-               break;
+           } break;
           case KEY_DC:
                // TODO: with our current insert mode undo implementation we can't support this
                // ce_remove_char(buffer, cursor);
                break;
           case '\t':
           {
-               if(insert_state->used_arrow_key){
-                    enter_insert_mode(config_state, cursor);
-                    insert_state->used_arrow_key = false;
-               }
-
                if(auto_completing(&config_state->auto_complete)){
                     int64_t offset = cursor->x - config_state->auto_complete.start.x;
                     const char* complete = config_state->auto_complete.current->option + offset;
                     int64_t complete_len = strlen(complete);
                     if(ce_insert_string(buffer, *cursor, complete)){
+                         Point_t save_cursor = *cursor;
                          ce_move_cursor(buffer, cursor, (Point_t){complete_len, cursor->y});
                          cursor->x++;
+                         ce_commit_insert_string(&buffer_state->commit_tail, save_cursor, save_cursor, *cursor, strdup(TAB_STRING), BCC_KEEP_GOING);
 
                          calc_auto_complete_start_and_path(&config_state->auto_complete,
                                                            buffer->lines[cursor->y],
@@ -3338,75 +3287,36 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                                            config_state->completion_buffer);
                     }
                }else{
-                    ce_insert_string(buffer, *cursor, TAB_STRING);
-                    ce_move_cursor(buffer, cursor, (Point_t){strlen(TAB_STRING) - 1, 0});
-                    cursor->x++; // we want to be after the tabs
-               }
-          } break;
-          case KEY_ENTER: // return
-          {
-               if(insert_state->used_arrow_key){
-                    enter_insert_mode(config_state, cursor);
-                    insert_state->used_arrow_key = false;
-               }
-
-               if(!buffer->lines) ce_alloc_lines(buffer, 1);
-               char* start = buffer->lines[cursor->y] + cursor->x;
-               int64_t to_end_of_line_len = strlen(start);
-
-               if(ce_insert_line(buffer, cursor->y + 1, start)){
-                    if(to_end_of_line_len){
-                         ce_remove_string(buffer, *cursor, to_end_of_line_len);
-                    }
-                    cursor->y++;
-                    cursor->x = 0;
-
-                    // indent if necessary
-                    Point_t prev_line = {0, cursor->y-1};
-                    int64_t indent_len = ce_get_indentation_for_next_line(buffer, prev_line, strlen(TAB_STRING));
-                    if(indent_len > 0){
-                         char* indent = malloc(indent_len + 1);
-                         memset(indent, ' ', indent_len);
-                         indent[indent_len] = '\0';
-
-                         if(ce_insert_string(buffer, *cursor, indent))
-                              cursor->x += indent_len;
-                    }
-
-                    if(auto_completing(&config_state->auto_complete)){
-                         calc_auto_complete_start_and_path(&config_state->auto_complete,
-                                                           buffer->lines[cursor->y],
-                                                           *cursor,
-                                                           config_state->completion_buffer);
+                    if(ce_insert_string(buffer, *cursor, TAB_STRING)){
+                         Point_t save_cursor = *cursor;
+                         ce_move_cursor(buffer, cursor, (Point_t){strlen(TAB_STRING) - 1, 0});
+                         cursor->x++; // we want to be after the tabs
+                         ce_commit_insert_string(&buffer_state->commit_tail, save_cursor, save_cursor, *cursor, strdup(TAB_STRING), BCC_KEEP_GOING);
+                         key_push(&config_state->command_head, key);
                     }
                }
           } break;
           case KEY_UP:
           case KEY_DOWN:
-               if(!insert_state->used_arrow_key){
-                    commit_insert_mode_changes(insert_state, buffer, buffer_state, cursor);
-               }
-               insert_state->used_arrow_key = true;
                ce_move_cursor(buffer, cursor, (Point_t){0, (key == KEY_DOWN) ? 1 : -1});
+               if(buffer_state->commit_tail){
+                    buffer_state->commit_tail->commit.chain = BCC_STOP;
+               }
                break;
           case KEY_LEFT:
           case KEY_RIGHT:
-               if(!insert_state->used_arrow_key){
-                    commit_insert_mode_changes(insert_state, buffer, buffer_state, cursor);
-               }
-               insert_state->used_arrow_key = true;
                cursor->x += key == KEY_RIGHT? 1 : -1;
                if(cursor->x > (int64_t) strlen(buffer->lines[cursor->y])) cursor->x--;
                if(cursor->x < 0) cursor->x++;
+               if(buffer_state->commit_tail){
+                    buffer_state->commit_tail->commit.chain = BCC_STOP;
+               }
                break;
           case '}':
           {
-               if(insert_state->used_arrow_key){
-                    enter_insert_mode(config_state, cursor);
-                    insert_state->used_arrow_key = false;
-               }
-
                if(ce_insert_char(buffer, *cursor, key)){
+                    Point_t next_cursor = {cursor->x + 1, cursor->y};
+                    ce_commit_insert_char(&buffer_state->commit_tail, *cursor, *cursor, next_cursor, key, BCC_KEEP_GOING);
                     bool do_indentation = true;
                     for(int i = 0; i < cursor->x; i++){
                          char blank_c;
@@ -3434,6 +3344,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                    for(int64_t i = 0; i < n_spaces; i++){
                                         Point_t itr = {cursor->x + i, cursor->y};
                                         if(!ce_insert_char(buffer, itr, ' ')) assert(0);
+                                        ce_commit_insert_char(&buffer_state->commit_tail, *cursor, *cursor, itr, ' ', BCC_KEEP_GOING);
                                    }
                                    cursor->x = sbol_match.x;
                               }
@@ -3449,21 +3360,15 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                    }
 
                                    if(can_unindent){
+                                        Point_t end_of_delete = *cursor;
                                         cursor->x -= n_deletes;
+                                        char* duped_str = ce_dupe_string(buffer, *cursor, end_of_delete);
                                         if(ce_remove_string(buffer, *cursor, n_deletes)){
-                                             if(insert_state->leftmost.y == cursor->y &&
-                                                insert_state->leftmost.x > cursor->x){
-                                                  insert_state->leftmost.x = cursor->x;
-                                                  for(int i = 0; i < n_deletes; ++i){
-                                                       backspace_push(&buffer_state->backspace_head, ' ');
-                                                       insert_state->backspaces++;
-                                                  }
-                                             }
+                                             ce_commit_remove_string(&buffer_state->commit_tail, *cursor, end_of_delete, *cursor, duped_str, BCC_KEEP_GOING);
                                         }
                                    }
                               }
                          }
-
                     }
 
                     cursor->x++;
@@ -3518,14 +3423,43 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           case 25: // Ctrl + y
                confirm_action(config_state, *head);
                break;
-          default:
-               if(insert_state->used_arrow_key){
-                    enter_insert_mode(config_state, cursor);
-                    insert_state->used_arrow_key = false;
-               }
+          case KEY_ENTER:
+               key = NEWLINE;
 
                if(ce_insert_char(buffer, *cursor, key)){
+                    Point_t undo_cursor = *cursor;
+
+                    cursor->y++;
+                    cursor->x = 0;
+
+                    ce_commit_insert_char(&buffer_state->commit_tail, undo_cursor, undo_cursor, *cursor, key, BCC_KEEP_GOING);
+                    key_push(&config_state->command_head, KEY_ENTER);
+
+                    // indent if necessary
+                    Point_t prev_line = {0, cursor->y-1};
+                    int64_t indent_len = ce_get_indentation_for_next_line(buffer, prev_line, strlen(TAB_STRING));
+                    if(indent_len > 0){
+                         char* indent = malloc(indent_len + 1);
+                         memset(indent, ' ', indent_len);
+                         indent[indent_len] = '\0';
+
+                         if(ce_insert_string(buffer, *cursor, indent)){
+                              Point_t pre_insert = *cursor;
+                              cursor->x += indent_len;
+                              ce_commit_insert_string(&buffer_state->commit_tail, pre_insert, pre_insert, *cursor, indent, BCC_KEEP_GOING);
+                         }
+                    }
+               }
+               break;
+          default:
+          {
+               if(ce_insert_char(buffer, *cursor, key)){
+                    key_push(&config_state->command_head, key);
+                    Point_t undo_cursor = *cursor;
                     cursor->x++;
+
+                    ce_commit_insert_char(&buffer_state->commit_tail, undo_cursor, undo_cursor, *cursor, key, BCC_KEEP_GOING);
+
                     if(auto_completing(&config_state->auto_complete)){
                          calc_auto_complete_start_and_path(&config_state->auto_complete,
                                                            buffer->lines[cursor->y],
@@ -3533,7 +3467,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                                            config_state->completion_buffer);
                     }
                }
-               break;
+          } break;
           }
 
           if(!auto_completing(&config_state->auto_complete) && config_state->input &&
@@ -3544,8 +3478,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                                  config_state->completion_buffer);
           }
      }else{
-          bool clear_command = true;
           bool handled_key = false;
+          bool clear_command = true;
 
           switch(config_state->last_key){
           default:
@@ -3646,7 +3580,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     config_state->tab_current->overriden_buffer = NULL;
                     break;
                }
-               if(handled_key) config_state->command_len = 0;
+               if(handled_key) key_free(&config_state->command_head);
           } break;
           case 'm':
           {
@@ -3676,28 +3610,25 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           }
 
           if(!handled_key && key >= 0 && key < 256 && isprint(key)){
-               if(config_state->command_len >= VIM_COMMAND_MAX){
-                    config_state->command_len = 0;
-               }
-
-               // insert the character into the command
-               config_state->command[config_state->command_len] = key;
-               config_state->command_len++;
-               config_state->command[config_state->command_len] = 0;
+               key_push(&config_state->command_head, key);
+               int* built_command = key_get_string(config_state->command_head);
 
                VimAction_t vim_action;
-               VimCommandState_t command_state = vim_action_from_string(config_state->command, &vim_action,
+               VimCommandState_t command_state = vim_action_from_string(built_command, &vim_action,
                                                                         config_state->vim_mode, buffer,
                                                                         cursor, &config_state->visual_start);
+
                switch(command_state){
                default:
                case VCS_INVALID:
                     // allow command to be cleared
+                    free(built_command);
                     break;
                case VCS_CONTINUE:
                     // no! don't clear the command
-                    clear_command = false;
                     handled_key = true;
+                    clear_command = false;
+                    free(built_command);
                     break;
                case VCS_COMPLETE:
                {
@@ -3728,7 +3659,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                    default:
                                         break;
                                    case VM_INSERT:
-                                        enter_insert_mode(config_state, cursor);
+                                        enter_insert_mode(config_state);
+                                        clear_command = false;
                                         break;
                                    case VM_NORMAL:
                                         enter_normal_mode(config_state);
@@ -3747,7 +3679,15 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                    // always use the cursor as the start of the visual selection
                                    config_state->last_vim_action.motion.visual_start_after = true;
                               }
+
                               // allow the command to be cleared
+                              if(config_state->last_command_string) free(config_state->last_command_string);
+                              config_state->last_command_string = built_command;
+                              char* char_command_string = command_string_to_char_string(built_command);
+                              ce_message("cmd: '%s'", char_command_string);
+                              free(char_command_string);
+                         }else{
+                              free(built_command);
                          }
                     }
                     handled_key = true;
@@ -3762,21 +3702,22 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                } break;
                case '.':
                {
-                    if(config_state->insert_state.used_arrow_key){
-                         repeat_insert_actions(&config_state->insert_state, buffer, cursor);
-                    }else{
-                         VimMode_t final_mode;
-                         vim_action_apply(&config_state->last_vim_action, buffer, cursor, config_state->vim_mode,
-                                          &config_state->yank_head, &final_mode, &config_state->visual_start,
-                                          &config_state->find_state);
+                    if(!config_state->last_command_string) break;
 
-                         if(config_state->last_vim_action.end_in_vim_mode == VM_INSERT){
-                              repeat_insert_actions(&config_state->insert_state, buffer, cursor);
-                              // insert the string we added
-                              enter_normal_mode(config_state);
-                         }
+                    VimAction_t vim_action;
+                    VimMode_t final_mode;
+                    vim_action_from_string(config_state->last_command_string, &vim_action, config_state->vim_mode,
+                                           buffer, cursor, &config_state->visual_start);
+
+                    vim_action_apply(&config_state->last_vim_action, buffer, cursor, config_state->vim_mode,
+                                     &config_state->yank_head, &final_mode, &config_state->visual_start,
+                                     &config_state->find_state);
+
+                    if(config_state->last_vim_action.end_in_vim_mode == VM_INSERT){
+                         // TODO: crazy redo insert mode replay stuff
+                         // insert the string we added
+                         enter_normal_mode(config_state);
                     }
-
                } break;
                case 27: // ESC
                {
@@ -3789,7 +3730,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     }
                } break;
                case KEY_MOUSE:
-                    handle_mouse_event(config_state, buffer, buffer_state, buffer_view, cursor);
+                    handle_mouse_event(config_state, buffer, buffer_view, cursor);
                     break;
                case 'J':
                {
@@ -3819,8 +3760,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
                     if(ce_insert_string(buffer, begin_line, indent_nl)){
                          *cursor = (Point_t){indent_len, cursor->y};
-                         ce_commit_insert_string(&buffer_state->commit_tail, begin_line, *cursor, *cursor, indent_nl, BCC_STOP);
-                         enter_insert_mode(config_state, cursor);
+                         ce_commit_insert_string(&buffer_state->commit_tail, begin_line, *cursor, *cursor, indent_nl, BCC_KEEP_GOING);
+                         enter_insert_mode(config_state);
                     }
                } break;
                case 'o':
@@ -3838,8 +3779,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     if(ce_insert_string(buffer, end_of_line, nl_indent)){
                          Point_t save_cursor = *cursor;
                          *cursor = (Point_t){indent_len, cursor->y + 1};
-                         ce_commit_insert_string(&buffer_state->commit_tail, end_of_line, save_cursor, *cursor, nl_indent, BCC_STOP);
-                         enter_insert_mode(config_state, cursor);
+                         ce_commit_insert_string(&buffer_state->commit_tail, end_of_line, save_cursor, *cursor, nl_indent, BCC_KEEP_GOING);
+                         enter_insert_mode(config_state);
                     }
                } break;
                case KEY_SAVE:
@@ -4396,9 +4337,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                }
           }
 
-          if(clear_command){
-               config_state->command_len = 0;
-          }
+          if(clear_command) key_free(&config_state->command_head);
      }
 
      // incremental search

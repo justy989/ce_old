@@ -2177,6 +2177,26 @@ TEST(move_cursor_backward_to_char)
      ce_free_buffer(&buffer);
 }
 
+TEST(join_line)
+{
+     Buffer_t buffer = {};
+     buffer.line_count = 4;
+     buffer.lines = malloc(4 * sizeof(char*));
+     buffer.lines[0] = strdup("tacos");
+     buffer.lines[1] = strdup("are");
+     buffer.lines[2] = strdup("the");
+     buffer.lines[3] = strdup("best");
+
+     ce_join_line(&buffer, 1);
+
+     EXPECT(buffer.line_count == 3);
+     EXPECT(strcmp(buffer.lines[0], "tacos") == 0);
+     EXPECT(strcmp(buffer.lines[1], "arethe") == 0);
+     EXPECT(strcmp(buffer.lines[2], "best") == 0);
+
+     ce_free_buffer(&buffer);
+}
+
 void segv_handler(int signo)
 {
      void *array[10];

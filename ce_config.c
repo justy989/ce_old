@@ -560,9 +560,6 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
      bool get_motion = true;
      VimAction_t built_action = {};
 
-     char* char_string = command_string_to_char_string(string);
-     ce_message("%s", char_string);
-
      built_action.multiplier = 1;
      built_action.motion.multiplier = 1;
 
@@ -2004,6 +2001,18 @@ void input_cancel(ConfigState_t* config_state)
           config_state->tab_current->view_input_save->cursor = config_state->start_search;
           pthread_mutex_unlock(&view_input_save_lock);
           center_view(config_state->tab_current->view_input_save);
+     }else if(config_state->input_key == 6){
+          if(config_state->tab_current->view_overrideable){
+               config_state->tab_current->view_overrideable->buffer = config_state->tab_current->overriden_buffer;
+               config_state->tab_current->view_overrideable->cursor = config_state->tab_current->overriden_buffer->cursor;
+               center_view(config_state->tab_current->view_overrideable);
+          }else{
+               pthread_mutex_lock(&view_input_save_lock);
+               config_state->tab_current->view_input_save->buffer = config_state->buffer_before_query;
+               pthread_mutex_unlock(&view_input_save_lock);
+               config_state->tab_current->view_input_save->cursor = config_state->buffer_before_query->cursor;
+               center_view(config_state->tab_current->view_input_save);
+          }
      }
      input_end(config_state);
 }
@@ -3100,6 +3109,8 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                }
                if(config_state->tab_current->overriden_buffer){
                     config_state->tab_current->view_overrideable->buffer = config_state->tab_current->overriden_buffer;
+                    config_state->tab_current->view_overrideable->cursor = config_state->tab_current->overriden_buffer->cursor;
+                    center_view(config_state->tab_current->view_overrideable);
                }
                break;
           case '/':
@@ -3139,6 +3150,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                }else{
                     if(config_state->tab_current->view_overrideable){
                          config_state->tab_current->overriden_buffer = config_state->tab_current->view_overrideable->buffer;
+                         config_state->tab_current->overriden_buffer->cursor = config_state->tab_current->view_overrideable->cursor;
                          config_state->tab_current->view_overrideable->buffer = command_buffer;
                          config_state->tab_current->view_overrideable->cursor = (Point_t){0, 0};
                          config_state->tab_current->view_overrideable->top_row = 0;
@@ -3828,14 +3840,10 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     enter_normal_mode(config_state);
                     key_free(&config_state->command_head);
                } break;
-               case 27: // ESC
+               case KEY_ESCAPE:
                {
                     if(config_state->input){
                          input_cancel(config_state);
-                    }
-
-                    if(config_state->vim_mode != VM_NORMAL){
-                         enter_normal_mode(config_state);
                     }
                } break;
                case 'J':
@@ -4396,10 +4404,13 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                                       config_state->completion_buffer);
                     if(config_state->tab_current->view_overrideable){
                          config_state->tab_current->overriden_buffer = config_state->tab_current->view_overrideable->buffer;
+                         config_state->tab_current->overriden_buffer->cursor = config_state->tab_current->view_overrideable->cursor;
                          config_state->tab_current->view_overrideable->buffer = config_state->completion_buffer;
                          config_state->tab_current->view_overrideable->cursor = (Point_t){0, 0};
                          center_view(config_state->tab_current->view_overrideable);
                     }else{
+                         config_state->buffer_before_query = config_state->tab_current->view_input_save->buffer;
+                         config_state->buffer_before_query->cursor = config_state->tab_current->view_input_save->cursor;
                          config_state->tab_current->view_input_save->buffer = config_state->completion_buffer;
                          config_state->tab_current->view_input_save->cursor = (Point_t){0, 0};
                          config_state->tab_current->view_input_save->top_row = 0;
@@ -4488,6 +4499,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
                if(itr) {
                     config_state->tab_current->overriden_buffer = config_state->tab_current->view_overrideable->buffer;
+                    config_state->tab_current->overriden_buffer->cursor = config_state->tab_current->view_overrideable->cursor;
                     config_state->tab_current->view_overrideable->buffer = config_state->buffer_before_query;
                     config_state->tab_current->view_overrideable->cursor.y = itr->location.y;
                     center_view(config_state->tab_current->view_overrideable);

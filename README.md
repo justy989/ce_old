@@ -58,6 +58,9 @@ v|visual mode
 V|visual line mode
 m|set mark in register (next character typed)
 m?|view mark registers
+q|record macro to a register (next character typed)
+@|replay macro from a register (next character typed)
+@?|view macro registers
 "|specify yank or paste from a specific register (next character typesd)
 "?|view yank registers
 zt|scroll view so cursor is at the top

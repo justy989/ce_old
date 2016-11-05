@@ -2118,33 +2118,33 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      // setup input buffer
      ce_alloc_lines(&config_state->input_buffer, 1);
      initialize_buffer(&config_state->input_buffer);
-     config_state->input_buffer.name = strdup("input");
+     config_state->input_buffer.name = strdup("[input]");
      config_state->view_input->buffer = &config_state->input_buffer;
 
      // setup buffer list buffer
-     config_state->buffer_list_buffer.name = strdup("buffers");
+     config_state->buffer_list_buffer.name = strdup("[buffers]");
      initialize_buffer(&config_state->buffer_list_buffer);
      config_state->buffer_list_buffer.readonly = true;
 
-     config_state->mark_list_buffer.name = strdup("marks");
+     config_state->mark_list_buffer.name = strdup("[marks]");
      initialize_buffer(&config_state->mark_list_buffer);
      config_state->mark_list_buffer.readonly = true;
 
-     config_state->yank_list_buffer.name = strdup("yanks");
+     config_state->yank_list_buffer.name = strdup("[yanks]");
      initialize_buffer(&config_state->yank_list_buffer);
      config_state->yank_list_buffer.readonly = true;
 
-     config_state->macro_list_buffer.name = strdup("macro");
+     config_state->macro_list_buffer.name = strdup("[marcos]");
      initialize_buffer(&config_state->macro_list_buffer);
      config_state->macro_list_buffer.readonly = true;
 
      // if we reload, the shell command buffer may already exist, don't recreate it
      BufferNode_t* itr = *head;
      while(itr){
-          if(strcmp(itr->buffer->name, "shell_output") == 0){
+          if(strcmp(itr->buffer->name, "[shell_output]") == 0){
                config_state->shell_command_buffer = itr->buffer;
           }
-          if(strcmp(itr->buffer->name, "completions") == 0){
+          if(strcmp(itr->buffer->name, "[completions]") == 0){
                config_state->completion_buffer = itr->buffer;
           }
           itr = itr->next;
@@ -2152,7 +2152,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
 
      if(!config_state->shell_command_buffer){
           config_state->shell_command_buffer = calloc(1, sizeof(*config_state->shell_command_buffer));
-          config_state->shell_command_buffer->name = strdup("shell_output");
+          config_state->shell_command_buffer->name = strdup("[shell_output]");
           config_state->shell_command_buffer->readonly = true;
           initialize_buffer(config_state->shell_command_buffer);
           ce_alloc_lines(config_state->shell_command_buffer, 1);
@@ -2165,7 +2165,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
 
      if(!config_state->completion_buffer){
           config_state->completion_buffer = calloc(1, sizeof(*config_state->shell_command_buffer));
-          config_state->completion_buffer->name = strdup("completions");
+          config_state->completion_buffer->name = strdup("[completions]");
           config_state->completion_buffer->readonly = true;
           initialize_buffer(config_state->completion_buffer);
           BufferNode_t* new_buffer_node = ce_append_buffer_to_list(*head, config_state->completion_buffer);
@@ -2707,13 +2707,13 @@ void update_buffer_list_buffer(ConfigState_t* config_state, const BufferNode_t* 
      // build format string, OMG THIS IS SO UNREADABLE HOLY MOLY BATMAN
      char format_string[BUFSIZ];
      // build header
-     snprintf(format_string, BUFSIZ, "%%5s %%-%"PRId64"s %%-%"PRId64"s", max_name_len,
+     snprintf(format_string, BUFSIZ, "+ %%5s %%-%"PRId64"s %%-%"PRId64"s", max_name_len,
               max_buffer_lines_digits);
      snprintf(buffer_info, BUFSIZ, format_string, "flags", "buffer name", "lines");
      ce_append_line(&config_state->buffer_list_buffer, buffer_info);
 
      // build buffer info
-     snprintf(format_string, BUFSIZ, "%%5s %%-%"PRId64"s %%%"PRId64 PRId64, max_name_len, max_buffer_lines_digits);
+     snprintf(format_string, BUFSIZ, "  %%5s %%-%"PRId64"s %%%"PRId64 PRId64, max_name_len, max_buffer_lines_digits);
 
      itr = head;
      while(itr){
@@ -2734,12 +2734,12 @@ void update_mark_list_buffer(ConfigState_t* config_state, const Buffer_t* buffer
      config_state->mark_list_buffer.readonly = false;
      ce_clear_lines(&config_state->mark_list_buffer);
 
-     snprintf(buffer_info, BUFSIZ, "register location");
+     snprintf(buffer_info, BUFSIZ, "+ reg loc");
      ce_append_line(&config_state->mark_list_buffer, buffer_info);
 
      const MarkNode_t* itr = ((BufferState_t*)(buffer->user_data))->mark_head;
      while(itr){
-          snprintf(buffer_info, BUFSIZ, "       %c %"PRId64", %"PRId64"", itr->reg_char, itr->location.x, itr->location.y);
+          snprintf(buffer_info, BUFSIZ, "  '%c' %"PRId64", %"PRId64"", itr->reg_char, itr->location.x, itr->location.y);
           ce_append_line(&config_state->mark_list_buffer, buffer_info);
           itr = itr->next;
      }
@@ -2756,7 +2756,7 @@ void update_yank_list_buffer(ConfigState_t* config_state)
 
      const YankNode_t* itr = config_state->yank_head;
      while(itr){
-          snprintf(buffer_info, BUFSIZ, "register: %c", itr->reg_char);
+          snprintf(buffer_info, BUFSIZ, "+ reg '%c'", itr->reg_char);
           ce_append_line(&config_state->yank_list_buffer, buffer_info);
           ce_append_line(&config_state->yank_list_buffer, itr->text);
           itr = itr->next;
@@ -2772,13 +2772,13 @@ void update_macro_list_buffer(ConfigState_t* config_state)
      config_state->macro_list_buffer.readonly = false;
      ce_clear_lines(&config_state->macro_list_buffer);
 
-     snprintf(buffer_info, BUFSIZ, "register actions");
+     snprintf(buffer_info, BUFSIZ, "+ reg actions");
      ce_append_line(&config_state->macro_list_buffer, buffer_info);
 
      const MacroNode_t* itr = config_state->macro_head;
      while(itr){
           char* char_string = command_string_to_char_string(itr->command);
-          snprintf(buffer_info, BUFSIZ, "       %c %s", itr->reg, char_string);
+          snprintf(buffer_info, BUFSIZ, "  '%c' %s", itr->reg, char_string);
           ce_append_line(&config_state->macro_list_buffer, buffer_info);
           free(char_string);
           itr = itr->next;
@@ -3812,14 +3812,26 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           {
                if(!isprint(key)) break;
 
-               MacroNode_t* macro = macro_find(config_state->macro_head, key);
-               if(!macro) break;
+               if(key == '?'){
+                    update_macro_list_buffer(config_state);
 
-               int* macro_itr = macro->command;
-               while(*macro_itr){
-                    vim_key_handler(*macro_itr, head, user_data, true);
-                    macro_itr++;
+                    config_state->buffer_before_query = config_state->tab_current->view_current->buffer;
+                    config_state->tab_current->view_current->buffer->cursor = *cursor;
+                    config_state->tab_current->view_current->buffer = &config_state->macro_list_buffer;
+                    config_state->tab_current->view_current->top_row = 0;
+                    config_state->tab_current->view_current->cursor = (Point_t){0, 1};
+               }else{
+                    MacroNode_t* macro = macro_find(config_state->macro_head, key);
+                    if(!macro) break;
+
+                    int* macro_itr = macro->command;
+                    while(*macro_itr){
+                         vim_key_handler(*macro_itr, head, user_data, true);
+                         macro_itr++;
+                    }
                }
+
+               handled_key = true;
           } break;
           }
      }

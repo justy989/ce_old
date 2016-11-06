@@ -316,6 +316,7 @@ void input_history_free(InputHistory_t* history)
      history->tail = NULL;
      history->cur = NULL;
 }
+
 bool input_history_next(InputHistory_t* history)
 {
      if(!history->cur) return false;
@@ -1801,7 +1802,8 @@ typedef struct{
      int64_t last_command_buffer_jump;
      int last_key;
      KeyNode_t* command_head;
-     int* last_command_string;
+     VimAction_t last_vim_action;
+     int* last_insert_command;
      FindState_t find_state;
      struct {
           Direction_t direction;
@@ -1819,7 +1821,6 @@ typedef struct{
      pthread_t shell_command_thread;
      pthread_t shell_input_thread;
      AutoComplete_t auto_complete;
-     VimAction_t last_vim_action;
      LineNumberType_t line_number_type;
      MacroNode_t* macro_head;
      char recording_macro; // holds the register we are recording
@@ -3428,7 +3429,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
      }
 }
 
-bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeating)
+bool vim_key_handler(int key, BufferNode_t** head, void* user_data)
 {
      ConfigState_t* config_state = user_data;
      Buffer_t* buffer = config_state->tab_current->view_current->buffer;
@@ -3457,8 +3458,8 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeati
           case KEY_ESCAPE:
           {
                int* built_command = keys_get_string(config_state->command_head);
-               if(config_state->last_command_string) free(config_state->last_command_string);
-               config_state->last_command_string = built_command;
+               if(config_state->last_insert_command) free(config_state->last_insert_command);
+               config_state->last_insert_command = built_command;
                keys_free(&config_state->command_head);
 
                enter_normal_mode(config_state);
@@ -3544,10 +3545,10 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeati
                }
 
                int* built_command = keys_get_string(config_state->command_head);
-               if(config_state->last_command_string) free(config_state->last_command_string);
-               config_state->last_command_string = built_command;
+               if(config_state->last_insert_command) free(config_state->last_insert_command);
+               config_state->last_insert_command = built_command;
                keys_free(&config_state->command_head);
-               keys_push(&config_state->command_head, 'i');
+               // TODO: clear last vim action
 
           }    break;
           case KEY_LEFT:
@@ -3561,10 +3562,10 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeati
                }
 
                int* built_command = keys_get_string(config_state->command_head);
-               if(config_state->last_command_string) free(config_state->last_command_string);
-               config_state->last_command_string = built_command;
+               if(config_state->last_insert_command) free(config_state->last_insert_command);
+               config_state->last_insert_command = built_command;
                keys_free(&config_state->command_head);
-               keys_push(&config_state->command_head, 'i');
+               // TODO: clear last vim action
 
           }    break;
           case '}':
@@ -3645,16 +3646,15 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeati
                VimCommandState_t command_state = vim_action_from_string(built_command, &vim_action,
                                                                         config_state->vim_mode, buffer,
                                                                         cursor, &config_state->visual_start);
+               free(built_command);
 
                switch(command_state){
                default:
                case VCS_INVALID:
                     // allow command to be cleared
                     keys_free(&config_state->command_head);
-                    free(built_command);
                     return false; // did not handle key
                case VCS_CONTINUE:
-                    free(built_command);
                     break;
                case VCS_COMPLETE:
                {
@@ -3690,19 +3690,14 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeati
                                         break;
                                    case VM_NORMAL:
                                         enter_normal_mode(config_state);
-                                        keys_free(&config_state->command_head);
                                         break;
                                    case VM_VISUAL_RANGE:
                                         enter_visual_range_mode(config_state, buffer_view);
-                                        keys_free(&config_state->command_head);
                                         break;
                                    case VM_VISUAL_LINE:
                                         enter_visual_line_mode(config_state, buffer_view);
-                                        keys_free(&config_state->command_head);
                                         break;
                                    }
-                              }else{
-                                   keys_free(&config_state->command_head);
                               }
 
                               if(vim_action.change.type != VCT_MOTION || vim_action.end_in_vim_mode == VM_INSERT){
@@ -3710,18 +3705,9 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeati
                                    // always use the cursor as the start of the visual selection
                                    config_state->last_vim_action.motion.visual_start_after = true;
                               }
-
-                              // allow the command to be cleared
-                              if(!repeating && vim_action.change.type != VCT_MOTION){
-                                   if(config_state->last_command_string) free(config_state->last_command_string);
-                                   config_state->last_command_string = built_command;
-                              }else{
-                                   free(built_command);
-                              }
-                         }else{
-                              free(built_command);
-                              keys_free(&config_state->command_head);
                          }
+
+                         keys_free(&config_state->command_head);
                     }
                }
           } break;
@@ -3935,7 +3921,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
                     int* macro_itr = macro->command;
                     while(*macro_itr){
-                         vim_key_handler(*macro_itr, head, user_data, true);
+                         vim_key_handler(*macro_itr, head, user_data);
                          macro_itr++;
                     }
 
@@ -3948,7 +3934,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
      }
 
      if(!handled_key){
-          if(vim_key_handler(key, head, user_data, false)){
+          if(vim_key_handler(key, head, user_data)){
                keys_push(&config_state->record_macro_head, key);
 
                if(config_state->vim_mode == VM_INSERT && config_state->input && config_state->input_key == 6){
@@ -4018,10 +4004,17 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          break;
                     case '.':
                     {
-                         if(!config_state->last_command_string) break;
-                         int* cmd_itr = config_state->last_command_string;
+                         VimMode_t final_mode;
+                         if(!vim_action_apply(&config_state->last_vim_action, buffer, cursor, config_state->vim_mode,
+                                             &config_state->yank_head, &final_mode, &config_state->visual_start,
+                                             &config_state->find_state)){
+                              break;
+                         }
+                         if(final_mode != VM_INSERT || !config_state->last_insert_command) break;
+                         enter_insert_mode(config_state);
+                         int* cmd_itr = config_state->last_insert_command;
                          while(*cmd_itr){
-                              vim_key_handler(*cmd_itr, head, user_data, true);
+                              vim_key_handler(*cmd_itr, head, user_data);
                               cmd_itr++;
                          }
                          enter_normal_mode(config_state);

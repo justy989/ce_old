@@ -570,8 +570,10 @@ int itoi(int* str)
      return value;
 }
 
+// TODO: put some of these arguments into a vim structure
 VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action, VimMode_t vim_mode,
-                                         Buffer_t* buffer, Point_t* cursor, Point_t* visual_start)
+                                         Buffer_t* buffer, Point_t* cursor, Point_t* visual_start,
+                                         FindState_t* find_state)
 {
      int tmp[BUFSIZ];
      bool visual_mode = false;
@@ -767,6 +769,35 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           break;
      case '~':
           built_action.change.type = VCT_FLIP_CASE;
+          break;
+     case ';':
+          built_action.change.type = VCT_MOTION;
+          built_action.motion.type = find_state->motion_type;
+          built_action.motion.match_char = find_state->ch;
+          get_motion = false;
+          break;
+     case ',':
+          built_action.change.type = VCT_MOTION;
+          built_action.motion.match_char = find_state->ch;
+
+          // reverse the motion
+          switch(find_state->motion_type){
+          default:
+               break;
+          case VMT_FIND_NEXT_MATCHING_CHAR:
+               built_action.motion.type = VMT_FIND_PREV_MATCHING_CHAR;
+               break;
+          case VMT_FIND_PREV_MATCHING_CHAR:
+               built_action.motion.type = VMT_FIND_NEXT_MATCHING_CHAR;
+               break;
+          case VMT_TO_NEXT_MATCHING_CHAR:
+               built_action.motion.type = VMT_TO_PREV_MATCHING_CHAR;
+               break;
+          case VMT_TO_PREV_MATCHING_CHAR:
+               built_action.motion.type = VMT_TO_NEXT_MATCHING_CHAR;
+               break;
+          }
+          get_motion = false;
           break;
      }
 
@@ -3653,7 +3684,8 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeati
                VimAction_t vim_action;
                VimCommandState_t command_state = vim_action_from_string(built_command, &vim_action,
                                                                         config_state->vim_mode, buffer,
-                                                                        cursor, &config_state->visual_start);
+                                                                        cursor, &config_state->visual_start,
+                                                                        &config_state->find_state);
                free(built_command);
 
                switch(command_state){
@@ -4254,49 +4286,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          if(buffer_state->commit_tail && buffer_state->commit_tail->next){
                               ce_commit_redo(buffer, &buffer_state->commit_tail, cursor);
                          }
-                    } break;
-                    case ';':
-                    {
-                         VimAction_t action = {};
-                         FindState_t find_state; // dummy find state so our's doesn't get modified
-                         VimMode_t final_mode;
-                         action.multiplier = 1;
-                         action.change.type = VCT_MOTION;
-                         action.motion.type = config_state->find_state.motion_type;
-                         action.motion.multiplier = 1;
-                         action.motion.match_char = config_state->find_state.ch;
-                         vim_action_apply(&action, buffer, cursor, config_state->vim_mode,
-                                          &config_state->yank_head, &final_mode, &config_state->visual_start,
-                                          &find_state);
-                    } break;
-                    case ',':
-                    {
-                         VimAction_t action = {};
-                         FindState_t find_state; // dummy find state so our's doesn't get modified
-                         VimMode_t final_mode;
-                         action.multiplier = 1;
-                         action.change.type = VCT_MOTION;
-                         action.motion.multiplier = 1;
-                         action.motion.match_char = config_state->find_state.ch;
-                         switch(config_state->find_state.motion_type){
-                         default:
-                              break;
-                         case VMT_FIND_NEXT_MATCHING_CHAR:
-                              action.motion.type = VMT_FIND_PREV_MATCHING_CHAR;
-                              break;
-                         case VMT_FIND_PREV_MATCHING_CHAR:
-                              action.motion.type = VMT_FIND_NEXT_MATCHING_CHAR;
-                              break;
-                         case VMT_TO_NEXT_MATCHING_CHAR:
-                              action.motion.type = VMT_TO_PREV_MATCHING_CHAR;
-                              break;
-                         case VMT_TO_PREV_MATCHING_CHAR:
-                              action.motion.type = VMT_TO_NEXT_MATCHING_CHAR;
-                              break;
-                         }
-                         vim_action_apply(&action, buffer, cursor, config_state->vim_mode,
-                                          &config_state->yank_head, &final_mode, &config_state->visual_start,
-                                          &find_state);
                     } break;
                     case 'H':
                     {

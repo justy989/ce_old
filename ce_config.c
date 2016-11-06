@@ -3749,82 +3749,82 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeati
           break;
      case VM_VISUAL_RANGE:
      case VM_VISUAL_LINE:
+         if(key == KEY_ESCAPE){
+               enter_normal_mode(config_state);
+               break;
+         }
      case VM_NORMAL:
      {
-          if(key == KEY_ESCAPE){
-               enter_normal_mode(config_state);
-          }else{
-               keys_push(&config_state->command_head, key);
-               int* built_command = keys_get_string(config_state->command_head);
+          keys_push(&config_state->command_head, key);
+          int* built_command = keys_get_string(config_state->command_head);
 
-               VimAction_t vim_action;
-               VimCommandState_t command_state = vim_action_from_string(built_command, &vim_action,
-                                                                        config_state->vim_mode, buffer,
-                                                                        cursor, &config_state->visual_start,
-                                                                        &config_state->find_state);
-               free(built_command);
+          VimAction_t vim_action;
+          VimCommandState_t command_state = vim_action_from_string(built_command, &vim_action,
+                                                                   config_state->vim_mode, buffer,
+                                                                   cursor, &config_state->visual_start,
+                                                                   &config_state->find_state);
+          free(built_command);
 
-               switch(command_state){
-               default:
-               case VCS_INVALID:
-                    // allow command to be cleared
-                    keys_free(&config_state->command_head);
-                    return false; // did not handle key
-               case VCS_CONTINUE:
-                    break;
-               case VCS_COMPLETE:
-               {
-                    // NOTE: can we do this buffer deletion outside the vim_key_handler? It's not vim functionality
-                    if(config_state->tab_current->view_current->buffer == &config_state->buffer_list_buffer && vim_action.change.type == VCT_DELETE){
-                         VimActionRange_t action_range;
-                         if(!vim_action_get_range(&vim_action, buffer, cursor, &config_state->find_state, &action_range)) break;
+          switch(command_state){
+          default:
+          case VCS_INVALID:
+               // allow command to be cleared
+               keys_free(&config_state->command_head);
+               return false; // did not handle key
+          case VCS_CONTINUE:
+               break;
+          case VCS_COMPLETE:
+          {
+               // NOTE: can we do this buffer deletion outside the vim_key_handler? It's not vim functionality
+               if(config_state->tab_current->view_current->buffer == &config_state->buffer_list_buffer && vim_action.change.type == VCT_DELETE){
+                    VimActionRange_t action_range;
+                    if(!vim_action_get_range(&vim_action, buffer, cursor, &config_state->find_state, &action_range)) break;
 
-                         int64_t delete_index = action_range.sorted_start->y - 1;
-                         int64_t buffers_to_delete = (action_range.sorted_end->y - action_range.sorted_start->y) + 1;
-                         for(int64_t b = 0; b < buffers_to_delete; ++b){
-                              if(!delete_buffer_at_index(head, config_state->tab_head, delete_index)){
-                                   return false; // quit !
-                              }
+                    int64_t delete_index = action_range.sorted_start->y - 1;
+                    int64_t buffers_to_delete = (action_range.sorted_end->y - action_range.sorted_start->y) + 1;
+                    for(int64_t b = 0; b < buffers_to_delete; ++b){
+                         if(!delete_buffer_at_index(head, config_state->tab_head, delete_index)){
+                              return false; // quit !
                          }
-
-                         update_buffer_list_buffer(config_state, *head);
-
-                         if(cursor->y >= config_state->buffer_list_buffer.line_count) cursor->y = config_state->buffer_list_buffer.line_count - 1;
-                         enter_normal_mode(config_state);
-                    }else{
-                         VimMode_t final_mode = config_state->vim_mode;
-                         VimMode_t original_mode = final_mode;
-                         if(vim_action_apply(&vim_action, buffer, cursor, config_state->vim_mode,
-                                             &config_state->yank_head, &final_mode, &config_state->visual_start,
-                                             &config_state->find_state)){
-                              if(final_mode != original_mode){
-                                   switch(final_mode){
-                                   default:
-                                        break;
-                                   case VM_INSERT:
-                                        enter_insert_mode(config_state);
-                                        break;
-                                   case VM_NORMAL:
-                                        enter_normal_mode(config_state);
-                                        break;
-                                   case VM_VISUAL_RANGE:
-                                        enter_visual_range_mode(config_state, buffer_view);
-                                        break;
-                                   case VM_VISUAL_LINE:
-                                        enter_visual_line_mode(config_state, buffer_view);
-                                        break;
-                                   }
-                              }
-
-                              if(vim_action.change.type != VCT_MOTION || vim_action.end_in_vim_mode == VM_INSERT){
-                                   config_state->last_vim_action = vim_action;
-                                   // always use the cursor as the start of the visual selection
-                                   config_state->last_vim_action.motion.visual_start_after = true;
-                              }
-                         }
-
-                         keys_free(&config_state->command_head);
                     }
+
+                    update_buffer_list_buffer(config_state, *head);
+
+                    if(cursor->y >= config_state->buffer_list_buffer.line_count) cursor->y = config_state->buffer_list_buffer.line_count - 1;
+                    enter_normal_mode(config_state);
+               }else{
+                    VimMode_t final_mode = config_state->vim_mode;
+                    VimMode_t original_mode = final_mode;
+                    if(vim_action_apply(&vim_action, buffer, cursor, config_state->vim_mode,
+                                        &config_state->yank_head, &final_mode, &config_state->visual_start,
+                                        &config_state->find_state)){
+                         if(final_mode != original_mode){
+                              switch(final_mode){
+                              default:
+                                   break;
+                              case VM_INSERT:
+                                   enter_insert_mode(config_state);
+                                   break;
+                              case VM_NORMAL:
+                                   enter_normal_mode(config_state);
+                                   break;
+                              case VM_VISUAL_RANGE:
+                                   enter_visual_range_mode(config_state, buffer_view);
+                                   break;
+                              case VM_VISUAL_LINE:
+                                   enter_visual_line_mode(config_state, buffer_view);
+                                   break;
+                              }
+                         }
+
+                         if(vim_action.change.type != VCT_MOTION || vim_action.end_in_vim_mode == VM_INSERT){
+                              config_state->last_vim_action = vim_action;
+                              // always use the cursor as the start of the visual selection
+                              config_state->last_vim_action.motion.visual_start_after = true;
+                         }
+                    }
+
+                    keys_free(&config_state->command_head);
                }
           } break;
           }

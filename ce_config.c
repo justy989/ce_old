@@ -476,6 +476,8 @@ typedef enum{
      VCT_UNCOMMENT,
      VCT_FLIP_CASE,
      VCT_JOIN_LINE,
+     VCT_OPEN_ABOVE, // NOTE: using the vim cheat sheet terminalogy for 'O' and 'o'
+     VCT_OPEN_BELOW,
 } VimChangeType_t;
 
 typedef struct{
@@ -803,6 +805,16 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
      case 'J':
           built_action.motion.type = VMT_END_OF_LINE_HARD;
           built_action.change.type = VCT_JOIN_LINE;
+          get_motion = false;
+          break;
+     case 'O':
+          built_action.change.type = VCT_OPEN_ABOVE;
+          built_action.end_in_vim_mode = VM_INSERT;
+          get_motion = false;
+          break;
+     case 'o':
+          built_action.change.type = VCT_OPEN_BELOW;
+          built_action.end_in_vim_mode = VM_INSERT;
           get_motion = false;
           break;
      }
@@ -1642,11 +1654,49 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                ce_commit_insert_string(&buffer_state->commit_tail, join_loc, *action_range.sorted_start, join_loc,
                                        save_str, BCC_KEEP_GOING);
                ce_commit_remove_string(&buffer_state->commit_tail, next_line_start, *action_range.sorted_start, next_line_start,
-                                       save_line, BCC_STOP);
+                                       save_line, BCC_KEEP_GOING);
               *cursor = join_loc;
+              if(ce_insert_string(buffer, *cursor, " ")){
+                    ce_commit_insert_string(&buffer_state->commit_tail, join_loc, *action_range.sorted_start, join_loc,
+                                            strdup(" "), BCC_STOP);
+              }
           }else{
                free(save_str);
                free(save_line);
+          }
+     } break;
+     case VCT_OPEN_ABOVE:
+     {
+          Point_t begin_line = {0, cursor->y};
+
+          // indent if necessary
+          int64_t indent_len = ce_get_indentation_for_next_line(buffer, *cursor, strlen(TAB_STRING));
+          char* indent_nl = malloc(sizeof '\n' + indent_len + sizeof '\0');
+          memset(&indent_nl[0], ' ', indent_len);
+          indent_nl[indent_len] = '\n';
+          indent_nl[indent_len + 1] = '\0';
+
+          if(ce_insert_string(buffer, begin_line, indent_nl)){
+               *cursor = (Point_t){indent_len, cursor->y};
+               ce_commit_insert_string(&buffer_state->commit_tail, begin_line, *cursor, *cursor, indent_nl, BCC_KEEP_GOING);
+          }
+     } break;
+     case VCT_OPEN_BELOW:
+     {
+          Point_t end_of_line = *cursor;
+          end_of_line.x = strlen(buffer->lines[cursor->y]);
+
+          // indent if necessary
+          int64_t indent_len = ce_get_indentation_for_next_line(buffer, *cursor, strlen(TAB_STRING));
+          char* nl_indent = malloc(sizeof '\n' + indent_len + sizeof '\0');
+          nl_indent[0] = '\n';
+          memset(&nl_indent[1], ' ', indent_len);
+          nl_indent[1 + indent_len] = '\0';
+
+          if(ce_insert_string(buffer, end_of_line, nl_indent)){
+               Point_t save_cursor = *cursor;
+               *cursor = (Point_t){indent_len, cursor->y + 1};
+               ce_commit_insert_string(&buffer_state->commit_tail, end_of_line, save_cursor, *cursor, nl_indent, BCC_KEEP_GOING);
           }
      } break;
      }
@@ -4102,42 +4152,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     {
                          if(config_state->input){
                               input_cancel(config_state);
-                         }
-                    } break;
-                    case 'O':
-                    {
-                         Point_t begin_line = {0, cursor->y};
-
-                         // indent if necessary
-                         int64_t indent_len = ce_get_indentation_for_next_line(buffer, *cursor, strlen(TAB_STRING));
-                         char* indent_nl = malloc(sizeof '\n' + indent_len + sizeof '\0');
-                         memset(&indent_nl[0], ' ', indent_len);
-                         indent_nl[indent_len] = '\n';
-                         indent_nl[indent_len + 1] = '\0';
-
-                         if(ce_insert_string(buffer, begin_line, indent_nl)){
-                              *cursor = (Point_t){indent_len, cursor->y};
-                              ce_commit_insert_string(&buffer_state->commit_tail, begin_line, *cursor, *cursor, indent_nl, BCC_KEEP_GOING);
-                              enter_insert_mode(config_state);
-                         }
-                    } break;
-                    case 'o':
-                    {
-                         Point_t end_of_line = *cursor;
-                         end_of_line.x = strlen(buffer->lines[cursor->y]);
-
-                         // indent if necessary
-                         int64_t indent_len = ce_get_indentation_for_next_line(buffer, *cursor, strlen(TAB_STRING));
-                         char* nl_indent = malloc(sizeof '\n' + indent_len + sizeof '\0');
-                         nl_indent[0] = '\n';
-                         memset(&nl_indent[1], ' ', indent_len);
-                         nl_indent[1 + indent_len] = '\0';
-
-                         if(ce_insert_string(buffer, end_of_line, nl_indent)){
-                              Point_t save_cursor = *cursor;
-                              *cursor = (Point_t){indent_len, cursor->y + 1};
-                              ce_commit_insert_string(&buffer_state->commit_tail, end_of_line, save_cursor, *cursor, nl_indent, BCC_KEEP_GOING);
-                              enter_insert_mode(config_state);
                          }
                     } break;
                     case KEY_SAVE:

@@ -56,6 +56,8 @@ n|goto next search match
 N|goto previous search match
 v|visual mode
 V|visual line mode
+o|insert a new line and move the cursor
+O|insert a new line before the cursor and move the cursor
 m|set mark in register (next character typed)
 m?|view mark registers
 q|record macro to a register (next character typed)
@@ -72,6 +74,7 @@ gT|goto previous tab
 gc|comment line
 gu|uncomment line
 gr|reload buffer from associated file
+gv|mark the view as overrideable
 <<|unindent line
 >>|indent line
 %|find matching quotes, parents, brackets, square brackets, angled brackets

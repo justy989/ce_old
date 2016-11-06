@@ -475,6 +475,7 @@ typedef enum{
      VCT_COMMENT,
      VCT_UNCOMMENT,
      VCT_FLIP_CASE,
+     VCT_JOIN_LINE,
 } VimChangeType_t;
 
 typedef struct{
@@ -797,6 +798,11 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
                built_action.motion.type = VMT_TO_NEXT_MATCHING_CHAR;
                break;
           }
+          get_motion = false;
+          break;
+     case 'J':
+          built_action.motion.type = VMT_END_OF_LINE_HARD;
+          built_action.change.type = VCT_JOIN_LINE;
           get_motion = false;
           break;
      }
@@ -1622,6 +1628,26 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
 
                ce_advance_cursor(buffer, &itr, 1);
           } while(!ce_point_after(itr, *action_range.sorted_end));
+     } break;
+     case VCT_JOIN_LINE:
+     {
+          if(action_range.sorted_start->y >= buffer->line_count - 1) break; // nothing to join
+
+          Point_t next_line_start = {0, action_range.sorted_start->y + 1};
+          char* save_str = strdup(buffer->lines[next_line_start.y]);
+          char* save_line = ce_dupe_line(buffer, next_line_start.y);
+          Point_t join_loc = {strlen(buffer->lines[action_range.sorted_start->y]), action_range.sorted_start->y};
+
+          if(ce_join_line(buffer, action_range.sorted_start->y)){
+               ce_commit_insert_string(&buffer_state->commit_tail, join_loc, *action_range.sorted_start, join_loc,
+                                       save_str, BCC_KEEP_GOING);
+               ce_commit_remove_string(&buffer_state->commit_tail, next_line_start, *action_range.sorted_start, next_line_start,
+                                       save_line, BCC_STOP);
+              *cursor = join_loc;
+          }else{
+               free(save_str);
+               free(save_line);
+          }
      } break;
      }
 
@@ -4076,21 +4102,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     {
                          if(config_state->input){
                               input_cancel(config_state);
-                         }
-                    } break;
-                    case 'J':
-                    {
-                         if(cursor->y == buffer->line_count - 1) break; // nothing to join
-                         Point_t join_loc = {strlen(buffer->lines[cursor->y]), cursor->y};
-                         Point_t end_join_loc = {0, cursor->y+1};
-                         ce_move_cursor_to_soft_beginning_of_line(buffer, &end_join_loc);
-                         if(!end_join_loc.x) end_join_loc = join_loc;
-                         else end_join_loc.x--;
-                         char* save_str = ce_dupe_string(buffer, join_loc, end_join_loc);
-                         assert(save_str[0] == '\n');
-                         if(ce_remove_string(buffer, join_loc, ce_compute_length(buffer, join_loc, end_join_loc))){
-                              ce_insert_string(buffer, join_loc, " ");
-                              ce_commit_change_string(&buffer_state->commit_tail, join_loc, *cursor, *cursor, strdup("\n"), save_str, BCC_STOP);
                          }
                     } break;
                     case 'O':

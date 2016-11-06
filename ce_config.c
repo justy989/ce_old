@@ -617,7 +617,6 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           get_motion = false;
           built_action.motion.type = VMT_VISUAL_LINE;
           built_action.motion.visual_lines = visual_start->y - cursor->y;
-          if(built_action.motion.visual_lines < 0) built_action.motion.visual_lines = -built_action.motion.visual_lines;
           built_action.motion.visual_start_after = ce_point_after(*visual_start, *cursor);
      }
 
@@ -1024,7 +1023,7 @@ void indent_line(Buffer_t* buffer, BufferCommitNode_t** commit_tail, int64_t lin
      if(!buffer->lines[line][0]) return;
      Point_t loc = {0, line};
      ce_insert_string(buffer, loc, TAB_STRING);
-     ce_commit_insert_string(commit_tail, loc, *cursor, *cursor, strdup(TAB_STRING), BCC_STOP);
+     ce_commit_insert_string(commit_tail, loc, *cursor, *cursor, strdup(TAB_STRING), BCC_KEEP_GOING);
 }
 
 void unindent_line(Buffer_t* buffer, BufferCommitNode_t** commit_tail, int64_t line, Point_t* cursor)
@@ -1046,7 +1045,7 @@ void unindent_line(Buffer_t* buffer, BufferCommitNode_t** commit_tail, int64_t l
      if(whitespace_count){
           Point_t loc = {0, line};
           ce_remove_string(buffer, loc, whitespace_count);
-          ce_commit_remove_string(commit_tail, loc, *cursor, *cursor, strdup(TAB_STRING), BCC_STOP);
+          ce_commit_remove_string(commit_tail, loc, *cursor, *cursor, strdup(TAB_STRING), BCC_KEEP_GOING);
      }
 }
 
@@ -1077,11 +1076,7 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
      }else if(action->motion.type == VMT_VISUAL_LINE){
           Point_t calc_visual_start = *cursor;
 
-          if(action->motion.visual_start_after){
-               calc_visual_start.y += action->motion.visual_lines;
-          }else{
-               calc_visual_start.y -= action->motion.visual_lines;
-          }
+          calc_visual_start.y += action->motion.visual_lines;
 
           // in visual line mode, we need to figure out which points are first/last so that we can set the
           // start/end 'x's accordingly, to the beginning and end of line
@@ -1572,23 +1567,43 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
              action->motion.type == VMT_LINE_DOWN || action->motion.type == VMT_VISUAL_RANGE ||
              action->motion.type == VMT_VISUAL_LINE){
                for(int i = action_range.sorted_start->y; i <= action_range.sorted_end->y; ++i){
-                    indent_line(buffer, &buffer_state->commit_tail, i, cursor);
+                    Point_t loc = {0, i};
+                    ce_insert_string(buffer, loc, TAB_STRING);
+                    ce_commit_insert_string(&buffer_state->commit_tail, loc, *cursor, *cursor, strdup(TAB_STRING), BCC_KEEP_GOING);
                }
           }else{
                return false;
           }
+
+          if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
      } break;
      case VCT_UNINDENT:
      {
           if(action->motion.type == VMT_LINE || action->motion.type == VMT_LINE_UP ||
              action->motion.type == VMT_LINE_DOWN || action->motion.type == VMT_VISUAL_RANGE ||
              action->motion.type == VMT_VISUAL_LINE){
-               for(int i = action_range.sorted_start->y; i <= action_range.sorted_end->y; ++i){
-                    unindent_line(buffer, &buffer_state->commit_tail, i, cursor);
+               for(int l = action_range.sorted_start->y; l <= action_range.sorted_end->y; ++l){
+                    int64_t whitespace_count = 0;
+                    const int64_t tab_len = strlen(TAB_STRING);
+                    for(int i = 0; i < tab_len; ++i){
+                         if(isblank(buffer->lines[l][i])){
+                              whitespace_count++;
+                         }else{
+                              break;
+                         }
+                    }
+
+                    if(whitespace_count){
+                         Point_t loc = {0, l};
+                         ce_remove_string(buffer, loc, whitespace_count);
+                         ce_commit_remove_string(&buffer_state->commit_tail, loc, *cursor, *cursor, strdup(TAB_STRING), BCC_KEEP_GOING);
+                    }
                }
           }else{
                return false;
           }
+
+          if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
      } break;
      case VCT_COMMENT:
      {
@@ -1600,9 +1615,11 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
 
                if(ce_insert_string(buffer, soft_beginning, VIM_COMMENT_STRING)){
                     ce_commit_insert_string(&buffer_state->commit_tail, soft_beginning, *cursor, *cursor,
-                                            strdup(VIM_COMMENT_STRING), BCC_STOP);
+                                            strdup(VIM_COMMENT_STRING), BCC_KEEP_GOING);
                }
           }
+
+          if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
      } break;
      case VCT_UNCOMMENT:
      {
@@ -1615,9 +1632,11 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
 
                if(ce_remove_string(buffer, soft_beginning, strlen(VIM_COMMENT_STRING))){
                     ce_commit_remove_string(&buffer_state->commit_tail, soft_beginning, *cursor, *cursor,
-                                            strdup(VIM_COMMENT_STRING), BCC_STOP);
+                                            strdup(VIM_COMMENT_STRING), BCC_KEEP_GOING);
                }
           }
+
+          if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
      } break;
      case VCT_FLIP_CASE:
      {
@@ -4019,7 +4038,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                }
                handled_key = true;
                break;
-#if 0 // useful for debugging commit history
+#if 1 // useful for debugging commit history
           case '!':
                ce_commits_dump(buffer_state->commit_tail);
                break;
@@ -4440,7 +4459,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     break;
                     case '=':
                     {
-     #if 0
+#if 0
                          if(config_state->movement_keys[0] == MOVEMENT_CONTINUE) return true;
                          else{
                               int64_t begin_format_line;
@@ -4535,7 +4554,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                    assert(formatted_line_buf[new_line_len] == '\n');
                                    formatted_line_buf[new_line_len] = 0;
                                    ce_insert_line(buffer, i, formatted_line_buf);
-     #if 0
+#if 0
                                    if(cursor_position > 0){
                                         cursor_position -= new_line_len+1;
                                         if(cursor_position <= 0){
@@ -4544,14 +4563,14 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                              ce_set_cursor(buffer, cursor, &new_cursor_location);
                                         }
                                    }
-     #endif
+#endif
                               }
                               cursor->x = 0;
                               cursor->y = 0;
                               if(!ce_advance_cursor(buffer, cursor, cursor_position-1))
                                    ce_message("failed to advance cursor");
 
-     #if 0
+#if 0
                               // TODO: use -output-replacements-xml to support undo
                               char* formatted_line = strdup(formatted_line_buf);
                               // save the current line in undo history
@@ -4563,7 +4582,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               }
                               ce_insert_string(buffer, &delete_begin, formatted_line);
                               ce_commit_change_string(&buffer_state->commit_tail, &delete_begin, cursor, cursor, formatted_line, save_string);
-     #endif
+#endif
 
                               fclose(child_stdout);
                               close(in_fds[0]);
@@ -4589,7 +4608,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               } while (!WIFEXITED(wstatus) && !WIFSIGNALED(wstatus));
                               config_state->command_key = '\0';
                          }
-     #endif
+#endif
                     } break;
                     case 24: // Ctrl + x
                     {

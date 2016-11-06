@@ -3977,13 +3977,16 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
                     if(config_state->tab_current->view_overrideable){
                          tab_view_save_overrideable(config_state->tab_current);
+                         config_state->tab_current->view_overrideable->buffer = &config_state->mark_list_buffer;
+                         config_state->tab_current->view_overrideable->top_row = 0;
+                         config_state->tab_current->view_overrideable->cursor = (Point_t){0, 1};
+                    }else{
+                         config_state->buffer_before_query = config_state->tab_current->view_current->buffer;
+                         config_state->tab_current->view_current->buffer->cursor = *cursor;
+                         config_state->tab_current->view_current->buffer = &config_state->mark_list_buffer;
+                         config_state->tab_current->view_current->top_row = 0;
+                         config_state->tab_current->view_current->cursor = (Point_t){0, 1};
                     }
-
-                    config_state->buffer_before_query = config_state->tab_current->view_current->buffer;
-                    config_state->tab_current->view_current->buffer->cursor = *cursor;
-                    config_state->tab_current->view_current->buffer = &config_state->mark_list_buffer;
-                    config_state->tab_current->view_current->top_row = 0;
-                    config_state->tab_current->view_current->cursor = (Point_t){0, 1};
                }else{
                     char mark = key;
                     add_mark(buffer_state, mark, cursor);
@@ -3994,11 +3997,19 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                if(key == '?'){
                     update_yank_list_buffer(config_state);
 
-                    config_state->buffer_before_query = config_state->tab_current->view_current->buffer;
-                    config_state->tab_current->view_current->buffer->cursor = *cursor;
-                    config_state->tab_current->view_current->buffer = &config_state->yank_list_buffer;
-                    config_state->tab_current->view_current->top_row = 0;
-                    config_state->tab_current->view_current->cursor = (Point_t){0, 1};
+                    if(config_state->tab_current->view_overrideable){
+                         tab_view_save_overrideable(config_state->tab_current);
+                         config_state->tab_current->view_overrideable->buffer = &config_state->yank_list_buffer;
+                         config_state->tab_current->view_overrideable->top_row = 0;
+                         config_state->tab_current->view_overrideable->cursor = (Point_t){0, 1};
+                    }else{
+                         config_state->buffer_before_query = config_state->tab_current->view_current->buffer;
+                         config_state->tab_current->view_current->buffer->cursor = *cursor;
+                         config_state->tab_current->view_current->buffer = &config_state->yank_list_buffer;
+                         config_state->tab_current->view_current->top_row = 0;
+                         config_state->tab_current->view_current->cursor = (Point_t){0, 1};
+                    }
+
                     handled_key = true;
                }
                break;
@@ -4027,11 +4038,18 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                if(key == '?'){
                     update_macro_list_buffer(config_state);
 
-                    config_state->buffer_before_query = config_state->tab_current->view_current->buffer;
-                    config_state->tab_current->view_current->buffer->cursor = *cursor;
-                    config_state->tab_current->view_current->buffer = &config_state->macro_list_buffer;
-                    config_state->tab_current->view_current->top_row = 0;
-                    config_state->tab_current->view_current->cursor = (Point_t){0, 1};
+                    if(config_state->tab_current->view_overrideable){
+                         tab_view_save_overrideable(config_state->tab_current);
+                         config_state->tab_current->view_overrideable->buffer = &config_state->macro_list_buffer;
+                         config_state->tab_current->view_overrideable->top_row = 0;
+                         config_state->tab_current->view_overrideable->cursor = (Point_t){0, 1};
+                    }else{
+                         config_state->buffer_before_query = config_state->tab_current->view_current->buffer;
+                         config_state->tab_current->view_current->buffer->cursor = *cursor;
+                         config_state->tab_current->view_current->buffer = &config_state->macro_list_buffer;
+                         config_state->tab_current->view_current->top_row = 0;
+                         config_state->tab_current->view_current->cursor = (Point_t){0, 1};
+                    }
                }else{
                     config_state->recording_macro = key;
                     keys_free(&config_state->record_macro_head);

@@ -2278,6 +2278,61 @@ bool ce_commits_free(BufferCommitNode_t* tail)
      return true;
 }
 
+bool ce_commits_dump(BufferCommitNode_t* tail)
+{
+     const char* type_str [] = {
+          "NONE",
+          "INSERT CHAR",
+          "INSERT STRING",
+          "REMOVE CHAR",
+          "REMOVE STRING",
+          "CHANGE CHAR",
+          "CHANGE STRING",
+     };
+
+     const char* chain_str [] = {
+          "STOP",
+          "KEEP GOING",
+     };
+
+     while(tail){
+          ce_message("type: %s", type_str[tail->commit.type]);
+          switch(tail->commit.type){
+          default:
+               break;
+          case BCT_INSERT_CHAR:
+               ce_message("    inserted char: '%c'", tail->commit.c);
+               break;
+          case BCT_REMOVE_CHAR:
+               ce_message("     removed char: '%c'", tail->commit.c);
+               break;
+          case BCT_INSERT_STRING:
+               ce_message("  inserted string: '%s'", tail->commit.str);
+               break;
+          case BCT_REMOVE_STRING:
+               ce_message("   removed string: '%s'", tail->commit.str);
+               break;
+          case BCT_CHANGE_CHAR:
+               ce_message("    inserted char: '%c'", tail->commit.c);
+               ce_message("     removed char: '%c'", tail->commit.prev_c);
+               break;
+          case BCT_CHANGE_STRING:
+               ce_message("    inserted char: '%s'", tail->commit.str);
+               ce_message("     removed char: '%s'", tail->commit.prev_str);
+               break;
+          }
+
+          ce_message("            start: %"PRId64", %"PRId64"", tail->commit.start.x, tail->commit.start.y);
+          ce_message("      undo cursor: %"PRId64", %"PRId64"", tail->commit.undo_cursor.x, tail->commit.undo_cursor.y);
+          ce_message("      redo cursor: %"PRId64", %"PRId64"", tail->commit.redo_cursor.x, tail->commit.redo_cursor.y);
+          ce_message("            chain: %s", chain_str[tail->commit.chain]);
+
+          tail = tail->prev;
+     }
+
+     return true;
+}
+
 bool ce_commit_undo(Buffer_t* buffer, BufferCommitNode_t** tail, Point_t* cursor)
 {
      CE_CHECK_PTR_ARG(buffer);

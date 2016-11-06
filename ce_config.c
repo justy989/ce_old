@@ -462,6 +462,7 @@ typedef enum{
 } VimMode_t;
 
 typedef enum{
+     VCT_NONE,
      VCT_MOTION,
      VCT_INSERT,
      VCT_DELETE,
@@ -1604,7 +1605,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                buffer_state->cursor_save_column = cursor->x;
           }
      }else{
-          if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_KEEP_GOING;
+          if(action->change.type != VCT_NONE && buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_KEEP_GOING;
      }
 
      return true;
@@ -3359,7 +3360,13 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                if(!itr) return;
 
                free(itr->command);
-               itr->command = char_string_to_command_string(config_state->view_input->buffer->lines[0]);
+               int* new_macro_string = char_string_to_command_string(config_state->view_input->buffer->lines[0]);
+
+               if(new_macro_string){
+                    itr->command = new_macro_string;
+               }else{
+                    ce_message("invalid editted macro string");
+               }
           } break;
           }
      }else if(buffer_view->buffer == &config_state->buffer_list_buffer){
@@ -3429,7 +3436,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
      }
 }
 
-bool vim_key_handler(int key, BufferNode_t** head, void* user_data)
+bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeating)
 {
      ConfigState_t* config_state = user_data;
      Buffer_t* buffer = config_state->tab_current->view_current->buffer;
@@ -3457,16 +3464,17 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data)
                break;
           case KEY_ESCAPE:
           {
-               int* built_command = keys_get_string(config_state->command_head);
-               if(config_state->last_insert_command) free(config_state->last_insert_command);
-               config_state->last_insert_command = built_command;
+               if(!repeating){
+                    int* built_command = keys_get_string(config_state->command_head);
+                    if(config_state->last_insert_command) free(config_state->last_insert_command);
+                    config_state->last_insert_command = built_command;
+               }
+
                keys_free(&config_state->command_head);
 
                enter_normal_mode(config_state);
                ce_clamp_cursor(buffer, cursor);
-               if(buffer_state->commit_tail){
-                    buffer_state->commit_tail->commit.chain = BCC_STOP;
-               }
+               if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
           } break;
           case KEY_ENTER:
                key = NEWLINE;
@@ -3903,6 +3911,11 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                }
                handled_key = true;
                break;
+#if 0 // useful for debugging commit history
+          case '!':
+               ce_commits_dump(buffer_state->commit_tail);
+               break;
+#endif
           case '@':
           {
                if(!isprint(key)) break;
@@ -3921,11 +3934,9 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
                     int* macro_itr = macro->command;
                     while(*macro_itr){
-                         vim_key_handler(*macro_itr, head, user_data);
+                         vim_key_handler(*macro_itr, head, user_data, true);
                          macro_itr++;
                     }
-
-                    if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
                }
 
                handled_key = true;
@@ -3934,7 +3945,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
      }
 
      if(!handled_key){
-          if(vim_key_handler(key, head, user_data)){
+          if(vim_key_handler(key, head, user_data, false)){
                keys_push(&config_state->record_macro_head, key);
 
                if(config_state->vim_mode == VM_INSERT && config_state->input && config_state->input_key == 6){
@@ -4014,7 +4025,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          enter_insert_mode(config_state);
                          int* cmd_itr = config_state->last_insert_command;
                          while(*cmd_itr){
-                              vim_key_handler(*cmd_itr, head, user_data);
+                              vim_key_handler(*cmd_itr, head, user_data, true);
                               cmd_itr++;
                          }
                          enter_normal_mode(config_state);

@@ -311,6 +311,7 @@ bool ce_commit_redo          (Buffer_t* buffer, BufferCommitNode_t** tail, Point
 bool ce_commit_change        (BufferCommitNode_t** tail, const BufferCommit_t* change);
 
 bool ce_commits_free         (BufferCommitNode_t* tail);
+bool ce_commits_dump         (BufferCommitNode_t* tail);
 
 // Syntax
 int64_t ce_is_c_keyword     (const char* line, int64_t start_offset);

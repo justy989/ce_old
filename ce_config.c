@@ -1658,6 +1658,21 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
           if(action_range.sorted_start->y >= buffer->line_count - 1) break; // nothing to join
 
           Point_t next_line_start = {0, action_range.sorted_start->y + 1};
+          Point_t next_line_join = next_line_start;
+          ce_move_cursor_to_soft_beginning_of_line(buffer, &next_line_join);
+
+          int64_t whitespace_to_delete = next_line_join.x - next_line_start.x;
+          if(whitespace_to_delete){
+               next_line_join.x--;
+               char* save_whitespace = ce_dupe_string(buffer, next_line_start, next_line_join);
+               if(ce_remove_string(buffer, next_line_start, whitespace_to_delete)){
+                    ce_commit_remove_string(&buffer_state->commit_tail, next_line_start, *action_range.sorted_start, next_line_start,
+                                            save_whitespace, BCC_KEEP_GOING);
+               }else{
+                    break;
+               }
+          }
+
           char* save_str = strdup(buffer->lines[next_line_start.y]);
           char* save_line = ce_dupe_line(buffer, next_line_start.y);
           Point_t join_loc = {strlen(buffer->lines[action_range.sorted_start->y]), action_range.sorted_start->y};
@@ -1667,11 +1682,11 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                                        save_str, BCC_KEEP_GOING);
                ce_commit_remove_string(&buffer_state->commit_tail, next_line_start, *action_range.sorted_start, next_line_start,
                                        save_line, BCC_KEEP_GOING);
-              *cursor = join_loc;
-              if(ce_insert_string(buffer, *cursor, " ")){
+               *cursor = join_loc;
+               if(ce_insert_string(buffer, *cursor, " ")){
                     ce_commit_insert_string(&buffer_state->commit_tail, join_loc, *action_range.sorted_start, join_loc,
                                             strdup(" "), BCC_STOP);
-              }
+               }
           }else{
                free(save_str);
                free(save_line);

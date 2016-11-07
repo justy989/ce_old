@@ -2379,7 +2379,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
           if(i == 0 && node) config_state->tab_current->view_current->buffer = node->buffer;
      }
 
-     config_state->line_number_type = LNT_NONE;
+     config_state->line_number_type = LNT_RELATIVE;
 
      input_history_init(&config_state->shell_command_history);
      input_history_init(&config_state->shell_input_history);

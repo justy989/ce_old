@@ -1566,13 +1566,10 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
      standend();
 
      // figure out how wide the line number margin needs to be
-     int64_t line_number_size = 0;
-     if(line_number_type == LNT_ABSOLUTE || line_number_type == LNT_RELATIVE_AND_ABSOLUTE){
-          line_number_size = count_digits(buffer->line_count);
-          max_width -= (line_number_size + 1);
-     }else if(line_number_type == LNT_RELATIVE){
-          line_number_size = count_digits(((last_line - buffer_top_left->y) + 1));
-          max_width -= (line_number_size + 1);
+     int line_number_size = ce_get_line_number_column_width(line_number_type, buffer->line_count, buffer_top_left->y, last_line);
+     if(line_number_size){
+          max_width -= line_number_size;
+          line_number_size--;
      }
 
      for(int64_t i = buffer_top_left->y; i <= last_line; ++i) {
@@ -2117,7 +2114,6 @@ bool ce_follow_cursor(Point_t cursor, int64_t* left_column, int64_t* top_row, in
 
      int64_t bottom_row = *top_row + view_height;
      int64_t right_column = *left_column + view_width;
-     int64_t line_number_adjustment = 0;
 
      if(cursor.y < *top_row){
           *top_row = cursor.y;
@@ -2127,11 +2123,7 @@ bool ce_follow_cursor(Point_t cursor, int64_t* left_column, int64_t* top_row, in
      }
 
      // adjust based on line numbers
-     if(line_number_type == LNT_ABSOLUTE || line_number_type == LNT_RELATIVE_AND_ABSOLUTE){
-          line_number_adjustment = (count_digits(line_count) + 1);
-     }else if(line_number_type == LNT_RELATIVE){
-          line_number_adjustment = (count_digits((bottom_row - *top_row) + 1) + 1);
-     }
+     int64_t line_number_adjustment = ce_get_line_number_column_width(line_number_type, line_count, bottom_row, *top_row);
 
      if(cursor.x < *left_column){
           *left_column = cursor.x;
@@ -2915,6 +2907,24 @@ BufferView_t* ce_buffer_in_view(BufferView_t* head, const Buffer_t* buffer)
      CE_CHECK_PTR_ARG(buffer);
 
      return buffer_in_view(head, buffer);
+}
+
+int64_t ce_get_line_number_column_width(LineNumberType_t line_number_type, int64_t buffer_line_count, int64_t buffer_view_top, int64_t buffer_view_bottom)
+{
+     int64_t column_width = 0;
+
+     if(line_number_type == LNT_ABSOLUTE || line_number_type == LNT_RELATIVE_AND_ABSOLUTE){
+          column_width += count_digits(buffer_line_count) + 1;
+     }else if(line_number_type == LNT_RELATIVE){
+          int64_t view_height = (buffer_view_bottom - buffer_view_top) + 1;
+          if(view_height > buffer_line_count){
+               column_width += count_digits(buffer_line_count) + 1;
+          }else{
+               column_width += count_digits(view_height) + 1;
+          }
+     }
+
+     return column_width;
 }
 
 void* ce_memrchr(const void* s, int c, size_t n)

@@ -2994,11 +2994,8 @@ Point_t get_cursor_on_terminal(const Point_t* cursor, const BufferView_t* buffer
 {
      Point_t p = {cursor->x - buffer_view->left_column + buffer_view->top_left.x,
                   cursor->y - buffer_view->top_row + buffer_view->top_left.y};
-     if(line_number_type == LNT_ABSOLUTE || line_number_type == LNT_RELATIVE_AND_ABSOLUTE){
-          p.x += count_digits(buffer_view->buffer->line_count) + 1;
-     }else if(line_number_type == LNT_RELATIVE){
-          p.x += count_digits((buffer_view->bottom_right.y - buffer_view->top_left.y) + 1) + 1;
-     }
+     p.x += ce_get_line_number_column_width(line_number_type, buffer_view->buffer->line_count, buffer_view->top_left.y,
+                                            buffer_view->bottom_right.y);
      return p;
 }
 

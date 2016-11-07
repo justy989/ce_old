@@ -296,14 +296,6 @@ bool input_history_commit_current(InputHistory_t* history)
      return true;
 }
 
-bool input_history_update_current(InputHistory_t* history, char* duped)
-{
-     if(!history->cur) return false;
-     if(history->cur->entry) free(history->cur->entry);
-     history->cur->entry = duped;
-     return true;
-}
-
 void input_history_free(InputHistory_t* history)
 {
      while(history->head){
@@ -2660,21 +2652,16 @@ void jump_to_next_shell_command_file_destination(BufferNode_t* head, ConfigState
      }
 }
 
-bool commit_input_to_history(Buffer_t* input_buffer, InputHistory_t* history)
+void commit_input_to_history(Buffer_t* input_buffer, InputHistory_t* history)
 {
-     if(input_buffer->line_count){
-          char* saved = ce_dupe_buffer(input_buffer);
-          if((history->cur->prev && strcmp(saved, history->cur->prev->entry) != 0) ||
-             !history->cur->prev){
-               history->cur = history->tail;
-               input_history_update_current(history, saved);
-               input_history_commit_current(history);
-          }
-     }else{
-          return false;
-     }
+     if(!input_buffer->line_count) return;
 
-     return true;
+     char* saved = ce_dupe_buffer(input_buffer);
+
+     if(!history->tail->prev || (history->tail->prev && strcmp(saved, history->tail->prev->entry) != 0)){
+          history->tail->entry = saved;
+          input_history_commit_current(history);
+     }
 }
 
 void view_follow_cursor(BufferView_t* current_view, LineNumberType_t line_number_type)
@@ -2841,12 +2828,13 @@ bool iterate_history_input(ConfigState_t* config_state, bool previous)
      InputHistory_t* history = history_from_input_key(config_state);
      if(!history) return false;
 
+#if 0
      // update the current history node if we are at the tail to save what the user typed
      // skip this if they haven't typed anything
-     if(history->tail == history->cur &&
-        config_state->view_input->buffer->line_count){
-          input_history_update_current(history, ce_dupe_buffer(config_state->view_input->buffer));
+     if(history->tail == history->cur && config_state->view_input->buffer->line_count){
+          history->tail->entry = ce_dupe_buffer(config_state->view_input->buffer);
      }
+#endif
 
      bool success = false;
 
@@ -4647,18 +4635,14 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          input_start(config_state, "Shell Command", key);
                     } break;
                     case 14: // Ctrl + n
-                         if(config_state->input){
-                              iterate_history_input(config_state, false);
-                         }else{
-                              jump_to_next_shell_command_file_destination(*head, config_state, true);
-                         }
+                         if(config_state->input) break;
+
+                         jump_to_next_shell_command_file_destination(*head, config_state, true);
                          break;
                     case 16: // Ctrl + p
-                         if(config_state->input){
-                              iterate_history_input(config_state, true);
-                         }else{
-                              jump_to_next_shell_command_file_destination(*head, config_state, false);
-                         }
+                         if(config_state->input) break;
+
+                         jump_to_next_shell_command_file_destination(*head, config_state, false);
                          break;
                     case 6: // Ctrl + f
                     {

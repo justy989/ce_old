@@ -293,7 +293,7 @@ bool     ce_move_cursor_to_end_of_file            (const Buffer_t* buffer, Point
 bool     ce_move_cursor_to_beginning_of_file      (const Buffer_t* buffer, Point_t* cursor);
 bool     ce_move_cursor_forward_to_char           (const Buffer_t* buffer, Point_t* cursor, char c);
 bool     ce_move_cursor_backward_to_char          (const Buffer_t* buffer, Point_t* cursor, char c);
-bool     ce_move_cursor_to_matching_pair          (const Buffer_t* buffer, Point_t* cursor);
+bool     ce_move_cursor_to_matching_pair          (const Buffer_t* buffer, Point_t* cursor, char matchee);
 bool     ce_follow_cursor                         (Point_t cursor, int64_t* left_column, int64_t* top_row, int64_t view_width, int64_t view_height,
                                                    bool at_terminal_width_edge, bool at_terminal_height_edge,
                                                    LineNumberType_t line_number_type, int64_t line_count);
@@ -333,6 +333,7 @@ int64_t ce_get_line_number_column_width(LineNumberType_t line_number_type, int64
 // Misc. Utility Functions
 int64_t ce_count_string_lines   (const char* string);
 bool    ce_point_after          (Point_t a, Point_t b);
+bool    ce_points_equal          (Point_t a, Point_t b);
 void    ce_sort_points          (const Point_t** a, const Point_t** b);
 int     ce_ispunct              (int c);
 int     ce_iswordchar           (int c);

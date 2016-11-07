@@ -919,6 +919,10 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
                case '\'':
                case ')':
                case '(':
+               case '}':
+               case '{':
+               case '[':
+               case ']':
                     built_action.motion.type = VMT_INSIDE_PAIR;
                     built_action.motion.inside_pair = ch;
                     break;
@@ -943,6 +947,10 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
                case '\'':
                case ')':
                case '(':
+               case '}':
+               case '{':
+               case '[':
+               case ']':
                     built_action.motion.type = VMT_AROUND_PAIR;
                     built_action.motion.around_pair = ch;
                     break;
@@ -1210,26 +1218,38 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                     switch(action->motion.inside_pair){
                     case '"':
                          if(!ce_get_homogenous_adjacents(buffer, &action_range->start, &action_range->end, isnotquote)) return false;
+                         if(action_range->start.x == 0) return false;
                          break;
                     case '\'':
                          if(!ce_get_homogenous_adjacents(buffer, &action_range->start, &action_range->end, isnotsinglequote)) return false;
+                         if(action_range->start.x == 0) return false;
                          break;
                     case '(':
-                         break;
                     case ')':
-                         // TODO: this is the simplest rule right now, and won't work as expected in some cases
-                         //       we need to make it behave more like ce_move_cursor_to_matching pair
-                         if(!ce_move_cursor_backward_to_char(buffer, &action_range->start, '(')) return false;
-                         if(!ce_move_cursor_forward_to_char(buffer, &action_range->end, ')')) return false;
-                         action_range->start.x++;
-                         action_range->end.x--;
+                         if(!ce_move_cursor_to_matching_pair(buffer, &action_range->start, ')')) return false;
+                         if(!ce_move_cursor_to_matching_pair(buffer, &action_range->end, '(')) return false;
+                         ce_advance_cursor(buffer, &action_range->start, 1);
+                         ce_advance_cursor(buffer, &action_range->end, -1);
+                         break;
+                    case '{':
+                    case '}':
+                         if(!ce_move_cursor_to_matching_pair(buffer, &action_range->start, '}')) return false;
+                         if(!ce_move_cursor_to_matching_pair(buffer, &action_range->end, '{')) return false;
+                         ce_advance_cursor(buffer, &action_range->start, 1);
+                         ce_advance_cursor(buffer, &action_range->end, -1);
+                         break;
+                    case '[':
+                    case ']':
+                         if(!ce_move_cursor_to_matching_pair(buffer, &action_range->start, ']')) return false;
+                         if(!ce_move_cursor_to_matching_pair(buffer, &action_range->end, ']')) return false;
+                         ce_advance_cursor(buffer, &action_range->start, 1);
+                         ce_advance_cursor(buffer, &action_range->end, -1);
                          break;
                     default:
                          return false;
                     }
 
                     if(action_range->start.x == action_range->end.x && action_range->start.y == action_range->end.y) return false;
-                    if(action_range->start.x == 0) return false;
                     break;
                case VMT_INSIDE_WORD_LITTLE:
                     ce_get_word_at_location(buffer, *cursor, &action_range->start, &action_range->end);
@@ -1250,27 +1270,34 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                     switch(action->motion.inside_pair){
                     case '"':
                          if(!ce_get_homogenous_adjacents(buffer, &action_range->start, &action_range->end, isnotquote)) return false;
+                         ce_advance_cursor(buffer, &action_range->start, -1);
+                         ce_advance_cursor(buffer, &action_range->end, 1);
                          break;
                     case '\'':
                          if(!ce_get_homogenous_adjacents(buffer, &action_range->start, &action_range->end, isnotsinglequote)) return false;
+                         ce_advance_cursor(buffer, &action_range->start, 1);
+                         ce_advance_cursor(buffer, &action_range->end, -1);
                          break;
                     case '(':
-                         break;
                     case ')':
-                         // TODO: this is the simplest rule right now, and won't work as expected in some cases
-                         //       we need to make it behave more like ce_move_cursor_to_matching pair
-                         if(!ce_move_cursor_backward_to_char(buffer, &action_range->start, '(')) return false;
-                         if(!ce_move_cursor_forward_to_char(buffer, &action_range->end, ')')) return false;
-                         action_range->start.x++;
-                         action_range->end.x--;
+                         if(!ce_move_cursor_to_matching_pair(buffer, &action_range->start, ')')) return false;
+                         if(!ce_move_cursor_to_matching_pair(buffer, &action_range->end, '(')) return false;
+                         break;
+                    case '{':
+                    case '}':
+                         if(!ce_move_cursor_to_matching_pair(buffer, &action_range->start, '}')) return false;
+                         if(!ce_move_cursor_to_matching_pair(buffer, &action_range->end, '{')) return false;
+                         break;
+                    case '[':
+                    case ']':
+                         if(!ce_move_cursor_to_matching_pair(buffer, &action_range->start, ']')) return false;
+                         if(!ce_move_cursor_to_matching_pair(buffer, &action_range->end, ']')) return false;
                          break;
                     default:
                          return false;
                     }
 
                     if(action_range->start.x == action_range->end.x && action_range->start.y == action_range->end.y) return false;
-                    action_range->start.x--;
-                    action_range->end.x++;
                     break;
                     // TIME TO SLURP
 #define SLURP_RIGHT(condition)                                                              \
@@ -3736,7 +3763,11 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeati
 
                     if(do_indentation){
                          Point_t match = *cursor;
-                         if(ce_move_cursor_to_matching_pair(buffer, &match) && match.y != cursor->y){
+
+                         char matchee;
+                         if(!ce_get_char(buffer, match, &matchee)) break;
+
+                         if(ce_move_cursor_to_matching_pair(buffer, &match, matchee) && match.y != cursor->y){
                               // get the match's sbol (that's the indentation we're matching)
                               Point_t sbol_match = {0, match.y};
                               ce_move_cursor_to_soft_beginning_of_line(buffer, &sbol_match);
@@ -4390,7 +4421,9 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     break;
                     case '%':
                     {
-                         ce_move_cursor_to_matching_pair(buffer, cursor);
+                         char matchee;
+                         if(!ce_get_char(buffer, *cursor, &matchee)) break;
+                         ce_move_cursor_to_matching_pair(buffer, cursor, matchee);
                     } break;
                     case KEY_NPAGE:
                     {

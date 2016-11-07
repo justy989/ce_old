@@ -606,15 +606,14 @@ char* ce_dupe_buffer(const Buffer_t* buffer)
 }
 
 // returns the delta to the matching character; return success
-bool ce_move_cursor_to_matching_pair(const Buffer_t* buffer, Point_t* location)
+bool ce_move_cursor_to_matching_pair(const Buffer_t* buffer, Point_t* location, char matchee)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
 
-     char matchee, match;
-     if(!ce_get_char(buffer, *location, &matchee)) return false;
-
+     char match;
      Direction_t d;
+
      switch(matchee){
      case '{':
           d = CE_DOWN;
@@ -668,15 +667,17 @@ bool ce_move_cursor_to_matching_pair(const Buffer_t* buffer, Point_t* location)
 
                // loop over line
                if(curr == match){
-                    if(--n_unmatched == 0){
+                    if(n_unmatched == 0){
                          *location = iter;
                          return true;
                     }
-               }else if(curr == matchee){
+                    n_unmatched--;
+               }else if(curr == matchee && !ce_points_equal(*location, iter)){
                     n_unmatched++;
                }
           }
      }
+
      return false;
 }
 
@@ -3039,7 +3040,7 @@ int64_t ce_get_indentation_for_next_line(const Buffer_t* buffer, Point_t locatio
          iter.x--){
           if(curr == '{'){
                Point_t match = iter;
-               if(!ce_move_cursor_to_matching_pair(buffer, &match) || match.y != location.y){
+               if(!ce_move_cursor_to_matching_pair(buffer, &match, '{') || match.y != location.y){
                     // '{' is globally unmatched, or unmatched on our line
                     indent += tab_len;
                     break; // if a line has "{{", we don't want to double tab the next line!
@@ -3074,6 +3075,11 @@ bool ce_point_in_range(Point_t p, Point_t start, Point_t end)
     }
 
      return false;
+}
+
+bool ce_points_equal(Point_t a, Point_t b)
+{
+     return b.x == a.x && b.y == a.y;
 }
 
 int64_t ce_last_index(const char* string)

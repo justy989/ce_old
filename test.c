@@ -949,7 +949,7 @@ TEST(sanity_find_matching_pair_same_line)
      buffer.lines[0] = strdup("if(i == 3)");
 
      Point_t point = {2, 0};
-     ce_move_cursor_to_matching_pair(&buffer, &point);
+     ce_move_cursor_to_matching_pair(&buffer, &point, '(');
 
      EXPECT(point.x == 9);
      EXPECT(point.y == 0);
@@ -967,7 +967,7 @@ TEST(sanity_find_matching_pair_multiline)
      buffer.lines[2] = strdup("}");
 
      Point_t point = {5, 0};
-     ce_move_cursor_to_matching_pair(&buffer, &point);
+     ce_move_cursor_to_matching_pair(&buffer, &point, '{');
 
      EXPECT(point.x == 0);
      EXPECT(point.y == 2);
@@ -987,7 +987,7 @@ TEST(sanity_find_matching_pair_multiline_nested)
      buffer.lines[4] = strdup("}");
 
      Point_t point = {5, 0};
-     ce_move_cursor_to_matching_pair(&buffer, &point);
+     ce_move_cursor_to_matching_pair(&buffer, &point, '{');
 
      EXPECT(point.x == 0);
      EXPECT(point.y == 4);
@@ -2226,6 +2226,29 @@ TEST(join_line)
      EXPECT(strcmp(buffer.lines[2], "best") == 0);
 
      ce_free_buffer(&buffer);
+}
+
+TEST(point_after)
+{
+     Point_t a = {1, 3};
+     Point_t b = {3, 5};
+     Point_t c = {1, 5};
+
+     EXPECT(ce_point_after(b, a));
+     EXPECT(ce_point_after(b, c));
+     EXPECT(ce_point_after(c, a));
+     EXPECT(!ce_point_after(a, b));
+     EXPECT(!ce_point_after(c, b));
+     EXPECT(!ce_point_after(a, c));
+}
+
+TEST(points_equal)
+{
+     Point_t a = {1, 3};
+     Point_t b = {3, 5};
+
+     EXPECT(ce_points_equal(a, a));
+     EXPECT(!ce_points_equal(a, b));
 }
 
 void segv_handler(int signo)

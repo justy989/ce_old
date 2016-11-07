@@ -3966,6 +3966,10 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     config_state->tab_current->view_overrideable = config_state->tab_current->view_current;
                     config_state->tab_current->overriden_buffer = NULL;
                     break;
+               case 'l':
+                    config_state->line_number_type++;
+                    config_state->line_number_type %= (LNT_RELATIVE_AND_ABSOLUTE + 1);
+                    break;
                }
 
                if(handled_key) keys_free(&config_state->command_head);

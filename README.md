@@ -75,6 +75,7 @@ gc|comment line
 gu|uncomment line
 gr|reload buffer from associated file
 gv|mark the view as overrideable
+gl|cycle through line number modes
 <<|unindent line
 >>|indent line
 %|find matching quotes, parents, brackets, square brackets, angled brackets

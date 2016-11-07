@@ -1567,6 +1567,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
              action->motion.type == VMT_LINE_DOWN || action->motion.type == VMT_VISUAL_RANGE ||
              action->motion.type == VMT_VISUAL_LINE){
                for(int i = action_range.sorted_start->y; i <= action_range.sorted_end->y; ++i){
+                    if(strlen(buffer->lines[i]) == 0) continue;
                     Point_t loc = {0, i};
                     ce_insert_string(buffer, loc, TAB_STRING);
                     ce_commit_insert_string(&buffer_state->commit_tail, loc, *cursor, *cursor, strdup(TAB_STRING), BCC_KEEP_GOING);

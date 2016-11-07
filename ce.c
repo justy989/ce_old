@@ -1561,9 +1561,13 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
 
      standend();
 
+     // figure out how wide the line number margin needs to be
      int64_t line_number_size = 0;
-     if(line_number_type != LNT_NONE){
+     if(line_number_type == LNT_ABSOLUTE || line_number_type == LNT_RELATIVE_AND_ABSOLUTE){
           line_number_size = count_digits(buffer->line_count);
+          max_width -= (line_number_size + 1);
+     }else if(line_number_type == LNT_RELATIVE){
+          line_number_size = count_digits(((last_line - buffer_top_left->y) + 1));
           max_width -= (line_number_size + 1);
      }
 
@@ -1573,7 +1577,7 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
           if(line_number_type){
                set_color(S_LINE_NUMBERS, HL_OFF);
                long value = i + 1;
-               if(line_number_type == LNT_RELATIVE && cursor->y != i){
+               if(line_number_type == LNT_RELATIVE || (line_number_type == LNT_RELATIVE_AND_ABSOLUTE && cursor->y != i)){
                     value = abs((int)(cursor->y - i));
                }
                printw("%*d ", line_number_size, value);
@@ -2111,14 +2115,18 @@ bool ce_follow_cursor(Point_t cursor, int64_t* left_column, int64_t* top_row, in
      int64_t right_column = *left_column + view_width;
      int64_t line_number_adjustment = 0;
 
-     // adjust based on line numbers
-     if(line_number_type) line_number_adjustment = (count_digits(line_count) + 1);
-
      if(cursor.y < *top_row){
           *top_row = cursor.y;
      }else if(cursor.y > bottom_row){
           bottom_row = cursor.y;
           *top_row = bottom_row - view_height;
+     }
+
+     // adjust based on line numbers
+     if(line_number_type == LNT_ABSOLUTE || line_number_type == LNT_RELATIVE_AND_ABSOLUTE){
+          line_number_adjustment = (count_digits(line_count) + 1);
+     }else if(line_number_type == LNT_RELATIVE){
+          line_number_adjustment = (count_digits((bottom_row - *top_row) + 1) + 1);
      }
 
      if(cursor.x < *left_column){

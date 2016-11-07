@@ -83,6 +83,7 @@ typedef enum {
      LNT_NONE,
      LNT_ABSOLUTE,
      LNT_RELATIVE,
+     LNT_RELATIVE_AND_ABSOLUTE,
 } LineNumberType_t;
 
 #define CE_CHECK_PTR_ARG(arg)                                                 \

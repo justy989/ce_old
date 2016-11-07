@@ -2124,7 +2124,7 @@ bool ce_follow_cursor(Point_t cursor, int64_t* left_column, int64_t* top_row, in
      }
 
      // adjust based on line numbers
-     int64_t line_number_adjustment = ce_get_line_number_column_width(line_number_type, line_count, bottom_row, *top_row);
+     int64_t line_number_adjustment = ce_get_line_number_column_width(line_number_type, line_count, *top_row, bottom_row);
 
      if(cursor.x < *left_column){
           *left_column = cursor.x;

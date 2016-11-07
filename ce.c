@@ -1572,7 +1572,7 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
 
           if(line_number_type){
                set_color(S_LINE_NUMBERS, HL_OFF);
-               long value = i;
+               long value = i + 1;
                if(line_number_type == LNT_RELATIVE && cursor->y != i){
                     value = abs((int)(cursor->y - i));
                }

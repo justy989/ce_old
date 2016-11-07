@@ -1037,13 +1037,16 @@ bool ce_remove_line(Buffer_t* buffer, int64_t line)
      free(buffer->lines[line]);
 
      int64_t new_line_count = buffer->line_count - 1;
-     // move trailing lines up 1
-     memmove(buffer->lines + line, buffer->lines + line + 1, (new_line_count - line) * sizeof(*buffer->lines));
 
-     buffer->lines = realloc(buffer->lines, new_line_count * sizeof(*buffer->lines));
-     if(!buffer->lines){
-          ce_message("%s() failed to realloc new lines: %"PRId64"", __FUNCTION__, new_line_count);
-          return false;
+     if(new_line_count){
+          // move trailing lines up 1
+          memmove(buffer->lines + line, buffer->lines + line + 1, (new_line_count - line) * sizeof(*buffer->lines));
+
+          buffer->lines = realloc(buffer->lines, new_line_count * sizeof(*buffer->lines));
+          if(!buffer->lines){
+               ce_message("%s() failed to realloc new lines: %"PRId64"", __FUNCTION__, new_line_count);
+               return false;
+          }
      }
 
      buffer->line_count = new_line_count;
@@ -1073,7 +1076,6 @@ bool ce_remove_string(Buffer_t* buffer, Point_t location, int64_t length)
           memmove(buffer->lines[location.y] + location.x,
                   buffer->lines[location.y] + location.x + length,
                   current_line_len - (location.x + length));
-          buffer->lines[location.y][new_line_len] = 0;
 
           // shrink the allocation now that we have fixed up the line
           buffer->lines[location.y] = realloc(buffer->lines[location.y], new_line_len + 1);
@@ -1081,6 +1083,8 @@ bool ce_remove_string(Buffer_t* buffer, Point_t location, int64_t length)
                ce_message("%s() failed to realloc new line", __FUNCTION__);
                return false;
           }
+          buffer->lines[location.y][new_line_len] = 0;
+
           buffer->modified = true;
           return true;
      }

@@ -560,6 +560,37 @@ TEST(remove_string_end)
      ce_free_buffer(&buffer);
 }
 
+TEST(remove_string_to_empty_line)
+{
+     Buffer_t buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+
+     Point_t point = {0, 0};
+     ce_remove_string(&buffer, point, 5);
+
+     ASSERT(buffer.line_count == 1);
+     EXPECT(strcmp(buffer.lines[0], "") == 0);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(remove_string_whole_line)
+{
+     Buffer_t buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+
+     Point_t point = {0, 0};
+     ce_remove_string(&buffer, point, 6);
+
+     ASSERT(buffer.line_count == 0);
+
+     ce_free_buffer(&buffer);
+}
+
 TEST(remove_string_multiline_begin)
 {
      Buffer_t buffer = {};

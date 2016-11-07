@@ -3288,25 +3288,25 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           default:
                break;
           case KEY_CLOSE: // Ctrl + q
-               if(config_state->view_input->buffer->line_count){
-                    if(tolower(config_state->view_input->buffer->lines[0][0]) == 'y'){
-                         config_state->quit = true;
-                    }
+               if(!config_state->view_input->buffer->line_count) break;
+
+               if(tolower(config_state->view_input->buffer->lines[0][0]) == 'y'){
+                    config_state->quit = true;
                }
                break;
           case ':':
           {
-               if(config_state->view_input->buffer->line_count){
-                    int64_t line = atoi(config_state->view_input->buffer->lines[0]);
-                    if(line > 0){
-                         *cursor = (Point_t){0, line - 1};
-                         ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
-                    }
+               if(!config_state->view_input->buffer->line_count) break;
+
+               int64_t line = atoi(config_state->view_input->buffer->lines[0]);
+               if(line > 0){
+                    *cursor = (Point_t){0, line - 1};
+                    ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
                }
           } break;
           case 6: // Ctrl + f
-               // just grab the first line and load it as a file
                commit_input_to_history(config_state->view_input->buffer, &config_state->load_file_history);
+
                for(int64_t i = 0; i < config_state->view_input->buffer->line_count; ++i){
                     Buffer_t* new_buffer = open_file_buffer(head, config_state->view_input->buffer->lines[i]);
                     if(i == 0 && new_buffer){
@@ -3314,27 +3314,26 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                          config_state->tab_current->view_current->cursor = (Point_t){0, 0};
                     }
                }
+
                if(config_state->tab_current->overriden_buffer){
                     tab_view_restore_overrideable(config_state->tab_current);
                }
                break;
           case '/':
-               if(config_state->view_input->buffer->line_count){
-                    commit_input_to_history(config_state->view_input->buffer, &config_state->search_history);
-                    add_yank(&config_state->yank_head, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
-               }
+               if(!config_state->view_input->buffer->line_count) break;
+
+               commit_input_to_history(config_state->view_input->buffer, &config_state->search_history);
+               add_yank(&config_state->yank_head, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
                break;
           case '?':
-               if(config_state->view_input->buffer->line_count){
-                    commit_input_to_history(config_state->view_input->buffer, &config_state->search_history);
-                    add_yank(&config_state->yank_head, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
-               }
+               if(!config_state->view_input->buffer->line_count) break;
+
+               commit_input_to_history(config_state->view_input->buffer, &config_state->search_history);
+               add_yank(&config_state->yank_head, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
                break;
           case 24: // Ctrl + x
           {
-               if(config_state->view_input->buffer->line_count == 0){
-                    break;
-               }
+               if(!config_state->view_input->buffer->line_count) break;
 
                if(config_state->shell_command_thread){
                     pthread_cancel(config_state->shell_command_thread);
@@ -3401,17 +3400,22 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           } break;
           case 'R':
           {
+               if(!config_state->view_input->buffer->line_count) break; // NOTE: unsure if this is correct
+
                YankNode_t* yank = find_yank(config_state->yank_head, '/');
                if(!yank) break;
+
                const char* search_str = yank->text;
                // NOTE: allow empty string to replace search
                int64_t search_len = strlen(search_str);
                if(!search_len) break;
+
                char* replace_str = ce_dupe_buffer(config_state->view_input->buffer);
                int64_t replace_len = strlen(replace_str);
                Point_t begin = config_state->tab_current->view_input_save->buffer->highlight_start;
                Point_t end = config_state->tab_current->view_input_save->buffer->highlight_end;
                if(end.x < 0) ce_move_cursor_to_end_of_file(config_state->tab_current->view_input_save->buffer, &end);
+
                Point_t match = {};
                int64_t replace_count = 0;
                while(ce_find_string(buffer, begin, search_str, &match, CE_DOWN)){
@@ -3425,19 +3429,20 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                     begin = match;
                     replace_count++;
                }
+
                if(replace_count){
                     ce_message("replaced %" PRId64 " matches", replace_count);
                }else{
                     ce_message("no matches found to replace");
                }
+
                *cursor = begin;
                center_view(buffer_view);
                free(replace_str);
           } break;
           case 1: // Ctrl + a
           {
-               if(!config_state->view_input->buffer->lines ||
-                  !config_state->view_input->buffer->lines[0][0]) break;
+               if(!config_state->view_input->buffer->lines) break;
 
                if(ce_save_buffer(buffer, config_state->view_input->buffer->lines[0])){
                     buffer->filename = strdup(config_state->view_input->buffer->lines[0]);
@@ -3477,6 +3482,8 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           } break;
           case '@':
           {
+               if(!config_state->view_input->buffer->lines) break;
+
                int64_t line = config_state->tab_current->view_input_save->cursor.y - 1; // account for buffer list row header
                if(line < 0) return;
                MacroNode_t* itr = config_state->macro_head;

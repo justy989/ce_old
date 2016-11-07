@@ -4741,6 +4741,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     pthread_mutex_lock(&view_input_save_lock);
                     config_state->tab_current->view_input_save->cursor = config_state->start_search;
                     pthread_mutex_unlock(&view_input_save_lock);
+                    center_view(config_state->tab_current->view_input_save);
                }
           }
      }

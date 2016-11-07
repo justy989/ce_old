@@ -3718,6 +3718,7 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeati
                if(ce_insert_char(buffer, *cursor, key)){
                     Point_t next_cursor = {cursor->x + 1, cursor->y};
                     ce_commit_insert_char(&buffer_state->commit_tail, *cursor, *cursor, next_cursor, key, BCC_KEEP_GOING);
+
                     bool do_indentation = true;
                     for(int i = 0; i < cursor->x; i++){
                          char blank_c;
@@ -3735,21 +3736,20 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeati
                     if(do_indentation){
                          Point_t match = *cursor;
                          if(ce_move_cursor_to_matching_pair(buffer, &match) && match.y != cursor->y){
-
                               // get the match's sbol (that's the indentation we're matching)
                               Point_t sbol_match = {0, match.y};
                               ce_move_cursor_to_soft_beginning_of_line(buffer, &sbol_match);
+
                               if(cursor->x < sbol_match.x){
                                    // we are adding spaces
                                    int64_t n_spaces = sbol_match.x - cursor->x;
                                    for(int64_t i = 0; i < n_spaces; i++){
                                         Point_t itr = {cursor->x + i, cursor->y};
                                         if(!ce_insert_char(buffer, itr, ' ')) assert(0);
-                                        ce_commit_insert_char(&buffer_state->commit_tail, *cursor, *cursor, itr, ' ', BCC_KEEP_GOING);
+                                        ce_commit_insert_char(&buffer_state->commit_tail, itr, *cursor, itr, ' ', BCC_KEEP_GOING);
                                    }
                                    cursor->x = sbol_match.x;
-                              }
-                              else{
+                              }else{
                                    int64_t n_deletes = CE_MIN((int64_t) strlen(TAB_STRING), cursor->x - sbol_match.x);
 
                                    bool can_unindent = true;
@@ -3762,6 +3762,7 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeati
 
                                    if(can_unindent){
                                         Point_t end_of_delete = *cursor;
+                                        end_of_delete.x--;
                                         cursor->x -= n_deletes;
                                         char* duped_str = ce_dupe_string(buffer, *cursor, end_of_delete);
                                         if(ce_remove_string(buffer, *cursor, n_deletes)){
@@ -4071,7 +4072,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                }
                handled_key = true;
                break;
-#if 1 // useful for debugging commit history
+#if 0 // useful for debugging commit history
           case '!':
                ce_commits_dump(buffer_state->commit_tail);
                break;

@@ -1090,7 +1090,7 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
           action_range->start.x = 0;
           action_range->end.x = strlen(buffer->lines[action_range->end.y]);
           action_range->yank_mode = YANK_LINE;
-     }else{
+     }else if(buffer->line_count){ // can't do motions without a buffer !
           int64_t multiplier = action->multiplier * action->motion.multiplier;
 
           for(int64_t i = 0; i < multiplier; ++i){

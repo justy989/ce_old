@@ -4228,7 +4228,13 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     case 'q':
                          if(config_state->recording_macro){
                               int* built_macro = keys_get_string(config_state->record_macro_head);
-                              macro_add(&config_state->macro_head, config_state->recording_macro, built_macro);
+
+                              if(built_macro[0]){
+                                   macro_add(&config_state->macro_head, config_state->recording_macro, built_macro);
+                              }else{
+                                   free(built_macro);
+                              }
+
                               config_state->recording_macro = 0;
                               key = 0;
                          }

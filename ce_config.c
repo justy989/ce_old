@@ -393,8 +393,7 @@ void add_yank(YankNode_t** head, char reg_char, const char* yank_text, YankMode_
      YankNode_t* node = find_yank(*head, reg_char);
      if(node != NULL){
           free((void*)node->text);
-     }
-     else{
+     }else{
           YankNode_t* new_yank = malloc(sizeof(*new_yank));
           new_yank->reg_char = reg_char;
           new_yank->next = *head;
@@ -404,6 +403,20 @@ void add_yank(YankNode_t** head, char reg_char, const char* yank_text, YankMode_
 
      node->text = yank_text;
      node->mode = mode;
+}
+
+void free_yanks(YankNode_t** head)
+{
+     YankNode_t* itr = *head;
+     while(itr){
+          YankNode_t* tmp = itr;
+          itr = itr->next;
+
+          free((void*)(tmp->text));
+          free(tmp);
+     }
+
+     *head = NULL;
 }
 
 typedef struct MacroNode_t{
@@ -2053,6 +2066,18 @@ void add_mark(BufferState_t* buffer, char mark_char, const Point_t* location)
      *mark_location = *location;
 }
 
+void free_marks(MarkNode_t** head)
+{
+     MarkNode_t* itr = *head;
+     while(itr){
+          MarkNode_t* tmp = itr;
+          itr = itr->next;
+          free(tmp);
+     }
+
+     *head = NULL;
+}
+
 bool initialize_buffer(Buffer_t* buffer){
      BufferState_t* buffer_state = calloc(1, sizeof(*buffer_state));
      if(!buffer_state){
@@ -2272,6 +2297,7 @@ void free_buffer_state(BufferState_t* buffer_state)
      BufferCommitNode_t* itr = buffer_state->commit_tail;
      while(itr->prev) itr = itr->prev;
      ce_commits_free(itr);
+     free_marks(&buffer_state->mark_head);
      free(buffer_state);
 }
 
@@ -2408,7 +2434,6 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
           config_state->shell_command_buffer = calloc(1, sizeof(*config_state->shell_command_buffer));
           config_state->shell_command_buffer->name = strdup("[shell_output]");
           config_state->shell_command_buffer->readonly = true;
-          initialize_buffer(config_state->shell_command_buffer);
           ce_alloc_lines(config_state->shell_command_buffer, 1);
           BufferNode_t* new_buffer_node = ce_append_buffer_to_list(*head, config_state->shell_command_buffer);
           if(!new_buffer_node){
@@ -2421,7 +2446,6 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
           config_state->completion_buffer = calloc(1, sizeof(*config_state->shell_command_buffer));
           config_state->completion_buffer->name = strdup("[completions]");
           config_state->completion_buffer->readonly = true;
-          initialize_buffer(config_state->completion_buffer);
           BufferNode_t* new_buffer_node = ce_append_buffer_to_list(*head, config_state->completion_buffer);
           if(!new_buffer_node){
                ce_message("failed to add shell command buffer to list");
@@ -2570,9 +2594,16 @@ bool destroyer(BufferNode_t** head, void* user_data)
           pthread_join(config_state->shell_input_thread, NULL);
      }
 
+     free_buffer_state(config_state->buffer_list_buffer.user_data);
      ce_free_buffer(&config_state->buffer_list_buffer);
+
+     free_buffer_state(config_state->mark_list_buffer.user_data);
      ce_free_buffer(&config_state->mark_list_buffer);
+
+     free_buffer_state(config_state->yank_list_buffer.user_data);
      ce_free_buffer(&config_state->yank_list_buffer);
+
+     free_buffer_state(config_state->macro_list_buffer.user_data);
      ce_free_buffer(&config_state->macro_list_buffer);
 
      // history
@@ -2585,6 +2616,13 @@ bool destroyer(BufferNode_t** head, void* user_data)
      pthread_mutex_destroy(&shell_buffer_lock);
 
      auto_complete_clear(&config_state->auto_complete);
+
+     free(config_state->vim_state.last_insert_command);
+
+     keys_free(&config_state->command_head);
+     keys_free(&config_state->record_macro_head);
+
+     free_yanks(&config_state->yank_head);
 
      free(config_state);
      return true;

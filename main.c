@@ -84,6 +84,7 @@ void config_close(Config_t* config)
 {
      if(!config->so_handle) return;
      free(config->path);
+     // NOTE: comment out dlclose() so valgrind can get a helpful stack frame
      if(dlclose(config->so_handle)) ce_message("dlclose() failed with error %s", dlerror());
 }
 

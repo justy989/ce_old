@@ -37,7 +37,7 @@ j|move cursor down
 k|move cursor up
 l|move cursor right|
 w|move by word
-e|m|ove to end of word
+e|move to end of word
 b|move to beginning of word
 c|change
 d|delete
@@ -56,6 +56,15 @@ n|goto next search match
 N|goto previous search match
 v|visual mode
 V|visual line mode
+o|insert a new line and move the cursor
+O|insert a new line before the cursor and move the cursor
+m|set mark in register (next character typed)
+m?|view mark registers
+q|record macro to a register (next character typed)
+@|replay macro from a register (next character typed)
+@?|view macro registers
+"|specify yank or paste from a specific register (next character typesd)
+"?|view yank registers
 zt|scroll view so cursor is at the top
 zz|scroll view so cursor is in the middle
 zb|scroll view so cursor is at the bottom
@@ -65,6 +74,8 @@ gT|goto previous tab
 gc|comment line
 gu|uncomment line
 gr|reload buffer from associated file
+gv|mark the view as overrideable
+gl|cycle through line number modes
 <<|unindent line
 >>|indent line
 %|find matching quotes, parents, brackets, square brackets, angled brackets

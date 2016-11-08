@@ -606,15 +606,14 @@ char* ce_dupe_buffer(const Buffer_t* buffer)
 }
 
 // returns the delta to the matching character; return success
-bool ce_move_cursor_to_matching_pair(const Buffer_t* buffer, Point_t* location)
+bool ce_move_cursor_to_matching_pair(const Buffer_t* buffer, Point_t* location, char matchee)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(location);
 
-     char matchee, match;
-     if(!ce_get_char(buffer, *location, &matchee)) return false;
-
+     char match;
      Direction_t d;
+
      switch(matchee){
      case '{':
           d = CE_DOWN;
@@ -668,15 +667,17 @@ bool ce_move_cursor_to_matching_pair(const Buffer_t* buffer, Point_t* location)
 
                // loop over line
                if(curr == match){
-                    if(--n_unmatched == 0){
+                    if(n_unmatched == 0){
                          *location = iter;
                          return true;
                     }
-               }else if(curr == matchee){
+                    n_unmatched--;
+               }else if(curr == matchee && !ce_points_equal(*location, iter)){
                     n_unmatched++;
                }
           }
      }
+
      return false;
 }
 
@@ -1014,11 +1015,10 @@ bool ce_join_line(Buffer_t* buffer, int64_t line){
      size_t l1_len = strlen(l1);
      char* l2 = buffer->lines[line+1];
      size_t l2_len = strlen(l2);
-     buffer->lines[line] = realloc(l1, l1_len + l2_len + 2); //space and null
+     buffer->lines[line] = realloc(l1, l1_len + l2_len + 1);
      if(!buffer->lines[line]) return false; // TODO: ENOMEM
      l1 = buffer->lines[line];
-     l1[l1_len] = ' ';
-     memcpy(&l1[l1_len+1], l2, l2_len+1);
+     memcpy(&l1[l1_len], l2, l2_len+1);
      buffer->modified = true;
      return ce_remove_line(buffer, line+1);
 }
@@ -1038,13 +1038,16 @@ bool ce_remove_line(Buffer_t* buffer, int64_t line)
      free(buffer->lines[line]);
 
      int64_t new_line_count = buffer->line_count - 1;
-     // move trailing lines up 1
-     memmove(buffer->lines + line, buffer->lines + line + 1, (new_line_count - line) * sizeof(*buffer->lines));
 
-     buffer->lines = realloc(buffer->lines, new_line_count * sizeof(*buffer->lines));
-     if(!buffer->lines){
-          ce_message("%s() failed to realloc new lines: %"PRId64"", __FUNCTION__, new_line_count);
-          return false;
+     if(new_line_count){
+          // move trailing lines up 1
+          memmove(buffer->lines + line, buffer->lines + line + 1, (new_line_count - line) * sizeof(*buffer->lines));
+
+          buffer->lines = realloc(buffer->lines, new_line_count * sizeof(*buffer->lines));
+          if(!buffer->lines){
+               ce_message("%s() failed to realloc new lines: %"PRId64"", __FUNCTION__, new_line_count);
+               return false;
+          }
      }
 
      buffer->line_count = new_line_count;
@@ -1074,7 +1077,6 @@ bool ce_remove_string(Buffer_t* buffer, Point_t location, int64_t length)
           memmove(buffer->lines[location.y] + location.x,
                   buffer->lines[location.y] + location.x + length,
                   current_line_len - (location.x + length));
-          buffer->lines[location.y][new_line_len] = 0;
 
           // shrink the allocation now that we have fixed up the line
           buffer->lines[location.y] = realloc(buffer->lines[location.y], new_line_len + 1);
@@ -1082,6 +1084,8 @@ bool ce_remove_string(Buffer_t* buffer, Point_t location, int64_t length)
                ce_message("%s() failed to realloc new line", __FUNCTION__);
                return false;
           }
+          buffer->lines[location.y][new_line_len] = 0;
+
           buffer->modified = true;
           return true;
      }
@@ -1270,7 +1274,7 @@ int64_t ce_is_c_typename(const char* line, int64_t start_offset)
      itr = line + start_offset;
      if(count >= 2 && itr[count-2] == '_' && itr[count-1] == 't') return count;
 
-#if 1
+#if 0
      // NOTE: Justin uses this while working on Bryte!
      if(isupper(*itr)){
           return count;
@@ -1562,10 +1566,11 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
 
      standend();
 
-     int64_t line_number_size = 0;
-     if(line_number_type != LNT_NONE){
-          line_number_size = count_digits(buffer->line_count);
-          max_width -= (line_number_size + 1);
+     // figure out how wide the line number margin needs to be
+     int line_number_size = ce_get_line_number_column_width(line_number_type, buffer->line_count, buffer_top_left->y, last_line);
+     if(line_number_size){
+          max_width -= line_number_size;
+          line_number_size--;
      }
 
      for(int64_t i = buffer_top_left->y; i <= last_line; ++i) {
@@ -1573,8 +1578,8 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
 
           if(line_number_type){
                set_color(S_LINE_NUMBERS, HL_OFF);
-               long value = i;
-               if(line_number_type == LNT_RELATIVE && cursor->y != i){
+               long value = i + 1;
+               if(line_number_type == LNT_RELATIVE || (line_number_type == LNT_RELATIVE_AND_ABSOLUTE && cursor->y != i)){
                     value = abs((int)(cursor->y - i));
                }
                printw("%*d ", line_number_size, value);
@@ -1912,21 +1917,27 @@ BufferNode_t* ce_append_buffer_to_list(BufferNode_t* head, Buffer_t* buffer)
      return new;
 }
 
-bool ce_remove_buffer_from_list(BufferNode_t* head, BufferNode_t** node)
+bool ce_remove_buffer_from_list(BufferNode_t** head, Buffer_t* buffer)
 {
      CE_CHECK_PTR_ARG(head);
-     CE_CHECK_PTR_ARG(node);
+     CE_CHECK_PTR_ARG(buffer);
 
-     BufferNode_t* tmp = head;
-     while(head){
-          if(head == *node){
-               tmp->next = head->next;
-               free(head);
-               *node = NULL;
+     BufferNode_t* itr = *head;
+     BufferNode_t* prev = NULL;
+     while(itr){
+          if(itr->buffer == buffer){
+               // patch up the previous node's next point
+               if(prev) prev->next = itr->next;
+
+               // advance head if are deleting it
+               if(itr == *head) *head = itr->next;
+
+               free(itr);
                return true;
           }
-          tmp = head;
-          head = head->next;
+
+          prev = itr;
+          itr = itr->next;
      }
 
      // didn't find the node to remove
@@ -2104,10 +2115,6 @@ bool ce_follow_cursor(Point_t cursor, int64_t* left_column, int64_t* top_row, in
 
      int64_t bottom_row = *top_row + view_height;
      int64_t right_column = *left_column + view_width;
-     int64_t line_number_adjustment = 0;
-
-     // adjust based on line numbers
-     if(line_number_type) line_number_adjustment = (count_digits(line_count) + 1);
 
      if(cursor.y < *top_row){
           *top_row = cursor.y;
@@ -2115,6 +2122,9 @@ bool ce_follow_cursor(Point_t cursor, int64_t* left_column, int64_t* top_row, in
           bottom_row = cursor.y;
           *top_row = bottom_row - view_height;
      }
+
+     // adjust based on line numbers
+     int64_t line_number_adjustment = ce_get_line_number_column_width(line_number_type, line_count, *top_row, bottom_row);
 
      if(cursor.x < *left_column){
           *left_column = cursor.x;
@@ -2273,6 +2283,61 @@ bool ce_commits_free(BufferCommitNode_t* tail)
      return true;
 }
 
+bool ce_commits_dump(BufferCommitNode_t* tail)
+{
+     const char* type_str [] = {
+          "NONE",
+          "INSERT CHAR",
+          "INSERT STRING",
+          "REMOVE CHAR",
+          "REMOVE STRING",
+          "CHANGE CHAR",
+          "CHANGE STRING",
+     };
+
+     const char* chain_str [] = {
+          "STOP",
+          "KEEP GOING",
+     };
+
+     while(tail){
+          ce_message("type: %s", type_str[tail->commit.type]);
+          switch(tail->commit.type){
+          default:
+               break;
+          case BCT_INSERT_CHAR:
+               ce_message("    inserted char: '%c'", tail->commit.c);
+               break;
+          case BCT_REMOVE_CHAR:
+               ce_message("     removed char: '%c'", tail->commit.c);
+               break;
+          case BCT_INSERT_STRING:
+               ce_message("  inserted string: '%s'", tail->commit.str);
+               break;
+          case BCT_REMOVE_STRING:
+               ce_message("   removed string: '%s'", tail->commit.str);
+               break;
+          case BCT_CHANGE_CHAR:
+               ce_message("    inserted char: '%c'", tail->commit.c);
+               ce_message("     removed char: '%c'", tail->commit.prev_c);
+               break;
+          case BCT_CHANGE_STRING:
+               ce_message("    inserted char: '%s'", tail->commit.str);
+               ce_message("     removed char: '%s'", tail->commit.prev_str);
+               break;
+          }
+
+          ce_message("            start: %"PRId64", %"PRId64"", tail->commit.start.x, tail->commit.start.y);
+          ce_message("      undo cursor: %"PRId64", %"PRId64"", tail->commit.undo_cursor.x, tail->commit.undo_cursor.y);
+          ce_message("      redo cursor: %"PRId64", %"PRId64"", tail->commit.redo_cursor.x, tail->commit.redo_cursor.y);
+          ce_message("            chain: %s", chain_str[tail->commit.chain]);
+
+          tail = tail->prev;
+     }
+
+     return true;
+}
+
 bool ce_commit_undo(Buffer_t* buffer, BufferCommitNode_t** tail, Point_t* cursor)
 {
      CE_CHECK_PTR_ARG(buffer);
@@ -2286,7 +2351,7 @@ bool ce_commit_undo(Buffer_t* buffer, BufferCommitNode_t** tail, Point_t* cursor
 
      BufferCommit_t* commit;
 
-     do {
+     do{
           commit = &((*tail)->commit);
 
           switch(commit->type){
@@ -2340,37 +2405,42 @@ bool ce_commit_redo(Buffer_t* buffer, BufferCommitNode_t** tail, Point_t* cursor
           return false;
      }
 
-     *tail = (*tail)->next;
+     BufferCommit_t* commit = NULL;
 
-     BufferCommitNode_t* undo_commit = *tail;
-     BufferCommit_t* commit = &undo_commit->commit;
+     do{
+          *tail = (*tail)->next;
 
-     switch(commit->type){
-     default:
-          ce_message("unsupported BufferCommitType_t: %d", commit->type);
-          return false;
-     case BCT_INSERT_CHAR:
-          ce_insert_char(buffer, commit->start, commit->c);
-          break;
-     case BCT_INSERT_STRING:
-          ce_insert_string(buffer, commit->start, commit->str);
-          break;
-     case BCT_REMOVE_CHAR:
-          ce_remove_char(buffer, commit->start);
-          break;
-     case BCT_REMOVE_STRING:
-          ce_remove_string(buffer, commit->start, strlen(commit->str));
-          break;
-     case BCT_CHANGE_CHAR:
-          ce_set_char(buffer, commit->start, commit->c);
-          break;
-     case BCT_CHANGE_STRING:
-          ce_remove_string(buffer, commit->start, strlen(commit->prev_str));
-          ce_insert_string(buffer, commit->start, commit->str);
-          break;
-     }
+          BufferCommitNode_t* undo_commit = *tail;
+          commit = &undo_commit->commit;
 
-     *cursor = (*tail)->commit.redo_cursor;
+          switch(commit->type){
+          default:
+               ce_message("unsupported BufferCommitType_t: %d", commit->type);
+               return false;
+          case BCT_INSERT_CHAR:
+               ce_insert_char(buffer, commit->start, commit->c);
+               break;
+          case BCT_INSERT_STRING:
+               ce_insert_string(buffer, commit->start, commit->str);
+               break;
+          case BCT_REMOVE_CHAR:
+               ce_remove_char(buffer, commit->start);
+               break;
+          case BCT_REMOVE_STRING:
+               ce_remove_string(buffer, commit->start, strlen(commit->str));
+               break;
+          case BCT_CHANGE_CHAR:
+               ce_set_char(buffer, commit->start, commit->c);
+               break;
+          case BCT_CHANGE_STRING:
+               ce_remove_string(buffer, commit->start, strlen(commit->prev_str));
+               ce_insert_string(buffer, commit->start, commit->str);
+               break;
+          }
+
+          *cursor = (*tail)->commit.redo_cursor;
+     }while((*tail)->next && commit->chain == BCC_KEEP_GOING);
+
      return true;
 }
 
@@ -2508,6 +2578,25 @@ bool ce_remove_view(BufferView_t** head, BufferView_t* view)
           }
 
           free(view);
+     }
+
+     return true;
+}
+
+bool ce_change_buffer_in_views(BufferView_t* head, Buffer_t* match, Buffer_t* new)
+{
+     CE_CHECK_PTR_ARG(head);
+     CE_CHECK_PTR_ARG(match);
+     CE_CHECK_PTR_ARG(new);
+
+     if(head->next_horizontal) ce_change_buffer_in_views(head->next_horizontal, match, new);
+     if(head->next_vertical) ce_change_buffer_in_views(head->next_vertical, match, new);
+
+     if(head->buffer == match){
+          head->buffer = new;
+          head->cursor = (Point_t){0, 0};
+          head->top_row = 0;
+          head->left_column = 0;
      }
 
      return true;
@@ -2821,6 +2910,24 @@ BufferView_t* ce_buffer_in_view(BufferView_t* head, const Buffer_t* buffer)
      return buffer_in_view(head, buffer);
 }
 
+int64_t ce_get_line_number_column_width(LineNumberType_t line_number_type, int64_t buffer_line_count, int64_t buffer_view_top, int64_t buffer_view_bottom)
+{
+     int64_t column_width = 0;
+
+     if(line_number_type == LNT_ABSOLUTE || line_number_type == LNT_RELATIVE_AND_ABSOLUTE){
+          column_width += count_digits(buffer_line_count) + 1;
+     }else if(line_number_type == LNT_RELATIVE){
+          int64_t view_height = (buffer_view_bottom - buffer_view_top) + 1;
+          if(view_height > buffer_line_count){
+               column_width += count_digits(buffer_line_count) + 1;
+          }else{
+               column_width += count_digits(view_height) + 1;
+          }
+     }
+
+     return column_width;
+}
+
 void* ce_memrchr(const void* s, int c, size_t n)
 {
      char* rev_search = (void*)s + (n-1);
@@ -2933,7 +3040,7 @@ int64_t ce_get_indentation_for_next_line(const Buffer_t* buffer, Point_t locatio
          iter.x--){
           if(curr == '{'){
                Point_t match = iter;
-               if(!ce_move_cursor_to_matching_pair(buffer, &match) || match.y != location.y){
+               if(!ce_move_cursor_to_matching_pair(buffer, &match, '{') || match.y != location.y){
                     // '{' is globally unmatched, or unmatched on our line
                     indent += tab_len;
                     break; // if a line has "{{", we don't want to double tab the next line!
@@ -2968,6 +3075,11 @@ bool ce_point_in_range(Point_t p, Point_t start, Point_t end)
     }
 
      return false;
+}
+
+bool ce_points_equal(Point_t a, Point_t b)
+{
+     return b.x == a.x && b.y == a.y;
 }
 
 int64_t ce_last_index(const char* string)

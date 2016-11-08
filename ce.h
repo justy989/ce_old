@@ -24,6 +24,9 @@
 #define COLOR_BRIGHT_CYAN 14
 #define COLOR_BRIGHT_WHITE 15
 
+#define KEY_ESCAPE 27
+#define KEY_TAB '\t'
+
 typedef enum {
      S_NORMAL = 1,
      S_KEYWORD,
@@ -80,6 +83,7 @@ typedef enum {
      LNT_NONE,
      LNT_ABSOLUTE,
      LNT_RELATIVE,
+     LNT_RELATIVE_AND_ABSOLUTE,
 } LineNumberType_t;
 
 #define CE_CHECK_PTR_ARG(arg)                                                 \
@@ -193,15 +197,15 @@ typedef enum {
 extern Point_t* g_terminal_dimensions;
 
 // CE Configuration-Defined Functions
-typedef bool ce_initializer (BufferNode_t*, Point_t*, int, char**, void**);
-typedef void ce_destroyer   (BufferNode_t*, void*);
-typedef bool ce_key_handler (int, BufferNode_t*, void*);
+typedef bool ce_initializer (BufferNode_t**, Point_t*, int, char**, void**);
+typedef void ce_destroyer   (BufferNode_t**, void*);
+typedef bool ce_key_handler (int, BufferNode_t**, void*);
 typedef void ce_view_drawer (const BufferNode_t*, void*);
 
 
 // BufferList Manipulation Functions
 BufferNode_t* ce_append_buffer_to_list (BufferNode_t* head, Buffer_t* buffer); // NOTE: we may want to consider taking tail rather than head
-bool ce_remove_buffer_from_list        (BufferNode_t* head, BufferNode_t** node);
+bool ce_remove_buffer_from_list        (BufferNode_t** head, Buffer_t* buffer);
 
 
 // BufferView Manipulation Functions
@@ -209,6 +213,7 @@ BufferView_t* ce_split_view       (BufferView_t* view, Buffer_t* buffer, bool ho
 bool ce_remove_view               (BufferView_t** head, BufferView_t* view);
 bool ce_calc_views                (BufferView_t* head, Point_t top_left, Point_t top_right);
 bool ce_draw_views                (const BufferView_t* head, const char* highlight_word, LineNumberType_t line_number_type);
+bool ce_change_buffer_in_views    (BufferView_t* head, Buffer_t* match, Buffer_t* new);
 bool ce_free_views                (BufferView_t** view);
 BufferView_t* ce_find_view_at_point (BufferView_t* head, Point_t point);
 BufferView_t* ce_buffer_in_view(BufferView_t* head, const Buffer_t* buffer);
@@ -288,7 +293,7 @@ bool     ce_move_cursor_to_end_of_file            (const Buffer_t* buffer, Point
 bool     ce_move_cursor_to_beginning_of_file      (const Buffer_t* buffer, Point_t* cursor);
 bool     ce_move_cursor_forward_to_char           (const Buffer_t* buffer, Point_t* cursor, char c);
 bool     ce_move_cursor_backward_to_char          (const Buffer_t* buffer, Point_t* cursor, char c);
-bool     ce_move_cursor_to_matching_pair          (const Buffer_t* buffer, Point_t* cursor);
+bool     ce_move_cursor_to_matching_pair          (const Buffer_t* buffer, Point_t* cursor, char matchee);
 bool     ce_follow_cursor                         (Point_t cursor, int64_t* left_column, int64_t* top_row, int64_t view_width, int64_t view_height,
                                                    bool at_terminal_width_edge, bool at_terminal_height_edge,
                                                    LineNumberType_t line_number_type, int64_t line_count);
@@ -307,6 +312,7 @@ bool ce_commit_redo          (Buffer_t* buffer, BufferCommitNode_t** tail, Point
 bool ce_commit_change        (BufferCommitNode_t** tail, const BufferCommit_t* change);
 
 bool ce_commits_free         (BufferCommitNode_t* tail);
+bool ce_commits_dump         (BufferCommitNode_t* tail);
 
 // Syntax
 int64_t ce_is_c_keyword     (const char* line, int64_t start_offset);
@@ -317,6 +323,9 @@ CommentType_t ce_is_comment (const char* line, int64_t start_offset);
 void ce_is_string_literal   (const char* line, int64_t start_offset, int64_t line_len, bool* inside_string, char* last_quote_char);
 int64_t ce_is_caps_var      (const char* line, int64_t start_offset);
 
+// Line Numbers
+int64_t ce_get_line_number_column_width(LineNumberType_t line_number_type, int64_t buffer_line_count, int64_t buffer_view_top, int64_t buffer_view_bottom);
+
 // Logging Functions
 #define ce_message(...) ({fprintf(stderr,__VA_ARGS__);\
                           fprintf(stderr,"\n");})
@@ -324,6 +333,7 @@ int64_t ce_is_caps_var      (const char* line, int64_t start_offset);
 // Misc. Utility Functions
 int64_t ce_count_string_lines   (const char* string);
 bool    ce_point_after          (Point_t a, Point_t b);
+bool    ce_points_equal          (Point_t a, Point_t b);
 void    ce_sort_points          (const Point_t** a, const Point_t** b);
 int     ce_ispunct              (int c);
 int     ce_iswordchar           (int c);

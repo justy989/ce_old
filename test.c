@@ -560,6 +560,37 @@ TEST(remove_string_end)
      ce_free_buffer(&buffer);
 }
 
+TEST(remove_string_to_empty_line)
+{
+     Buffer_t buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+
+     Point_t point = {0, 0};
+     ce_remove_string(&buffer, point, 5);
+
+     ASSERT(buffer.line_count == 1);
+     EXPECT(strcmp(buffer.lines[0], "") == 0);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(remove_string_whole_line)
+{
+     Buffer_t buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+
+     Point_t point = {0, 0};
+     ce_remove_string(&buffer, point, 6);
+
+     ASSERT(buffer.line_count == 0);
+
+     ce_free_buffer(&buffer);
+}
+
 TEST(remove_string_multiline_begin)
 {
      Buffer_t buffer = {};
@@ -918,7 +949,7 @@ TEST(sanity_find_matching_pair_same_line)
      buffer.lines[0] = strdup("if(i == 3)");
 
      Point_t point = {2, 0};
-     ce_move_cursor_to_matching_pair(&buffer, &point);
+     ce_move_cursor_to_matching_pair(&buffer, &point, '(');
 
      EXPECT(point.x == 9);
      EXPECT(point.y == 0);
@@ -936,7 +967,7 @@ TEST(sanity_find_matching_pair_multiline)
      buffer.lines[2] = strdup("}");
 
      Point_t point = {5, 0};
-     ce_move_cursor_to_matching_pair(&buffer, &point);
+     ce_move_cursor_to_matching_pair(&buffer, &point, '{');
 
      EXPECT(point.x == 0);
      EXPECT(point.y == 2);
@@ -956,7 +987,7 @@ TEST(sanity_find_matching_pair_multiline_nested)
      buffer.lines[4] = strdup("}");
 
      Point_t point = {5, 0};
-     ce_move_cursor_to_matching_pair(&buffer, &point);
+     ce_move_cursor_to_matching_pair(&buffer, &point, '{');
 
      EXPECT(point.x == 0);
      EXPECT(point.y == 4);
@@ -1454,15 +1485,15 @@ TEST(sanity_buffer_list)
      ASSERT(head->next->buffer == &two);
      ASSERT(head->next->next->buffer == &three);
 
-     EXPECT(ce_remove_buffer_from_list(head, &two_node) == true);
-     EXPECT(ce_remove_buffer_from_list(head, &two_node) == false);
+     EXPECT(ce_remove_buffer_from_list(&head, &two) == true);
+     EXPECT(ce_remove_buffer_from_list(&head, &two) == false);
 
      ASSERT(head);
      ASSERT(head->next);
      ASSERT(head->next->buffer == &three);
      ASSERT(head->next->next == NULL);
 
-     EXPECT(ce_remove_buffer_from_list(head, &three_node) == true);
+     EXPECT(ce_remove_buffer_from_list(&head, &three) == true);
 
      ASSERT(head);
      ASSERT(head->buffer == &one);
@@ -2175,6 +2206,49 @@ TEST(move_cursor_backward_to_char)
      EXPECT(point.y == 0);
 
      ce_free_buffer(&buffer);
+}
+
+TEST(join_line)
+{
+     Buffer_t buffer = {};
+     buffer.line_count = 4;
+     buffer.lines = malloc(4 * sizeof(char*));
+     buffer.lines[0] = strdup("tacos");
+     buffer.lines[1] = strdup("are");
+     buffer.lines[2] = strdup("the");
+     buffer.lines[3] = strdup("best");
+
+     ce_join_line(&buffer, 1);
+
+     EXPECT(buffer.line_count == 3);
+     EXPECT(strcmp(buffer.lines[0], "tacos") == 0);
+     EXPECT(strcmp(buffer.lines[1], "arethe") == 0);
+     EXPECT(strcmp(buffer.lines[2], "best") == 0);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(point_after)
+{
+     Point_t a = {1, 3};
+     Point_t b = {3, 5};
+     Point_t c = {1, 5};
+
+     EXPECT(ce_point_after(b, a));
+     EXPECT(ce_point_after(b, c));
+     EXPECT(ce_point_after(c, a));
+     EXPECT(!ce_point_after(a, b));
+     EXPECT(!ce_point_after(c, b));
+     EXPECT(!ce_point_after(a, c));
+}
+
+TEST(points_equal)
+{
+     Point_t a = {1, 3};
+     Point_t b = {3, 5};
+
+     EXPECT(ce_points_equal(a, a));
+     EXPECT(!ce_points_equal(a, b));
 }
 
 void segv_handler(int signo)

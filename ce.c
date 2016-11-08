@@ -2055,7 +2055,8 @@ bool ce_advance_cursor(const Buffer_t* buffer, Point_t* cursor, int64_t delta)
 
      delta -= line_len_left;
      cursor->y += d;
-     cursor->x = (d == CE_DOWN) ? strlen(buffer->lines[cursor->y]) : 0;
+     cursor->x = 0;
+     if(cursor->y < buffer->line_count && d == CE_DOWN) cursor->x = strlen(buffer->lines[cursor->y]);
 
      while(true){
           if(d == CE_DOWN && cursor->y >= buffer->line_count) return ce_move_cursor_to_end_of_file(buffer, cursor);

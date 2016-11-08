@@ -1574,6 +1574,41 @@ TEST(sanity_split_view)
      ASSERT(ce_free_views(&head));
 }
 
+TEST(change_buffer_in_views)
+{
+     BufferView_t* head = calloc(1, sizeof(*head));
+     ASSERT(head);
+
+     Buffer_t a;
+     Buffer_t b;
+     Buffer_t c;
+
+     head->buffer = &a;
+
+     BufferView_t* horizontal_split = ce_split_view(head, &a, true);
+     ASSERT(horizontal_split);
+
+     BufferView_t* vertical_split = ce_split_view(head, &b, false);
+     ASSERT(vertical_split);
+
+     BufferView_t* vertical_horizontal_split = ce_split_view(vertical_split, &a, true);
+     ASSERT(vertical_horizontal_split);
+
+     EXPECT(head->buffer == &a);
+     EXPECT(horizontal_split->buffer == &a);
+     EXPECT(vertical_split->buffer == &b);
+     EXPECT(vertical_horizontal_split->buffer == &a);
+
+     EXPECT(ce_change_buffer_in_views(head, &a, &c));
+
+     EXPECT(head->buffer == &c);
+     EXPECT(horizontal_split->buffer == &c);
+     EXPECT(vertical_split->buffer == &b);
+     EXPECT(vertical_horizontal_split->buffer == &c);
+
+     ASSERT(ce_free_views(&head));
+}
+
 // TODO: this function should point us to the last character. not the newline.
 TEST(sanity_move_cursor_to_end_of_line)
 {
@@ -2226,6 +2261,27 @@ TEST(join_line)
      EXPECT(strcmp(buffer.lines[2], "best") == 0);
 
      ce_free_buffer(&buffer);
+}
+
+TEST(get_line_number_column_width)
+{
+     EXPECT(ce_get_line_number_column_width(LNT_NONE, 2500, 950, 1050) == 0);
+     EXPECT(ce_get_line_number_column_width(LNT_NONE, 0, 0, 0) == 0);
+
+     EXPECT(ce_get_line_number_column_width(LNT_ABSOLUTE, 2500, 0, 10) == 5);
+     EXPECT(ce_get_line_number_column_width(LNT_ABSOLUTE, 2500, 0, 150) == 5);
+     EXPECT(ce_get_line_number_column_width(LNT_ABSOLUTE, 100, 0, 10) == 4);
+     EXPECT(ce_get_line_number_column_width(LNT_ABSOLUTE, 100, 0, 150) == 4);
+
+     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE_AND_ABSOLUTE, 2500, 0, 10) == 5);
+     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE_AND_ABSOLUTE, 2500, 0, 150) == 5);
+     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE_AND_ABSOLUTE, 100, 0, 10) == 4);
+     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE_AND_ABSOLUTE, 100, 0, 150) == 4);
+
+     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE, 2500, 0, 15) == 3);
+     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE, 2500, 0, 150) == 4);
+     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE, 100, 0, 15) == 3);
+     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE, 100, 0, 150) == 4);
 }
 
 TEST(point_after)

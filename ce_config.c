@@ -4042,6 +4042,29 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           } break;
           case '"':
                if(!isprint(key)) break;
+
+               if(key == '?'){
+                    update_yank_list_buffer(config_state);
+
+                    if(config_state->tab_current->view_overrideable){
+                         tab_view_save_overrideable(config_state->tab_current);
+                         config_state->tab_current->view_overrideable->buffer = &config_state->yank_list_buffer;
+                         config_state->tab_current->view_overrideable->top_row = 0;
+                         config_state->tab_current->view_overrideable->cursor = (Point_t){0, 1};
+                    }else{
+                         config_state->buffer_before_query = config_state->tab_current->view_current->buffer;
+                         config_state->tab_current->view_current->buffer->cursor = *cursor;
+                         config_state->tab_current->view_current->buffer = &config_state->yank_list_buffer;
+                         config_state->tab_current->view_current->top_row = 0;
+                         config_state->tab_current->view_current->cursor = (Point_t){0, 1};
+                    }
+
+                    handled_key = true;
+               }
+               break;
+          case 'y':
+               if(!isprint(key)) break;
+
                if(key == '?'){
                     update_yank_list_buffer(config_state);
 

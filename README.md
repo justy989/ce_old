@@ -63,8 +63,10 @@ m?|view mark registers
 q|record macro to a register (next character typed)
 @|replay macro from a register (next character typed)
 @?|view macro registers
+q?|view macro registers
 "|specify yank or paste from a specific register (next character typesd)
 "?|view yank registers
+y?|view yank registers
 zt|scroll view so cursor is at the top
 zz|scroll view so cursor is in the middle
 zb|scroll view so cursor is at the bottom

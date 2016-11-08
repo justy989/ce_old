@@ -1069,7 +1069,7 @@ typedef struct {
 } VimActionRange_t;
 
 bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, FindState_t* find_state,
-                          VimActionRange_t* action_range, Point_t* visual_start)
+                          Point_t* visual_start, VimActionRange_t* action_range)
 {
      action_range->start = *cursor;
      action_range->end = action_range->start;
@@ -1450,7 +1450,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
 {
      VimActionRange_t action_range;
 
-     if(!vim_action_get_range(action, buffer, cursor, &vim_state->find_state, &action_range, &vim_state->visual_start) ) return false;
+     if(!vim_action_get_range(action, buffer, cursor, &vim_state->find_state, &vim_state->visual_start, &action_range) ) return false;
 
      BufferState_t* buffer_state = buffer->user_data;
 
@@ -3881,8 +3881,8 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeati
                // NOTE: can we do this buffer deletion outside the vim_key_handler? It's not vim functionality
                if(config_state->tab_current->view_current->buffer == &config_state->buffer_list_buffer && vim_action.change.type == VCT_DELETE){
                     VimActionRange_t action_range;
-                    if(!vim_action_get_range(&vim_action, buffer, cursor, &config_state->vim_state.find_state, &action_range,
-                                             &config_state->vim_state.visual_start)) break;
+                    if(!vim_action_get_range(&vim_action, buffer, cursor, &config_state->vim_state.find_state,
+                                             &config_state->vim_state.visual_start, &action_range)) break;
 
                     int64_t delete_index = action_range.sorted_start->y - 1;
                     int64_t buffers_to_delete = (action_range.sorted_end->y - action_range.sorted_start->y) + 1;
@@ -3896,6 +3896,7 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeati
 
                     if(cursor->y >= config_state->buffer_list_buffer.line_count) cursor->y = config_state->buffer_list_buffer.line_count - 1;
                     enter_normal_mode(config_state);
+                    keys_free(&config_state->command_head);
                }else{
                     VimMode_t original_mode = config_state->vim_state.mode;
                     if(vim_action_apply(&vim_action, buffer, cursor, &config_state->vim_state, &config_state->yank_head)){

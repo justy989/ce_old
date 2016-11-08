@@ -557,7 +557,7 @@ int itoi(int* str)
      int value = 0;
 
      while(*str){
-          if(!isdigit(*str)) return 0;
+          if(*str < 0 || *str > 255 || !isdigit(*str)) return 0;
           value = value * 10 + (*str - '0');
           str++;
      }
@@ -580,7 +580,7 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
 
      // get multiplier if there is one
      const int* itr = string;
-     while(*itr && isdigit(*itr)) itr++;
+     while(*itr && *itr >= 0 && *itr <= 255 && isdigit(*itr)) itr++;
      if(itr != string){
           int64_t len = itr - string;
           memcpy(tmp, string, len * sizeof(*tmp));

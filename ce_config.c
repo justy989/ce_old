@@ -1974,8 +1974,10 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
                break;
           }
 
+          KeyNode_t* save_command_head = vim_state->command_head;
+          vim_state->command_head = NULL;
+
           for(int64_t i = 0; i < action->multiplier; ++i){
-               keys_free(&vim_state->command_head);
 
                bool unhandled_key = false;
                int* macro_itr = macro->command;
@@ -1990,8 +1992,12 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
                     macro_itr++;
                }
 
+               keys_free(&vim_state->command_head);
+
                if(unhandled_key) break;
           }
+
+          vim_state->command_head = save_command_head;
      } break;
      }
 

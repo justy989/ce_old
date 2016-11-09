@@ -684,6 +684,7 @@ typedef struct{
      int* last_insert_command;
 
      char recording_macro; // holds the register we are recording, is 0 if we aren't recording
+     char playing_macro;
      KeyNode_t* record_macro_head;
      MacroNode_t* macro_head;
 
@@ -1968,6 +1969,11 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
           break;
      case VCT_PLAY_MACRO:
      {
+          if(vim_state->playing_macro == action->change.reg){
+               ce_message("attempted to play macro in register '%c' inside itself", action->change.reg);
+               break;
+          }
+
           MacroNode_t* macro = macro_find(vim_state->macro_head, action->change.reg);
           if(!macro){
                ce_message("no macro defined in register '%c'", action->change.reg);
@@ -1976,6 +1982,7 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
 
           KeyNode_t* save_command_head = vim_state->command_head;
           vim_state->command_head = NULL;
+          vim_state->playing_macro = action->change.reg;
 
           for(int64_t i = 0; i < action->multiplier; ++i){
 
@@ -1997,6 +2004,7 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
                if(unhandled_key) break;
           }
 
+          vim_state->playing_macro = 0;
           vim_state->command_head = save_command_head;
      } break;
      }
@@ -4044,7 +4052,14 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, BufferView
                }
 
                if(vim_action.change.type != VCT_MOTION || vim_action.end_in_vim_mode == VM_INSERT){
-                    vim_state->last_action = vim_action;
+                    if(!vim_state->playing_macro){
+                         vim_state->last_action = vim_action;
+
+                         if(!vim_state->recording_macro && vim_action.change.type == VCT_RECORD_MACRO){
+                              vim_state->last_action.change.type = VCT_PLAY_MACRO;
+                              vim_state->last_action.change.reg = recording_macro;
+                         }
+                    }
 
                     // always use the cursor as the start of the visual selection
                     vim_state->last_action.motion.visual_start_after = true;
@@ -4424,7 +4439,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          vim_action_apply(&config_state->vim_state.last_action, buffer_view, cursor, &config_state->vim_state,
                                           &config_state->auto_complete);
 
-                         if(config_state->vim_state.mode != VM_INSERT || !config_state->vim_state.last_insert_command) break;
+                         if(config_state->vim_state.mode != VM_INSERT || !config_state->vim_state.last_insert_command ||
+                            config_state->vim_state.last_action.change.type == VCT_PLAY_MACRO) break;
 
                          vim_enter_insert_mode(&config_state->vim_state, config_state->tab_current->view_current);
 

@@ -714,7 +714,6 @@ int itoi(int* str)
      return value;
 }
 
-// TODO: put some of these arguments into a vim structure
 VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action, VimMode_t vim_mode,
                                          Buffer_t* buffer, Point_t* cursor, Point_t* visual_start,
                                          FindState_t* find_state, bool recording_macro)
@@ -2026,7 +2025,7 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
 
 // location is {left_column, top_line} for the view
 void scroll_view_to_location(BufferView_t* buffer_view, const Point_t* location){
-     // TODO: we should be able to scroll the view above our first line
+     // TODO: should we be able to scroll the view above our first line?
      buffer_view->left_column = (location->x >= 0) ? location->x : 0;
      buffer_view->top_row = (location->y >= 0) ? location->y : 0;
 }
@@ -2284,7 +2283,6 @@ BufferNode_t* new_buffer_from_file(BufferNode_t* head, const char* filename)
 void vim_enter_normal_mode(VimState_t* vim_state)
 {
      vim_state->mode = VM_NORMAL;
-     //auto_complete_end(&config_state->auto_complete);
 }
 
 bool vim_enter_insert_mode(VimState_t* vim_state, BufferView_t* buffer_view)
@@ -3908,7 +3906,6 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, BufferView
                if(vim_state->last_insert_command) free(vim_state->last_insert_command);
                vim_state->last_insert_command = built_command;
                keys_free(&vim_state->command_head);
-               // TODO: clear last vim action
 
           } break;
           case KEY_LEFT:
@@ -3925,7 +3922,6 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, BufferView
                if(vim_state->last_insert_command) free(vim_state->last_insert_command);
                vim_state->last_insert_command = built_command;
                keys_free(&vim_state->command_head);
-               // TODO: clear last vim action
           } break;
           case '}':
           {

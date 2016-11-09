@@ -716,7 +716,7 @@ int itoi(int* str)
 // TODO: put some of these arguments into a vim structure
 VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action, VimMode_t vim_mode,
                                          Buffer_t* buffer, Point_t* cursor, Point_t* visual_start,
-                                         FindState_t* find_state)
+                                         FindState_t* find_state, bool recording_macro)
 {
      int tmp[BUFSIZ];
      bool visual_mode = false;
@@ -971,12 +971,14 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           break;
      case 'q':
           built_action.change.type = VCT_RECORD_MACRO;
-          built_action.change.reg = *(++itr);
-          if(!built_action.change.reg){
-               return VCS_CONTINUE;
-          }
-          if(!isprint(built_action.change.reg)){
-               return VCS_INVALID;
+          if(!recording_macro){
+               built_action.change.reg = *(++itr);
+               if(!built_action.change.reg){
+                    return VCS_CONTINUE;
+               }
+               if(!isprint(built_action.change.reg)){
+                    return VCS_INVALID;
+               }
           }
           get_motion = false;
           break;
@@ -3999,7 +4001,8 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, BufferView
 
           VimAction_t vim_action;
           VimCommandState_t command_state = vim_action_from_string(built_command, &vim_action, vim_state->mode, buffer,
-                                                                   cursor, &vim_state->visual_start, &vim_state->find_state);
+                                                                   cursor, &vim_state->visual_start, &vim_state->find_state,
+                                                                   vim_state->recording_macro);
           free(built_command);
 
           switch(command_state){

@@ -677,6 +677,8 @@ typedef enum{
      VMT_VISUAL_LINE,
      VMT_VISUAL_SWAP_WITH_CURSOR,
      VMT_MATCHING_PAIR,
+     VMT_NEXT_BLANK_LINE,
+     VMT_PREV_BLANK_LINE,
 } VimMotionType_t;
 
 typedef struct{
@@ -1215,8 +1217,8 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
                }
           break;
           case 'G':
-          built_action.motion.type = VMT_END_OF_FILE;
-          break;
+               built_action.motion.type = VMT_END_OF_FILE;
+               break;
           case 'c':
                if(change_char == 'c') {
                     built_action.motion.type = VMT_LINE;
@@ -1253,6 +1255,12 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
                }else{
                     return VCS_INVALID;
                }
+               break;
+          case '}':
+               built_action.motion.type = VMT_NEXT_BLANK_LINE;
+               break;
+          case '{':
+               built_action.motion.type = VMT_PREV_BLANK_LINE;
                break;
           }
      }
@@ -1641,6 +1649,20 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                     if(!ce_get_char(buffer, action_range->end, &matchee)) break;
                     ce_move_cursor_to_matching_pair(buffer, &action_range->end, matchee);
                } break;
+               case VMT_NEXT_BLANK_LINE:
+               {
+                    int64_t last_line = buffer->line_count - 1;
+                    action_range->end.y++;
+                    while(action_range->end.y < last_line && strlen(buffer->lines[action_range->end.y])){
+                         action_range->end.y++;
+                    }
+               } break;
+               case VMT_PREV_BLANK_LINE:
+                    action_range->end.y--;
+                    while(action_range->end.y > 0 && strlen(buffer->lines[action_range->end.y])){
+                         action_range->end.y--;
+                    }
+                    break;
                }
           }
      }

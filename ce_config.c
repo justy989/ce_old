@@ -1430,7 +1430,7 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                     case '[':
                     case ']':
                          if(!ce_move_cursor_to_matching_pair(buffer, &action_range->start, ']')) return false;
-                         if(!ce_move_cursor_to_matching_pair(buffer, &action_range->end, ']')) return false;
+                         if(!ce_move_cursor_to_matching_pair(buffer, &action_range->end, '[')) return false;
                          ce_advance_cursor(buffer, &action_range->start, 1);
                          ce_advance_cursor(buffer, &action_range->end, -1);
                          break;
@@ -1480,7 +1480,7 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                     case '[':
                     case ']':
                          if(!ce_move_cursor_to_matching_pair(buffer, &action_range->start, ']')) return false;
-                         if(!ce_move_cursor_to_matching_pair(buffer, &action_range->end, ']')) return false;
+                         if(!ce_move_cursor_to_matching_pair(buffer, &action_range->end, '[')) return false;
                          break;
                     default:
                          return false;

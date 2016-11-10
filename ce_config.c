@@ -509,6 +509,54 @@ bool auto_completing(AutoComplete_t* auto_complete)
     return auto_complete->start.x >= 0;
 }
 
+int64_t string_common_beginning(const char* a, const char* b)
+{
+     size_t common = 0;
+
+     while(*a && *b){
+          if(*a == *b){
+               common++;
+          }else{
+               break;
+          }
+
+          a++;
+          b++;
+     }
+
+     return common;
+}
+
+// NOTE: allocates the string that is returned to the user
+char* auto_complete_get_completion(AutoComplete_t* auto_complete, int64_t x)
+{
+     int64_t offset = x - auto_complete->start.x;
+
+     CompleteNode_t* itr = auto_complete->current;
+     int64_t complete_len = strlen(auto_complete->current->option + offset);
+     int64_t min_complete_len = complete_len;
+
+     do{
+          itr = itr->next;
+          if(!itr) itr = auto_complete->head;
+          int64_t option_len = strlen(itr->option);
+
+          if(option_len <= offset) continue;
+          if(strncmp(auto_complete->current->option, itr->option, offset) != 0) continue;
+
+          int64_t check_complete_len = string_common_beginning(auto_complete->current->option + offset, itr->option + offset);
+          if(check_complete_len < min_complete_len) min_complete_len = check_complete_len;
+     }while(itr != auto_complete->current);
+
+     if(min_complete_len) complete_len = min_complete_len;
+
+     char* completion = malloc(complete_len + 1);
+     strncpy(completion, auto_complete->current->option + offset, complete_len);
+     completion[complete_len] = 0;
+
+     return completion;
+}
+
 void auto_complete_clear(AutoComplete_t* auto_complete)
 {
     CompleteNode_t* itr = auto_complete->head;
@@ -3923,14 +3971,15 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, BufferView
           case KEY_TAB:
           {
                if(auto_completing(auto_complete)){
-                    int64_t offset = cursor->x - auto_complete->start.x;
-                    const char* complete = auto_complete->current->option + offset;
+                    char* complete = auto_complete_get_completion(auto_complete, cursor->x);
                     int64_t complete_len = strlen(complete);
                     if(ce_insert_string(buffer, *cursor, complete)){
                          Point_t save_cursor = *cursor;
                          ce_move_cursor(buffer, cursor, (Point_t){complete_len, cursor->y});
                          cursor->x++;
-                         ce_commit_insert_string(&buffer_state->commit_tail, save_cursor, save_cursor, *cursor, strdup(TAB_STRING), BCC_KEEP_GOING);
+                         ce_commit_insert_string(&buffer_state->commit_tail, save_cursor, save_cursor, *cursor, complete, BCC_KEEP_GOING);
+                    }else{
+                         free(complete);
                     }
                }else{
                     if(ce_insert_string(buffer, *cursor, TAB_STRING)){

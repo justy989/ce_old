@@ -686,6 +686,7 @@ typedef struct{
      char playing_macro;
      KeyNode_t* record_macro_head;
      MacroNode_t* macro_head;
+     BufferCommitNode_t* record_start_commit_tail;
 
      YankNode_t* yank_head;
 
@@ -1622,6 +1623,7 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
      Buffer_t* buffer = buffer_view->buffer;
      BufferState_t* buffer_state = buffer->user_data;
      VimActionRange_t action_range;
+     BufferCommitChain_t chain = vim_state->playing_macro ? BCC_KEEP_GOING : BCC_STOP;
 
      if(!vim_action_get_range(action, buffer, cursor, &vim_state->find_state, &vim_state->visual_start, &action_range) ) return;
 
@@ -1666,7 +1668,7 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
                add_yank(&vim_state->yank_head, action->change.reg ? action->change.reg : '"', yank_string, action_range.yank_mode);
           }
 
-          ce_commit_remove_string(&buffer_state->commit_tail, *action_range.sorted_start, *cursor, *action_range.sorted_start, commit_string, BCC_STOP);
+          ce_commit_remove_string(&buffer_state->commit_tail, *action_range.sorted_start, *cursor, *action_range.sorted_start, commit_string, chain);
      } break;
      case VCT_PASTE_BEFORE:
      {
@@ -1682,7 +1684,7 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
                if(ce_insert_string(buffer, *action_range.sorted_start, yank->text)){
                     ce_commit_insert_string(&buffer_state->commit_tail,
                                             *action_range.sorted_start, *action_range.sorted_start, *action_range.sorted_start,
-                                            strdup(yank->text), BCC_STOP);
+                                            strdup(yank->text), chain);
                }
           } break;
           case YANK_LINE:
@@ -1699,7 +1701,7 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
                     if(ce_insert_string(buffer, insert_loc, save_str)){
                          ce_commit_insert_string(&buffer_state->commit_tail,
                                                  insert_loc, *cursor, cursor_loc,
-                                                 save_str, BCC_STOP);
+                                                 save_str, chain);
                     }
           } break;
           }
@@ -1730,7 +1732,7 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
                if(ce_insert_string(buffer, insert_cursor, yank->text)){
                     ce_commit_insert_string(&buffer_state->commit_tail,
                                             insert_cursor, *action_range.sorted_start, *action_range.sorted_start,
-                                            strdup(yank->text), BCC_STOP);
+                                            strdup(yank->text), chain);
                     ce_advance_cursor(buffer, cursor, yank_len);
                }
           } break;
@@ -1747,7 +1749,7 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
                if(ce_insert_string(buffer, insert_loc, save_str)){
                     ce_commit_insert_string(&buffer_state->commit_tail,
                                             insert_loc, *cursor, cursor_loc,
-                                            save_str, BCC_STOP);
+                                            save_str, chain);
                     *cursor = cursor_loc;
                }
           } break;
@@ -1761,7 +1763,7 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
           if(!ce_set_char(buffer, *action_range.sorted_start, action->change.change_char)) break;
 
           ce_commit_change_char(&buffer_state->commit_tail, *action_range.sorted_start, *cursor, *action_range.sorted_start,
-                                action->change.change_char, prev_char, BCC_STOP);
+                                action->change.change_char, prev_char, chain);
      } break;
      case VCT_YANK:
      {
@@ -1792,7 +1794,7 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
                     ce_commit_insert_string(&buffer_state->commit_tail, loc, *cursor, *cursor, strdup(TAB_STRING), BCC_KEEP_GOING);
                }
 
-               if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
+               if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = chain;
           }
      } break;
      case VCT_UNINDENT:
@@ -1818,7 +1820,7 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
                     }
                }
 
-               if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
+               if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = chain;
           }
      } break;
      case VCT_COMMENT:
@@ -1835,7 +1837,7 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
                }
           }
 
-          if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
+          if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = chain;
      } break;
      case VCT_UNCOMMENT:
      {
@@ -1852,7 +1854,7 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
                }
           }
 
-          if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
+          if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = chain;
      } break;
      case VCT_FLIP_CASE:
      {
@@ -1870,11 +1872,13 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
                          new_char = toupper(prev_char);
                     }
                     if(!ce_set_char(buffer, itr, new_char)) break;
-                    ce_commit_change_char(&buffer_state->commit_tail, itr, itr, itr, new_char, prev_char, BCC_STOP);
+                    ce_commit_change_char(&buffer_state->commit_tail, itr, itr, itr, new_char, prev_char, BCC_KEEP_GOING);
                }
 
                ce_advance_cursor(buffer, &itr, 1);
           } while(!ce_point_after(itr, *action_range.sorted_end));
+
+          if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = chain;
      } break;
      case VCT_JOIN_LINE:
      {
@@ -1908,7 +1912,7 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
                *cursor = join_loc;
                if(ce_insert_string(buffer, *cursor, " ")){
                     ce_commit_insert_string(&buffer_state->commit_tail, join_loc, *action_range.sorted_start, join_loc,
-                                            strdup(" "), BCC_STOP);
+                                            strdup(" "), chain);
                }
           }else{
                free(save_str);
@@ -1963,6 +1967,7 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
           }else{
                vim_state->recording_macro = action->change.reg;
                keys_free(&vim_state->record_macro_head);
+               vim_state->record_start_commit_tail = buffer_state->commit_tail;
           }
           break;
      case VCT_PLAY_MACRO:
@@ -1998,6 +2003,8 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
                }
 
                keys_free(&vim_state->command_head);
+
+               if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
 
                if(unhandled_key) break;
           }
@@ -3844,7 +3851,7 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, BufferView
 
                vim_enter_normal_mode(vim_state);
                ce_clamp_cursor(buffer, cursor);
-               if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
+               if(buffer_state->commit_tail && !vim_state->playing_macro) buffer_state->commit_tail->commit.chain = BCC_STOP;
           } break;
           case KEY_ENTER:
                key = NEWLINE;
@@ -3918,7 +3925,7 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, BufferView
           case KEY_DOWN:
           {
                ce_move_cursor(buffer, cursor, (Point_t){0, (key == KEY_DOWN) ? 1 : -1});
-               if(buffer_state->commit_tail){
+               if(buffer_state->commit_tail && !vim_state->playing_macro){
                     buffer_state->commit_tail->commit.chain = BCC_STOP;
                }
 
@@ -3934,7 +3941,7 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, BufferView
                cursor->x += key == KEY_RIGHT? 1 : -1;
                if(cursor->x > (int64_t) strlen(buffer->lines[cursor->y])) cursor->x--;
                if(cursor->x < 0) cursor->x++;
-               if(buffer_state->commit_tail){
+               if(buffer_state->commit_tail && !vim_state->playing_macro){
                     buffer_state->commit_tail->commit.chain = BCC_STOP;
                }
 

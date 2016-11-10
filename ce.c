@@ -1358,6 +1358,15 @@ void ce_is_string_literal(const char* line, int64_t start_offset, int64_t line_l
                if(*last_quote_char == '"'){
                     return;
                }
+
+               int64_t prev_char = start_offset - 1;
+               if(prev_char >= 0 && line[prev_char] == '\\'){
+                    int64_t prev_prev_char = prev_char - 1;
+                    if(prev_prev_char >= 0 && line[prev_prev_char] != '\\'){
+                         return;
+                    }
+               }
+
                *inside_string = false;
           }else{
                char next_char = line[start_offset + 1];
@@ -1823,6 +1832,7 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                               break;
                          case CT_END_MULTILINE:
                               inside_multiline_comment = false;
+                              color_left = 1;
                               break;
                          }
 

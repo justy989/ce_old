@@ -1963,6 +1963,21 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
                     free(built_macro);
                }
 
+               // see if we can override commit history to make our macro undo-able with 1 undo
+               BufferCommitNode_t* itr = buffer_state->commit_tail;
+
+               while(itr){
+                    if(itr == vim_state->record_start_commit_tail) break;
+                    itr = itr->prev;
+               }
+
+               while(itr && itr->next){
+                    itr->commit.chain = BCC_KEEP_GOING;
+                    itr = itr->next;
+               }
+
+               if(itr) itr->commit.chain = BCC_STOP;
+
                vim_state->recording_macro = 0;
           }else{
                vim_state->recording_macro = action->change.reg;

@@ -2998,6 +2998,8 @@ void handle_mouse_event(ConfigState_t* config_state, Buffer_t* buffer, BufferVie
                switch_to_view_at_point(config_state, click);
                click = (Point_t) {event.x - (config_state->tab_current->view_current->top_left.x - config_state->tab_current->view_current->left_column),
                                   event.y - (config_state->tab_current->view_current->top_left.y - config_state->tab_current->view_current->top_row)};
+               click.x -= ce_get_line_number_column_width(config_state->line_number_type, buffer->line_count, buffer_view->top_left.y, buffer_view->bottom_right.y);
+               if(click.x < 0) click.x = 0;
                ce_set_cursor(config_state->tab_current->view_current->buffer,
                              &config_state->tab_current->view_current->cursor,
                              click);

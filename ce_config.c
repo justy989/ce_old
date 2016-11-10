@@ -2237,6 +2237,8 @@ typedef struct{
 
      LineNumberType_t line_number_type;
 
+     char editting_register;
+
      bool quit;
 } ConfigState_t;
 
@@ -3814,24 +3816,32 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
 
                int64_t line = config_state->tab_current->view_input_save->cursor.y - 1; // account for buffer list row header
                if(line < 0) return;
-               MacroNode_t* itr = config_state->vim_state.macro_head;
 
-               while(line > 0){
-                    itr = itr->next;
-                    if(!itr) return;
-                    line--;
-               }
+               MacroNode_t* macro = macro_find(config_state->vim_state.macro_head, config_state->editting_register);
+               if(!macro) return;
 
-               if(!itr) return;
-
-               free(itr->command);
+               free(macro->command);
                int* new_macro_string = char_string_to_command_string(config_state->view_input->buffer->lines[0]);
 
                if(new_macro_string){
-                    itr->command = new_macro_string;
+                    macro->command = new_macro_string;
                }else{
                     ce_message("invalid editted macro string");
                }
+               config_state->editting_register = 0;
+          } break;
+          case 'y':
+          {
+               int64_t line = config_state->tab_current->view_input_save->cursor.y;
+               if(line < 0) return;
+
+               YankNode_t* yank = find_yank(config_state->vim_state.yank_head, config_state->editting_register);
+               if(!yank) return;
+
+               char* new_yank = ce_dupe_buffer(config_state->view_input->buffer);
+               free((char*)(yank->text));
+               yank->text = new_yank;
+               config_state->editting_register = 0;
           } break;
           }
      }else if(buffer_view->buffer == &config_state->buffer_list_buffer){
@@ -3894,10 +3904,27 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           if(!itr) return;
 
           input_start(config_state, "Edit Macro", '@');
+          config_state->editting_register = itr->reg;
           vim_enter_normal_mode(&config_state->vim_state);
           char* char_command = command_string_to_char_string(itr->command);
           ce_insert_string(config_state->view_input->buffer, (Point_t){0,0}, char_command);
           free(char_command);
+     }else if(buffer_view->buffer == &config_state->yank_list_buffer){
+          int64_t line = cursor->y;
+          if(line < 0) return;
+
+          YankNode_t* itr = config_state->vim_state.yank_head;
+          while(itr){
+               line -= (ce_count_string_lines(itr->text) + 1);
+               if(line < 0) break;
+
+               itr = itr->next;
+          }
+
+          input_start(config_state, "Edit Yank", 'y');
+          config_state->editting_register = itr->reg_char;
+          vim_enter_normal_mode(&config_state->vim_state);
+          ce_insert_string(config_state->view_input->buffer, (Point_t){0,0}, itr->text);
      }
 }
 

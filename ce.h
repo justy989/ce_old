@@ -209,14 +209,14 @@ bool ce_remove_buffer_from_list        (BufferNode_t** head, Buffer_t* buffer);
 
 
 // BufferView Manipulation Functions
-BufferView_t* ce_split_view       (BufferView_t* view, Buffer_t* buffer, bool horizontal);
-bool ce_remove_view               (BufferView_t** head, BufferView_t* view);
-bool ce_calc_views                (BufferView_t* head, Point_t top_left, Point_t top_right);
-bool ce_draw_views                (const BufferView_t* head, const char* highlight_word, LineNumberType_t line_number_type);
-bool ce_change_buffer_in_views    (BufferView_t* head, Buffer_t* match, Buffer_t* new);
-bool ce_free_views                (BufferView_t** view);
+BufferView_t* ce_split_view         (BufferView_t* view, Buffer_t* buffer, bool horizontal);
+bool ce_remove_view                 (BufferView_t** head, BufferView_t* view);
+bool ce_calc_views                  (BufferView_t* head, Point_t top_left, Point_t top_right);
+bool ce_draw_views                  (const BufferView_t* head, const char* highlight_word, LineNumberType_t line_number_type);
+bool ce_change_buffer_in_views      (BufferView_t* head, Buffer_t* match, Buffer_t* new);
+bool ce_free_views                  (BufferView_t** view);
 BufferView_t* ce_find_view_at_point (BufferView_t* head, Point_t point);
-BufferView_t* ce_buffer_in_view(BufferView_t* head, const Buffer_t* buffer);
+BufferView_t* ce_buffer_in_view     (BufferView_t* head, const Buffer_t* buffer);
 
 
 // Buffer_t Manipulation Functions

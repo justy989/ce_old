@@ -646,7 +646,6 @@ typedef struct{
 
 typedef struct{
      int64_t multiplier;
-     Point_t start;
      VimMotion_t motion;
      VimChange_t change;
      VimMode_t end_in_vim_mode;
@@ -2920,6 +2919,7 @@ void switch_to_view_at_point(ConfigState_t* config_state, Point_t point)
      if(point.y >= g_terminal_dimensions->y) point.y = 0;
 
      if(config_state->input) next_view = ce_find_view_at_point(config_state->view_input, point);
+     config_state->vim_state.recording_macro = 0;
      if(!next_view) next_view = ce_find_view_at_point(config_state->tab_current->view_head, point);
 
      if(next_view){
@@ -3189,6 +3189,24 @@ void update_macro_list_buffer(ConfigState_t* config_state)
           ce_append_line(&config_state->macro_list_buffer, buffer_info);
           free(char_string);
           itr = itr->next;
+     }
+
+     if(config_state->vim_state.recording_macro){
+          ce_append_line(&config_state->macro_list_buffer, "");
+          ce_append_line(&config_state->macro_list_buffer, "+ recording:");
+
+          int* int_cmd = keys_get_string(config_state->vim_state.record_macro_head);
+
+          if(int_cmd[0]){
+               char* char_cmd = command_string_to_char_string(int_cmd);
+               if(char_cmd[0]){
+                    ce_append_line(&config_state->macro_list_buffer, char_cmd);
+               }
+
+               free(char_cmd);
+          }
+
+          free(int_cmd);
      }
 
      ce_append_line(&config_state->macro_list_buffer, "");

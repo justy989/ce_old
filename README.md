@@ -10,7 +10,7 @@
 Key Sequence|Action
 ------------|------
 Ctrl+f|load file
-Ctrl+q|kill current window, if there is only 1 window, then quit
+Ctrl+q|kill current window, if there is only 1 window, then quit, or stop recording macro
 Ctrl+w|save buffer
 Ctrl+a|save buffer as new filename
 Ctrl+e|open new unnamed buffer

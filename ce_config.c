@@ -698,6 +698,12 @@ typedef struct{
      Point_t start_search;
 } VimState_t;
 
+void vim_stop_recording_macro(VimState_t* vim_state)
+{
+     vim_state->recording_macro = 0;
+     keys_free(&vim_state->record_macro_head);
+}
+
 VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, BufferView_t* buffer_view,
                                       AutoComplete_t* auto_complete, bool repeating);
 
@@ -1978,7 +1984,7 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
 
                if(itr) itr->commit.chain = BCC_STOP;
 
-               vim_state->recording_macro = 0;
+               vim_stop_recording_macro(vim_state);
           }else{
                vim_state->recording_macro = action->change.reg;
                keys_free(&vim_state->record_macro_head);
@@ -2941,7 +2947,7 @@ void switch_to_view_at_point(ConfigState_t* config_state, Point_t point)
      if(point.y >= g_terminal_dimensions->y) point.y = 0;
 
      if(config_state->input) next_view = ce_find_view_at_point(config_state->view_input, point);
-     config_state->vim_state.recording_macro = 0;
+     vim_stop_recording_macro(&config_state->vim_state);
      if(!next_view) next_view = ce_find_view_at_point(config_state->tab_current->view_head, point);
 
      if(next_view){
@@ -4514,6 +4520,11 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     {
                          if(config_state->input){
                               input_cancel(config_state);
+                              break;
+                         }
+
+                         if(config_state->vim_state.recording_macro){
+                              vim_stop_recording_macro(&config_state->vim_state);
                               break;
                          }
 

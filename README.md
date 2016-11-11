@@ -114,7 +114,7 @@ gl|cycle through line number modes
 #|search forward for the word under the cursor
 ~|flip case
 
-###Cool commands to run
+###Cool Shell Commands To Run
 `fgrep -n -H <pattern> <files>`  
 `fgrep -n -H Buffer ce_config.c`  
 `fgrep -n default *`  
@@ -131,4 +131,4 @@ ctrl+n and ctrl+p will move you between definitions of that symbol (if tags have
 ctrl+n and ctrl+p will move you between functions calling this function (if tags have been generated)  
 
 `man pthread_create`  
-c syntax highlighted man pages
+c-syntax highlighted man pages

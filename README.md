@@ -28,9 +28,9 @@
 ###How To Build
 - Requirements
   - ncurses library
-  - c11 enabled compiler
+  - c11 compiler
 - Step(s)
-  1. `$ make`
+  `$ make`
 
 ###How To Run
 `$ ce path/to/file.c`

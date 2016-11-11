@@ -4619,7 +4619,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                ce_commits_dump(buffer_state->commit_tail);
                break;
 #endif
-#if 1 // useful for debugging macro commit history
+#if 0 // useful for debugging macro commit history
           case '!':
           {
                MacroCommitNode_t* head = config_state->vim_state.macro_commit_current;

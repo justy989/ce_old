@@ -591,6 +591,25 @@ TEST(remove_string_whole_line)
      ce_free_buffer(&buffer);
 }
 
+TEST(remove_string_whole_line_in_multiline)
+{
+     Buffer_t buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE");
+     buffer.lines[2] = strdup("AWESOME");
+
+     Point_t point = {0, 0};
+     ce_remove_string(&buffer, point, 6);
+
+     ASSERT(buffer.line_count == 2);
+     EXPECT(strcmp(buffer.lines[0], "ARE") == 0);
+     EXPECT(strcmp(buffer.lines[1], "AWESOME") == 0);
+
+     ce_free_buffer(&buffer);
+}
+
 TEST(remove_string_multiline_begin)
 {
      Buffer_t buffer = {};

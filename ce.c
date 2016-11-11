@@ -982,8 +982,8 @@ bool insert_line_impl(Buffer_t* buffer, int64_t line, const char* string)
 {
      CE_CHECK_PTR_ARG(buffer);
 
-     // make sure we are only inserting in the middle or at the very end
-     assert(line >= 0 && line <= buffer->line_count);
+     // make sure we are only inserting in the middle or at the very end, or the buffer is empty
+     assert(buffer->line_count == 0 || line >= 0 && line <= buffer->line_count);
      int64_t string_line_count = 1;
      if(string) string_line_count = ce_count_string_lines(string);
 
@@ -994,7 +994,9 @@ bool insert_line_impl(Buffer_t* buffer, int64_t line, const char* string)
           return false;
      }
 
-     memmove(new_lines + line + string_line_count, new_lines + line, (buffer->line_count - line) * sizeof(*new_lines));
+     if(buffer->line_count){
+          memmove(new_lines + line + string_line_count, new_lines + line, (buffer->line_count - line) * sizeof(*new_lines));
+     }
 
      if(string){
           const char* line_start = string;

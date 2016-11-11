@@ -114,7 +114,7 @@ gl|cycle through line number modes
 #|search forward for the word under the cursor
 ~|flip case
 
-###Cool Shell Commands To Run
+###Cool Shell Commands To Run In ce
 `fgrep -n -H <pattern> <files>`  
 `fgrep -n -H Buffer ce_config.c`  
 `fgrep -n default *`  

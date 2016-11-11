@@ -29,7 +29,7 @@
 1. Dependencies: c11 enabled compiler, libncurses
 2. run `make`
 
-###Default keybindings (In Normal Or Visual Mode)
+###Default keybindings (in normal or visual mode)
 Key Sequence|Action
 ------------|------
 Ctrl+f|load file

@@ -5,9 +5,9 @@
 ###But why?
 - Emacs and Vim are awesome, but they have some problems we'd like to address without having to learn/write
   vimscript or emacs lisp. However, we want to take some awesome ideas from each:
-  - Emacs's idea where everything is a just a plain text buffer, we can do things like, run shell
+  - Emacs's idea where everything is a just a plain text buffer. We can do things like, run shell
     commands that output to a buffer just like any other. So you can copy+paste, etc.
-  - Vim's modal editting, we really like it! It also makes the transition to using this editor easier.
+  - Vim's modal editting. We really like it! It also makes the transition to using this editor easier.
     (Note: the default configuration implements vim-like editting, but your configuration can implement
     any arbitrary editting style)
 - The config is written in 'c' and compiled into a shared object that you can reload while running. No need to

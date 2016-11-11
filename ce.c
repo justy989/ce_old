@@ -612,39 +612,39 @@ bool ce_move_cursor_to_matching_pair(const Buffer_t* buffer, Point_t* location, 
      CE_CHECK_PTR_ARG(location);
 
      char match;
-     Direction_t d;
+     Direction_t dir;
 
      switch(matchee){
      case '{':
-          d = CE_DOWN;
+          dir = CE_DOWN;
           match = '}';
           break;
      case '}':
-          d = CE_UP;
+          dir = CE_UP;
           match = '{';
           break;
      case '(':
-          d = CE_DOWN;
+          dir = CE_DOWN;
           match = ')';
           break;
      case ')':
-          d = CE_UP;
+          dir = CE_UP;
           match = '(';
           break;
      case '[':
-          d = CE_DOWN;
+          dir = CE_DOWN;
           match = ']';
           break;
      case ']':
-          d = CE_UP;
+          dir = CE_UP;
           match = '[';
           break;
      case '<':
-          d = CE_DOWN;
+          dir = CE_DOWN;
           match = '>';
           break;
      case '>':
-          d = CE_UP;
+          dir = CE_UP;
           match = '<';
           break;
      default:
@@ -652,29 +652,81 @@ bool ce_move_cursor_to_matching_pair(const Buffer_t* buffer, Point_t* location, 
      }
 
      uint64_t n_unmatched = 0; // when n_unmatched decrements back to 0, we have found our match
+     bool inside_double_quotes = false;
+     bool inside_single_quotes = false;
+
+     // TODO: doesn't handle ignoring things in multiline comments
 
      char curr;
+     char prev = 0;
+     char prev_prev = 0;
      for(Point_t iter = *location;
-         d == CE_UP? iter.y >= 0 : iter.y < buffer->line_count;
-         iter.y += d ){
+         dir == CE_UP? iter.y >= 0 : iter.y < buffer->line_count;
+         iter.y += dir ){
 
           // first iteration we want iter.x to be on our matchee, other iterations we want it at eol/bol
-          if(iter.y != location->y) iter.x = (d == CE_UP) ? ce_last_index(buffer->lines[iter.y]) : 0;
+          if(iter.y != location->y){
+               iter.x = 0;
+               if(dir == CE_UP){
+                    int64_t last_index = ce_last_index(buffer->lines[iter.y]);
+
+                    // loop until the last index or stop early if we find comments !
+                    while(iter.x < last_index){
+                         ce_get_char(buffer, iter, &curr);
+                         if(curr == '/' && prev == '/') break;
+                         prev = curr;
+                         iter.x++;
+                    }
+               }
+          }
 
           // loop over buffer
-          for(; ce_point_on_buffer(buffer, iter); iter.x +=d){
+          prev = 0;
+          prev_prev = 0;
+          for(; ce_point_on_buffer(buffer, iter); iter.x += dir){
                ce_get_char(buffer, iter, &curr);
 
-               // loop over line
-               if(curr == match){
-                    if(n_unmatched == 0){
-                         *location = iter;
-                         return true;
-                    }
-                    n_unmatched--;
-               }else if(curr == matchee && !ce_points_equal(*location, iter)){
-                    n_unmatched++;
+               // NOTE: looping backwards doesn't work !
+               if(curr == '/' && prev == '/'){
+                    // skip the rest of this line since it's a comment !
+                    break;
                }
+
+               if(!inside_single_quotes && curr == '"'){
+                    if(prev == '\\'){
+                         if(prev_prev == '\\'){
+                              inside_double_quotes = !inside_double_quotes;
+                         }
+                    }else{
+                         inside_double_quotes = !inside_double_quotes;
+                    }
+               }
+
+               if(!inside_double_quotes && curr == '\''){
+                    if(prev == '\\'){
+                         if(prev_prev == '\\'){
+                              inside_single_quotes = !inside_single_quotes;
+                         }
+                    }else{
+                         inside_single_quotes = !inside_single_quotes;
+                    }
+               }
+
+               // loop over line
+               if(!inside_double_quotes && !inside_single_quotes){
+                    if(curr == match){
+                         if(n_unmatched == 0){
+                              *location = iter;
+                              return true;
+                         }
+                         n_unmatched--;
+                    }else if(curr == matchee && !ce_points_equal(*location, iter)){
+                         n_unmatched++;
+                    }
+               }
+
+               prev_prev = prev;
+               prev = curr;
           }
      }
 
@@ -1346,9 +1398,19 @@ void ce_is_string_literal(const char* line, int64_t start_offset, int64_t line_l
      char ch = line[start_offset];
      if(ch == '"'){
           // ignore single quotes inside double quotes
-          if(*inside_string && *last_quote_char == '\''){
-               return;
+          if(*inside_string){
+               if(*last_quote_char == '\''){
+                    return;
+               }
+               int64_t prev_char = start_offset - 1;
+               if(prev_char >= 0 && line[prev_char] == '\\'){
+                    int64_t prev_prev_char = prev_char - 1;
+                    if(prev_prev_char >= 0 && line[prev_prev_char] != '\\'){
+                         return;
+                    }
+               }
           }
+
           *inside_string = !*inside_string;
           if(*inside_string){
                *last_quote_char = ch;

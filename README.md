@@ -5,9 +5,9 @@
 ###But why?
 - Emacs and Vim are awesome, but they have some problems we'd like to address without having to learn/write
   vimscript or emacs lisp. However, we want to take some awesome ideas from each:
-  - Taking emacs's idea where everything is a just a plain text buffer, we can do things like, run shell
+  - Emacs's idea where everything is a just a plain text buffer, we can do things like, run shell
     commands that output to a buffer just like any other. So you can copy+paste, etc.
-  - Taking vim's editting, we were able to transition to using the editor fulltime pretty quickly
+  - Vim's editting, we were able to transition to using the editor fulltime pretty quickly
 - The config is written in 'c' and compiled into a shared object that you can reload while running. No need to
   learn a new language!
 - Input boxes in both vim and emacs are special 'insert mode only' constructs. In ce, the input box works just

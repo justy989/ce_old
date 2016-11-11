@@ -48,7 +48,8 @@ Ctrl+x|shell command
 Ctrl+i|send shell command input
 Ctrl+u|page up
 Ctrl+d|page down
-Ctrl+b|view buffer list (hit return on the buffer to open it in the buffer list view)
+Ctrl+y|confirm action (used to perform actions based on current buffer)
+Ctrl+b|view buffer list (confirm on the cursor selected buffer to open it)
 Ctrl+r|redo
 Ctrl+v|vertical split
 Ctrl+g|horizontal split
@@ -58,7 +59,6 @@ Ctrl+k|move cursor to the view to the above
 Ctrl+l|move cursor to the view to the right
 Ctrl+n|goto the next file definition in the shell command buffer (works with compilation errors, fgrep, etc)
 Ctrl+p|goto the previous file definition in the shell command buffer (works with compilation errors, fgrep, etc)
-Ctrl+y|confirm input, or if cursor on file definition in shell buffer then goto it, or if the cursor is on a buffer in the buffer list then goto it
 i|enter insert mode
 esc|enter normal mode
 h|move cursor left
@@ -88,14 +88,14 @@ V|visual line mode
 o|insert a new line and move the cursor
 O|insert a new line before the cursor and move the cursor
 m|set mark in register (next character typed)
-m?|view mark registers
+m?|view mark registers (confirm on register you want to goto)
 q|record macro to a register (next character typed)
 @|replay macro from a register (next character typed)
-@?|view macro registers
-q?|view macro registers
+@?|view macro registers (confirm on register you want to edit)
+q?|view macro registers (confirm on register you want to edit)
 "|specify yank or paste from a specific register (next character typesd)
-"?|view yank registers
-y?|view yank registers
+"?|view yank registers (confirm on register you want to edit)
+y?|view yank registers (confirm on register you want to edit)
 zt|scroll view so cursor is at the top
 zz|scroll view so cursor is in the middle
 zb|scroll view so cursor is at the bottom

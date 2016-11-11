@@ -25,11 +25,11 @@
  change you want to undo. You can also redo that macro.
 - It is fun learning how to make a text editor. Also, Using something you created on a daily basis is pretty great.
 
-###Build
+###How To Build
 1. Dependencies: c11 enabled compiler, libncurses
 2. run `make`
 
-###Default keybindings (when not in insert mode)
+###Default keybindings (In Normal Or Visual Mode)
 Key Sequence|Action
 ------------|------
 Ctrl+f|load file

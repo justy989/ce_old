@@ -30,7 +30,7 @@
   - ncurses library
   - c11 compiler
 - Step(s)
-  `$ make`
+  - `$ make`
 
 ###How To Run
 `$ ce path/to/file.c`

@@ -427,6 +427,19 @@ typedef struct MacroNode_t{
      struct MacroNode_t* next;
 } MacroNode_t;
 
+void macros_free(MacroNode_t** head)
+{
+     MacroNode_t* itr = *head;
+
+     while(itr){
+          MacroNode_t* tmp = itr;
+          itr = itr->next;
+          free(tmp);
+     }
+
+     *head = NULL;
+}
+
 MacroNode_t* macro_find(MacroNode_t* head, char reg)
 {
      MacroNode_t* itr = head;
@@ -2889,6 +2902,12 @@ bool destroyer(BufferNode_t** head, void* user_data)
 
      free_yanks(&config_state->vim_state.yank_head);
 
+     macros_free(&config_state->vim_state.macro_head);
+
+     MacroCommitNode_t* macro_commit_head = config_state->vim_state.macro_commit_current;
+     while(macro_commit_head->prev) macro_commit_head = macro_commit_head->prev;
+     macro_commit_free(&macro_commit_head);
+
      free(config_state);
      return true;
 }
@@ -4274,6 +4293,12 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, BufferView
 
                if(recording_macro && recording_macro == vim_state->recording_macro){
                     keys_push(&vim_state->record_macro_head, key);
+
+                    if(vim_state->macro_commit_current->next){
+                         macro_commit_free(&vim_state->macro_commit_current->next);
+                         keys_free(&vim_state->macro_commit_current->command_copy);
+                    }
+
                     keys_push(&vim_state->macro_commit_current->command_copy, key);
 
                     // tag this command as a macro commit
@@ -4295,6 +4320,12 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, BufferView
 
      if(recording_macro && recording_macro == vim_state->recording_macro){
           keys_push(&vim_state->record_macro_head, key);
+
+          if(vim_state->macro_commit_current->next){
+               macro_commit_free(&vim_state->macro_commit_current->next);
+               keys_free(&vim_state->macro_commit_current->command_copy);
+          }
+
           keys_push(&vim_state->macro_commit_current->command_copy, key);
 
           // when we exit insert mode, track the last macro action

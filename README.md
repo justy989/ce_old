@@ -26,10 +26,16 @@
 - It is fun learning how to make a text editor. Also, Using something you created on a daily basis is pretty great.
 
 ###How To Build
-1. Dependencies: c11 enabled compiler, libncurses
-2. run `make`
+- Requirements
+  - ncurses library
+  - c11 enabled compiler
+- Step(s)
+  1. `$ make`
 
-###Default keybindings (in normal or visual mode)
+###How To Run
+`$ ce path/to/file.c`
+
+###Default Keybindings (in normal or visual mode)
 Key Sequence|Action
 ------------|------
 Ctrl+f|load file

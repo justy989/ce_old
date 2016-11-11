@@ -817,6 +817,7 @@ typedef struct{
      FindState_t find_state;
 
      Point_t visual_start;
+     Point_t insert_start;
 
      Direction_t search_direction;
      Point_t start_search;
@@ -1790,6 +1791,10 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
      default:
           break;
      case VCT_MOTION:
+          if(action->end_in_vim_mode == VM_INSERT){
+               vim_state->insert_start = *cursor;
+          }
+
           *cursor = action_range.end;
 
           if(action->motion.type == VMT_UP ||
@@ -2842,6 +2847,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      pthread_mutex_init(&shell_buffer_lock, NULL);
 
      auto_complete_end(&config_state->auto_complete);
+     config_state->vim_state.insert_start = (Point_t){-1, -1};
      return true;
 }
 
@@ -4037,14 +4043,22 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, BufferView
           assert(!"vim mode not handled");
           return result;
      case VM_INSERT:
+     {
+          Point_t insert_start = *cursor;
+          Point_t undo_cursor = insert_start;
+
+          if(vim_state->insert_start.x >= 0){
+               undo_cursor = vim_state->insert_start;
+               vim_state->insert_start = (Point_t){-1, -1};
+          }
+
           switch(key){
           default:
                if(isprint(key)){
                     if(ce_insert_char(buffer, *cursor, key)){
                          keys_push(&vim_state->command_head, key);
-                         Point_t undo_cursor = *cursor;
                          cursor->x++;
-                         ce_commit_insert_char(&buffer_state->commit_tail, undo_cursor, undo_cursor, *cursor, key, BCC_KEEP_GOING);
+                         ce_commit_insert_char(&buffer_state->commit_tail, insert_start, undo_cursor, *cursor, key, BCC_KEEP_GOING);
                     }
                }else{
                     return result;
@@ -4071,12 +4085,10 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, BufferView
                key = NEWLINE;
 
                if(ce_insert_char(buffer, *cursor, key)){
-                    Point_t undo_cursor = *cursor;
-
                     cursor->y++;
                     cursor->x = 0;
 
-                    ce_commit_insert_char(&buffer_state->commit_tail, undo_cursor, undo_cursor, *cursor, key, BCC_KEEP_GOING);
+                    ce_commit_insert_char(&buffer_state->commit_tail, insert_start, undo_cursor, *cursor, key, BCC_KEEP_GOING);
                     keys_push(&vim_state->command_head, KEY_ENTER);
 
                     // indent if necessary
@@ -4127,11 +4139,10 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, BufferView
                          free(complete);
                     }
                }else{
-                    if(ce_insert_string(buffer, *cursor, TAB_STRING)){
-                         Point_t save_cursor = *cursor;
+                    if(ce_insert_string(buffer, insert_start, TAB_STRING)){
                          ce_move_cursor(buffer, cursor, (Point_t){strlen(TAB_STRING) - 1, 0});
                          cursor->x++; // we want to be after the tabs
-                         ce_commit_insert_string(&buffer_state->commit_tail, save_cursor, save_cursor, *cursor, strdup(TAB_STRING), BCC_KEEP_GOING);
+                         ce_commit_insert_string(&buffer_state->commit_tail, insert_start, undo_cursor, *cursor, strdup(TAB_STRING), BCC_KEEP_GOING);
                          keys_push(&vim_state->command_head, key);
                     }
                }
@@ -4249,7 +4260,7 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, BufferView
                     macro_commit_push(&vim_state->macro_commit_current, vim_state->last_macro_command_begin, false);
                }
           }
-          break;
+     } break;
      case VM_VISUAL_RANGE:
      case VM_VISUAL_LINE:
          if(key == KEY_ESCAPE){

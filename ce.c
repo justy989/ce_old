@@ -4,6 +4,7 @@
 #include <inttypes.h>
 #include <assert.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 Point_t* g_terminal_dimensions = NULL;
 
@@ -67,6 +68,16 @@ bool ce_load_file(Buffer_t* buffer, const char* filename)
      ce_message("load file '%s'", filename);
 
      if(buffer->lines) ce_free_buffer(buffer);
+
+     // check if directory
+     {
+          struct stat info;
+          stat(filename, &info);
+          if(S_ISDIR(info.st_mode)){
+               ce_message("%s() '%s' is a directory.", __FUNCTION__, filename);
+               return false;
+          }
+     }
 
      // read the entire file
      size_t content_size;

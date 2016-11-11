@@ -117,20 +117,20 @@ gl|cycle through line number modes
 F5|reload ce's config
 
 ###Cool Shell Commands To Run In ce
-`fgrep -n -H <pattern> <files>`  
-`fgrep -n -H Buffer ce_config.c`  
-`fgrep -n default *`  
+`$ fgrep -n -H <pattern> <files>`  
+`$ fgrep -n -H Buffer ce_config.c`  
+`$ fgrep -n default *`  
 ctrl+n and ctrl+p will move you between matches  
   
-`make`  
+`$ make`  
 ctrl+n and ctrl+p will move you between build failures  
   
-`cscope -L1<symbol>`  
-`cscope -L1BufferView`  
+`$ cscope -L1<symbol>`  
+`$ cscope -L1BufferView`  
 ctrl+n and ctrl+p will move you between definitions of that symbol (if tags have been generated)  
   
-`cscope -L3ce_insert_char`  
+`$ cscope -L3ce_insert_char`  
 ctrl+n and ctrl+p will move you between functions calling this function (if tags have been generated)  
 
-`man pthread_create`  
+`$ man pthread_create`  
 c-syntax highlighted man pages

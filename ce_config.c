@@ -378,7 +378,8 @@ typedef struct YankNode_t{
      struct YankNode_t* next;
 } YankNode_t;
 
-YankNode_t* find_yank(YankNode_t* head, char reg_char){
+YankNode_t* find_yank(YankNode_t* head, char reg_char)
+{
      YankNode_t* itr = head;
      while(itr != NULL){
           if(itr->reg_char == reg_char) return itr;
@@ -389,7 +390,8 @@ YankNode_t* find_yank(YankNode_t* head, char reg_char){
 
 // for now the yanked string is user allocated. eventually will probably
 // want to change this interface so that everything is hidden
-void add_yank(YankNode_t** head, char reg_char, const char* yank_text, YankMode_t mode){
+void add_yank(YankNode_t** head, char reg_char, const char* yank_text, YankMode_t mode)
+{
      YankNode_t* node = find_yank(*head, reg_char);
      if(node != NULL){
           free((void*)node->text);
@@ -600,6 +602,56 @@ void auto_complete_prev(AutoComplete_t* auto_complete, const char* match)
      auto_complete_end(auto_complete);
 }
 
+typedef struct MacroCommitNode_t{
+     KeyNode_t* command_end;
+     KeyNode_t* command_copy;
+     struct MacroCommitNode_t* next;
+     struct MacroCommitNode_t* prev;
+} MacroCommitNode_t;
+
+void macro_commit_free(MacroCommitNode_t** macro_commit)
+{
+     MacroCommitNode_t* itr = *macro_commit;
+     while(itr){
+          MacroCommitNode_t* tmp = itr;
+          itr = itr->next;
+          keys_free(&tmp->command_copy);
+          free(tmp);
+     }
+
+     *macro_commit = NULL;
+}
+
+void macro_commit_push(MacroCommitNode_t** macro_commit, KeyNode_t* command_end)
+{
+     if(*macro_commit && (*macro_commit)->next){
+          macro_commit_free(&(*macro_commit)->next);
+     }
+
+     MacroCommitNode_t* new_commit = calloc(1, sizeof(*new_commit));
+     if(!new_commit) return;
+
+     new_commit->prev = *macro_commit;
+     if(*macro_commit) (*macro_commit)->next = new_commit;
+     new_commit->command_end = command_end;
+
+     *macro_commit = new_commit;
+}
+
+void macro_commits_dump(const MacroCommitNode_t* macro_commit)
+{
+     const MacroCommitNode_t* itr = macro_commit;
+     while(itr){
+          ce_message("key: %c", itr->command_end ? itr->command_end->key : 0);
+          KeyNode_t* copy_itr = itr->command_copy;
+          while(copy_itr){
+               ce_message("  %c", copy_itr->key);
+               copy_itr = copy_itr->next;
+          }
+          itr = itr->next;
+     }
+}
+
 #define VIM_COMMENT_STRING "//"
 
 typedef enum{
@@ -720,11 +772,6 @@ typedef enum{
 } VimKeyHandlerResultType_t;
 
 typedef struct{
-     VimKeyHandlerResultType_t type;
-     VimAction_t completed_action;
-} VimKeyHandlerResult_t;
-
-typedef struct{
      VimMode_t mode;
 
      KeyNode_t* command_head;
@@ -735,6 +782,7 @@ typedef struct{
      char recording_macro; // holds the register we are recording, is 0 if we aren't recording
      char playing_macro;
      KeyNode_t* record_macro_head;
+     MacroCommitNode_t* macro_commit_current;
      MacroNode_t* macro_head;
      BufferCommitNode_t* record_start_commit_tail;
 
@@ -753,6 +801,11 @@ void vim_stop_recording_macro(VimState_t* vim_state)
      vim_state->recording_macro = 0;
      keys_free(&vim_state->record_macro_head);
 }
+
+typedef struct{
+     VimKeyHandlerResultType_t type;
+     VimAction_t completed_action;
+} VimKeyHandlerResult_t;
 
 VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, BufferView_t* buffer_view,
                                       AutoComplete_t* auto_complete, bool repeating);
@@ -2039,9 +2092,10 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
                     free(built_macro);
                }
 
-               // see if we can override commit history to make our macro undo-able with 1 undo
+               // override commit history to make our macro undo-able with 1 undo
                BufferCommitNode_t* itr = buffer_state->commit_tail;
 
+               // see if the commit we started recording at is still in the history
                while(itr){
                     if(itr == vim_state->record_start_commit_tail) break;
                     itr = itr->prev;
@@ -2055,10 +2109,14 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
                if(itr) itr->commit.chain = BCC_STOP;
 
                vim_stop_recording_macro(vim_state);
+
+               macro_commit_free(&vim_state->macro_commit_current);
           }else{
                vim_state->recording_macro = action->change.reg;
                keys_free(&vim_state->record_macro_head);
                vim_state->record_start_commit_tail = buffer_state->commit_tail;
+               macro_commit_free(&vim_state->macro_commit_current);
+               macro_commit_push(&vim_state->macro_commit_current, NULL);
           }
           break;
      case VCT_PLAY_MACRO:
@@ -2083,7 +2141,7 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
                bool unhandled_key = false;
                int* macro_itr = macro->command;
                while(*macro_itr){
-                    VimKeyHandlerResult_t vkh_result =  vim_key_handler(*macro_itr, vim_state, buffer_view, auto_complete, true);
+                    VimKeyHandlerResult_t vkh_result =  vim_key_handler(*macro_itr, vim_state, buffer_view, auto_complete, false);
 
                     if(vkh_result.type == VKH_UNHANDLED_KEY){
                          unhandled_key = true;
@@ -2107,7 +2165,9 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
 
      vim_state->mode = action->end_in_vim_mode;
 
-     if(action->end_in_vim_mode != VM_INSERT){
+     if(action->end_in_vim_mode == VM_INSERT){
+          if(action->change.type != VCT_NONE && action->change.type != VCT_MOTION && buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_KEEP_GOING;
+     }else{
           Point_t old_cursor = *cursor;
           ce_clamp_cursor(buffer, cursor);
 
@@ -2115,8 +2175,6 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
              old_cursor.y == cursor->y){
                buffer_state->cursor_save_column = cursor->x;
           }
-     }else{
-          if(action->change.type != VCT_NONE && buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_KEEP_GOING;
      }
 }
 
@@ -3935,6 +3993,7 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, BufferView
      BufferState_t* buffer_state = buffer->user_data;
      Point_t* cursor = &buffer_view->cursor;
      char recording_macro = vim_state->recording_macro;
+     VimMode_t vim_mode = vim_state->mode;
 
      VimKeyHandlerResult_t result;
      result.type = VKH_UNHANDLED_KEY;
@@ -3969,7 +4028,11 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, BufferView
 
                vim_enter_normal_mode(vim_state);
                ce_clamp_cursor(buffer, cursor);
-               if(buffer_state->commit_tail && !vim_state->playing_macro) buffer_state->commit_tail->commit.chain = BCC_STOP;
+
+               if(buffer_state->commit_tail && !vim_state->playing_macro){
+                    ce_message("BOSS");
+                    buffer_state->commit_tail->commit.chain = BCC_STOP;
+               }
           } break;
           case KEY_ENTER:
                key = NEWLINE;
@@ -4211,6 +4274,14 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, BufferView
 
                if(recording_macro && recording_macro == vim_state->recording_macro){
                     keys_push(&vim_state->record_macro_head, key);
+                    keys_push(&vim_state->macro_commit_current->command_copy, key);
+
+                    // tag this command as a macro commit
+                    if(vim_action.change.type != VCT_MOTION && vim_state->mode != VM_INSERT){
+                         KeyNode_t* itr = vim_state->record_macro_head;
+                         while(itr->next) itr = itr->next;
+                         macro_commit_push(&vim_state->macro_commit_current, itr);
+                    }
                }
 
                result.type = VKH_COMPLETED_ACTION;
@@ -4224,6 +4295,14 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, BufferView
 
      if(recording_macro && recording_macro == vim_state->recording_macro){
           keys_push(&vim_state->record_macro_head, key);
+          keys_push(&vim_state->macro_commit_current->command_copy, key);
+
+          // when we exit insert mode, track the last macro action
+          if(vim_mode == VM_INSERT && vim_state->mode == VM_NORMAL){
+               KeyNode_t* itr = vim_state->record_macro_head;
+               while(itr->next) itr = itr->next;
+               macro_commit_push(&vim_state->macro_commit_current, itr);
+          }
      }
 
      result.type = VKH_HANDLED_KEY;
@@ -4462,6 +4541,14 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           case '!':
                ce_commits_dump(buffer_state->commit_tail);
                break;
+#endif
+#if 1 // useful for debugging macro commit history
+          case '!':
+          {
+               MacroCommitNode_t* head = config_state->vim_state.macro_commit_current;
+               while(head->prev) head = head->prev;
+               macro_commits_dump(head);
+          } break;
 #endif
           case '@':
           {
@@ -4750,21 +4837,53 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                    buffer->modified = false;
                               }
                          }
-                         break;
-                    case 'x':
-                    {
-                         char c;
-                         if(ce_get_char(buffer, *cursor, &c) && ce_remove_char(buffer, *cursor)){
-                              ce_commit_remove_char(&buffer_state->commit_tail, *cursor, *cursor, *cursor, c, BCC_STOP);
-                              ce_clamp_cursor(buffer, cursor);
+
+                         // if we are recording a macro, kill the last command we entered from the key list
+                         if(config_state->vim_state.recording_macro){
+                              KeyNode_t* itr = config_state->vim_state.record_macro_head;
+                              MacroCommitNode_t* last_macro_commit = config_state->vim_state.macro_commit_current->prev;
+                              if(last_macro_commit){
+                                   if(last_macro_commit->command_end){
+                                        while(itr && itr != last_macro_commit->command_end){
+                                             itr = itr->next;
+                                        }
+
+                                        if(itr){
+                                             // free the keys from our macro recording
+                                             keys_free(&itr->next);
+                                             itr->next = NULL;
+                                        }
+                                   }else{
+                                        keys_free(&itr);
+                                        config_state->vim_state.record_macro_head = NULL;
+                                   }
+
+                                   config_state->vim_state.macro_commit_current = config_state->vim_state.macro_commit_current->prev;
+                              }else{
+                                   vim_stop_recording_macro(&config_state->vim_state);
+                              }
                          }
-                    }
-                    break;
+                         break;
                     case KEY_REDO:
                     {
                          if(buffer_state->commit_tail && buffer_state->commit_tail->next){
-                              ce_commit_redo(buffer, &buffer_state->commit_tail, cursor);
+                              if(ce_commit_redo(buffer, &buffer_state->commit_tail, cursor)){
+                                   if(config_state->vim_state.recording_macro){
+                                        KeyNode_t* itr = config_state->vim_state.macro_commit_current->command_copy;
+                                        while(itr){
+                                             keys_push(&config_state->vim_state.record_macro_head, itr->key);
+                                             itr = itr->next;
+                                        }
+
+                                        itr = config_state->vim_state.record_macro_head;
+                                        while(itr->next) itr = itr->next;
+
+                                        config_state->vim_state.macro_commit_current = config_state->vim_state.macro_commit_current->next;
+                                        config_state->vim_state.macro_commit_current->command_end = itr;
+                                   }
+                              }
                          }
+
                     } break;
                     case 'H':
                     {

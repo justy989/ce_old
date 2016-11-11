@@ -141,6 +141,7 @@ const char* random_greeting()
           "Oy! ce's a beaut!",
           "The default config has a great vimplementation!",
           "They see me slurpin' They hatin'",
+          "'Days of pain are worth the years of upcoming prosperity' -confucius",
      };
 
      srand(time(NULL));

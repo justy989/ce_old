@@ -3,16 +3,13 @@
 [![Build Status](https://travis-ci.org/justy989/ce.svg?branch=master)](https://travis-ci.org/justy989/ce)
 
 ###But why?
-- Emacs and Vim are awesome, but they have some problems we'd like to address without having to learn vimscript
-  or emacs lisp
+- Emacs and Vim are awesome, but they have some problems we'd like to address without having to learn/write
+  vimscript or emacs lisp. However, we want to take some awesome ideas from each:
+  - Taking emacs's idea where everything is a just a plain text buffer, we can do things like, run shell
+    commands that output to a buffer just like any other. So you can copy+paste, etc.
+  - Taking vim's editting, we were able to transition to using the editor fulltime pretty quickly
 - The config is written in 'c' and compiled into a shared object that you can reload while running. No need to
   learn a new language!
-- The authors need to work remotely through a terminal, so the editor needs to be able to run in a terminal.
-- Editting in Vim is awesome, Emacs's idea of everything being pain text in a buffer is awesome, so we combine
-  those ideas
-  - Taking emacs's idea where everything is a buffer, we can do things like, run shell commands that output to a
-    buffer just like any other. So you can copy+paste, etc.
-  - Taking vim's editting, we were able to transition to using the editor fulltime pretty quickly
 - Input boxes in both vim and emacs are special 'insert mode only' constructs. In ce, the input box works just
   like any other buffer. So it's easy to do things like paste. It also means the input box can be multiple lines.
 - Registers in vim are also awesome, but it's not easy to see what you have in registers or even know what
@@ -20,10 +17,12 @@
   also works for paste registers and marks.
 - Macros in vim are awesome, but:
   - If you mess up while creating a macro, you have to start over. In ce, when you are viewing your recorded macros,
-   you can select one to edit it
+    you can select any macro to edit it
   - If you accidently 'undo' while creating a macro, it won't replay correctly. In ce, undo clears the part of the macro associated with
- change you want to undo. You can also redo that macro.
-- It is fun learning how to make a text editor. Also, Using something you created on a daily basis is pretty great.
+    change you want to undo. You can also redo that macro.
+- The authors need to work remotely, so the editor needs to be able to run in a terminal.
+- It is fun learning how to make a text editor. Also, using something you created on a daily basis gives us
+  the warm and fuzzies.
 
 ###How To Build
 - Requirements
@@ -113,6 +112,7 @@ gl|cycle through line number modes
 \*|search forward for the word under the cursor
 #|search forward for the word under the cursor
 ~|flip case
+F5|reload ce's config
 
 ###Cool Shell Commands To Run In ce
 `fgrep -n -H <pattern> <files>`  

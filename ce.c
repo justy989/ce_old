@@ -213,6 +213,7 @@ bool insert_char_impl(Buffer_t* buffer, Point_t location, char c)
           }
           new_line[location.x] = 0;
           buffer->lines[location.y] = new_line;
+          buffer->modified = true;
           return true;
      }
 
@@ -1019,6 +1020,7 @@ bool insert_line_impl(Buffer_t* buffer, int64_t line, const char* string)
 
      buffer->lines = new_lines;
      buffer->line_count = new_line_count;
+     buffer->modified = true;
 
      return true;
 }
@@ -1219,6 +1221,7 @@ bool ce_save_buffer(Buffer_t* buffer, const char* filename)
 
      fclose(file);
      buffer->modified = false;
+     buffer->newfile = false;
      return true;
 }
 

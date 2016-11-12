@@ -121,6 +121,7 @@ typedef struct {
      Point_t highlight_end;
      bool modified;
      bool readonly;
+     bool newfile;
      union {
           char* filename;
           char* name;

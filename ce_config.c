@@ -14,14 +14,13 @@
 #define TAB_STRING "     "
 #define SCROLL_LINES 1
 
-const char* modified_string(Buffer_t* buffer)
+const char* buffer_flag_string(Buffer_t* buffer)
 {
-     return buffer->modified ? "*" : "";
-}
+     if(buffer->readonly) return "[RO] ";
+     if(buffer->newfile) return "[NEW] ";
+     if(buffer->modified) return "*";
 
-const char* readonly_string(Buffer_t* buffer)
-{
-     return buffer->readonly ? " [RO]" : "";
+     return "";
 }
 
 typedef struct{
@@ -2450,8 +2449,8 @@ BufferNode_t* new_buffer_from_file(BufferNode_t* head, const char* filename)
      }
 
      if(!ce_load_file(buffer, filename)){
-          free(buffer);
-          return NULL;
+          buffer->newfile = true;
+          buffer->name = strdup(filename);
      }
 
      if(!initialize_buffer(buffer)){
@@ -2621,7 +2620,8 @@ Buffer_t* open_file_buffer(BufferNode_t* head, const char* filename)
      nftw(".", nftw_find_file, 20, FTW_CHDIR);
      if(nftw_state.new_node) return nftw_state.new_node->buffer;
 
-     ce_message("file %s not found", filename);
+     BufferNode_t* node = new_buffer_from_file(head, filename);
+     if(node) return node->buffer;
 
      return NULL;
 }
@@ -3315,8 +3315,7 @@ void update_buffer_list_buffer(ConfigState_t* config_state, const BufferNode_t* 
 
      itr = head;
      while(itr){
-          const char* buffer_flag_str = itr->buffer->readonly ? readonly_string(itr->buffer) :
-                                                                modified_string(itr->buffer);
+          const char* buffer_flag_str = buffer_flag_string(itr->buffer);
           snprintf(buffer_info, BUFSIZ, format_string, buffer_flag_str, itr->buffer->name,
                    itr->buffer->line_count);
           ce_append_line(&config_state->buffer_list_buffer, buffer_info);
@@ -5404,9 +5403,9 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferVi
      for(int i = view->top_left.x; i < view->bottom_right.x; ++i) addch(ACS_HLINE);
 
      attron(COLOR_PAIR(S_VIEW_STATUS));
-     mvprintw(view->bottom_right.y, view->top_left.x + 1, " %s%s%s%s ",
+     mvprintw(view->bottom_right.y, view->top_left.x + 1, " %s%s%s ",
               view == current_view ? mode_names[vim_mode] : "",
-              modified_string(buffer), buffer->filename, readonly_string(buffer));
+              buffer_flag_string(buffer), buffer->filename);
 #ifndef NDEBUG
      if(view == current_view) printw("%s %d ", keyname(last_key), last_key);
 #endif

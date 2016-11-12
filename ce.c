@@ -63,7 +63,7 @@ bool ce_alloc_lines(Buffer_t* buffer, int64_t line_count)
      return true;
 }
 
-bool ce_load_file(Buffer_t* buffer, const char* filename)
+LoadFileResult_t ce_load_file(Buffer_t* buffer, const char* filename)
 {
      ce_message("load file '%s'", filename);
 
@@ -75,7 +75,7 @@ bool ce_load_file(Buffer_t* buffer, const char* filename)
           stat(filename, &info);
           if(S_ISDIR(info.st_mode)){
                ce_message("%s() '%s' is a directory.", __FUNCTION__, filename);
-               return false;
+               return LF_IS_DIRECTORY;
           }
      }
 
@@ -86,7 +86,7 @@ bool ce_load_file(Buffer_t* buffer, const char* filename)
           FILE* file = fopen(filename, "rb");
           if(!file){
                ce_message("%s() fopen('%s', 'rb') failed: %s", __FUNCTION__, filename, strerror(errno));
-               return false;
+               return LF_DOES_NOT_EXIST;
           }
 
           fseek(file, 0, SEEK_END);
@@ -113,7 +113,7 @@ bool ce_load_file(Buffer_t* buffer, const char* filename)
 
      free(contents);
      buffer->modified = false;
-     return true;
+     return LF_SUCCESS;
 }
 
 bool ce_load_string(Buffer_t* buffer, const char* str)
@@ -1342,7 +1342,7 @@ int64_t ce_is_c_typename(const char* line, int64_t start_offset)
      itr = line + start_offset;
      if(count >= 2 && itr[count-2] == '_' && itr[count-1] == 't') return count;
 
-#if 0
+#if 1
      // NOTE: Justin uses this while working on Bryte!
      if(isupper(*itr)){
           return count;

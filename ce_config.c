@@ -2448,9 +2448,19 @@ BufferNode_t* new_buffer_from_file(BufferNode_t* head, const char* filename)
           return NULL;
      }
 
-     if(!ce_load_file(buffer, filename)){
+     LoadFileResult_t lfr = ce_load_file(buffer, filename);
+     switch(lfr){
+     default:
+          assert(!"unsupported LoadFileResult_t");
+          return false;
+     case LF_DOES_NOT_EXIST:
           buffer->newfile = true;
           buffer->name = strdup(filename);
+          break;
+     case LF_IS_DIRECTORY:
+          return NULL;
+     case LF_SUCCESS:
+          break;
      }
 
      if(!initialize_buffer(buffer)){
@@ -2584,6 +2594,10 @@ int nftw_find_file(const char* fpath, const struct stat *sb, int typeflag, struc
      (void)sb;
      if((typeflag == FTW_F || typeflag == FTW_SL) && !strcmp(&fpath[ftwbuf->base], nftw_state.search_filename)){
           nftw_state.new_node = new_buffer_from_file(nftw_state.head, nftw_state.search_filename);
+
+          // update the buffer filename, we don't really want the basename, we want the full path from where we opened ce
+          free(nftw_state.new_node->buffer->name);
+          nftw_state.new_node->buffer->name = strdup(fpath + 2); // cut off initial './'
           return FTW_STOP;
      }
      return FTW_CONTINUE;
@@ -2606,11 +2620,6 @@ Buffer_t* open_file_buffer(BufferNode_t* head, const char* filename)
                return itr->buffer; // already open
           }
           itr = itr->next;
-     }
-
-     if(access(filename, F_OK) == 0){
-          BufferNode_t* node = new_buffer_from_file(head, filename);
-          if(node) return node->buffer;
      }
 
      // clang doesn't support nested functions so we need to deal with global state
@@ -3732,20 +3741,28 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                }
           } break;
           case 6: // Ctrl + f
+          {
                commit_input_to_history(config_state->view_input->buffer, &config_state->load_file_history);
+               bool switched_to_open_file = false;
 
                for(int64_t i = 0; i < config_state->view_input->buffer->line_count; ++i){
                     Buffer_t* new_buffer = open_file_buffer(head, config_state->view_input->buffer->lines[i]);
-                    if(i == 0 && new_buffer){
+                    if(!switched_to_open_file && new_buffer){
                          config_state->tab_current->view_current->buffer = new_buffer;
                          config_state->tab_current->view_current->cursor = (Point_t){0, 0};
+                         switched_to_open_file = true;
                     }
+               }
+
+               if(!switched_to_open_file){
+                    config_state->tab_current->view_current->buffer = head->buffer; // message buffer
+                    config_state->tab_current->view_current->cursor = (Point_t){0, 0};
                }
 
                if(config_state->tab_current->overriden_buffer){
                     tab_view_restore_overrideable(config_state->tab_current);
                }
-               break;
+          } break;
           case '/':
                if(!config_state->view_input->buffer->line_count) break;
 

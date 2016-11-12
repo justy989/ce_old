@@ -195,6 +195,13 @@ typedef enum {
      CT_END_MULTILINE,
 } CommentType_t;
 
+// NOTE: temporary, we probably want something like CeRC_t type of thing?
+typedef enum {
+     LF_DOES_NOT_EXIST,
+     LF_IS_DIRECTORY,
+     LF_SUCCESS,
+} LoadFileResult_t;
+
 extern Point_t* g_terminal_dimensions;
 
 // CE Configuration-Defined Functions
@@ -230,7 +237,7 @@ void ce_clear_lines             (Buffer_t* buffer);
 void ce_clear_lines_readonly    (Buffer_t* buffer);
 
 bool ce_load_string             (Buffer_t* buffer, const char* string);
-bool ce_load_file               (Buffer_t* buffer, const char* filename);
+LoadFileResult_t ce_load_file   (Buffer_t* buffer, const char* filename);
 
 bool ce_insert_char             (Buffer_t* buffer, Point_t location, char c);
 bool ce_append_char             (Buffer_t* buffer, char c);

@@ -5211,7 +5211,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               }
                               cursor->x = 0;
                               cursor->y = 0;
-                              if(!ce_advance_cursor(buffer, cursor, cursor_position-1))
+                              if(!ce_advance_cursor(buffer, cursor, cursor_position - 1))
                                    ce_message("failed to advance cursor");
 
 #if 0

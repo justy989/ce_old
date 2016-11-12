@@ -1169,7 +1169,7 @@ TEST(advance_cursor_next_line)
      Point_t cursor = {1, 0};
      ce_advance_cursor(&buffer, &cursor, 6);
 
-     EXPECT(cursor.x == 2);
+     EXPECT(cursor.x == 1);
      EXPECT(cursor.y == 1);
 
      ce_free_buffer(&buffer);

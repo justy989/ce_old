@@ -6,7 +6,7 @@
 
 TEST(marks_sanity)
 {
-     VimMarkNode_t* mark_head;
+     VimMarkNode_t* mark_head = NULL;
 
      Point_t first_mark = {3, 5};
      Point_t second_mark = {17, 31};

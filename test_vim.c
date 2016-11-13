@@ -53,9 +53,6 @@ void segv_handler(int signo)
 
 int main()
 {
-     Point_t terminal_dimensions = {17, 10};
-     g_terminal_dimensions = &terminal_dimensions;
-
      struct sigaction sa = {};
      sa.sa_handler = segv_handler;
      sigemptyset(&sa.sa_mask);

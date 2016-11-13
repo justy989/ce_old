@@ -752,22 +752,43 @@ bool ce_find_string(const Buffer_t* buffer, Point_t location, const char* search
      CE_CHECK_PTR_ARG(search_str);
      CE_CHECK_PTR_ARG(match);
 
-     Point_t search_loc = location;
-     ce_advance_cursor(buffer, &search_loc, 1);
-     char* line_str = &buffer->lines[search_loc.y][search_loc.x];
+     size_t search_str_len = strlen(search_str);
+     if(!search_str_len) return false;
 
-     int64_t n_lines = (direction == CE_UP) ? search_loc.y : buffer->line_count - search_loc.y;
-     for(int64_t i = 0; i < n_lines;){
-          const char* match_str = strstr(line_str, search_str);
-          if(match_str){
-               int64_t line = search_loc.y + i*direction;
-               match->x = match_str - buffer->lines[line];
-               match->y = line;
+     int64_t delta = (direction == CE_DOWN) ? 1 : -1;
+
+     location.x += delta;
+
+     if(location.x < 0){
+          location.y--;
+          location.x = strlen(buffer->lines[location.y]) - 1;
+     }else if(location.x >= (int64_t)(strlen(buffer->lines[location.y]))){
+          location.x = 0;
+          location.y++;
+     }
+
+     Point_t end = {0, 0};
+     if(direction == CE_DOWN) ce_move_cursor_to_end_of_file(buffer, &end);
+
+     while(!ce_points_equal(location, end)){
+          char* str = buffer->lines[location.y] + location.x;
+
+          if(strncmp(str, search_str, search_str_len) == 0){
+               *match = location;
                return true;
           }
-          i++;
-          line_str = buffer->lines[search_loc.y + i*direction];
+
+          location.x += delta;
+
+          if(location.x < 0){
+               location.y--;
+               location.x = strlen(buffer->lines[location.y]) - 1;
+          }else if(location.x >= (int64_t)(strlen(buffer->lines[location.y]))){
+               location.x = 0;
+               location.y++;
+          }
      }
+
      return false;
 }
 
@@ -2126,8 +2147,16 @@ bool ce_advance_cursor(const Buffer_t* buffer, Point_t* cursor, int64_t delta)
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(cursor);
 
-     if(!ce_point_on_buffer(buffer, *cursor)) return false;
-     if(!delta) return true;
+     if(!ce_point_on_buffer(buffer, *cursor)){
+          // NOTE: hack to allow cursor to be passed the end of the line
+          if(cursor->y < 0 || cursor->y >= buffer->line_count){
+               return false;
+          }else if(cursor->x > (int64_t)(strlen(buffer->lines[cursor->y]))){
+               return false;
+          }
+     }
+
+     if(delta == 0) return true;
 
      Direction_t d = (delta > 0 ) ? CE_DOWN : CE_UP;
      delta *= d;

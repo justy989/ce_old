@@ -1874,10 +1874,12 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                          if(!ce_insert_string(buffer, match, replace_str)) break;
                     }
                     ce_commit_change_string(&buffer_state->commit_tail, match, match, match, strdup(replace_str),
-                                            strdup(search_str), BCC_STOP);
+                                            strdup(search_str), BCC_KEEP_GOING);
                     begin = match;
                     replace_count++;
                }
+
+               if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
 
                if(replace_count){
                     ce_message("replaced %" PRId64 " matches", replace_count);

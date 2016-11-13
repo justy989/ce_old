@@ -1498,9 +1498,15 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                               }
                          }
 
+                         if(dir == CE_UP){
+                              ce_move_cursor_to_beginning_of_word(buffer, &action_range->end, true);
+                         }
+
                          Point_t match;
                          if(ce_find_string(buffer, action_range->end, yank->text, &match, dir)){
                               ce_set_cursor(buffer, &action_range->end, match);
+                         }else{
+                              action_range->end = *cursor;
                          }
                     }
                } break;

@@ -21,20 +21,17 @@ test: clean_test test.c ce.test.o
 ce: main.c ce.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LINK) -ldl -Wl,-rpath,.
 
-ce%o: ce.c
+%.o: %.c
 	$(CC) -c -fpic $(CFLAGS) $^ -o $@
 
-ce_config.o: ce_config.c
-	$(CC) -c -fpic $(CFLAGS) $^ -o $@
-
-ce_config.so: ce_config.o ce.o
+ce_config.so: ce_config.o ce.o ce_auto_complete.o
 	$(CC) -shared $(CFLAGS) $^ -o $@ $(LINK)
 
 clean: clean_config clean_test
-	rm -rf ce messages buffers shell_output ce.o valgrind_results.txt *.dSYM
+	rm -rf ce *.o valgrind_results.txt *.dSYM
 
 clean_config:
-	rm -f ce_config.o ce_config.so ce.o
+	rm -f ce_config.so
 
 clean_test:
 	rm -f test ce.test.o *.gcda *.gcno *.gcov test_output.txt default.profraw

@@ -29,6 +29,7 @@ LITTLE:
 -matching pairs is still wrong when going CE_UP over multiple lines in some instances
 -word movement commands should work across lines
 -searching backwards is with multiple instances on the same line is wrong
+-'o' then undo delets a line?
 
 */
 

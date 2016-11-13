@@ -1,4 +1,3 @@
-#include "ce.h"
 #include <assert.h>
 #include <ctype.h>
 #include <ftw.h>
@@ -10,6 +9,9 @@
 #include <fcntl.h>
 #include <dirent.h>
 #include <sys/ioctl.h>
+
+#include "ce.h"
+#include "ce_auto_complete.h"
 
 #define TAB_STRING "     "
 #define SCROLL_LINES 1
@@ -468,150 +470,6 @@ void macro_add(MacroNode_t** head, char reg, int* command)
      }
 
      node->command = command;
-}
-
-typedef struct CompleteNode_t{
-     char* option;
-     struct CompleteNode_t* next;
-     struct CompleteNode_t* prev;
-} CompleteNode_t;
-
-typedef struct{
-     CompleteNode_t* head;
-     CompleteNode_t* tail;
-     CompleteNode_t* current;
-     Point_t start;
-} AutoComplete_t;
-
-bool auto_complete_insert(AutoComplete_t* auto_complete, const char* option)
-{
-     CompleteNode_t* new_node = calloc(1, sizeof(*new_node));
-     if(!new_node){
-          ce_message("failed to allocate auto complete option");
-          return false;
-     }
-
-     new_node->option = strdup(option);
-
-     if(auto_complete->tail){
-          auto_complete->tail->next = new_node;
-          new_node->prev = auto_complete->tail;
-     }
-
-     auto_complete->tail = new_node;
-     if(!auto_complete->head){
-          auto_complete->head = new_node;
-     }
-
-     return true;
-}
-
-void auto_complete_start(AutoComplete_t* auto_complete, Point_t start)
-{
-     assert(start.x >= 0);
-     auto_complete->start = start;
-     auto_complete->current = auto_complete->head;
-}
-
-void auto_complete_end(AutoComplete_t* auto_complete)
-{
-     auto_complete->start.x = -1;
-}
-
-bool auto_completing(AutoComplete_t* auto_complete)
-{
-    return auto_complete->start.x >= 0;
-}
-
-int64_t string_common_beginning(const char* a, const char* b)
-{
-     size_t common = 0;
-
-     while(*a && *b){
-          if(*a == *b){
-               common++;
-          }else{
-               break;
-          }
-
-          a++;
-          b++;
-     }
-
-     return common;
-}
-
-// NOTE: allocates the string that is returned to the user
-char* auto_complete_get_completion(AutoComplete_t* auto_complete, int64_t x)
-{
-     int64_t offset = x - auto_complete->start.x;
-
-     CompleteNode_t* itr = auto_complete->current;
-     int64_t complete_len = strlen(auto_complete->current->option + offset);
-     int64_t min_complete_len = complete_len;
-
-     do{
-          itr = itr->next;
-          if(!itr) itr = auto_complete->head;
-          int64_t option_len = strlen(itr->option);
-
-          if(option_len <= offset) continue;
-          if(strncmp(auto_complete->current->option, itr->option, offset) != 0) continue;
-
-          int64_t check_complete_len = string_common_beginning(auto_complete->current->option + offset, itr->option + offset);
-          if(check_complete_len < min_complete_len) min_complete_len = check_complete_len;
-     }while(itr != auto_complete->current);
-
-     if(min_complete_len) complete_len = min_complete_len;
-
-     char* completion = malloc(complete_len + 1);
-     strncpy(completion, auto_complete->current->option + offset, complete_len);
-     completion[complete_len] = 0;
-
-     return completion;
-}
-
-void auto_complete_clear(AutoComplete_t* auto_complete)
-{
-    CompleteNode_t* itr = auto_complete->head;
-    while(itr){
-         CompleteNode_t* tmp = itr;
-         itr = itr->next;
-         free(tmp->option);
-         free(tmp);
-    }
-
-    auto_complete->head = NULL;
-    auto_complete->tail = NULL;
-    auto_complete->current = NULL;
-}
-
-void auto_complete_next(AutoComplete_t* auto_complete, const char* match)
-{
-     int64_t match_len = strlen(match);
-     CompleteNode_t* initial_node = auto_complete->current;
-
-     do{
-          auto_complete->current = auto_complete->current->next;
-          if(!auto_complete->current) auto_complete->current = auto_complete->head;
-          if(strncmp(auto_complete->current->option, match, match_len) == 0) return;
-     }while(auto_complete->current != initial_node);
-
-     auto_complete_end(auto_complete);
-}
-
-void auto_complete_prev(AutoComplete_t* auto_complete, const char* match)
-{
-     int64_t match_len = strlen(match);
-     CompleteNode_t* initial_node = auto_complete->current;
-
-     do{
-          auto_complete->current = auto_complete->current->prev;
-          if(!auto_complete->current) auto_complete->current = auto_complete->tail;
-          if(strncmp(auto_complete->current->option, match, match_len) == 0) return;
-     }while(auto_complete->current != initial_node);
-
-     auto_complete_end(auto_complete);
 }
 
 typedef struct MacroCommitNode_t{
@@ -1139,23 +997,27 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           get_motion = false;
           break;
      case '*':
+          built_action.change.type = VCT_MOTION;
           built_action.motion.type = VMT_SEARCH_WORD_UNDER_CURSOR;
           built_action.motion.search_direction = CE_DOWN;
           built_action.motion.search_forward = true;
           get_motion = false;
           break;
      case '#':
+          built_action.change.type = VCT_MOTION;
           built_action.motion.type = VMT_SEARCH_WORD_UNDER_CURSOR;
           built_action.motion.search_direction = CE_UP;
           built_action.motion.search_forward = true;
           get_motion = false;
           break;
      case 'n':
+          built_action.change.type = VCT_MOTION;
           built_action.motion.type = VMT_SEARCH;
           built_action.motion.search_forward = true;
           get_motion = false;
           break;
      case 'N':
+          built_action.change.type = VCT_MOTION;
           built_action.motion.type = VMT_SEARCH;
           built_action.motion.search_forward = false;
           get_motion = false;
@@ -1824,8 +1686,8 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                          }
 
                          Point_t match;
-                         if(ce_find_string(buffer, *cursor, yank->text, &match, dir)){
-                              ce_set_cursor(buffer, cursor, match);
+                         if(ce_find_string(buffer, action_range->end, yank->text, &match, dir)){
+                              ce_set_cursor(buffer, &action_range->end, match);
                          }
                     }
                } break;
@@ -3006,7 +2868,7 @@ bool destroyer(BufferNode_t** head, void* user_data)
      pthread_mutex_destroy(&draw_lock);
      pthread_mutex_destroy(&shell_buffer_lock);
 
-     auto_complete_clear(&config_state->auto_complete);
+     auto_complete_free(&config_state->auto_complete);
 
      free(config_state->vim_state.last_insert_command);
 
@@ -3707,7 +3569,7 @@ bool generate_auto_complete_files_in_dir(AutoComplete_t* auto_complete, const ch
      DIR* os_dir = opendir(dir);
      if(!os_dir) return false;
 
-     auto_complete_clear(auto_complete);
+     auto_complete_free(auto_complete);
 
      char tmp[BUFSIZ];
      struct stat info;

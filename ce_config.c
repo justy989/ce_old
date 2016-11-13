@@ -14,14 +14,13 @@
 #define TAB_STRING "     "
 #define SCROLL_LINES 1
 
-const char* modified_string(Buffer_t* buffer)
+const char* buffer_flag_string(Buffer_t* buffer)
 {
-     return buffer->modified ? "*" : "";
-}
+     if(buffer->readonly) return "[RO] ";
+     if(buffer->newfile) return "[NEW] ";
+     if(buffer->modified) return "*";
 
-const char* readonly_string(Buffer_t* buffer)
-{
-     return buffer->readonly ? " [RO]" : "";
+     return "";
 }
 
 typedef struct{
@@ -378,7 +377,8 @@ typedef struct YankNode_t{
      struct YankNode_t* next;
 } YankNode_t;
 
-YankNode_t* find_yank(YankNode_t* head, char reg_char){
+YankNode_t* find_yank(YankNode_t* head, char reg_char)
+{
      YankNode_t* itr = head;
      while(itr != NULL){
           if(itr->reg_char == reg_char) return itr;
@@ -389,12 +389,12 @@ YankNode_t* find_yank(YankNode_t* head, char reg_char){
 
 // for now the yanked string is user allocated. eventually will probably
 // want to change this interface so that everything is hidden
-void add_yank(YankNode_t** head, char reg_char, const char* yank_text, YankMode_t mode){
+void add_yank(YankNode_t** head, char reg_char, const char* yank_text, YankMode_t mode)
+{
      YankNode_t* node = find_yank(*head, reg_char);
      if(node != NULL){
           free((void*)node->text);
-     }
-     else{
+     }else{
           YankNode_t* new_yank = malloc(sizeof(*new_yank));
           new_yank->reg_char = reg_char;
           new_yank->next = *head;
@@ -406,11 +406,38 @@ void add_yank(YankNode_t** head, char reg_char, const char* yank_text, YankMode_
      node->mode = mode;
 }
 
+void free_yanks(YankNode_t** head)
+{
+     YankNode_t* itr = *head;
+     while(itr){
+          YankNode_t* tmp = itr;
+          itr = itr->next;
+
+          free((void*)(tmp->text));
+          free(tmp);
+     }
+
+     *head = NULL;
+}
+
 typedef struct MacroNode_t{
      char reg;
      int* command;
      struct MacroNode_t* next;
 } MacroNode_t;
+
+void macros_free(MacroNode_t** head)
+{
+     MacroNode_t* itr = *head;
+
+     while(itr){
+          MacroNode_t* tmp = itr;
+          itr = itr->next;
+          free(tmp);
+     }
+
+     *head = NULL;
+}
 
 MacroNode_t* macro_find(MacroNode_t* head, char reg)
 {
@@ -443,6 +470,212 @@ void macro_add(MacroNode_t** head, char reg, int* command)
      node->command = command;
 }
 
+typedef struct CompleteNode_t{
+     char* option;
+     struct CompleteNode_t* next;
+     struct CompleteNode_t* prev;
+} CompleteNode_t;
+
+typedef struct{
+     CompleteNode_t* head;
+     CompleteNode_t* tail;
+     CompleteNode_t* current;
+     Point_t start;
+} AutoComplete_t;
+
+bool auto_complete_insert(AutoComplete_t* auto_complete, const char* option)
+{
+     CompleteNode_t* new_node = calloc(1, sizeof(*new_node));
+     if(!new_node){
+          ce_message("failed to allocate auto complete option");
+          return false;
+     }
+
+     new_node->option = strdup(option);
+
+     if(auto_complete->tail){
+          auto_complete->tail->next = new_node;
+          new_node->prev = auto_complete->tail;
+     }
+
+     auto_complete->tail = new_node;
+     if(!auto_complete->head){
+          auto_complete->head = new_node;
+     }
+
+     return true;
+}
+
+void auto_complete_start(AutoComplete_t* auto_complete, Point_t start)
+{
+     assert(start.x >= 0);
+     auto_complete->start = start;
+     auto_complete->current = auto_complete->head;
+}
+
+void auto_complete_end(AutoComplete_t* auto_complete)
+{
+     auto_complete->start.x = -1;
+}
+
+bool auto_completing(AutoComplete_t* auto_complete)
+{
+    return auto_complete->start.x >= 0;
+}
+
+int64_t string_common_beginning(const char* a, const char* b)
+{
+     size_t common = 0;
+
+     while(*a && *b){
+          if(*a == *b){
+               common++;
+          }else{
+               break;
+          }
+
+          a++;
+          b++;
+     }
+
+     return common;
+}
+
+// NOTE: allocates the string that is returned to the user
+char* auto_complete_get_completion(AutoComplete_t* auto_complete, int64_t x)
+{
+     int64_t offset = x - auto_complete->start.x;
+
+     CompleteNode_t* itr = auto_complete->current;
+     int64_t complete_len = strlen(auto_complete->current->option + offset);
+     int64_t min_complete_len = complete_len;
+
+     do{
+          itr = itr->next;
+          if(!itr) itr = auto_complete->head;
+          int64_t option_len = strlen(itr->option);
+
+          if(option_len <= offset) continue;
+          if(strncmp(auto_complete->current->option, itr->option, offset) != 0) continue;
+
+          int64_t check_complete_len = string_common_beginning(auto_complete->current->option + offset, itr->option + offset);
+          if(check_complete_len < min_complete_len) min_complete_len = check_complete_len;
+     }while(itr != auto_complete->current);
+
+     if(min_complete_len) complete_len = min_complete_len;
+
+     char* completion = malloc(complete_len + 1);
+     strncpy(completion, auto_complete->current->option + offset, complete_len);
+     completion[complete_len] = 0;
+
+     return completion;
+}
+
+void auto_complete_clear(AutoComplete_t* auto_complete)
+{
+    CompleteNode_t* itr = auto_complete->head;
+    while(itr){
+         CompleteNode_t* tmp = itr;
+         itr = itr->next;
+         free(tmp->option);
+         free(tmp);
+    }
+
+    auto_complete->head = NULL;
+    auto_complete->tail = NULL;
+    auto_complete->current = NULL;
+}
+
+void auto_complete_next(AutoComplete_t* auto_complete, const char* match)
+{
+     int64_t match_len = strlen(match);
+     CompleteNode_t* initial_node = auto_complete->current;
+
+     do{
+          auto_complete->current = auto_complete->current->next;
+          if(!auto_complete->current) auto_complete->current = auto_complete->head;
+          if(strncmp(auto_complete->current->option, match, match_len) == 0) return;
+     }while(auto_complete->current != initial_node);
+
+     auto_complete_end(auto_complete);
+}
+
+void auto_complete_prev(AutoComplete_t* auto_complete, const char* match)
+{
+     int64_t match_len = strlen(match);
+     CompleteNode_t* initial_node = auto_complete->current;
+
+     do{
+          auto_complete->current = auto_complete->current->prev;
+          if(!auto_complete->current) auto_complete->current = auto_complete->tail;
+          if(strncmp(auto_complete->current->option, match, match_len) == 0) return;
+     }while(auto_complete->current != initial_node);
+
+     auto_complete_end(auto_complete);
+}
+
+typedef struct MacroCommitNode_t{
+     KeyNode_t* command_begin;
+     KeyNode_t* command_copy;
+     bool chain;
+     struct MacroCommitNode_t* next;
+     struct MacroCommitNode_t* prev;
+} MacroCommitNode_t;
+
+void macro_commits_free(MacroCommitNode_t** macro_commit)
+{
+     MacroCommitNode_t* itr = *macro_commit;
+     while(itr){
+          MacroCommitNode_t* tmp = itr;
+          itr = itr->next;
+          keys_free(&tmp->command_copy);
+          free(tmp);
+     }
+
+     *macro_commit = NULL;
+}
+
+void macro_commits_init(MacroCommitNode_t** macro_commit)
+{
+     if(*macro_commit){
+          macro_commits_free(macro_commit);
+     }
+
+     *macro_commit = calloc(1, sizeof(**macro_commit));
+}
+
+void macro_commit_push(MacroCommitNode_t** macro_commit, KeyNode_t* last_command_begin, bool chain)
+{
+     if(*macro_commit && (*macro_commit)->command_copy){
+          macro_commits_free(&(*macro_commit)->next);
+     }
+
+     MacroCommitNode_t* new_commit = calloc(1, sizeof(*new_commit));
+     if(!new_commit) return;
+
+     new_commit->prev = *macro_commit;
+     (*macro_commit)->next = new_commit;
+
+     (*macro_commit)->command_begin = last_command_begin;
+     (*macro_commit)->chain = chain;
+
+     *macro_commit = new_commit;
+}
+
+void macro_commits_dump(const MacroCommitNode_t* macro_commit)
+{
+     const MacroCommitNode_t* itr = macro_commit;
+     while(itr){
+          ce_message("key: %c, chain: %d", itr->command_begin ? itr->command_begin->key : '0', itr->chain);
+          KeyNode_t* copy_itr = itr->command_copy;
+          while(copy_itr){
+               ce_message("  %c", copy_itr->key);
+               copy_itr = copy_itr->next;
+          }
+          itr = itr->next;
+     }
+}
+
 #define VIM_COMMENT_STRING "//"
 
 typedef enum{
@@ -470,14 +703,15 @@ typedef enum{
      VCT_JOIN_LINE,
      VCT_OPEN_ABOVE, // NOTE: using the vim cheat sheet terminalogy for 'O' and 'o'
      VCT_OPEN_BELOW,
+     VCT_RECORD_MACRO,
+     VCT_PLAY_MACRO,
 } VimChangeType_t;
 
 typedef struct{
      VimChangeType_t type;
      union{
           char* insert_string;
-          char yank_register;
-          char paste_register;
+          char reg;
           char change_char;
           char* change_string;
      };
@@ -517,6 +751,12 @@ typedef enum{
      VMT_AROUND_WORD_BIG,
      VMT_VISUAL_RANGE,
      VMT_VISUAL_LINE,
+     VMT_VISUAL_SWAP_WITH_CURSOR,
+     VMT_SEARCH_WORD_UNDER_CURSOR,
+     VMT_SEARCH,
+     VMT_MATCHING_PAIR,
+     VMT_NEXT_BLANK_LINE,
+     VMT_PREV_BLANK_LINE,
 } VimMotionType_t;
 
 typedef struct{
@@ -528,13 +768,14 @@ typedef struct{
           char around_pair;
           int64_t visual_length;
           int64_t visual_lines;
+          Direction_t search_direction;
      };
      bool visual_start_after; // false means after !
+     bool search_forward;
 } VimMotion_t;
 
 typedef struct{
      int64_t multiplier;
-     Point_t start;
      VimMotion_t motion;
      VimChange_t change;
      VimMode_t end_in_vim_mode;
@@ -550,14 +791,62 @@ typedef enum{
 typedef struct{
      VimMotionType_t motion_type;
      char ch;
-} FindState_t;
+} FindCharInLineState_t;
+
+typedef enum{
+     VKH_UNHANDLED_KEY,
+     VKH_HANDLED_KEY,
+     VKH_COMPLETED_ACTION,
+} VimKeyHandlerResultType_t;
+
+typedef struct{
+     VimMode_t mode;
+
+     KeyNode_t* command_head;
+
+     VimAction_t last_action;
+     int* last_insert_command;
+
+     char recording_macro; // holds the register we are recording, is 0 if we aren't recording
+     char playing_macro;
+     KeyNode_t* record_macro_head;
+     KeyNode_t* last_macro_command_begin;
+     MacroCommitNode_t* macro_commit_current;
+     MacroNode_t* macro_head;
+     BufferCommitNode_t* record_start_commit_tail;
+
+     YankNode_t* yank_head;
+
+     FindCharInLineState_t find_char_in_line_state;
+
+     Point_t visual_start;
+     Point_t insert_start;
+
+     Direction_t search_direction;
+     Point_t start_search;
+} VimState_t;
+
+void vim_stop_recording_macro(VimState_t* vim_state)
+{
+     vim_state->recording_macro = 0;
+     keys_free(&vim_state->record_macro_head);
+     vim_state->last_macro_command_begin = NULL;
+}
+
+typedef struct{
+     VimKeyHandlerResultType_t type;
+     VimAction_t completed_action;
+} VimKeyHandlerResult_t;
+
+VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* buffer, Point_t* cursor,
+                                      AutoComplete_t* auto_complete, bool repeating);
 
 int itoi(int* str)
 {
      int value = 0;
 
      while(*str){
-          if(!isdigit(*str)) return 0;
+          if(*str < 0 || *str > 255 || !isdigit(*str)) return 0;
           value = value * 10 + (*str - '0');
           str++;
      }
@@ -565,10 +854,9 @@ int itoi(int* str)
      return value;
 }
 
-// TODO: put some of these arguments into a vim structure
 VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action, VimMode_t vim_mode,
                                          Buffer_t* buffer, Point_t* cursor, Point_t* visual_start,
-                                         FindState_t* find_state)
+                                         FindCharInLineState_t* find_char_in_line_state, bool recording_macro)
 {
      int tmp[BUFSIZ];
      bool visual_mode = false;
@@ -580,7 +868,7 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
 
      // get multiplier if there is one
      const int* itr = string;
-     while(*itr && isdigit(*itr)) itr++;
+     while(*itr && *itr >= 0 && *itr <= 255 && isdigit(*itr)) itr++;
      if(itr != string){
           int64_t len = itr - string;
           memcpy(tmp, string, len * sizeof(*tmp));
@@ -624,7 +912,7 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
                return VCS_INVALID;
           }
 
-          built_action.change.yank_register = *itr;
+          built_action.change.reg = *itr;
           itr++;
      }
 
@@ -661,6 +949,7 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           break;
      case 'a':
           if(vim_mode == VM_VISUAL_RANGE) { // wait for aw in visual range mode
+               built_action.change.type = VCT_MOTION;
                built_action.end_in_vim_mode = vim_mode;
                itr--; // back up so this counts as a motion
                get_motion = true;
@@ -690,6 +979,7 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           break;
      case 'i':
           if(vim_mode == VM_VISUAL_RANGE) { // wait for iw in visual range mode
+               built_action.change.type = VCT_MOTION;
                built_action.end_in_vim_mode = vim_mode;
                itr--; // back up so this counts as a motion
                get_motion = true;
@@ -721,6 +1011,9 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           built_action.change.change_char = *(++itr);
           if(!built_action.change.change_char){
                return VCS_CONTINUE;
+          }
+          if(!isprint(built_action.change.change_char)){
+               return VCS_INVALID;
           }
           get_motion = false;
           break;
@@ -766,16 +1059,14 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           break;
      case ';':
           built_action.change.type = VCT_MOTION;
-          built_action.motion.type = find_state->motion_type;
-          built_action.motion.match_char = find_state->ch;
+          built_action.motion.type = find_char_in_line_state->motion_type;
           get_motion = false;
           break;
      case ',':
           built_action.change.type = VCT_MOTION;
-          built_action.motion.match_char = find_state->ch;
 
           // reverse the motion
-          switch(find_state->motion_type){
+          switch(find_char_in_line_state->motion_type){
           default:
                break;
           case VMT_FIND_NEXT_MATCHING_CHAR:
@@ -799,13 +1090,74 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           get_motion = false;
           break;
      case 'O':
-          built_action.change.type = VCT_OPEN_ABOVE;
-          built_action.end_in_vim_mode = VM_INSERT;
+          if(visual_mode){
+               built_action.motion.type = VMT_VISUAL_SWAP_WITH_CURSOR;
+               built_action.end_in_vim_mode = vim_mode;
+          }else{
+               built_action.change.type = VCT_OPEN_ABOVE;
+               built_action.end_in_vim_mode = VM_INSERT;
+          }
           get_motion = false;
           break;
      case 'o':
-          built_action.change.type = VCT_OPEN_BELOW;
-          built_action.end_in_vim_mode = VM_INSERT;
+          if(visual_mode){
+               built_action.motion.type = VMT_VISUAL_SWAP_WITH_CURSOR;
+               built_action.end_in_vim_mode = vim_mode;
+          }else{
+               built_action.change.type = VCT_OPEN_BELOW;
+               built_action.end_in_vim_mode = VM_INSERT;
+          }
+          get_motion = false;
+          break;
+     case 'q':
+          built_action.change.type = VCT_RECORD_MACRO;
+          if(!recording_macro){
+               built_action.change.reg = *(++itr);
+               if(!built_action.change.reg){
+                    return VCS_CONTINUE;
+               }
+               if(!isprint(built_action.change.reg)){
+                    return VCS_INVALID;
+               }
+          }
+          get_motion = false;
+          break;
+     case '@':
+          built_action.change.type = VCT_PLAY_MACRO;
+          built_action.change.reg = *(++itr);
+          if(!built_action.change.reg){
+               return VCS_CONTINUE;
+          }
+          if(!isprint(built_action.change.reg)){
+               return VCS_INVALID;
+          }
+          get_motion = false;
+          break;
+     case '%':
+          built_action.change.type = VCT_MOTION;
+          built_action.motion.type = VMT_MATCHING_PAIR;
+          get_motion = false;
+          break;
+     case '*':
+          built_action.motion.type = VMT_SEARCH_WORD_UNDER_CURSOR;
+          built_action.motion.search_direction = CE_DOWN;
+          built_action.motion.search_forward = true;
+          get_motion = false;
+          break;
+     case '#':
+          built_action.motion.type = VMT_SEARCH_WORD_UNDER_CURSOR;
+          built_action.motion.search_direction = CE_UP;
+          built_action.motion.search_forward = true;
+          get_motion = false;
+          break;
+     case 'n':
+          built_action.motion.type = VMT_SEARCH;
+          built_action.motion.search_forward = true;
+          get_motion = false;
+          break;
+     case 'N':
+          built_action.motion.type = VMT_SEARCH;
+          built_action.motion.search_forward = false;
           get_motion = false;
           break;
      }
@@ -971,8 +1323,8 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
                }
           break;
           case 'G':
-          built_action.motion.type = VMT_END_OF_FILE;
-          break;
+               built_action.motion.type = VMT_END_OF_FILE;
+               break;
           case 'c':
                if(change_char == 'c') {
                     built_action.motion.type = VMT_LINE;
@@ -1009,6 +1361,12 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
                }else{
                     return VCS_INVALID;
                }
+               break;
+          case '}':
+               built_action.motion.type = VMT_NEXT_BLANK_LINE;
+               break;
+          case '{':
+               built_action.motion.type = VMT_PREV_BLANK_LINE;
                break;
           }
      }
@@ -1057,8 +1415,7 @@ typedef struct {
      YankMode_t yank_mode;
 } VimActionRange_t;
 
-bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, FindState_t* find_state,
-                          VimActionRange_t* action_range)
+bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, VimState_t* vim_state, VimActionRange_t* action_range)
 {
      action_range->start = *cursor;
      action_range->end = action_range->start;
@@ -1157,39 +1514,70 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                     action_range->yank_mode = YANK_LINE;
                     break;
                case VMT_FIND_NEXT_MATCHING_CHAR:
-                    if(ce_move_cursor_forward_to_char(buffer, &action_range->end, action->motion.match_char)){
-                         find_state->motion_type = action->motion.type;
-                         find_state->ch = action->motion.match_char;
+                    if(action->motion.match_char){
+                         if(ce_move_cursor_forward_to_char(buffer, &action_range->end, action->motion.match_char)){
+                              vim_state->find_char_in_line_state.motion_type = action->motion.type;
+                              vim_state->find_char_in_line_state.ch = action->motion.match_char;
+                         }
+                    }else{
+                         ce_move_cursor_forward_to_char(buffer, &action_range->end, vim_state->find_char_in_line_state.ch);
                     }
                     break;
                case VMT_FIND_PREV_MATCHING_CHAR:
-                    if(ce_move_cursor_backward_to_char(buffer, &action_range->end, action->motion.match_char)){
-                         find_state->motion_type = action->motion.type;
-                         find_state->ch = action->motion.match_char;
+                    if(action->motion.match_char){
+                         if(ce_move_cursor_backward_to_char(buffer, &action_range->end, action->motion.match_char)){
+                              vim_state->find_char_in_line_state.motion_type = action->motion.type;
+                              vim_state->find_char_in_line_state.ch = action->motion.match_char;
+                         }
+                    }else{
+                         ce_move_cursor_backward_to_char(buffer, &action_range->end, vim_state->find_char_in_line_state.ch);
                     }
                     break;
                case VMT_TO_NEXT_MATCHING_CHAR:
                     action_range->end.x++;
-                    if(ce_move_cursor_forward_to_char(buffer, &action_range->end, action->motion.match_char)){
-                         find_state->motion_type = action->motion.type;
-                         find_state->ch = action->motion.match_char;
-                         action_range->end.x--;
-                         if(action_range->end.x < 0) action_range->end.x = 0;
+                    if(action->motion.match_char){
+                         if(ce_move_cursor_forward_to_char(buffer, &action_range->end, action->motion.match_char)){
+                              if(action->motion.match_char){
+                                   vim_state->find_char_in_line_state.motion_type = action->motion.type;
+                                   vim_state->find_char_in_line_state.ch = action->motion.match_char;
+                              }
+                              action_range->end.x--;
+                              if(action_range->end.x < 0) action_range->end.x = 0;
+                         }else{
+                              action_range->end.x--;
+                         }
                     }else{
-                         action_range->end.x--;
+                         if(ce_move_cursor_forward_to_char(buffer, &action_range->end, vim_state->find_char_in_line_state.ch)){
+                              action_range->end.x--;
+                              if(action_range->end.x < 0) action_range->end.x = 0;
+                         }else{
+                              action_range->end.x--;
+                         }
                     }
                     break;
                case VMT_TO_PREV_MATCHING_CHAR:
                {
                     action_range->end.x--;
-                    if(ce_move_cursor_backward_to_char(buffer, &action_range->end, action->motion.match_char)){
-                         find_state->motion_type = action->motion.type;
-                         find_state->ch = action->motion.match_char;
-                         action_range->end.x++;
-                         int64_t line_len = strlen(buffer->lines[action_range->end.y]);
-                         if(action_range->end.x > line_len) action_range->end.x = line_len;
+                    if(action->motion.match_char){
+                         if(ce_move_cursor_backward_to_char(buffer, &action_range->end, action->motion.match_char)){
+                              if(action->motion.match_char){
+                                   vim_state->find_char_in_line_state.motion_type = action->motion.type;
+                                   vim_state->find_char_in_line_state.ch = action->motion.match_char;
+                              }
+                              action_range->end.x++;
+                              int64_t line_len = strlen(buffer->lines[action_range->end.y]);
+                              if(action_range->end.x > line_len) action_range->end.x = line_len;
+                         }else{
+                              action_range->end.x++;
+                         }
                     }else{
-                         action_range->end.x++;
+                         if(ce_move_cursor_backward_to_char(buffer, &action_range->end, vim_state->find_char_in_line_state.ch)){
+                              action_range->end.x++;
+                              int64_t line_len = strlen(buffer->lines[action_range->end.y]);
+                              if(action_range->end.x > line_len) action_range->end.x = line_len;
+                         }else{
+                              action_range->end.x++;
+                         }
                     }
                }break;
                case VMT_BEGINNING_OF_FILE:
@@ -1241,7 +1629,7 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                     case '[':
                     case ']':
                          if(!ce_move_cursor_to_matching_pair(buffer, &action_range->start, ']')) return false;
-                         if(!ce_move_cursor_to_matching_pair(buffer, &action_range->end, ']')) return false;
+                         if(!ce_move_cursor_to_matching_pair(buffer, &action_range->end, '[')) return false;
                          ce_advance_cursor(buffer, &action_range->start, 1);
                          ce_advance_cursor(buffer, &action_range->end, -1);
                          break;
@@ -1291,7 +1679,7 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                     case '[':
                     case ']':
                          if(!ce_move_cursor_to_matching_pair(buffer, &action_range->start, ']')) return false;
-                         if(!ce_move_cursor_to_matching_pair(buffer, &action_range->end, ']')) return false;
+                         if(!ce_move_cursor_to_matching_pair(buffer, &action_range->end, '[')) return false;
                          break;
                     default:
                          return false;
@@ -1385,6 +1773,62 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                          }
                     }
                } break;
+               case VMT_VISUAL_SWAP_WITH_CURSOR:
+               {
+                    Point_t tmp = *cursor;
+                    *cursor = vim_state->visual_start;
+                    vim_state->visual_start = tmp;
+               } break;
+               case VMT_MATCHING_PAIR:
+               {
+                    char matchee;
+                    if(!ce_get_char(buffer, action_range->end, &matchee)) break;
+                    ce_move_cursor_to_matching_pair(buffer, &action_range->end, matchee);
+               } break;
+               case VMT_NEXT_BLANK_LINE:
+               {
+                    int64_t last_line = buffer->line_count - 1;
+                    action_range->end.y++;
+                    while(action_range->end.y < last_line && strlen(buffer->lines[action_range->end.y])){
+                         action_range->end.y++;
+                    }
+               } break;
+               case VMT_PREV_BLANK_LINE:
+                    action_range->end.y--;
+                    while(action_range->end.y > 0 && strlen(buffer->lines[action_range->end.y])){
+                         action_range->end.y--;
+                    }
+                    break;
+               case VMT_SEARCH_WORD_UNDER_CURSOR:
+               {
+                    Point_t word_start, word_end;
+                    if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) break;
+                    char* search_str = ce_dupe_string(buffer, word_start, word_end);
+                    add_yank(&vim_state->yank_head, '/', search_str, YANK_NORMAL);
+                    vim_state->search_direction = action->motion.search_direction;
+               }
+               // NOTE: fall through intentionally
+               case VMT_SEARCH:
+               {
+                    YankNode_t* yank = find_yank(vim_state->yank_head, '/');
+                    if(yank){
+                         assert(yank->mode == YANK_NORMAL);
+
+                         Direction_t dir = vim_state->search_direction;
+                         if(!action->motion.search_forward){
+                              if(vim_state->search_direction == CE_UP){
+                                   dir = CE_DOWN;
+                              }else{
+                                   dir = CE_UP;
+                              }
+                         }
+
+                         Point_t match;
+                         if(ce_find_string(buffer, *cursor, yank->text, &match, dir)){
+                              ce_set_cursor(buffer, cursor, match);
+                         }
+                    }
+               } break;
                }
           }
      }
@@ -1415,21 +1859,24 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
      return true;
 }
 
-bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, VimMode_t vim_mode,
-                      YankNode_t** yank_head, VimMode_t* final_mode, Point_t* visual_start,
-                      FindState_t* find_state)
+void vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, VimState_t* vim_state,
+                      AutoComplete_t* auto_complete)
 {
-     VimActionRange_t action_range;
-
-     if(!vim_action_get_range(action, buffer, cursor, find_state, &action_range) ) return false;
-
      BufferState_t* buffer_state = buffer->user_data;
+     VimActionRange_t action_range;
+     BufferCommitChain_t chain = vim_state->playing_macro ? BCC_KEEP_GOING : BCC_STOP;
+
+     if(!vim_action_get_range(action, buffer, cursor, vim_state, &action_range) ) return;
 
      // perform action on range
      switch(action->change.type){
      default:
           break;
      case VCT_MOTION:
+          if(action->end_in_vim_mode == VM_INSERT){
+               vim_state->insert_start = *cursor;
+          }
+
           *cursor = action_range.end;
 
           if(action->motion.type == VMT_UP ||
@@ -1437,14 +1884,14 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                cursor->x = buffer_state->cursor_save_column;
           }
 
-          if(vim_mode == VM_VISUAL_RANGE){
+          if(vim_state->mode == VM_VISUAL_RANGE){
                // expand the selection for some motions
-               if(ce_point_after(*visual_start, *cursor) &&
-                  ce_point_after(*action_range.sorted_end, *visual_start)){
-                     *visual_start = *action_range.sorted_end;
-               }else if(ce_point_after(*cursor, *visual_start) &&
-                        ce_point_after(*visual_start, *action_range.sorted_start)){
-                     *visual_start = *action_range.sorted_start;
+               if(ce_point_after(vim_state->visual_start, *cursor) &&
+                  ce_point_after(*action_range.sorted_end, vim_state->visual_start)){
+                     vim_state->visual_start = *action_range.sorted_end;
+               }else if(ce_point_after(*cursor, vim_state->visual_start) &&
+                        ce_point_after(vim_state->visual_start, *action_range.sorted_start)){
+                     vim_state->visual_start = *action_range.sorted_start;
                }
           }
           break;
@@ -1457,22 +1904,22 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
 
           if(!ce_remove_string(buffer, *action_range.sorted_start, len)){
                free(commit_string);
-               return false;
+               break;
           }
 
           if(action->yank){
                char* yank_string = strdup(commit_string);
                if(action_range.yank_mode == YANK_LINE && yank_string[len-1] == NEWLINE) yank_string[len-1] = 0;
-               add_yank(yank_head, action->change.yank_register ? action->change.yank_register : '"', yank_string, action_range.yank_mode);
+               add_yank(&vim_state->yank_head, action->change.reg ? action->change.reg : '"', yank_string, action_range.yank_mode);
           }
 
-          ce_commit_remove_string(&buffer_state->commit_tail, *action_range.sorted_start, *cursor, *action_range.sorted_start, commit_string, BCC_STOP);
+          ce_commit_remove_string(&buffer_state->commit_tail, *action_range.sorted_start, *cursor, *action_range.sorted_start, commit_string, chain);
      } break;
      case VCT_PASTE_BEFORE:
      {
-          YankNode_t* yank = find_yank(*yank_head, action->change.yank_register ? action->change.yank_register : '"');
+          YankNode_t* yank = find_yank(vim_state->yank_head, action->change.reg ? action->change.reg : '"');
 
-          if(!yank) return false;
+          if(!yank) break;
 
           switch(yank->mode){
           default:
@@ -1482,7 +1929,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                if(ce_insert_string(buffer, *action_range.sorted_start, yank->text)){
                     ce_commit_insert_string(&buffer_state->commit_tail,
                                             *action_range.sorted_start, *action_range.sorted_start, *action_range.sorted_start,
-                                            strdup(yank->text), BCC_STOP);
+                                            strdup(yank->text), chain);
                }
           } break;
           case YANK_LINE:
@@ -1499,16 +1946,16 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                     if(ce_insert_string(buffer, insert_loc, save_str)){
                          ce_commit_insert_string(&buffer_state->commit_tail,
                                                  insert_loc, *cursor, cursor_loc,
-                                                 save_str, BCC_STOP);
+                                                 save_str, chain);
                     }
           } break;
           }
      } break;
      case VCT_PASTE_AFTER:
      {
-          YankNode_t* yank = find_yank(*yank_head, action->change.yank_register ? action->change.yank_register : '"');
+          YankNode_t* yank = find_yank(vim_state->yank_head, action->change.reg ? action->change.reg : '"');
 
-          if(!yank) return false;
+          if(!yank) break;
 
           switch(yank->mode){
           default:
@@ -1530,7 +1977,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                if(ce_insert_string(buffer, insert_cursor, yank->text)){
                     ce_commit_insert_string(&buffer_state->commit_tail,
                                             insert_cursor, *action_range.sorted_start, *action_range.sorted_start,
-                                            strdup(yank->text), BCC_STOP);
+                                            strdup(yank->text), chain);
                     ce_advance_cursor(buffer, cursor, yank_len);
                }
           } break;
@@ -1547,7 +1994,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                if(ce_insert_string(buffer, insert_loc, save_str)){
                     ce_commit_insert_string(&buffer_state->commit_tail,
                                             insert_loc, *cursor, cursor_loc,
-                                            save_str, BCC_STOP);
+                                            save_str, chain);
                     *cursor = cursor_loc;
                }
           } break;
@@ -1557,11 +2004,11 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
      {
           char prev_char;
 
-          if(!ce_get_char(buffer, *action_range.sorted_start, &prev_char)) return false;
-          if(!ce_set_char(buffer, *action_range.sorted_start, action->change.change_char)) return false;
+          if(!ce_get_char(buffer, *action_range.sorted_start, &prev_char)) break;
+          if(!ce_set_char(buffer, *action_range.sorted_start, action->change.change_char)) break;
 
           ce_commit_change_char(&buffer_state->commit_tail, *action_range.sorted_start, *cursor, *action_range.sorted_start,
-                                action->change.change_char, prev_char, BCC_STOP);
+                                action->change.change_char, prev_char, chain);
      } break;
      case VCT_YANK:
      {
@@ -1576,8 +2023,8 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                }
           }
 
-          add_yank(yank_head, '0', save_zero, action_range.yank_mode);
-          add_yank(yank_head, action->change.yank_register ? action->change.yank_register : '"', save_quote,
+          add_yank(&vim_state->yank_head, '0', save_zero, action_range.yank_mode);
+          add_yank(&vim_state->yank_head, action->change.reg ? action->change.reg : '"', save_quote,
                    action_range.yank_mode);
      } break;
      case VCT_INDENT:
@@ -1591,11 +2038,9 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                     ce_insert_string(buffer, loc, TAB_STRING);
                     ce_commit_insert_string(&buffer_state->commit_tail, loc, *cursor, *cursor, strdup(TAB_STRING), BCC_KEEP_GOING);
                }
-          }else{
-               return false;
-          }
 
-          if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
+               if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = chain;
+          }
      } break;
      case VCT_UNINDENT:
      {
@@ -1619,11 +2064,9 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                          ce_commit_remove_string(&buffer_state->commit_tail, loc, *cursor, *cursor, strdup(TAB_STRING), BCC_KEEP_GOING);
                     }
                }
-          }else{
-               return false;
-          }
 
-          if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
+               if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = chain;
+          }
      } break;
      case VCT_COMMENT:
      {
@@ -1639,7 +2082,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                }
           }
 
-          if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
+          if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = chain;
      } break;
      case VCT_UNCOMMENT:
      {
@@ -1656,7 +2099,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                }
           }
 
-          if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
+          if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = chain;
      } break;
      case VCT_FLIP_CASE:
      {
@@ -1673,12 +2116,14 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                     }else{
                          new_char = toupper(prev_char);
                     }
-                    if(!ce_set_char(buffer, itr, new_char)) return false;
-                    ce_commit_change_char(&buffer_state->commit_tail, itr, itr, itr, new_char, prev_char, BCC_STOP);
+                    if(!ce_set_char(buffer, itr, new_char)) break;
+                    ce_commit_change_char(&buffer_state->commit_tail, itr, itr, itr, new_char, prev_char, BCC_KEEP_GOING);
                }
 
                ce_advance_cursor(buffer, &itr, 1);
           } while(!ce_point_after(itr, *action_range.sorted_end));
+
+          if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = chain;
      } break;
      case VCT_JOIN_LINE:
      {
@@ -1712,7 +2157,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                *cursor = join_loc;
                if(ce_insert_string(buffer, *cursor, " ")){
                     ce_commit_insert_string(&buffer_state->commit_tail, join_loc, *action_range.sorted_start, join_loc,
-                                            strdup(" "), BCC_STOP);
+                                            strdup(" "), chain);
                }
           }else{
                free(save_str);
@@ -1753,11 +2198,91 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                ce_commit_insert_string(&buffer_state->commit_tail, end_of_line, save_cursor, *cursor, nl_indent, BCC_KEEP_GOING);
           }
      } break;
+     case VCT_RECORD_MACRO:
+          if(vim_state->recording_macro){
+               int* built_macro = keys_get_string(vim_state->record_macro_head);
+
+               if(built_macro[0]){
+                    macro_add(&vim_state->macro_head, vim_state->recording_macro, built_macro);
+               }else{
+                    free(built_macro);
+               }
+
+               // override commit history to make our macro undo-able with 1 undo
+               BufferCommitNode_t* itr = buffer_state->commit_tail;
+
+               // see if the commit we started recording at is still in the history
+               while(itr){
+                    if(itr == vim_state->record_start_commit_tail) break;
+                    itr = itr->prev;
+               }
+
+               while(itr && itr->next){
+                    itr->commit.chain = BCC_KEEP_GOING;
+                    itr = itr->next;
+               }
+
+               if(itr) itr->commit.chain = BCC_STOP;
+
+               vim_stop_recording_macro(vim_state);
+
+               macro_commits_free(&vim_state->macro_commit_current);
+          }else{
+               vim_state->recording_macro = action->change.reg;
+               keys_free(&vim_state->record_macro_head);
+               vim_state->record_start_commit_tail = buffer_state->commit_tail;
+               macro_commits_init(&vim_state->macro_commit_current);
+          }
+          break;
+     case VCT_PLAY_MACRO:
+     {
+          if(vim_state->playing_macro == action->change.reg){
+               ce_message("attempted to play macro in register '%c' inside itself", action->change.reg);
+               break;
+          }
+
+          MacroNode_t* macro = macro_find(vim_state->macro_head, action->change.reg);
+          if(!macro){
+               ce_message("no macro defined in register '%c'", action->change.reg);
+               break;
+          }
+
+          KeyNode_t* save_command_head = vim_state->command_head;
+          vim_state->command_head = NULL;
+          vim_state->playing_macro = action->change.reg;
+
+          for(int64_t i = 0; i < action->multiplier; ++i){
+
+               bool unhandled_key = false;
+               int* macro_itr = macro->command;
+               while(*macro_itr){
+                    VimKeyHandlerResult_t vkh_result =  vim_key_handler(*macro_itr, vim_state, buffer, cursor, auto_complete, false);
+
+                    if(vkh_result.type == VKH_UNHANDLED_KEY){
+                         unhandled_key = true;
+                         break;
+                    }
+
+                    macro_itr++;
+               }
+
+               keys_free(&vim_state->command_head);
+
+               if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
+
+               if(unhandled_key) break;
+          }
+
+          vim_state->playing_macro = 0;
+          vim_state->command_head = save_command_head;
+     } break;
      }
 
-     *final_mode = action->end_in_vim_mode;
+     vim_state->mode = action->end_in_vim_mode;
 
-     if(action->end_in_vim_mode != VM_INSERT){
+     if(action->end_in_vim_mode == VM_INSERT){
+          if(action->change.type != VCT_NONE && action->change.type != VCT_MOTION && buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_KEEP_GOING;
+     }else{
           Point_t old_cursor = *cursor;
           ce_clamp_cursor(buffer, cursor);
 
@@ -1765,16 +2290,12 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
              old_cursor.y == cursor->y){
                buffer_state->cursor_save_column = cursor->x;
           }
-     }else{
-          if(action->change.type != VCT_NONE && buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_KEEP_GOING;
      }
-
-     return true;
 }
 
 // location is {left_column, top_line} for the view
 void scroll_view_to_location(BufferView_t* buffer_view, const Point_t* location){
-     // TODO: we should be able to scroll the view above our first line
+     // TODO: should we be able to scroll the view above our first line?
      buffer_view->left_column = (location->x >= 0) ? location->x : 0;
      buffer_view->top_row = (location->y >= 0) ? location->y : 0;
 }
@@ -1852,141 +2373,45 @@ void tab_view_restore_overrideable(TabView_t* tab)
      center_view(tab->view_overrideable);
 }
 
-typedef struct CompleteNode_t{
-     char* option;
-     struct CompleteNode_t* next;
-     struct CompleteNode_t* prev;
-} CompleteNode_t;
-
 typedef struct{
-     CompleteNode_t* head;
-     CompleteNode_t* tail;
-     CompleteNode_t* current;
-     Point_t start;
-} AutoComplete_t;
-
-bool auto_complete_insert(AutoComplete_t* auto_complete, const char* option)
-{
-     CompleteNode_t* new_node = calloc(1, sizeof(*new_node));
-     if(!new_node){
-          ce_message("failed to allocate auto complete option");
-          return false;
-     }
-
-     new_node->option = strdup(option);
-
-     if(auto_complete->tail){
-          auto_complete->tail->next = new_node;
-          new_node->prev = auto_complete->tail;
-     }
-
-     auto_complete->tail = new_node;
-     if(!auto_complete->head){
-          auto_complete->head = new_node;
-     }
-
-     return true;
-}
-
-void auto_complete_start(AutoComplete_t* auto_complete, Point_t start)
-{
-     assert(start.x >= 0);
-     auto_complete->start = start;
-     auto_complete->current = auto_complete->head;
-}
-
-void auto_complete_end(AutoComplete_t* auto_complete)
-{
-     auto_complete->start.x = -1;
-}
-
-bool auto_completing(AutoComplete_t* auto_complete)
-{
-    return auto_complete->start.x >= 0;
-}
-
-void auto_complete_clear(AutoComplete_t* auto_complete)
-{
-    CompleteNode_t* itr = auto_complete->head;
-    while(itr){
-         CompleteNode_t* tmp = itr;
-         itr = itr->next;
-         free(tmp->option);
-         free(tmp);
-    }
-
-    auto_complete->head = NULL;
-    auto_complete->tail = NULL;
-    auto_complete->current = NULL;
-}
-
-void auto_complete_next(AutoComplete_t* auto_complete, const char* match)
-{
-     int64_t match_len = strlen(match);
-     CompleteNode_t* initial_node = auto_complete->current;
-
-     do{
-          auto_complete->current = auto_complete->current->next;
-          if(!auto_complete->current) auto_complete->current = auto_complete->head;
-          if(strncmp(auto_complete->current->option, match, match_len) == 0) return;
-     }while(auto_complete->current != initial_node);
-
-     auto_complete_end(auto_complete);
-}
-
-void auto_complete_prev(AutoComplete_t* auto_complete, const char* match)
-{
-     int64_t match_len = strlen(match);
-     CompleteNode_t* initial_node = auto_complete->current;
-
-     do{
-          auto_complete->current = auto_complete->current->prev;
-          if(!auto_complete->current) auto_complete->current = auto_complete->tail;
-          if(strncmp(auto_complete->current->option, match, match_len) == 0) return;
-     }while(auto_complete->current != initial_node);
-
-     auto_complete_end(auto_complete);
-}
-
-typedef struct{
-     VimMode_t vim_mode;
      bool input;
      const char* input_message;
      int input_key;
+
      Buffer_t* shell_command_buffer; // Allocate so it can be part of the buffer list and get free'd at the end
-     Buffer_t* completion_buffer; // same as shell_command_buffer (let's see how quickly this comment gets out of date!)
+     Buffer_t* completion_buffer;    // same as shell_command_buffer
+
      Buffer_t input_buffer;
      Buffer_t buffer_list_buffer;
      Buffer_t mark_list_buffer;
      Buffer_t yank_list_buffer;
      Buffer_t macro_list_buffer;
      Buffer_t* buffer_before_query;
+
+     VimState_t vim_state;
+
      int64_t last_command_buffer_jump;
      int last_key;
-     KeyNode_t* command_head;
-     VimAction_t last_vim_action;
-     int* last_insert_command;
-     FindState_t find_state;
-     struct {
-          Direction_t direction;
-     } search_command;
-     Point_t visual_start;
-     struct YankNode_t* yank_head;
+
      TabView_t* tab_head;
      TabView_t* tab_current;
+
      BufferView_t* view_input;
+
      InputHistory_t shell_command_history;
      InputHistory_t shell_input_history;
      InputHistory_t search_history;
      InputHistory_t load_file_history;
-     Point_t start_search;
+
      pthread_t shell_command_thread;
      pthread_t shell_input_thread;
+
      AutoComplete_t auto_complete;
+
      LineNumberType_t line_number_type;
-     MacroNode_t* macro_head;
-     char recording_macro; // holds the register we are recording
-     KeyNode_t* record_macro_head;
+
+     char editting_register;
+
      bool quit;
 } ConfigState_t;
 
@@ -2017,6 +2442,18 @@ void add_mark(BufferState_t* buffer, char mark_char, const Point_t* location)
           mark_location = &new_mark->location;
      }
      *mark_location = *location;
+}
+
+void free_marks(MarkNode_t** head)
+{
+     MarkNode_t* itr = *head;
+     while(itr){
+          MarkNode_t* tmp = itr;
+          itr = itr->next;
+          free(tmp);
+     }
+
+     *head = NULL;
 }
 
 bool initialize_buffer(Buffer_t* buffer){
@@ -2094,9 +2531,19 @@ BufferNode_t* new_buffer_from_file(BufferNode_t* head, const char* filename)
           return NULL;
      }
 
-     if(!ce_load_file(buffer, filename)){
-          free(buffer);
+     LoadFileResult_t lfr = ce_load_file(buffer, filename);
+     switch(lfr){
+     default:
+          assert(!"unsupported LoadFileResult_t");
+          return false;
+     case LF_DOES_NOT_EXIST:
+          buffer->newfile = true;
+          buffer->name = strdup(filename);
+          break;
+     case LF_IS_DIRECTORY:
           return NULL;
+     case LF_SUCCESS:
+          break;
      }
 
      if(!initialize_buffer(buffer)){
@@ -2115,28 +2562,29 @@ BufferNode_t* new_buffer_from_file(BufferNode_t* head, const char* filename)
      return new_buffer_node;
 }
 
-void enter_normal_mode(ConfigState_t* config_state)
+void vim_enter_normal_mode(VimState_t* vim_state)
 {
-     config_state->vim_mode = VM_NORMAL;
-     auto_complete_end(&config_state->auto_complete);
+     vim_state->mode = VM_NORMAL;
 }
 
-void enter_insert_mode(ConfigState_t* config_state)
+bool vim_enter_insert_mode(VimState_t* vim_state, Buffer_t* buffer)
 {
-     if(config_state->tab_current->view_current->buffer->readonly) return;
-     config_state->vim_mode = VM_INSERT;
+     if(buffer->readonly) return false;
+
+     vim_state->mode = VM_INSERT;
+     return true;
 }
 
-void enter_visual_range_mode(ConfigState_t* config_state, BufferView_t* buffer_view)
+void vim_enter_visual_range_mode(VimState_t* vim_state, Point_t cursor)
 {
-     config_state->vim_mode = VM_VISUAL_RANGE;
-     config_state->visual_start = buffer_view->cursor;
+     vim_state->mode = VM_VISUAL_RANGE;
+     vim_state->visual_start = cursor;
 }
 
-void enter_visual_line_mode(ConfigState_t* config_state, BufferView_t* buffer_view)
+void vim_enter_visual_line_mode(VimState_t* vim_state, Point_t cursor)
 {
-     config_state->vim_mode = VM_VISUAL_LINE;
-     config_state->visual_start = buffer_view->cursor;
+     vim_state->mode = VM_VISUAL_LINE;
+     vim_state->visual_start = cursor;
 }
 
 InputHistory_t* history_from_input_key(ConfigState_t* config_state)
@@ -2176,7 +2624,8 @@ void input_start(ConfigState_t* config_state, const char* input_message, int inp
      config_state->tab_current->view_input_save = config_state->tab_current->view_current;
      pthread_mutex_unlock(&view_input_save_lock);
      config_state->tab_current->view_current = config_state->view_input;
-     enter_insert_mode(config_state);
+
+     vim_enter_insert_mode(&config_state->vim_state, config_state->tab_current->view_current->buffer);
 
      // reset input history back to tail
      InputHistory_t* history = history_from_input_key(config_state);
@@ -2187,14 +2636,14 @@ void input_end(ConfigState_t* config_state)
 {
      config_state->input = false;
      config_state->tab_current->view_current = config_state->tab_current->view_input_save;
-     enter_normal_mode(config_state);
+     vim_enter_normal_mode(&config_state->vim_state);
 }
 
 void input_cancel(ConfigState_t* config_state)
 {
      if(config_state->input_key == '/' || config_state->input_key == '?'){
           pthread_mutex_lock(&view_input_save_lock);
-          config_state->tab_current->view_input_save->cursor = config_state->start_search;
+          config_state->tab_current->view_input_save->cursor = config_state->vim_state.start_search;
           pthread_mutex_unlock(&view_input_save_lock);
           center_view(config_state->tab_current->view_input_save);
      }else if(config_state->input_key == 6){
@@ -2228,6 +2677,10 @@ int nftw_find_file(const char* fpath, const struct stat *sb, int typeflag, struc
      (void)sb;
      if((typeflag == FTW_F || typeflag == FTW_SL) && !strcmp(&fpath[ftwbuf->base], nftw_state.search_filename)){
           nftw_state.new_node = new_buffer_from_file(nftw_state.head, nftw_state.search_filename);
+
+          // update the buffer filename, we don't really want the basename, we want the full path from where we opened ce
+          free(nftw_state.new_node->buffer->name);
+          nftw_state.new_node->buffer->name = strdup(fpath + 2); // cut off initial './'
           return FTW_STOP;
      }
      return FTW_CONTINUE;
@@ -2238,6 +2691,7 @@ void free_buffer_state(BufferState_t* buffer_state)
      BufferCommitNode_t* itr = buffer_state->commit_tail;
      while(itr->prev) itr = itr->prev;
      ce_commits_free(itr);
+     free_marks(&buffer_state->mark_head);
      free(buffer_state);
 }
 
@@ -2251,11 +2705,6 @@ Buffer_t* open_file_buffer(BufferNode_t* head, const char* filename)
           itr = itr->next;
      }
 
-     if(access(filename, F_OK) == 0){
-          BufferNode_t* node = new_buffer_from_file(head, filename);
-          if(node) return node->buffer;
-     }
-
      // clang doesn't support nested functions so we need to deal with global state
      nftw_state.search_filename = filename;
      nftw_state.head = head;
@@ -2263,7 +2712,8 @@ Buffer_t* open_file_buffer(BufferNode_t* head, const char* filename)
      nftw(".", nftw_find_file, 20, FTW_CHDIR);
      if(nftw_state.new_node) return nftw_state.new_node->buffer;
 
-     ce_message("file %s not found", filename);
+     BufferNode_t* node = new_buffer_from_file(head, filename);
+     if(node) return node->buffer;
 
      return NULL;
 }
@@ -2374,7 +2824,6 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
           config_state->shell_command_buffer = calloc(1, sizeof(*config_state->shell_command_buffer));
           config_state->shell_command_buffer->name = strdup("[shell_output]");
           config_state->shell_command_buffer->readonly = true;
-          initialize_buffer(config_state->shell_command_buffer);
           ce_alloc_lines(config_state->shell_command_buffer, 1);
           BufferNode_t* new_buffer_node = ce_append_buffer_to_list(*head, config_state->shell_command_buffer);
           if(!new_buffer_node){
@@ -2387,7 +2836,6 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
           config_state->completion_buffer = calloc(1, sizeof(*config_state->shell_command_buffer));
           config_state->completion_buffer->name = strdup("[completions]");
           config_state->completion_buffer->readonly = true;
-          initialize_buffer(config_state->completion_buffer);
           BufferNode_t* new_buffer_node = ce_append_buffer_to_list(*head, config_state->completion_buffer);
           if(!new_buffer_node){
                ce_message("failed to add shell command buffer to list");
@@ -2491,6 +2939,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      pthread_mutex_init(&shell_buffer_lock, NULL);
 
      auto_complete_end(&config_state->auto_complete);
+     config_state->vim_state.insert_start = (Point_t){-1, -1};
      return true;
 }
 
@@ -2536,9 +2985,16 @@ bool destroyer(BufferNode_t** head, void* user_data)
           pthread_join(config_state->shell_input_thread, NULL);
      }
 
+     free_buffer_state(config_state->buffer_list_buffer.user_data);
      ce_free_buffer(&config_state->buffer_list_buffer);
+
+     free_buffer_state(config_state->mark_list_buffer.user_data);
      ce_free_buffer(&config_state->mark_list_buffer);
+
+     free_buffer_state(config_state->yank_list_buffer.user_data);
      ce_free_buffer(&config_state->yank_list_buffer);
+
+     free_buffer_state(config_state->macro_list_buffer.user_data);
      ce_free_buffer(&config_state->macro_list_buffer);
 
      // history
@@ -2551,6 +3007,19 @@ bool destroyer(BufferNode_t** head, void* user_data)
      pthread_mutex_destroy(&shell_buffer_lock);
 
      auto_complete_clear(&config_state->auto_complete);
+
+     free(config_state->vim_state.last_insert_command);
+
+     keys_free(&config_state->vim_state.command_head);
+     keys_free(&config_state->vim_state.record_macro_head);
+
+     free_yanks(&config_state->vim_state.yank_head);
+
+     macros_free(&config_state->vim_state.macro_head);
+
+     MacroCommitNode_t* macro_commit_head = config_state->vim_state.macro_commit_current;
+     while(macro_commit_head->prev) macro_commit_head = macro_commit_head->prev;
+     macro_commits_free(&macro_commit_head);
 
      free(config_state);
      return true;
@@ -2740,6 +3209,7 @@ void switch_to_view_at_point(ConfigState_t* config_state, Point_t point)
      if(point.y >= g_terminal_dimensions->y) point.y = 0;
 
      if(config_state->input) next_view = ce_find_view_at_point(config_state->view_input, point);
+     vim_stop_recording_macro(&config_state->vim_state);
      if(!next_view) next_view = ce_find_view_at_point(config_state->tab_current->view_head, point);
 
      if(next_view){
@@ -2747,7 +3217,7 @@ void switch_to_view_at_point(ConfigState_t* config_state, Point_t point)
           config_state->tab_current->view_previous = config_state->tab_current->view_current;
           config_state->tab_current->view_current->buffer->cursor = config_state->tab_current->view_current->cursor;
           config_state->tab_current->view_current = next_view;
-          enter_normal_mode(config_state);
+          vim_enter_normal_mode(&config_state->vim_state);
      }
 }
 
@@ -2756,9 +3226,9 @@ void handle_mouse_event(ConfigState_t* config_state, Buffer_t* buffer, BufferVie
      MEVENT event;
      if(getmouse(&event) == OK){
           bool enter_insert;
-          if((enter_insert = config_state->vim_mode == VM_INSERT)){
+          if((enter_insert = config_state->vim_state.mode == VM_INSERT)){
                ce_clamp_cursor(buffer, cursor);
-               enter_normal_mode(config_state);
+               vim_enter_normal_mode(&config_state->vim_state);
           }
 #ifdef MOUSE_DIAG
           ce_message("0x%x", event.bstate);
@@ -2818,6 +3288,8 @@ void handle_mouse_event(ConfigState_t* config_state, Buffer_t* buffer, BufferVie
                switch_to_view_at_point(config_state, click);
                click = (Point_t) {event.x - (config_state->tab_current->view_current->top_left.x - config_state->tab_current->view_current->left_column),
                                   event.y - (config_state->tab_current->view_current->top_left.y - config_state->tab_current->view_current->top_row)};
+               click.x -= ce_get_line_number_column_width(config_state->line_number_type, buffer->line_count, buffer_view->top_left.y, buffer_view->bottom_right.y);
+               if(click.x < 0) click.x = 0;
                ce_set_cursor(config_state->tab_current->view_current->buffer,
                              &config_state->tab_current->view_current->cursor,
                              click);
@@ -2846,7 +3318,9 @@ void handle_mouse_event(ConfigState_t* config_state, Buffer_t* buffer, BufferVie
           (void) buffer_view;
 #endif
           // if we left insert and haven't switched views, enter insert mode
-          if(enter_insert && config_state->tab_current->view_current == buffer_view) enter_insert_mode(config_state);
+          if(enter_insert && config_state->tab_current->view_current == buffer_view){
+               vim_enter_insert_mode(&config_state->vim_state, config_state->tab_current->view_current->buffer);
+          }
      }
 }
 
@@ -2933,8 +3407,7 @@ void update_buffer_list_buffer(ConfigState_t* config_state, const BufferNode_t* 
 
      itr = head;
      while(itr){
-          const char* buffer_flag_str = itr->buffer->readonly ? readonly_string(itr->buffer) :
-                                                                modified_string(itr->buffer);
+          const char* buffer_flag_str = buffer_flag_string(itr->buffer);
           snprintf(buffer_info, BUFSIZ, format_string, buffer_flag_str, itr->buffer->name,
                    itr->buffer->line_count);
           ce_append_line(&config_state->buffer_list_buffer, buffer_info);
@@ -2980,7 +3453,7 @@ void update_yank_list_buffer(ConfigState_t* config_state)
      config_state->yank_list_buffer.readonly = false;
      ce_clear_lines(&config_state->yank_list_buffer);
 
-     const YankNode_t* itr = config_state->yank_head;
+     const YankNode_t* itr = config_state->vim_state.yank_head;
      while(itr){
           snprintf(buffer_info, BUFSIZ, "+ reg '%c'", itr->reg_char);
           ce_append_line(&config_state->yank_list_buffer, buffer_info);
@@ -3000,13 +3473,31 @@ void update_macro_list_buffer(ConfigState_t* config_state)
 
      ce_append_line(&config_state->macro_list_buffer, "+ reg actions");
 
-     const MacroNode_t* itr = config_state->macro_head;
+     const MacroNode_t* itr = config_state->vim_state.macro_head;
      while(itr){
           char* char_string = command_string_to_char_string(itr->command);
           snprintf(buffer_info, BUFSIZ, "  '%c' %s", itr->reg, char_string);
           ce_append_line(&config_state->macro_list_buffer, buffer_info);
           free(char_string);
           itr = itr->next;
+     }
+
+     if(config_state->vim_state.recording_macro){
+          ce_append_line(&config_state->macro_list_buffer, "");
+          ce_append_line(&config_state->macro_list_buffer, "+ recording:");
+
+          int* int_cmd = keys_get_string(config_state->vim_state.record_macro_head);
+
+          if(int_cmd[0]){
+               char* char_cmd = command_string_to_char_string(int_cmd);
+               if(char_cmd[0]){
+                    ce_append_line(&config_state->macro_list_buffer, char_cmd);
+               }
+
+               free(char_cmd);
+          }
+
+          free(int_cmd);
      }
 
      ce_append_line(&config_state->macro_list_buffer, "");
@@ -3333,31 +3824,39 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                }
           } break;
           case 6: // Ctrl + f
+          {
                commit_input_to_history(config_state->view_input->buffer, &config_state->load_file_history);
+               bool switched_to_open_file = false;
 
                for(int64_t i = 0; i < config_state->view_input->buffer->line_count; ++i){
                     Buffer_t* new_buffer = open_file_buffer(head, config_state->view_input->buffer->lines[i]);
-                    if(i == 0 && new_buffer){
+                    if(!switched_to_open_file && new_buffer){
                          config_state->tab_current->view_current->buffer = new_buffer;
                          config_state->tab_current->view_current->cursor = (Point_t){0, 0};
+                         switched_to_open_file = true;
                     }
+               }
+
+               if(!switched_to_open_file){
+                    config_state->tab_current->view_current->buffer = head->buffer; // message buffer
+                    config_state->tab_current->view_current->cursor = (Point_t){0, 0};
                }
 
                if(config_state->tab_current->overriden_buffer){
                     tab_view_restore_overrideable(config_state->tab_current);
                }
-               break;
+          } break;
           case '/':
                if(!config_state->view_input->buffer->line_count) break;
 
                commit_input_to_history(config_state->view_input->buffer, &config_state->search_history);
-               add_yank(&config_state->yank_head, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
+               add_yank(&config_state->vim_state.yank_head, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
                break;
           case '?':
                if(!config_state->view_input->buffer->line_count) break;
 
                commit_input_to_history(config_state->view_input->buffer, &config_state->search_history);
-               add_yank(&config_state->yank_head, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
+               add_yank(&config_state->vim_state.yank_head, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
                break;
           case 24: // Ctrl + x
           {
@@ -3430,7 +3929,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           {
                if(!config_state->view_input->buffer->line_count) break; // NOTE: unsure if this is correct
 
-               YankNode_t* yank = find_yank(config_state->yank_head, '/');
+               YankNode_t* yank = find_yank(config_state->vim_state.yank_head, '/');
                if(!yank) break;
 
                const char* search_str = yank->text;
@@ -3514,24 +4013,32 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
 
                int64_t line = config_state->tab_current->view_input_save->cursor.y - 1; // account for buffer list row header
                if(line < 0) return;
-               MacroNode_t* itr = config_state->macro_head;
 
-               while(line > 0){
-                    itr = itr->next;
-                    if(!itr) return;
-                    line--;
-               }
+               MacroNode_t* macro = macro_find(config_state->vim_state.macro_head, config_state->editting_register);
+               if(!macro) return;
 
-               if(!itr) return;
-
-               free(itr->command);
+               free(macro->command);
                int* new_macro_string = char_string_to_command_string(config_state->view_input->buffer->lines[0]);
 
                if(new_macro_string){
-                    itr->command = new_macro_string;
+                    macro->command = new_macro_string;
                }else{
                     ce_message("invalid editted macro string");
                }
+               config_state->editting_register = 0;
+          } break;
+          case 'y':
+          {
+               int64_t line = config_state->tab_current->view_input_save->cursor.y;
+               if(line < 0) return;
+
+               YankNode_t* yank = find_yank(config_state->vim_state.yank_head, config_state->editting_register);
+               if(!yank) return;
+
+               char* new_yank = ce_dupe_buffer(config_state->view_input->buffer);
+               free((char*)(yank->text));
+               yank->text = new_yank;
+               config_state->editting_register = 0;
           } break;
           }
      }else if(buffer_view->buffer == &config_state->buffer_list_buffer){
@@ -3583,7 +4090,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
      }else if(buffer_view->buffer == &config_state->macro_list_buffer){
           int64_t line = cursor->y - 1; // account for buffer list row header
           if(line < 0) return;
-          MacroNode_t* itr = config_state->macro_head;
+          MacroNode_t* itr = config_state->vim_state.macro_head;
 
           while(line > 0){
                itr = itr->next;
@@ -3594,64 +4101,92 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           if(!itr) return;
 
           input_start(config_state, "Edit Macro", '@');
-          enter_normal_mode(config_state);
+          config_state->editting_register = itr->reg;
+          vim_enter_normal_mode(&config_state->vim_state);
           char* char_command = command_string_to_char_string(itr->command);
           ce_insert_string(config_state->view_input->buffer, (Point_t){0,0}, char_command);
           free(char_command);
+     }else if(buffer_view->buffer == &config_state->yank_list_buffer){
+          int64_t line = cursor->y;
+          if(line < 0) return;
+
+          YankNode_t* itr = config_state->vim_state.yank_head;
+          while(itr){
+               line -= (ce_count_string_lines(itr->text) + 1);
+               if(line < 0) break;
+
+               itr = itr->next;
+          }
+
+          input_start(config_state, "Edit Yank", 'y');
+          config_state->editting_register = itr->reg_char;
+          vim_enter_normal_mode(&config_state->vim_state);
+          ce_insert_string(config_state->view_input->buffer, (Point_t){0,0}, itr->text);
      }
 }
 
-bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeating)
+VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* buffer, Point_t* cursor,
+                                      AutoComplete_t* auto_complete, bool repeating)
 {
-     ConfigState_t* config_state = user_data;
-     Buffer_t* buffer = config_state->tab_current->view_current->buffer;
      BufferState_t* buffer_state = buffer->user_data;
-     BufferView_t* buffer_view = config_state->tab_current->view_current;
-     Point_t* cursor = &config_state->tab_current->view_current->cursor;
+     char recording_macro = vim_state->recording_macro;
+     VimMode_t vim_mode = vim_state->mode;
 
-     switch(config_state->vim_mode){
+     VimKeyHandlerResult_t result;
+     result.type = VKH_UNHANDLED_KEY;
+
+     switch(vim_state->mode){
      default:
           assert(!"vim mode not handled");
-          return false;
+          return result;
      case VM_INSERT:
+     {
+          Point_t insert_start = *cursor;
+          Point_t undo_cursor = insert_start;
+
+          if(vim_state->insert_start.x >= 0){
+               undo_cursor = vim_state->insert_start;
+               vim_state->insert_start = (Point_t){-1, -1};
+          }
+
           switch(key){
           default:
                if(isprint(key)){
                     if(ce_insert_char(buffer, *cursor, key)){
-                         keys_push(&config_state->command_head, key);
-                         Point_t undo_cursor = *cursor;
+                         keys_push(&vim_state->command_head, key);
                          cursor->x++;
-                         ce_commit_insert_char(&buffer_state->commit_tail, undo_cursor, undo_cursor, *cursor, key, BCC_KEEP_GOING);
+                         ce_commit_insert_char(&buffer_state->commit_tail, insert_start, undo_cursor, *cursor, key, BCC_KEEP_GOING);
                     }
                }else{
-                    return false;
+                    return result;
                }
                break;
           case KEY_ESCAPE:
           {
                if(!repeating){
-                    int* built_command = keys_get_string(config_state->command_head);
-                    if(config_state->last_insert_command) free(config_state->last_insert_command);
-                    config_state->last_insert_command = built_command;
+                    int* built_command = keys_get_string(vim_state->command_head);
+                    if(vim_state->last_insert_command) free(vim_state->last_insert_command);
+                    vim_state->last_insert_command = built_command;
                }
 
-               keys_free(&config_state->command_head);
+               keys_free(&vim_state->command_head);
 
-               enter_normal_mode(config_state);
+               vim_enter_normal_mode(vim_state);
                ce_clamp_cursor(buffer, cursor);
-               if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
+
+               if(buffer_state->commit_tail && !vim_state->playing_macro){
+                    buffer_state->commit_tail->commit.chain = BCC_STOP;
+               }
           } break;
           case KEY_ENTER:
                key = NEWLINE;
 
                if(ce_insert_char(buffer, *cursor, key)){
-                    Point_t undo_cursor = *cursor;
-
                     cursor->y++;
                     cursor->x = 0;
 
-                    ce_commit_insert_char(&buffer_state->commit_tail, undo_cursor, undo_cursor, *cursor, key, BCC_KEEP_GOING);
-                    keys_push(&config_state->command_head, KEY_ENTER);
+                    ce_commit_insert_char(&buffer_state->commit_tail, insert_start, undo_cursor, *cursor, key, BCC_KEEP_GOING);
+                    keys_push(&vim_state->command_head, KEY_ENTER);
 
                     // indent if necessary
                     Point_t prev_line = {0, cursor->y-1};
@@ -3683,29 +4218,29 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeati
                     if(ce_remove_char(buffer, before_cursor)){
                          ce_commit_remove_char(&buffer_state->commit_tail, before_cursor, *cursor, before_cursor, ch, BCC_KEEP_GOING);
                          *cursor = before_cursor;
-                         keys_push(&config_state->command_head, key);
+                         keys_push(&vim_state->command_head, key);
                     }
                }
            } break;
           case KEY_TAB:
           {
-               if(auto_completing(&config_state->auto_complete)){
-                    int64_t offset = cursor->x - config_state->auto_complete.start.x;
-                    const char* complete = config_state->auto_complete.current->option + offset;
+               if(auto_completing(auto_complete)){
+                    char* complete = auto_complete_get_completion(auto_complete, cursor->x);
                     int64_t complete_len = strlen(complete);
                     if(ce_insert_string(buffer, *cursor, complete)){
                          Point_t save_cursor = *cursor;
                          ce_move_cursor(buffer, cursor, (Point_t){complete_len, cursor->y});
                          cursor->x++;
-                         ce_commit_insert_string(&buffer_state->commit_tail, save_cursor, save_cursor, *cursor, strdup(TAB_STRING), BCC_KEEP_GOING);
+                         ce_commit_insert_string(&buffer_state->commit_tail, save_cursor, save_cursor, *cursor, complete, BCC_KEEP_GOING);
+                    }else{
+                         free(complete);
                     }
                }else{
-                    if(ce_insert_string(buffer, *cursor, TAB_STRING)){
-                         Point_t save_cursor = *cursor;
+                    if(ce_insert_string(buffer, insert_start, TAB_STRING)){
                          ce_move_cursor(buffer, cursor, (Point_t){strlen(TAB_STRING) - 1, 0});
                          cursor->x++; // we want to be after the tabs
-                         ce_commit_insert_string(&buffer_state->commit_tail, save_cursor, save_cursor, *cursor, strdup(TAB_STRING), BCC_KEEP_GOING);
-                         keys_push(&config_state->command_head, key);
+                         ce_commit_insert_string(&buffer_state->commit_tail, insert_start, undo_cursor, *cursor, strdup(TAB_STRING), BCC_KEEP_GOING);
+                         keys_push(&vim_state->command_head, key);
                     }
                }
           } break;
@@ -3713,34 +4248,31 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeati
           case KEY_DOWN:
           {
                ce_move_cursor(buffer, cursor, (Point_t){0, (key == KEY_DOWN) ? 1 : -1});
-               if(buffer_state->commit_tail){
+               if(buffer_state->commit_tail && !vim_state->playing_macro){
                     buffer_state->commit_tail->commit.chain = BCC_STOP;
                }
 
-               int* built_command = keys_get_string(config_state->command_head);
-               if(config_state->last_insert_command) free(config_state->last_insert_command);
-               config_state->last_insert_command = built_command;
-               keys_free(&config_state->command_head);
-               // TODO: clear last vim action
+               int* built_command = keys_get_string(vim_state->command_head);
+               if(vim_state->last_insert_command) free(vim_state->last_insert_command);
+               vim_state->last_insert_command = built_command;
+               keys_free(&vim_state->command_head);
 
-          }    break;
+          } break;
           case KEY_LEFT:
           case KEY_RIGHT:
           {
                cursor->x += key == KEY_RIGHT? 1 : -1;
                if(cursor->x > (int64_t) strlen(buffer->lines[cursor->y])) cursor->x--;
                if(cursor->x < 0) cursor->x++;
-               if(buffer_state->commit_tail){
+               if(buffer_state->commit_tail && !vim_state->playing_macro){
                     buffer_state->commit_tail->commit.chain = BCC_STOP;
                }
 
-               int* built_command = keys_get_string(config_state->command_head);
-               if(config_state->last_insert_command) free(config_state->last_insert_command);
-               config_state->last_insert_command = built_command;
-               keys_free(&config_state->command_head);
-               // TODO: clear last vim action
-
-          }    break;
+               int* built_command = keys_get_string(vim_state->command_head);
+               if(vim_state->last_insert_command) free(vim_state->last_insert_command);
+               vim_state->last_insert_command = built_command;
+               keys_free(&vim_state->command_head);
+          } break;
           case '}':
           {
                if(ce_insert_char(buffer, *cursor, key)){
@@ -3809,92 +4341,147 @@ bool vim_key_handler(int key, BufferNode_t** head, void* user_data, bool repeati
                }
           } break;
           }
-          break;
+
+          if(recording_macro && recording_macro == vim_state->recording_macro){
+               keys_push(&vim_state->record_macro_head, key);
+
+               if(vim_state->macro_commit_current->next){
+                    macro_commits_free(&vim_state->macro_commit_current->next);
+                    keys_free(&vim_state->macro_commit_current->command_copy);
+               }
+
+               keys_push(&vim_state->macro_commit_current->command_copy, key);
+
+               // when we exit insert mode, track the last macro action
+               if(vim_mode == VM_INSERT && vim_state->mode == VM_NORMAL){
+                    macro_commit_push(&vim_state->macro_commit_current, vim_state->last_macro_command_begin, false);
+               }
+          }
+     } break;
      case VM_VISUAL_RANGE:
      case VM_VISUAL_LINE:
          if(key == KEY_ESCAPE){
-               enter_normal_mode(config_state);
+               vim_enter_normal_mode(vim_state);
                break;
-         }
+         }else if(key == 'v'){
+               vim_enter_visual_range_mode(vim_state, *cursor);
+               break;
+         }else if(key == 'V'){
+               vim_enter_visual_line_mode(vim_state, *cursor);
+               break;
+          }
      case VM_NORMAL:
      {
-          keys_push(&config_state->command_head, key);
-          int* built_command = keys_get_string(config_state->command_head);
+          keys_push(&vim_state->command_head, key);
+          int* built_command = keys_get_string(vim_state->command_head);
 
           VimAction_t vim_action;
-          VimCommandState_t command_state = vim_action_from_string(built_command, &vim_action,
-                                                                   config_state->vim_mode, buffer,
-                                                                   cursor, &config_state->visual_start,
-                                                                   &config_state->find_state);
+          VimCommandState_t command_state = vim_action_from_string(built_command, &vim_action, vim_state->mode, buffer,
+                                                                   cursor, &vim_state->visual_start, &vim_state->find_char_in_line_state,
+                                                                   vim_state->recording_macro);
           free(built_command);
 
           switch(command_state){
           default:
           case VCS_INVALID:
                // allow command to be cleared
-               keys_free(&config_state->command_head);
-               return false; // did not handle key
+               keys_free(&vim_state->command_head);
+               return result; // did not handle key
           case VCS_CONTINUE:
+               if(recording_macro && recording_macro == vim_state->recording_macro){
+                    // TODO: compress
+                    keys_push(&vim_state->record_macro_head, key);
+
+                    if(vim_state->macro_commit_current->next){
+                         macro_commits_free(&vim_state->macro_commit_current->next);
+                         keys_free(&vim_state->macro_commit_current->command_copy);
+                    }
+
+                    keys_push(&vim_state->macro_commit_current->command_copy, key);
+
+                    if(!vim_state->command_head->next){
+                         KeyNode_t* itr = vim_state->record_macro_head;
+                         while(itr->next) {
+                              itr = itr->next;
+                         }
+                         vim_state->last_macro_command_begin = itr;
+                    }
+               }
                break;
           case VCS_COMPLETE:
           {
-               // NOTE: can we do this buffer deletion outside the vim_key_handler? It's not vim functionality
-               if(config_state->tab_current->view_current->buffer == &config_state->buffer_list_buffer && vim_action.change.type == VCT_DELETE){
-                    VimActionRange_t action_range;
-                    if(!vim_action_get_range(&vim_action, buffer, cursor, &config_state->find_state, &action_range)) break;
+               VimMode_t original_mode = vim_state->mode;
+               vim_action_apply(&vim_action, buffer, cursor, vim_state, auto_complete);
 
-                    int64_t delete_index = action_range.sorted_start->y - 1;
-                    int64_t buffers_to_delete = (action_range.sorted_end->y - action_range.sorted_start->y) + 1;
-                    for(int64_t b = 0; b < buffers_to_delete; ++b){
-                         if(!delete_buffer_at_index(head, config_state->tab_head, delete_index)){
-                              return false; // quit !
-                         }
+               if(vim_state->mode != original_mode){
+                    switch(vim_state->mode){
+                    default:
+                         break;
+                    case VM_INSERT:
+                         vim_enter_insert_mode(vim_state, buffer);
+                         break;
+                    case VM_NORMAL:
+                         vim_enter_normal_mode(vim_state);
+                         break;
+                    case VM_VISUAL_RANGE:
+                         vim_enter_visual_range_mode(vim_state, *cursor);
+                         break;
+                    case VM_VISUAL_LINE:
+                         vim_enter_visual_line_mode(vim_state, *cursor);
+                         break;
                     }
-
-                    update_buffer_list_buffer(config_state, *head);
-
-                    if(cursor->y >= config_state->buffer_list_buffer.line_count) cursor->y = config_state->buffer_list_buffer.line_count - 1;
-                    enter_normal_mode(config_state);
-               }else{
-                    VimMode_t final_mode = config_state->vim_mode;
-                    VimMode_t original_mode = final_mode;
-                    if(vim_action_apply(&vim_action, buffer, cursor, config_state->vim_mode,
-                                        &config_state->yank_head, &final_mode, &config_state->visual_start,
-                                        &config_state->find_state)){
-                         if(final_mode != original_mode){
-                              switch(final_mode){
-                              default:
-                                   break;
-                              case VM_INSERT:
-                                   enter_insert_mode(config_state);
-                                   break;
-                              case VM_NORMAL:
-                                   enter_normal_mode(config_state);
-                                   break;
-                              case VM_VISUAL_RANGE:
-                                   enter_visual_range_mode(config_state, buffer_view);
-                                   break;
-                              case VM_VISUAL_LINE:
-                                   enter_visual_line_mode(config_state, buffer_view);
-                                   break;
-                              }
-                         }
-
-                         if(vim_action.change.type != VCT_MOTION || vim_action.end_in_vim_mode == VM_INSERT){
-                              config_state->last_vim_action = vim_action;
-                              // always use the cursor as the start of the visual selection
-                              config_state->last_vim_action.motion.visual_start_after = true;
-                         }
-                    }
-
-                    keys_free(&config_state->command_head);
                }
+
+               if(vim_action.change.type != VCT_MOTION || vim_action.end_in_vim_mode == VM_INSERT){
+                    if(!vim_state->playing_macro){
+                         vim_state->last_action = vim_action;
+
+                         if(!vim_state->recording_macro && vim_action.change.type == VCT_RECORD_MACRO){
+                              vim_state->last_action.change.type = VCT_PLAY_MACRO;
+                              vim_state->last_action.change.reg = recording_macro;
+                         }
+                    }
+
+                    // always use the cursor as the start of the visual selection
+                    vim_state->last_action.motion.visual_start_after = true;
+               }
+
+               if(recording_macro && recording_macro == vim_state->recording_macro){
+                    keys_push(&vim_state->record_macro_head, key);
+
+                    if(!vim_state->command_head->next){
+                         KeyNode_t* itr = vim_state->record_macro_head;
+                         while(itr->next) itr = itr->next;
+                         vim_state->last_macro_command_begin = itr;
+                    }
+
+                    if(vim_state->macro_commit_current->next){
+                         macro_commits_free(&vim_state->macro_commit_current->next);
+                         keys_free(&vim_state->macro_commit_current->command_copy);
+                    }
+
+                    keys_push(&vim_state->macro_commit_current->command_copy, key);
+
+                    // tag this command as a macro commit
+                    if(vim_state->mode != VM_INSERT){
+                         macro_commit_push(&vim_state->macro_commit_current, vim_state->last_macro_command_begin, vim_action.change.type == VCT_MOTION);
+                    }
+               }
+
+               keys_free(&vim_state->command_head);
+
+               result.type = VKH_COMPLETED_ACTION;
+               result.completed_action = vim_action;
+
+               return result;
           } break;
           }
      } break;
      }
 
-     return true;
+     result.type = VKH_HANDLED_KEY;
+
+     return result;
 }
 
 bool key_handler(int key, BufferNode_t** head, void* user_data)
@@ -3907,7 +4494,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
      bool handled_key = false;
 
-     if(config_state->vim_mode != VM_INSERT){
+     if(config_state->vim_state.mode != VM_INSERT){
           switch(config_state->last_key){
           default:
                break;
@@ -4012,7 +4599,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     break;
                }
 
-               if(handled_key) keys_free(&config_state->command_head);
+               if(handled_key) keys_free(&config_state->vim_state.command_head);
           } break;
           case 'm':
           {
@@ -4042,6 +4629,29 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           } break;
           case '"':
                if(!isprint(key)) break;
+
+               if(key == '?'){
+                    update_yank_list_buffer(config_state);
+
+                    if(config_state->tab_current->view_overrideable){
+                         tab_view_save_overrideable(config_state->tab_current);
+                         config_state->tab_current->view_overrideable->buffer = &config_state->yank_list_buffer;
+                         config_state->tab_current->view_overrideable->top_row = 0;
+                         config_state->tab_current->view_overrideable->cursor = (Point_t){0, 1};
+                    }else{
+                         config_state->buffer_before_query = config_state->tab_current->view_current->buffer;
+                         config_state->tab_current->view_current->buffer->cursor = *cursor;
+                         config_state->tab_current->view_current->buffer = &config_state->yank_list_buffer;
+                         config_state->tab_current->view_current->top_row = 0;
+                         config_state->tab_current->view_current->cursor = (Point_t){0, 1};
+                    }
+
+                    handled_key = true;
+               }
+               break;
+          case 'y':
+               if(!isprint(key)) break;
+
                if(key == '?'){
                     update_yank_list_buffer(config_state);
 
@@ -4082,7 +4692,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                }
                break;
           case 'q':
-               if(!isprint(key)) break;
                if(key == '?'){
                     update_macro_list_buffer(config_state);
 
@@ -4098,56 +4707,80 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          config_state->tab_current->view_current->top_row = 0;
                          config_state->tab_current->view_current->cursor = (Point_t){0, 1};
                     }
-               }else{
-                    config_state->recording_macro = key;
-                    keys_free(&config_state->record_macro_head);
+
+                    handled_key = true;
                }
-               handled_key = true;
                break;
 #if 0 // useful for debugging commit history
           case '!':
                ce_commits_dump(buffer_state->commit_tail);
                break;
 #endif
+#if 0 // useful for debugging macro commit history
+          case '!':
+          {
+               MacroCommitNode_t* head = config_state->vim_state.macro_commit_current;
+               while(head->prev) head = head->prev;
+               macro_commits_dump(head);
+          } break;
+#endif
           case '@':
           {
-               if(!isprint(key)) break;
-
                if(key == '?'){
                     update_macro_list_buffer(config_state);
 
-                    config_state->buffer_before_query = config_state->tab_current->view_current->buffer;
-                    config_state->tab_current->view_current->buffer->cursor = *cursor;
-                    config_state->tab_current->view_current->buffer = &config_state->macro_list_buffer;
-                    config_state->tab_current->view_current->top_row = 0;
-                    config_state->tab_current->view_current->cursor = (Point_t){0, 1};
-               }else{
-                    MacroNode_t* macro = macro_find(config_state->macro_head, key);
-                    if(!macro) break;
-
-                    int* macro_itr = macro->command;
-                    while(*macro_itr){
-                         vim_key_handler(*macro_itr, head, user_data, true);
-                         macro_itr++;
+                    if(config_state->tab_current->view_overrideable){
+                         tab_view_save_overrideable(config_state->tab_current);
+                         config_state->tab_current->view_overrideable->buffer = &config_state->macro_list_buffer;
+                         config_state->tab_current->view_overrideable->top_row = 0;
+                         config_state->tab_current->view_overrideable->cursor = (Point_t){0, 1};
+                    }else{
+                         config_state->buffer_before_query = config_state->tab_current->view_current->buffer;
+                         config_state->tab_current->view_current->buffer->cursor = *cursor;
+                         config_state->tab_current->view_current->buffer = &config_state->macro_list_buffer;
+                         config_state->tab_current->view_current->top_row = 0;
+                         config_state->tab_current->view_current->cursor = (Point_t){0, 1};
                     }
-               }
 
-               handled_key = true;
+                    handled_key = true;
+               }
           } break;
           }
      }
 
      if(!handled_key){
-          if(vim_key_handler(key, head, user_data, false)){
-               keys_push(&config_state->record_macro_head, key);
-
-               if(config_state->vim_mode == VM_INSERT && config_state->input && config_state->input_key == 6){
+          VimKeyHandlerResult_t vkh_result = vim_key_handler(key, &config_state->vim_state, config_state->tab_current->view_current->buffer,
+                                                             &config_state->tab_current->view_current->cursor, &config_state->auto_complete, false);
+          if(vkh_result.type == VKH_HANDLED_KEY){
+               if(config_state->vim_state.mode == VM_INSERT && config_state->input && config_state->input_key == 6){
                     calc_auto_complete_start_and_path(&config_state->auto_complete,
                                                       buffer->lines[cursor->y],
                                                       *cursor,
                                                       config_state->completion_buffer);
                }
-          }else{
+          }else if(vkh_result.type == VKH_COMPLETED_ACTION){
+               if(vkh_result.completed_action.change.type == VCT_DELETE && config_state->tab_current->view_current->buffer == &config_state->buffer_list_buffer){
+                    VimActionRange_t action_range;
+                    if(vim_action_get_range(&vkh_result.completed_action, buffer, cursor, &config_state->vim_state, &action_range)){
+                         int64_t delete_index = action_range.sorted_start->y - 1;
+                         int64_t buffers_to_delete = (action_range.sorted_end->y - action_range.sorted_start->y) + 1;
+                         for(int64_t b = 0; b < buffers_to_delete; ++b){
+                              if(!delete_buffer_at_index(head, config_state->tab_head, delete_index)){
+                                   return false; // quit !
+                              }
+                         }
+
+                         update_buffer_list_buffer(config_state, *head);
+
+                         if(cursor->y >= config_state->buffer_list_buffer.line_count) cursor->y = config_state->buffer_list_buffer.line_count - 1;
+                         vim_enter_normal_mode(&config_state->vim_state);
+                         keys_free(&config_state->vim_state.command_head);
+                    }
+               }else if(vkh_result.completed_action.motion.type == VMT_SEARCH ||
+                        vkh_result.completed_action.motion.type == VMT_SEARCH_WORD_UNDER_CURSOR){
+                    center_view(buffer_view);
+               }
+          }else if(vkh_result.type == VKH_UNHANDLED_KEY){
                switch(key){
                case KEY_MOUSE:
                     handle_mouse_event(config_state, buffer, buffer_view, cursor);
@@ -4172,7 +4805,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     if(config_state->input){
                          if(iterate_history_input(config_state, false)){
                               if(buffer->line_count && buffer->lines[cursor->y][0]) cursor->x++;
-                              enter_normal_mode(config_state);
+                              vim_enter_normal_mode(&config_state->vim_state);
                          }
                     }
                     break;
@@ -4192,47 +4825,41 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     if(config_state->input){
                          if(iterate_history_input(config_state, true)){
                               if(buffer->line_count && buffer->lines[cursor->y][0]) cursor->x++;
-                              enter_normal_mode(config_state);
+                              vim_enter_normal_mode(&config_state->vim_state);
                          }
                     }
                     break;
                case 25: // Ctrl + y
                     confirm_action(config_state, *head);
-                    keys_free(&config_state->command_head);
+                    keys_free(&config_state->vim_state.command_head);
                     break;
                }
 
-               if(config_state->vim_mode != VM_INSERT){
+               if(config_state->vim_state.mode != VM_INSERT){
                     switch(key){
                     default:
                          break;
                     case '.':
                     {
-                         VimMode_t final_mode;
-                         if(!vim_action_apply(&config_state->last_vim_action, buffer, cursor, config_state->vim_mode,
-                                             &config_state->yank_head, &final_mode, &config_state->visual_start,
-                                             &config_state->find_state)){
-                              break;
-                         }
-                         if(final_mode != VM_INSERT || !config_state->last_insert_command) break;
-                         enter_insert_mode(config_state);
-                         int* cmd_itr = config_state->last_insert_command;
+                         vim_action_apply(&config_state->vim_state.last_action, buffer, cursor, &config_state->vim_state,
+                                          &config_state->auto_complete);
+
+                         if(config_state->vim_state.mode != VM_INSERT || !config_state->vim_state.last_insert_command ||
+                            config_state->vim_state.last_action.change.type == VCT_PLAY_MACRO) break;
+
+                         if(!vim_enter_insert_mode(&config_state->vim_state, config_state->tab_current->view_current->buffer)) break;
+
+                         int* cmd_itr = config_state->vim_state.last_insert_command;
                          while(*cmd_itr){
-                              vim_key_handler(*cmd_itr, head, user_data, true);
+                              vim_key_handler(*cmd_itr, &config_state->vim_state, config_state->tab_current->view_current->buffer,
+                                              &config_state->tab_current->view_current->cursor, &config_state->auto_complete, true);
                               cmd_itr++;
                          }
-                         enter_normal_mode(config_state);
-                         keys_free(&config_state->command_head);
+
+                         vim_enter_normal_mode(&config_state->vim_state);
+                         keys_free(&config_state->vim_state.command_head);
                          if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
                     } break;
-                    case 'q':
-                         if(config_state->recording_macro){
-                              int* built_macro = keys_get_string(config_state->record_macro_head);
-                              macro_add(&config_state->macro_head, config_state->recording_macro, built_macro);
-                              config_state->recording_macro = 0;
-                              key = 0;
-                         }
-                         break;
                     case KEY_ESCAPE:
                     {
                          if(config_state->input){
@@ -4254,6 +4881,11 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     {
                          if(config_state->input){
                               input_cancel(config_state);
+                              break;
+                         }
+
+                         if(config_state->vim_state.recording_macro){
+                              vim_stop_recording_macro(&config_state->vim_state);
                               break;
                          }
 
@@ -4381,21 +5013,70 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                    buffer->modified = false;
                               }
                          }
-                         break;
-                    case 'x':
-                    {
-                         char c;
-                         if(ce_get_char(buffer, *cursor, &c) && ce_remove_char(buffer, *cursor)){
-                              ce_commit_remove_char(&buffer_state->commit_tail, *cursor, *cursor, *cursor, c, BCC_STOP);
-                              ce_clamp_cursor(buffer, cursor);
+
+                         // if we are recording a macro, kill the last command we entered from the key list
+                         if(config_state->vim_state.recording_macro){
+                              MacroCommitNode_t* last_macro_commit = config_state->vim_state.macro_commit_current->prev;
+                              if(last_macro_commit){
+                                   do{
+                                        KeyNode_t* itr = config_state->vim_state.record_macro_head;
+                                        if(last_macro_commit->command_begin){
+                                             KeyNode_t* prev = NULL;
+                                             while(itr && itr != last_macro_commit->command_begin){
+                                                  prev = itr;
+                                                  itr = itr->next;
+                                             }
+
+                                             if(itr){
+                                                  // free the keys from our macro recording
+                                                  keys_free(&itr);
+                                                  if(prev){
+                                                       prev->next = NULL;
+                                                  }else{
+                                                       config_state->vim_state.record_macro_head = NULL;
+                                                  }
+                                             }
+                                        }else{
+                                             // NOTE: not sure this case can get hit anymore
+                                             keys_free(&itr);
+                                             config_state->vim_state.record_macro_head = NULL;
+                                        }
+
+                                        if(!last_macro_commit->chain) break;
+
+                                        last_macro_commit = last_macro_commit->prev;
+                                   }while(last_macro_commit);
+
+                                   config_state->vim_state.macro_commit_current = last_macro_commit;
+                              }else{
+                                   vim_stop_recording_macro(&config_state->vim_state);
+                              }
                          }
-                    }
-                    break;
+                         break;
                     case KEY_REDO:
                     {
                          if(buffer_state->commit_tail && buffer_state->commit_tail->next){
-                              ce_commit_redo(buffer, &buffer_state->commit_tail, cursor);
+                              if(ce_commit_redo(buffer, &buffer_state->commit_tail, cursor)){
+                                   if(config_state->vim_state.recording_macro){
+                                        do{
+                                             KeyNode_t* itr = config_state->vim_state.macro_commit_current->command_copy;
+                                             KeyNode_t* new_command_begin = NULL;
+                                             while(itr){
+                                                  KeyNode_t* new_key = keys_push(&config_state->vim_state.record_macro_head, itr->key);
+                                                  if(!new_command_begin) new_command_begin = new_key;
+                                                  itr = itr->next;
+                                             }
+
+                                             itr = config_state->vim_state.record_macro_head;
+                                             while(itr->next) itr = itr->next;
+
+                                             config_state->vim_state.macro_commit_current->command_begin = new_command_begin;
+                                             config_state->vim_state.macro_commit_current = config_state->vim_state.macro_commit_current->next;
+                                        }while(config_state->vim_state.macro_commit_current && config_state->vim_state.macro_commit_current->prev->chain);
+                                   }
+                              }
                          }
+
                     } break;
                     case 'H':
                     {
@@ -4419,12 +5100,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     } break;
                     case 'z':
                     break;
-                    case '%':
-                    {
-                         char matchee;
-                         if(!ce_get_char(buffer, *cursor, &matchee)) break;
-                         ce_move_cursor_to_matching_pair(buffer, cursor, matchee);
-                    } break;
                     case KEY_NPAGE:
                     {
                          half_page_up(config_state->tab_current->view_current);
@@ -4463,68 +5138,20 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          input_start(config_state, "Goto Line", key);
                     }
                     break;
-                    case '#':
-                    {
-                         if(!buffer->lines || !buffer->lines[cursor->y]) break;
-
-                         Point_t word_start, word_end;
-                         if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) break;
-                         char* search_str = ce_dupe_string(buffer, word_start, word_end);
-                         add_yank(&config_state->yank_head, '/', search_str, YANK_NORMAL);
-                         config_state->search_command.direction = CE_UP;
-                         goto search;
-                    } break;
-                    case '*':
-                    {
-                         if(!buffer->lines || !buffer->lines[cursor->y]) break;
-
-                         Point_t word_start, word_end;
-                         if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) break;
-                         char* search_str = ce_dupe_string(buffer, word_start, word_end);
-                         add_yank(&config_state->yank_head, '/', search_str, YANK_NORMAL);
-                         config_state->search_command.direction = CE_DOWN;
-                         goto search;
-                    } break;
                     case '/':
                     {
                          input_start(config_state, "Search", key);
-                         config_state->search_command.direction = CE_DOWN;
-                         config_state->start_search = *cursor;
+                         config_state->vim_state.search_direction = CE_DOWN;
+                         config_state->vim_state.start_search = *cursor;
                          break;
                     }
                     case '?':
                     {
                          input_start(config_state, "Reverse Search", key);
-                         config_state->search_command.direction = CE_UP;
-                         config_state->start_search = *cursor;
+                         config_state->vim_state.search_direction = CE_UP;
+                         config_state->vim_state.start_search = *cursor;
                          break;
                     }
-                    case 'n':
-          search:
-                    {
-                         YankNode_t* yank = find_yank(config_state->yank_head, '/');
-                         if(yank){
-                              assert(yank->mode == YANK_NORMAL);
-                              Point_t match;
-                              if(ce_find_string(buffer, *cursor, yank->text, &match, config_state->search_command.direction)){
-                                   ce_set_cursor(buffer, cursor, match);
-                                   center_view(config_state->tab_current->view_current);
-                              }
-                         }
-                    } break;
-                    case 'N':
-                    {
-                         YankNode_t* yank = find_yank(config_state->yank_head, '/');
-                         if(yank){
-                              assert(yank->mode == YANK_NORMAL);
-                              Point_t match;
-                              if(ce_find_string(buffer, *cursor, yank->text, &match, ce_reverse_direction(config_state->search_command.direction))){
-                                   ce_set_cursor(buffer, cursor, match);
-                                   center_view(config_state->tab_current->view_current);
-                              }
-                         }
-                    } break;
-                    break;
                     case '=':
                     {
 #if 0
@@ -4635,7 +5262,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               }
                               cursor->x = 0;
                               cursor->y = 0;
-                              if(!ce_advance_cursor(buffer, cursor, cursor_position-1))
+                              if(!ce_advance_cursor(buffer, cursor, cursor_position - 1))
                                    ce_message("failed to advance cursor");
 
 #if 0
@@ -4727,7 +5354,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          config_state->tab_current = new_tab;
                     } break;
                     case 'R':
-                         if(config_state->vim_mode == VM_VISUAL_RANGE || config_state->vim_mode == VM_VISUAL_LINE){
+                         if(config_state->vim_state.mode == VM_VISUAL_RANGE || config_state->vim_state.mode == VM_VISUAL_LINE){
                               input_start(config_state, "Visual Replace", key);
                          }else{
                               input_start(config_state, "Replace", key);
@@ -4755,15 +5382,15 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
      if(config_state->input && (config_state->input_key == '/' || config_state->input_key == '?')){
           if(config_state->view_input->buffer->lines == NULL){
                pthread_mutex_lock(&view_input_save_lock);
-               config_state->tab_current->view_input_save->cursor = config_state->start_search;
+               config_state->tab_current->view_input_save->cursor = config_state->vim_state.start_search;
                pthread_mutex_unlock(&view_input_save_lock);
           }else{
                const char* search_str = config_state->view_input->buffer->lines[0];
                Point_t match = {};
                if(search_str[0] &&
                   ce_find_string(config_state->tab_current->view_input_save->buffer,
-                                 config_state->start_search, search_str, &match,
-                                 config_state->search_command.direction)){
+                                 config_state->vim_state.start_search, search_str, &match,
+                                 config_state->vim_state.search_direction)){
                     pthread_mutex_lock(&view_input_save_lock);
                     ce_set_cursor(config_state->tab_current->view_input_save->buffer,
                                   &config_state->tab_current->view_input_save->cursor, match);
@@ -4771,11 +5398,15 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     center_view(config_state->tab_current->view_input_save);
                }else{
                     pthread_mutex_lock(&view_input_save_lock);
-                    config_state->tab_current->view_input_save->cursor = config_state->start_search;
+                    config_state->tab_current->view_input_save->cursor = config_state->vim_state.start_search;
                     pthread_mutex_unlock(&view_input_save_lock);
                     center_view(config_state->tab_current->view_input_save);
                }
           }
+     }
+
+     if(config_state->vim_state.mode != VM_INSERT){
+          auto_complete_end(&config_state->auto_complete);
      }
 
      if(config_state->tab_current->view_overrideable && buffer_view->buffer == &config_state->mark_list_buffer){
@@ -4804,7 +5435,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 }
 
 void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferView_t* overrideable_view, VimMode_t vim_mode, int last_key,
-                        bool recording_macro)
+                        char recording_macro)
 {
      Buffer_t* buffer = view->buffer;
      if(view->next_horizontal) draw_view_statuses(view->next_horizontal, current_view, overrideable_view, vim_mode, last_key, recording_macro);
@@ -4824,14 +5455,14 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferVi
      for(int i = view->top_left.x; i < view->bottom_right.x; ++i) addch(ACS_HLINE);
 
      attron(COLOR_PAIR(S_VIEW_STATUS));
-     mvprintw(view->bottom_right.y, view->top_left.x + 1, " %s%s%s%s ",
+     mvprintw(view->bottom_right.y, view->top_left.x + 1, " %s%s%s ",
               view == current_view ? mode_names[vim_mode] : "",
-              modified_string(buffer), buffer->filename, readonly_string(buffer));
+              buffer_flag_string(buffer), buffer->filename);
 #ifndef NDEBUG
      if(view == current_view) printw("%s %d ", keyname(last_key), last_key);
 #endif
      if(view == overrideable_view) printw("^ ");
-     if(view == current_view && recording_macro) printw("RECORDING ");
+     if(view == current_view && recording_macro) printw("RECORDING %c ", recording_macro);
      int64_t row = view->cursor.y + 1;
      int64_t column = view->cursor.x + 1;
      int64_t digits_in_line = count_digits(row);
@@ -4906,16 +5537,16 @@ void view_drawer(const BufferNode_t* head, void* user_data)
      view_follow_cursor(buffer_view, config_state->line_number_type);
 
      // setup highlight
-     if(config_state->vim_mode == VM_VISUAL_RANGE){
-          const Point_t* start = &config_state->visual_start;
+     if(config_state->vim_state.mode == VM_VISUAL_RANGE){
+          const Point_t* start = &config_state->vim_state.visual_start;
           const Point_t* end = &config_state->tab_current->view_current->cursor;
 
           ce_sort_points(&start, &end);
 
           buffer->highlight_start = *start;
           buffer->highlight_end = *end;
-     }else if(config_state->vim_mode == VM_VISUAL_LINE){
-          int64_t start_line = config_state->visual_start.y;
+     }else if(config_state->vim_state.mode == VM_VISUAL_LINE){
+          int64_t start_line = config_state->vim_state.visual_start.y;
           int64_t end_line = config_state->tab_current->view_current->cursor.y;
 
           if(start_line > end_line){
@@ -4936,7 +5567,7 @@ void view_drawer(const BufferNode_t* head, void* user_data)
         config_state->view_input->buffer->lines && config_state->view_input->buffer->lines[0][0]){
           search = config_state->view_input->buffer->lines[0];
      }else{
-          YankNode_t* yank = find_yank(config_state->yank_head, '/');
+          YankNode_t* yank = find_yank(config_state->vim_state.yank_head, '/');
           if(yank) search = yank->text;
      }
 
@@ -4944,8 +5575,8 @@ void view_drawer(const BufferNode_t* head, void* user_data)
      ce_draw_views(config_state->tab_current->view_head, search, config_state->line_number_type);
 
      draw_view_statuses(config_state->tab_current->view_head, config_state->tab_current->view_current,
-                        config_state->tab_current->view_overrideable, config_state->vim_mode, config_state->last_key,
-                        config_state->recording_macro);
+                        config_state->tab_current->view_overrideable, config_state->vim_state.mode, config_state->last_key,
+                        config_state->vim_state.recording_macro);
 
      // draw input status
      if(config_state->input){
@@ -4972,8 +5603,8 @@ void view_drawer(const BufferNode_t* head, void* user_data)
 
           ce_draw_views(config_state->view_input, NULL, LNT_NONE);
           draw_view_statuses(config_state->view_input, config_state->tab_current->view_current,
-                             NULL, config_state->vim_mode, config_state->last_key,
-                             config_state->recording_macro);
+                             NULL, config_state->vim_state.mode, config_state->last_key,
+                             config_state->vim_state.recording_macro);
      }
 
      // draw auto complete

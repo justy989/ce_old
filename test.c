@@ -591,6 +591,25 @@ TEST(remove_string_whole_line)
      ce_free_buffer(&buffer);
 }
 
+TEST(remove_string_whole_line_in_multiline)
+{
+     Buffer_t buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE");
+     buffer.lines[2] = strdup("AWESOME");
+
+     Point_t point = {0, 0};
+     ce_remove_string(&buffer, point, 6);
+
+     ASSERT(buffer.line_count == 2);
+     EXPECT(strcmp(buffer.lines[0], "ARE") == 0);
+     EXPECT(strcmp(buffer.lines[1], "AWESOME") == 0);
+
+     ce_free_buffer(&buffer);
+}
+
 TEST(remove_string_multiline_begin)
 {
      Buffer_t buffer = {};
@@ -957,6 +976,22 @@ TEST(sanity_find_matching_pair_same_line)
      ce_free_buffer(&buffer);
 }
 
+TEST(sanity_find_matching_pair_same_line_with_match_in_quotes)
+{
+     Buffer_t buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("if(strcmp(name == \"dog(a)\"))");
+
+     Point_t point = {2, 0};
+     ce_move_cursor_to_matching_pair(&buffer, &point, '(');
+
+     EXPECT(point.x == 27);
+     EXPECT(point.y == 0);
+
+     ce_free_buffer(&buffer);
+}
+
 TEST(sanity_find_matching_pair_multiline)
 {
      Buffer_t buffer = {};
@@ -1134,7 +1169,7 @@ TEST(advance_cursor_next_line)
      Point_t cursor = {1, 0};
      ce_advance_cursor(&buffer, &cursor, 6);
 
-     EXPECT(cursor.x == 2);
+     EXPECT(cursor.x == 1);
      EXPECT(cursor.y == 1);
 
      ce_free_buffer(&buffer);
@@ -1571,6 +1606,41 @@ TEST(sanity_split_view)
      EXPECT(head->next_horizontal == horizontal_split_view);
 
      // free views
+     ASSERT(ce_free_views(&head));
+}
+
+TEST(change_buffer_in_views)
+{
+     BufferView_t* head = calloc(1, sizeof(*head));
+     ASSERT(head);
+
+     Buffer_t a;
+     Buffer_t b;
+     Buffer_t c;
+
+     head->buffer = &a;
+
+     BufferView_t* horizontal_split = ce_split_view(head, &a, true);
+     ASSERT(horizontal_split);
+
+     BufferView_t* vertical_split = ce_split_view(head, &b, false);
+     ASSERT(vertical_split);
+
+     BufferView_t* vertical_horizontal_split = ce_split_view(vertical_split, &a, true);
+     ASSERT(vertical_horizontal_split);
+
+     EXPECT(head->buffer == &a);
+     EXPECT(horizontal_split->buffer == &a);
+     EXPECT(vertical_split->buffer == &b);
+     EXPECT(vertical_horizontal_split->buffer == &a);
+
+     EXPECT(ce_change_buffer_in_views(head, &a, &c));
+
+     EXPECT(head->buffer == &c);
+     EXPECT(horizontal_split->buffer == &c);
+     EXPECT(vertical_split->buffer == &b);
+     EXPECT(vertical_horizontal_split->buffer == &c);
+
      ASSERT(ce_free_views(&head));
 }
 
@@ -2226,6 +2296,27 @@ TEST(join_line)
      EXPECT(strcmp(buffer.lines[2], "best") == 0);
 
      ce_free_buffer(&buffer);
+}
+
+TEST(get_line_number_column_width)
+{
+     EXPECT(ce_get_line_number_column_width(LNT_NONE, 2500, 950, 1050) == 0);
+     EXPECT(ce_get_line_number_column_width(LNT_NONE, 0, 0, 0) == 0);
+
+     EXPECT(ce_get_line_number_column_width(LNT_ABSOLUTE, 2500, 0, 10) == 5);
+     EXPECT(ce_get_line_number_column_width(LNT_ABSOLUTE, 2500, 0, 150) == 5);
+     EXPECT(ce_get_line_number_column_width(LNT_ABSOLUTE, 100, 0, 10) == 4);
+     EXPECT(ce_get_line_number_column_width(LNT_ABSOLUTE, 100, 0, 150) == 4);
+
+     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE_AND_ABSOLUTE, 2500, 0, 10) == 5);
+     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE_AND_ABSOLUTE, 2500, 0, 150) == 5);
+     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE_AND_ABSOLUTE, 100, 0, 10) == 4);
+     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE_AND_ABSOLUTE, 100, 0, 150) == 4);
+
+     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE, 2500, 0, 15) == 3);
+     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE, 2500, 0, 150) == 4);
+     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE, 100, 0, 15) == 3);
+     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE, 100, 0, 150) == 4);
 }
 
 TEST(point_after)

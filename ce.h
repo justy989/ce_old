@@ -121,6 +121,7 @@ typedef struct {
      Point_t highlight_end;
      bool modified;
      bool readonly;
+     bool newfile;
      union {
           char* filename;
           char* name;
@@ -194,6 +195,13 @@ typedef enum {
      CT_END_MULTILINE,
 } CommentType_t;
 
+// NOTE: temporary, we probably want something like CeRC_t type of thing?
+typedef enum {
+     LF_DOES_NOT_EXIST,
+     LF_IS_DIRECTORY,
+     LF_SUCCESS,
+} LoadFileResult_t;
+
 extern Point_t* g_terminal_dimensions;
 
 // CE Configuration-Defined Functions
@@ -209,14 +217,14 @@ bool ce_remove_buffer_from_list        (BufferNode_t** head, Buffer_t* buffer);
 
 
 // BufferView Manipulation Functions
-BufferView_t* ce_split_view       (BufferView_t* view, Buffer_t* buffer, bool horizontal);
-bool ce_remove_view               (BufferView_t** head, BufferView_t* view);
-bool ce_calc_views                (BufferView_t* head, Point_t top_left, Point_t top_right);
-bool ce_draw_views                (const BufferView_t* head, const char* highlight_word, LineNumberType_t line_number_type);
-bool ce_change_buffer_in_views    (BufferView_t* head, Buffer_t* match, Buffer_t* new);
-bool ce_free_views                (BufferView_t** view);
+BufferView_t* ce_split_view         (BufferView_t* view, Buffer_t* buffer, bool horizontal);
+bool ce_remove_view                 (BufferView_t** head, BufferView_t* view);
+bool ce_calc_views                  (BufferView_t* head, Point_t top_left, Point_t top_right);
+bool ce_draw_views                  (const BufferView_t* head, const char* highlight_word, LineNumberType_t line_number_type);
+bool ce_change_buffer_in_views      (BufferView_t* head, Buffer_t* match, Buffer_t* new);
+bool ce_free_views                  (BufferView_t** view);
 BufferView_t* ce_find_view_at_point (BufferView_t* head, Point_t point);
-BufferView_t* ce_buffer_in_view(BufferView_t* head, const Buffer_t* buffer);
+BufferView_t* ce_buffer_in_view     (BufferView_t* head, const Buffer_t* buffer);
 
 
 // Buffer_t Manipulation Functions
@@ -229,7 +237,7 @@ void ce_clear_lines             (Buffer_t* buffer);
 void ce_clear_lines_readonly    (Buffer_t* buffer);
 
 bool ce_load_string             (Buffer_t* buffer, const char* string);
-bool ce_load_file               (Buffer_t* buffer, const char* filename);
+LoadFileResult_t ce_load_file   (Buffer_t* buffer, const char* filename);
 
 bool ce_insert_char             (Buffer_t* buffer, Point_t location, char c);
 bool ce_append_char             (Buffer_t* buffer, char c);
@@ -333,7 +341,7 @@ int64_t ce_get_line_number_column_width(LineNumberType_t line_number_type, int64
 // Misc. Utility Functions
 int64_t ce_count_string_lines   (const char* string);
 bool    ce_point_after          (Point_t a, Point_t b);
-bool    ce_points_equal          (Point_t a, Point_t b);
+bool    ce_points_equal         (Point_t a, Point_t b);
 void    ce_sort_points          (const Point_t** a, const Point_t** b);
 int     ce_ispunct              (int c);
 int     ce_iswordchar           (int c);

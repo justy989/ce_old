@@ -4,6 +4,7 @@
 #include <inttypes.h>
 #include <assert.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 Point_t* g_terminal_dimensions = NULL;
 
@@ -62,11 +63,21 @@ bool ce_alloc_lines(Buffer_t* buffer, int64_t line_count)
      return true;
 }
 
-bool ce_load_file(Buffer_t* buffer, const char* filename)
+LoadFileResult_t ce_load_file(Buffer_t* buffer, const char* filename)
 {
      ce_message("load file '%s'", filename);
 
      if(buffer->lines) ce_free_buffer(buffer);
+
+     // check if directory
+     {
+          struct stat info;
+          stat(filename, &info);
+          if(S_ISDIR(info.st_mode)){
+               ce_message("%s() '%s' is a directory.", __FUNCTION__, filename);
+               return LF_IS_DIRECTORY;
+          }
+     }
 
      // read the entire file
      size_t content_size;
@@ -75,7 +86,7 @@ bool ce_load_file(Buffer_t* buffer, const char* filename)
           FILE* file = fopen(filename, "rb");
           if(!file){
                ce_message("%s() fopen('%s', 'rb') failed: %s", __FUNCTION__, filename, strerror(errno));
-               return false;
+               return LF_DOES_NOT_EXIST;
           }
 
           fseek(file, 0, SEEK_END);
@@ -102,7 +113,7 @@ bool ce_load_file(Buffer_t* buffer, const char* filename)
 
      free(contents);
      buffer->modified = false;
-     return true;
+     return LF_SUCCESS;
 }
 
 bool ce_load_string(Buffer_t* buffer, const char* str)
@@ -202,6 +213,7 @@ bool insert_char_impl(Buffer_t* buffer, Point_t location, char c)
           }
           new_line[location.x] = 0;
           buffer->lines[location.y] = new_line;
+          buffer->modified = true;
           return true;
      }
 
@@ -487,7 +499,7 @@ char* ce_dupe_string(const Buffer_t* buffer, Point_t start, Point_t end)
                return NULL;
           }
           memcpy(new_str, buffer->lines[start.y] + start.x, total_len);
-          if(start.x != start.y && !new_str[total_len-1]) new_str[total_len-1] = '\n';
+          if(!new_str[total_len-1]) new_str[total_len-1] = '\n';
           new_str[total_len] = 0;
 
           return new_str;
@@ -612,39 +624,39 @@ bool ce_move_cursor_to_matching_pair(const Buffer_t* buffer, Point_t* location, 
      CE_CHECK_PTR_ARG(location);
 
      char match;
-     Direction_t d;
+     Direction_t dir;
 
      switch(matchee){
      case '{':
-          d = CE_DOWN;
+          dir = CE_DOWN;
           match = '}';
           break;
      case '}':
-          d = CE_UP;
+          dir = CE_UP;
           match = '{';
           break;
      case '(':
-          d = CE_DOWN;
+          dir = CE_DOWN;
           match = ')';
           break;
      case ')':
-          d = CE_UP;
+          dir = CE_UP;
           match = '(';
           break;
      case '[':
-          d = CE_DOWN;
+          dir = CE_DOWN;
           match = ']';
           break;
      case ']':
-          d = CE_UP;
+          dir = CE_UP;
           match = '[';
           break;
      case '<':
-          d = CE_DOWN;
+          dir = CE_DOWN;
           match = '>';
           break;
      case '>':
-          d = CE_UP;
+          dir = CE_UP;
           match = '<';
           break;
      default:
@@ -652,29 +664,81 @@ bool ce_move_cursor_to_matching_pair(const Buffer_t* buffer, Point_t* location, 
      }
 
      uint64_t n_unmatched = 0; // when n_unmatched decrements back to 0, we have found our match
+     bool inside_double_quotes = false;
+     bool inside_single_quotes = false;
+
+     // TODO: doesn't handle ignoring things in multiline comments
 
      char curr;
+     char prev = 0;
+     char prev_prev = 0;
      for(Point_t iter = *location;
-         d == CE_UP? iter.y >= 0 : iter.y < buffer->line_count;
-         iter.y += d ){
+         dir == CE_UP? iter.y >= 0 : iter.y < buffer->line_count;
+         iter.y += dir ){
 
           // first iteration we want iter.x to be on our matchee, other iterations we want it at eol/bol
-          if(iter.y != location->y) iter.x = (d == CE_UP) ? ce_last_index(buffer->lines[iter.y]) : 0;
+          if(iter.y != location->y){
+               iter.x = 0;
+               if(dir == CE_UP){
+                    int64_t last_index = ce_last_index(buffer->lines[iter.y]);
+
+                    // loop until the last index or stop early if we find comments !
+                    while(iter.x < last_index){
+                         ce_get_char(buffer, iter, &curr);
+                         if(curr == '/' && prev == '/') break;
+                         prev = curr;
+                         iter.x++;
+                    }
+               }
+          }
 
           // loop over buffer
-          for(; ce_point_on_buffer(buffer, iter); iter.x +=d){
+          prev = 0;
+          prev_prev = 0;
+          for(; ce_point_on_buffer(buffer, iter); iter.x += dir){
                ce_get_char(buffer, iter, &curr);
 
-               // loop over line
-               if(curr == match){
-                    if(n_unmatched == 0){
-                         *location = iter;
-                         return true;
-                    }
-                    n_unmatched--;
-               }else if(curr == matchee && !ce_points_equal(*location, iter)){
-                    n_unmatched++;
+               // NOTE: looping backwards doesn't work !
+               if(curr == '/' && prev == '/'){
+                    // skip the rest of this line since it's a comment !
+                    break;
                }
+
+               if(!inside_single_quotes && curr == '"'){
+                    if(prev == '\\'){
+                         if(prev_prev == '\\'){
+                              inside_double_quotes = !inside_double_quotes;
+                         }
+                    }else{
+                         inside_double_quotes = !inside_double_quotes;
+                    }
+               }
+
+               if(!inside_double_quotes && curr == '\''){
+                    if(prev == '\\'){
+                         if(prev_prev == '\\'){
+                              inside_single_quotes = !inside_single_quotes;
+                         }
+                    }else{
+                         inside_single_quotes = !inside_single_quotes;
+                    }
+               }
+
+               // loop over line
+               if(!inside_double_quotes && !inside_single_quotes){
+                    if(curr == match){
+                         if(n_unmatched == 0){
+                              *location = iter;
+                              return true;
+                         }
+                         n_unmatched--;
+                    }else if(curr == matchee && !ce_points_equal(*location, iter)){
+                         n_unmatched++;
+                    }
+               }
+
+               prev_prev = prev;
+               prev = curr;
           }
      }
 
@@ -919,8 +983,8 @@ bool insert_line_impl(Buffer_t* buffer, int64_t line, const char* string)
 {
      CE_CHECK_PTR_ARG(buffer);
 
-     // make sure we are only inserting in the middle or at the very end
-     assert(line >= 0 && line <= buffer->line_count);
+     // make sure we are only inserting in the middle or at the very end, or the buffer is empty
+     assert(buffer->line_count == 0 || line >= 0 && line <= buffer->line_count);
      int64_t string_line_count = 1;
      if(string) string_line_count = ce_count_string_lines(string);
 
@@ -931,7 +995,9 @@ bool insert_line_impl(Buffer_t* buffer, int64_t line, const char* string)
           return false;
      }
 
-     memmove(new_lines + line + string_line_count, new_lines + line, (buffer->line_count - line) * sizeof(*new_lines));
+     if(buffer->line_count){
+          memmove(new_lines + line + string_line_count, new_lines + line, (buffer->line_count - line) * sizeof(*new_lines));
+     }
 
      if(string){
           const char* line_start = string;
@@ -954,6 +1020,7 @@ bool insert_line_impl(Buffer_t* buffer, int64_t line, const char* string)
 
      buffer->lines = new_lines;
      buffer->line_count = new_line_count;
+     buffer->modified = true;
 
      return true;
 }
@@ -1154,6 +1221,7 @@ bool ce_save_buffer(Buffer_t* buffer, const char* filename)
 
      fclose(file);
      buffer->modified = false;
+     buffer->newfile = false;
      return true;
 }
 
@@ -1346,9 +1414,19 @@ void ce_is_string_literal(const char* line, int64_t start_offset, int64_t line_l
      char ch = line[start_offset];
      if(ch == '"'){
           // ignore single quotes inside double quotes
-          if(*inside_string && *last_quote_char == '\''){
-               return;
+          if(*inside_string){
+               if(*last_quote_char == '\''){
+                    return;
+               }
+               int64_t prev_char = start_offset - 1;
+               if(prev_char >= 0 && line[prev_char] == '\\'){
+                    int64_t prev_prev_char = prev_char - 1;
+                    if(prev_prev_char >= 0 && line[prev_prev_char] != '\\'){
+                         return;
+                    }
+               }
           }
+
           *inside_string = !*inside_string;
           if(*inside_string){
                *last_quote_char = ch;
@@ -1358,6 +1436,15 @@ void ce_is_string_literal(const char* line, int64_t start_offset, int64_t line_l
                if(*last_quote_char == '"'){
                     return;
                }
+
+               int64_t prev_char = start_offset - 1;
+               if(prev_char >= 0 && line[prev_char] == '\\'){
+                    int64_t prev_prev_char = prev_char - 1;
+                    if(prev_prev_char >= 0 && line[prev_prev_char] != '\\'){
+                         return;
+                    }
+               }
+
                *inside_string = false;
           }else{
                char next_char = line[start_offset + 1];
@@ -1823,6 +1910,7 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                               break;
                          case CT_END_MULTILINE:
                               inside_multiline_comment = false;
+                              color_left = 1;
                               break;
                          }
 
@@ -2044,24 +2132,25 @@ bool ce_advance_cursor(const Buffer_t* buffer, Point_t* cursor, int64_t delta)
      Direction_t d = (delta > 0 ) ? CE_DOWN : CE_UP;
      delta *= d;
 
-     int64_t line_len = (d == CE_DOWN) ? strlen(buffer->lines[cursor->y]) : 0;
+     int64_t line_len = (d == CE_DOWN) ? (strlen(buffer->lines[cursor->y]) + 1) : 0; // account for newline
      int64_t line_len_left = (d == CE_DOWN) ? line_len - cursor->x : cursor->x;
 
      // if the movement fits on this line, go for it
      if(delta < line_len_left){
-          cursor->x += delta*d;
+          cursor->x += delta * d;
           return true;
      }
 
      delta -= line_len_left;
      cursor->y += d;
-     cursor->x = (d == CE_DOWN) ? strlen(buffer->lines[cursor->y]) : 0;
+     cursor->x = 0;
+     if(cursor->y < buffer->line_count && d == CE_DOWN) cursor->x = strlen(buffer->lines[cursor->y]);
 
      while(true){
           if(d == CE_DOWN && cursor->y >= buffer->line_count) return ce_move_cursor_to_end_of_file(buffer, cursor);
           else if(cursor->y < 0) return ce_move_cursor_to_beginning_of_file(buffer, cursor);
 
-          line_len = strlen(buffer->lines[cursor->y]);
+          line_len = strlen(buffer->lines[cursor->y]) + 1; // account for newline
 
           if(delta < line_len){
                cursor->x = (d == CE_DOWN) ? delta : line_len - delta;

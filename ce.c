@@ -3181,7 +3181,7 @@ int64_t ce_last_index(const char* string)
      return len;
 }
 
-KeyNode_t* keys_push(KeyNode_t** head, int key)
+KeyNode_t* ce_keys_push(KeyNode_t** head, int key)
 {
      KeyNode_t* new_node = malloc(sizeof(*new_node));
      if(!new_node){
@@ -3210,7 +3210,7 @@ KeyNode_t* keys_push(KeyNode_t** head, int key)
 }
 
 // string is allocated and returned, it is the user's responsibility to free it
-int* keys_get_string(KeyNode_t* head)
+int* ce_keys_get_string(KeyNode_t* head)
 {
      int64_t len = 0;
      KeyNode_t* itr = head;
@@ -3237,7 +3237,7 @@ int* keys_get_string(KeyNode_t* head)
      return str;
 }
 
-void keys_free(KeyNode_t** head)
+void ce_keys_free(KeyNode_t** head)
 {
      while(*head){
           KeyNode_t* tmp = *head;

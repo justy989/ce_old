@@ -139,54 +139,54 @@ typedef struct MarkNode_t{
      char reg_char;
      Point_t location;
      struct MarkNode_t* next;
-} MarkNode_t;
+} VimMarkNode_t;
 
-Point_t* mark_find(MarkNode_t* mark_head, char mark_char);
-void mark_add(MarkNode_t** head, char mark_char, const Point_t* location);
-void marks_free(MarkNode_t** head);
+Point_t* vim_mark_find(VimMarkNode_t* mark_head, char mark_char);
+void vim_mark_add(VimMarkNode_t** head, char mark_char, const Point_t* location);
+void vim_marks_free(VimMarkNode_t** head);
 
 
 // yanks
 typedef enum{
      YANK_NORMAL,
      YANK_LINE,
-} YankMode_t;
+} VimYankMode_t;
 
-typedef struct YankNode_t{
+typedef struct VimYankNode_t{
      char reg_char;
      const char* text;
-     YankMode_t mode;
-     struct YankNode_t* next;
-} YankNode_t;
+     VimYankMode_t mode;
+     struct VimYankNode_t* next;
+} VimYankNode_t;
 
-YankNode_t* yank_find(YankNode_t* head, char reg_char);
-void yank_add(YankNode_t** head, char reg_char, const char* yank_text, YankMode_t mode);
-void yanks_free(YankNode_t** head);
+VimYankNode_t* vim_yank_find(VimYankNode_t* head, char reg_char);
+void vim_yank_add(VimYankNode_t** head, char reg_char, const char* yank_text, VimYankMode_t mode);
+void vim_yanks_free(VimYankNode_t** head);
 
 
 // macros
-typedef struct MacroNode_t{
+typedef struct VimMacroNode_t{
      char reg;
      int* command;
-     struct MacroNode_t* next;
-} MacroNode_t;
+     struct VimMacroNode_t* next;
+} VimMacroNode_t;
 
-MacroNode_t* macro_find(MacroNode_t* head, char reg);
-void macro_add(MacroNode_t** head, char reg, int* command);
-void macros_free(MacroNode_t** head);
+VimMacroNode_t* vim_macro_find(VimMacroNode_t* head, char reg);
+void vim_macro_add(VimMacroNode_t** head, char reg, int* command);
+void vim_macros_free(VimMacroNode_t** head);
 
-typedef struct MacroCommitNode_t{
+typedef struct VimMacroCommitNode_t{
      KeyNode_t* command_begin;
      KeyNode_t* command_copy;
      bool chain;
-     struct MacroCommitNode_t* next;
-     struct MacroCommitNode_t* prev;
-} MacroCommitNode_t;
+     struct VimMacroCommitNode_t* next;
+     struct VimMacroCommitNode_t* prev;
+} VimMacroCommitNode_t;
 
-void macro_commits_free(MacroCommitNode_t** macro_commit);
-void macro_commits_init(MacroCommitNode_t** macro_commit);
-void macro_commit_push(MacroCommitNode_t** macro_commit, KeyNode_t* last_command_begin, bool chain);
-void macro_commits_dump(const MacroCommitNode_t* macro_commit);
+void vim_macro_commits_free(VimMacroCommitNode_t** macro_commit);
+void vim_macro_commits_init(VimMacroCommitNode_t** macro_commit);
+void vim_macro_commit_push(VimMacroCommitNode_t** macro_commit, KeyNode_t* last_command_begin, bool chain);
+void vim_macro_commits_dump(const VimMacroCommitNode_t* macro_commit);
 
 
 // vim state
@@ -202,11 +202,11 @@ typedef struct{
      char playing_macro;
      KeyNode_t* record_macro_head;
      KeyNode_t* last_macro_command_begin;
-     MacroCommitNode_t* macro_commit_current;
-     MacroNode_t* macro_head;
+     VimMacroCommitNode_t* macro_commit_current;
+     VimMacroNode_t* macro_head;
      BufferCommitNode_t* record_start_commit_tail;
 
-     YankNode_t* yank_head;
+     VimYankNode_t* yank_head;
 
      VimFindCharState_t find_char_state;
 
@@ -222,7 +222,7 @@ typedef struct {
      Point_t end;
      const Point_t* sorted_start;
      const Point_t* sorted_end;
-     YankMode_t yank_mode;
+     VimYankMode_t yank_mode;
 } VimActionRange_t;
 
 VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* buffer, Point_t* cursor,

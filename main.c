@@ -30,6 +30,7 @@ LITTLE:
 -word movement commands should work across lines
 -searching backwards is with multiple instances on the same line is wrong
 -'o' then undo delets a line?
+-'R' replace infinite loops
 
 */
 

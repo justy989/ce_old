@@ -3,9 +3,9 @@
 #include <assert.h>
 #include <ctype.h>
 
-Point_t* mark_find(MarkNode_t* head, char mark_char)
+Point_t* vim_mark_find(VimMarkNode_t* head, char mark_char)
 {
-     MarkNode_t* itr = head;
+     VimMarkNode_t* itr = head;
      while(itr != NULL){
           if(itr->reg_char == mark_char) return &itr->location;
           itr = itr->next;
@@ -13,11 +13,11 @@ Point_t* mark_find(MarkNode_t* head, char mark_char)
      return NULL;
 }
 
-void mark_add(MarkNode_t** head, char mark_char, const Point_t* location)
+void vim_mark_add(VimMarkNode_t** head, char mark_char, const Point_t* location)
 {
-     Point_t* mark_location = mark_find(*head, mark_char);
+     Point_t* mark_location = vim_mark_find(*head, mark_char);
      if(!mark_location){
-          MarkNode_t* new_mark = malloc(sizeof(*head));
+          VimMarkNode_t* new_mark = malloc(sizeof(*head));
           new_mark->reg_char = mark_char;
           new_mark->next = *head;
           *head = new_mark;
@@ -26,11 +26,11 @@ void mark_add(MarkNode_t** head, char mark_char, const Point_t* location)
      *mark_location = *location;
 }
 
-void marks_free(MarkNode_t** head)
+void vim_marks_free(VimMarkNode_t** head)
 {
-     MarkNode_t* itr = *head;
+     VimMarkNode_t* itr = *head;
      while(itr){
-          MarkNode_t* tmp = itr;
+          VimMarkNode_t* tmp = itr;
           itr = itr->next;
           free(tmp);
      }
@@ -38,9 +38,9 @@ void marks_free(MarkNode_t** head)
      *head = NULL;
 }
 
-YankNode_t* yank_find(YankNode_t* head, char reg_char)
+VimYankNode_t* vim_yank_find(VimYankNode_t* head, char reg_char)
 {
-     YankNode_t* itr = head;
+     VimYankNode_t* itr = head;
      while(itr != NULL){
           if(itr->reg_char == reg_char) return itr;
           itr = itr->next;
@@ -50,13 +50,13 @@ YankNode_t* yank_find(YankNode_t* head, char reg_char)
 
 // for now the yanked string is user allocated. eventually will probably
 // want to change this interface so that everything is hidden
-void yank_add(YankNode_t** head, char reg_char, const char* yank_text, YankMode_t mode)
+void vim_yank_add(VimYankNode_t** head, char reg_char, const char* yank_text, VimYankMode_t mode)
 {
-     YankNode_t* node = yank_find(*head, reg_char);
+     VimYankNode_t* node = vim_yank_find(*head, reg_char);
      if(node != NULL){
           free((void*)node->text);
      }else{
-          YankNode_t* new_yank = malloc(sizeof(*new_yank));
+          VimYankNode_t* new_yank = malloc(sizeof(*new_yank));
           new_yank->reg_char = reg_char;
           new_yank->next = *head;
           node = new_yank;
@@ -67,11 +67,11 @@ void yank_add(YankNode_t** head, char reg_char, const char* yank_text, YankMode_
      node->mode = mode;
 }
 
-void yanks_free(YankNode_t** head)
+void vim_yanks_free(VimYankNode_t** head)
 {
-     YankNode_t* itr = *head;
+     VimYankNode_t* itr = *head;
      while(itr){
-          YankNode_t* tmp = itr;
+          VimYankNode_t* tmp = itr;
           itr = itr->next;
 
           free((void*)(tmp->text));
@@ -81,12 +81,12 @@ void yanks_free(YankNode_t** head)
      *head = NULL;
 }
 
-void macros_free(MacroNode_t** head)
+void vim_macros_free(VimMacroNode_t** head)
 {
-     MacroNode_t* itr = *head;
+     VimMacroNode_t* itr = *head;
 
      while(itr){
-          MacroNode_t* tmp = itr;
+          VimMacroNode_t* tmp = itr;
           itr = itr->next;
           free(tmp);
      }
@@ -94,9 +94,9 @@ void macros_free(MacroNode_t** head)
      *head = NULL;
 }
 
-MacroNode_t* macro_find(MacroNode_t* head, char reg)
+VimMacroNode_t* vim_macro_find(VimMacroNode_t* head, char reg)
 {
-     MacroNode_t* itr = head;
+     VimMacroNode_t* itr = head;
 
      while(itr != NULL){
           if(itr->reg == reg) return itr;
@@ -108,14 +108,14 @@ MacroNode_t* macro_find(MacroNode_t* head, char reg)
 
 // for now the yanked string is user allocated. eventually will probably
 // want to change this interface so that everything is hidden
-void macro_add(MacroNode_t** head, char reg, int* command)
+void vim_macro_add(VimMacroNode_t** head, char reg, int* command)
 {
-     MacroNode_t* node = macro_find(*head, reg);
+     VimMacroNode_t* node = vim_macro_find(*head, reg);
 
      if(node != NULL){
           free((void*)node->command);
      }else{
-          MacroNode_t* new_yank = malloc(sizeof(*new_yank));
+          VimMacroNode_t* new_yank = malloc(sizeof(*new_yank));
           new_yank->reg = reg;
           new_yank->next = *head;
           node = new_yank;
@@ -125,35 +125,35 @@ void macro_add(MacroNode_t** head, char reg, int* command)
      node->command = command;
 }
 
-void macro_commits_free(MacroCommitNode_t** macro_commit)
+void vim_macro_commits_free(VimMacroCommitNode_t** macro_commit)
 {
-     MacroCommitNode_t* itr = *macro_commit;
+     VimMacroCommitNode_t* itr = *macro_commit;
      while(itr){
-          MacroCommitNode_t* tmp = itr;
+          VimMacroCommitNode_t* tmp = itr;
           itr = itr->next;
-          keys_free(&tmp->command_copy);
+          ce_keys_free(&tmp->command_copy);
           free(tmp);
      }
 
      *macro_commit = NULL;
 }
 
-void macro_commits_init(MacroCommitNode_t** macro_commit)
+void vim_macro_commits_init(VimMacroCommitNode_t** macro_commit)
 {
      if(*macro_commit){
-          macro_commits_free(macro_commit);
+          vim_macro_commits_free(macro_commit);
      }
 
      *macro_commit = calloc(1, sizeof(**macro_commit));
 }
 
-void macro_commit_push(MacroCommitNode_t** macro_commit, KeyNode_t* last_command_begin, bool chain)
+void vim_macro_commit_push(VimMacroCommitNode_t** macro_commit, KeyNode_t* last_command_begin, bool chain)
 {
      if(*macro_commit && (*macro_commit)->command_copy){
-          macro_commits_free(&(*macro_commit)->next);
+          vim_macro_commits_free(&(*macro_commit)->next);
      }
 
-     MacroCommitNode_t* new_commit = calloc(1, sizeof(*new_commit));
+     VimMacroCommitNode_t* new_commit = calloc(1, sizeof(*new_commit));
      if(!new_commit) return;
 
      new_commit->prev = *macro_commit;
@@ -165,9 +165,9 @@ void macro_commit_push(MacroCommitNode_t** macro_commit, KeyNode_t* last_command
      *macro_commit = new_commit;
 }
 
-void macro_commits_dump(const MacroCommitNode_t* macro_commit)
+void vim_macro_commits_dump(const VimMacroCommitNode_t* macro_commit)
 {
-     const MacroCommitNode_t* itr = macro_commit;
+     const VimMacroCommitNode_t* itr = macro_commit;
      while(itr){
           ce_message("key: %c, chain: %d", itr->command_begin ? itr->command_begin->key : '0', itr->chain);
           KeyNode_t* copy_itr = itr->command_copy;
@@ -206,7 +206,7 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
           default:
                if(isprint(key)){
                     if(ce_insert_char(buffer, *cursor, key)){
-                         keys_push(&vim_state->command_head, key);
+                         ce_keys_push(&vim_state->command_head, key);
                          cursor->x++;
                          ce_commit_insert_char(commit_tail, insert_start, undo_cursor, *cursor, key, BCC_KEEP_GOING);
                     }
@@ -217,12 +217,12 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
           case KEY_ESCAPE:
           {
                if(!repeating){
-                    int* built_command = keys_get_string(vim_state->command_head);
+                    int* built_command = ce_keys_get_string(vim_state->command_head);
                     if(vim_state->last_insert_command) free(vim_state->last_insert_command);
                     vim_state->last_insert_command = built_command;
                }
 
-               keys_free(&vim_state->command_head);
+               ce_keys_free(&vim_state->command_head);
 
                vim_enter_normal_mode(vim_state);
                ce_clamp_cursor(buffer, cursor);
@@ -239,7 +239,7 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                     cursor->x = 0;
 
                     ce_commit_insert_char(commit_tail, insert_start, undo_cursor, *cursor, key, BCC_KEEP_GOING);
-                    keys_push(&vim_state->command_head, KEY_ENTER);
+                    ce_keys_push(&vim_state->command_head, KEY_ENTER);
 
                     // indent if necessary
                     Point_t prev_line = {0, cursor->y-1};
@@ -271,7 +271,7 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                     if(ce_remove_char(buffer, before_cursor)){
                          ce_commit_remove_char(commit_tail, before_cursor, *cursor, before_cursor, ch, BCC_KEEP_GOING);
                          *cursor = before_cursor;
-                         keys_push(&vim_state->command_head, key);
+                         ce_keys_push(&vim_state->command_head, key);
                     }
                }
            } break;
@@ -293,7 +293,7 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                          ce_move_cursor(buffer, cursor, (Point_t){strlen(TAB_STRING) - 1, 0});
                          cursor->x++; // we want to be after the tabs
                          ce_commit_insert_string(commit_tail, insert_start, undo_cursor, *cursor, strdup(TAB_STRING), BCC_KEEP_GOING);
-                         keys_push(&vim_state->command_head, key);
+                         ce_keys_push(&vim_state->command_head, key);
                     }
                }
           } break;
@@ -305,10 +305,10 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                     (*commit_tail)->commit.chain = BCC_STOP;
                }
 
-               int* built_command = keys_get_string(vim_state->command_head);
+               int* built_command = ce_keys_get_string(vim_state->command_head);
                if(vim_state->last_insert_command) free(vim_state->last_insert_command);
                vim_state->last_insert_command = built_command;
-               keys_free(&vim_state->command_head);
+               ce_keys_free(&vim_state->command_head);
 
           } break;
           case KEY_LEFT:
@@ -321,10 +321,10 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                     (*commit_tail)->commit.chain = BCC_STOP;
                }
 
-               int* built_command = keys_get_string(vim_state->command_head);
+               int* built_command = ce_keys_get_string(vim_state->command_head);
                if(vim_state->last_insert_command) free(vim_state->last_insert_command);
                vim_state->last_insert_command = built_command;
-               keys_free(&vim_state->command_head);
+               ce_keys_free(&vim_state->command_head);
           } break;
           case '}':
           {
@@ -396,18 +396,18 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
           }
 
           if(recording_macro && recording_macro == vim_state->recording_macro){
-               keys_push(&vim_state->record_macro_head, key);
+               ce_keys_push(&vim_state->record_macro_head, key);
 
                if(vim_state->macro_commit_current->next){
-                    macro_commits_free(&vim_state->macro_commit_current->next);
-                    keys_free(&vim_state->macro_commit_current->command_copy);
+                    vim_macro_commits_free(&vim_state->macro_commit_current->next);
+                    ce_keys_free(&vim_state->macro_commit_current->command_copy);
                }
 
-               keys_push(&vim_state->macro_commit_current->command_copy, key);
+               ce_keys_push(&vim_state->macro_commit_current->command_copy, key);
 
                // when we exit insert mode, track the last macro action
                if(vim_mode == VM_INSERT && vim_state->mode == VM_NORMAL){
-                    macro_commit_push(&vim_state->macro_commit_current, vim_state->last_macro_command_begin, false);
+                    vim_macro_commit_push(&vim_state->macro_commit_current, vim_state->last_macro_command_begin, false);
                }
           }
      } break;
@@ -425,8 +425,8 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
           }
      case VM_NORMAL:
      {
-          keys_push(&vim_state->command_head, key);
-          int* built_command = keys_get_string(vim_state->command_head);
+          ce_keys_push(&vim_state->command_head, key);
+          int* built_command = ce_keys_get_string(vim_state->command_head);
 
           VimAction_t vim_action;
           VimCommandState_t command_state = vim_action_from_string(built_command, &vim_action, vim_state->mode, buffer,
@@ -438,19 +438,19 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
           default:
           case VCS_INVALID:
                // allow command to be cleared
-               keys_free(&vim_state->command_head);
+               ce_keys_free(&vim_state->command_head);
                return result; // did not handle key
           case VCS_CONTINUE:
                if(recording_macro && recording_macro == vim_state->recording_macro){
                     // TODO: compress
-                    keys_push(&vim_state->record_macro_head, key);
+                    ce_keys_push(&vim_state->record_macro_head, key);
 
                     if(vim_state->macro_commit_current->next){
-                         macro_commits_free(&vim_state->macro_commit_current->next);
-                         keys_free(&vim_state->macro_commit_current->command_copy);
+                         vim_macro_commits_free(&vim_state->macro_commit_current->next);
+                         ce_keys_free(&vim_state->macro_commit_current->command_copy);
                     }
 
-                    keys_push(&vim_state->macro_commit_current->command_copy, key);
+                    ce_keys_push(&vim_state->macro_commit_current->command_copy, key);
 
                     if(!vim_state->command_head->next){
                          KeyNode_t* itr = vim_state->record_macro_head;
@@ -500,7 +500,7 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                }
 
                if(recording_macro && recording_macro == vim_state->recording_macro){
-                    keys_push(&vim_state->record_macro_head, key);
+                    ce_keys_push(&vim_state->record_macro_head, key);
 
                     if(!vim_state->command_head->next){
                          KeyNode_t* itr = vim_state->record_macro_head;
@@ -509,19 +509,19 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                     }
 
                     if(vim_state->macro_commit_current->next){
-                         macro_commits_free(&vim_state->macro_commit_current->next);
-                         keys_free(&vim_state->macro_commit_current->command_copy);
+                         vim_macro_commits_free(&vim_state->macro_commit_current->next);
+                         ce_keys_free(&vim_state->macro_commit_current->command_copy);
                     }
 
-                    keys_push(&vim_state->macro_commit_current->command_copy, key);
+                    ce_keys_push(&vim_state->macro_commit_current->command_copy, key);
 
                     // tag this command as a macro commit
                     if(vim_state->mode != VM_INSERT){
-                         macro_commit_push(&vim_state->macro_commit_current, vim_state->last_macro_command_begin, vim_action.change.type == VCT_MOTION);
+                         vim_macro_commit_push(&vim_state->macro_commit_current, vim_state->last_macro_command_begin, vim_action.change.type == VCT_MOTION);
                     }
                }
 
-               keys_free(&vim_state->command_head);
+               ce_keys_free(&vim_state->command_head);
 
                result.type = VKH_COMPLETED_ACTION;
                result.completed_action = vim_action;
@@ -1479,13 +1479,13 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                     Point_t word_start, word_end;
                     if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) break;
                     char* search_str = ce_dupe_string(buffer, word_start, word_end);
-                    yank_add(&vim_state->yank_head, '/', search_str, YANK_NORMAL);
+                    vim_yank_add(&vim_state->yank_head, '/', search_str, YANK_NORMAL);
                     vim_state->search_direction = action->motion.search_direction;
                }
                // NOTE: fall through intentionally
                case VMT_SEARCH:
                {
-                    YankNode_t* yank = yank_find(vim_state->yank_head, '/');
+                    VimYankNode_t* yank = vim_yank_find(vim_state->yank_head, '/');
                     if(yank){
                          assert(yank->mode == YANK_NORMAL);
 
@@ -1585,14 +1585,14 @@ void vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
           if(action->yank){
                char* yank_string = strdup(commit_string);
                if(action_range.yank_mode == YANK_LINE && yank_string[len-1] == NEWLINE) yank_string[len-1] = 0;
-               yank_add(&vim_state->yank_head, action->change.reg ? action->change.reg : '"', yank_string, action_range.yank_mode);
+               vim_yank_add(&vim_state->yank_head, action->change.reg ? action->change.reg : '"', yank_string, action_range.yank_mode);
           }
 
           ce_commit_remove_string(commit_tail, *action_range.sorted_start, *cursor, *action_range.sorted_start, commit_string, chain);
      } break;
      case VCT_PASTE_BEFORE:
      {
-          YankNode_t* yank = yank_find(vim_state->yank_head, action->change.reg ? action->change.reg : '"');
+          VimYankNode_t* yank = vim_yank_find(vim_state->yank_head, action->change.reg ? action->change.reg : '"');
 
           if(!yank) break;
 
@@ -1628,7 +1628,7 @@ void vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
      } break;
      case VCT_PASTE_AFTER:
      {
-          YankNode_t* yank = yank_find(vim_state->yank_head, action->change.reg ? action->change.reg : '"');
+          VimYankNode_t* yank = vim_yank_find(vim_state->yank_head, action->change.reg ? action->change.reg : '"');
 
           if(!yank) break;
 
@@ -1698,9 +1698,9 @@ void vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                }
           }
 
-          yank_add(&vim_state->yank_head, '0', save_zero, action_range.yank_mode);
-          yank_add(&vim_state->yank_head, action->change.reg ? action->change.reg : '"', save_quote,
-                   action_range.yank_mode);
+          vim_yank_add(&vim_state->yank_head, '0', save_zero, action_range.yank_mode);
+          vim_yank_add(&vim_state->yank_head, action->change.reg ? action->change.reg : '"', save_quote,
+                       action_range.yank_mode);
      } break;
      case VCT_INDENT:
      {
@@ -1875,10 +1875,10 @@ void vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
      } break;
      case VCT_RECORD_MACRO:
           if(vim_state->recording_macro){
-               int* built_macro = keys_get_string(vim_state->record_macro_head);
+               int* built_macro = ce_keys_get_string(vim_state->record_macro_head);
 
                if(built_macro[0]){
-                    macro_add(&vim_state->macro_head, vim_state->recording_macro, built_macro);
+                    vim_macro_add(&vim_state->macro_head, vim_state->recording_macro, built_macro);
                }else{
                     free(built_macro);
                }
@@ -1901,12 +1901,12 @@ void vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
 
                vim_stop_recording_macro(vim_state);
 
-               macro_commits_free(&vim_state->macro_commit_current);
+               vim_macro_commits_free(&vim_state->macro_commit_current);
           }else{
                vim_state->recording_macro = action->change.reg;
-               keys_free(&vim_state->record_macro_head);
+               ce_keys_free(&vim_state->record_macro_head);
                vim_state->record_start_commit_tail = *commit_tail;
-               macro_commits_init(&vim_state->macro_commit_current);
+               vim_macro_commits_init(&vim_state->macro_commit_current);
           }
           break;
      case VCT_PLAY_MACRO:
@@ -1916,7 +1916,7 @@ void vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                break;
           }
 
-          MacroNode_t* macro = macro_find(vim_state->macro_head, action->change.reg);
+          VimMacroNode_t* macro = vim_macro_find(vim_state->macro_head, action->change.reg);
           if(!macro){
                ce_message("no macro defined in register '%c'", action->change.reg);
                break;
@@ -1942,7 +1942,7 @@ void vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                     macro_itr++;
                }
 
-               keys_free(&vim_state->command_head);
+               ce_keys_free(&vim_state->command_head);
 
                if(*commit_tail) (*commit_tail)->commit.chain = BCC_STOP;
 
@@ -1999,6 +1999,6 @@ void vim_enter_visual_line_mode(VimState_t* vim_state, Point_t cursor)
 void vim_stop_recording_macro(VimState_t* vim_state)
 {
      vim_state->recording_macro = 0;
-     keys_free(&vim_state->record_macro_head);
+     ce_keys_free(&vim_state->record_macro_head);
      vim_state->last_macro_command_begin = NULL;
 }

@@ -344,9 +344,9 @@ int64_t ce_get_line_number_column_width(LineNumberType_t line_number_type, int64
                           fprintf(stderr,"\n");})
 
 // Key Node
-KeyNode_t* keys_push(KeyNode_t** head, int key);
-int* keys_get_string(KeyNode_t* head);
-void keys_free(KeyNode_t** head);
+KeyNode_t* ce_keys_push(KeyNode_t** head, int key);
+int* ce_keys_get_string(KeyNode_t* head);
+void ce_keys_free(KeyNode_t** head);
 
 // Misc. Utility Functions
 int64_t ce_count_string_lines   (const char* string);

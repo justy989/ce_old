@@ -277,7 +277,7 @@ Point_t previous_point(Buffer_t* buffer, Point_t point)
 typedef struct{
      BufferCommitNode_t* commit_tail;
      int64_t cursor_save_column;
-     MarkNode_t* mark_head;
+     VimMarkNode_t* mark_head;
 } BufferState_t;
 
 
@@ -613,7 +613,7 @@ void free_buffer_state(BufferState_t* buffer_state)
      BufferCommitNode_t* itr = buffer_state->commit_tail;
      while(itr->prev) itr = itr->prev;
      ce_commits_free(itr);
-     marks_free(&buffer_state->mark_head);
+     vim_marks_free(&buffer_state->mark_head);
      free(buffer_state);
 }
 
@@ -932,16 +932,16 @@ bool destroyer(BufferNode_t** head, void* user_data)
 
      free(config_state->vim_state.last_insert_command);
 
-     keys_free(&config_state->vim_state.command_head);
-     keys_free(&config_state->vim_state.record_macro_head);
+     ce_keys_free(&config_state->vim_state.command_head);
+     ce_keys_free(&config_state->vim_state.record_macro_head);
 
-     yanks_free(&config_state->vim_state.yank_head);
+     vim_yanks_free(&config_state->vim_state.yank_head);
 
-     macros_free(&config_state->vim_state.macro_head);
+     vim_macros_free(&config_state->vim_state.macro_head);
 
-     MacroCommitNode_t* macro_commit_head = config_state->vim_state.macro_commit_current;
+     VimMacroCommitNode_t* macro_commit_head = config_state->vim_state.macro_commit_current;
      while(macro_commit_head->prev) macro_commit_head = macro_commit_head->prev;
-     macro_commits_free(&macro_commit_head);
+     vim_macro_commits_free(&macro_commit_head);
 
      free(config_state);
      return true;
@@ -1349,7 +1349,7 @@ void update_mark_list_buffer(ConfigState_t* config_state, const Buffer_t* buffer
      ce_append_line(&config_state->mark_list_buffer, buffer_info);
 
      int max_digits = 1;
-     const MarkNode_t* itr = ((BufferState_t*)(buffer->user_data))->mark_head;
+     const VimMarkNode_t* itr = ((BufferState_t*)(buffer->user_data))->mark_head;
      while(itr){
           int digits = count_digits(itr->location.y);
           if(digits > max_digits) max_digits = digits;
@@ -1375,7 +1375,7 @@ void update_yank_list_buffer(ConfigState_t* config_state)
      config_state->yank_list_buffer.readonly = false;
      ce_clear_lines(&config_state->yank_list_buffer);
 
-     const YankNode_t* itr = config_state->vim_state.yank_head;
+     const VimYankNode_t* itr = config_state->vim_state.yank_head;
      while(itr){
           snprintf(buffer_info, BUFSIZ, "+ reg '%c'", itr->reg_char);
           ce_append_line(&config_state->yank_list_buffer, buffer_info);
@@ -1395,7 +1395,7 @@ void update_macro_list_buffer(ConfigState_t* config_state)
 
      ce_append_line(&config_state->macro_list_buffer, "+ reg actions");
 
-     const MacroNode_t* itr = config_state->vim_state.macro_head;
+     const VimMacroNode_t* itr = config_state->vim_state.macro_head;
      while(itr){
           char* char_string = command_string_to_char_string(itr->command);
           snprintf(buffer_info, BUFSIZ, "  '%c' %s", itr->reg, char_string);
@@ -1408,7 +1408,7 @@ void update_macro_list_buffer(ConfigState_t* config_state)
           ce_append_line(&config_state->macro_list_buffer, "");
           ce_append_line(&config_state->macro_list_buffer, "+ recording:");
 
-          int* int_cmd = keys_get_string(config_state->vim_state.record_macro_head);
+          int* int_cmd = ce_keys_get_string(config_state->vim_state.record_macro_head);
 
           if(int_cmd[0]){
                char* char_cmd = command_string_to_char_string(int_cmd);
@@ -1772,13 +1772,13 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                if(!config_state->view_input->buffer->line_count) break;
 
                commit_input_to_history(config_state->view_input->buffer, &config_state->search_history);
-               yank_add(&config_state->vim_state.yank_head, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
+               vim_yank_add(&config_state->vim_state.yank_head, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
                break;
           case '?':
                if(!config_state->view_input->buffer->line_count) break;
 
                commit_input_to_history(config_state->view_input->buffer, &config_state->search_history);
-               yank_add(&config_state->vim_state.yank_head, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
+               vim_yank_add(&config_state->vim_state.yank_head, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
                break;
           case 24: // Ctrl + x
           {
@@ -1851,7 +1851,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           {
                if(!config_state->view_input->buffer->line_count) break; // NOTE: unsure if this is correct
 
-               YankNode_t* yank = yank_find(config_state->vim_state.yank_head, '/');
+               VimYankNode_t* yank = vim_yank_find(config_state->vim_state.yank_head, '/');
                if(!yank) break;
 
                const char* search_str = yank->text;
@@ -1936,7 +1936,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                int64_t line = config_state->tab_current->view_input_save->cursor.y - 1; // account for buffer list row header
                if(line < 0) return;
 
-               MacroNode_t* macro = macro_find(config_state->vim_state.macro_head, config_state->editting_register);
+               VimMacroNode_t* macro = vim_macro_find(config_state->vim_state.macro_head, config_state->editting_register);
                if(!macro) return;
 
                free(macro->command);
@@ -1954,7 +1954,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                int64_t line = config_state->tab_current->view_input_save->cursor.y;
                if(line < 0) return;
 
-               YankNode_t* yank = yank_find(config_state->vim_state.yank_head, config_state->editting_register);
+               VimYankNode_t* yank = vim_yank_find(config_state->vim_state.yank_head, config_state->editting_register);
                if(!yank) return;
 
                char* new_yank = ce_dupe_buffer(config_state->view_input->buffer);
@@ -1992,7 +1992,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
      }else if(buffer_view->buffer == &config_state->mark_list_buffer){
           int64_t line = cursor->y - 1; // account for buffer list row header
           if(line < 0) return;
-          MarkNode_t* itr = ((BufferState_t*)(config_state->buffer_before_query->user_data))->mark_head;
+          VimMarkNode_t* itr = ((BufferState_t*)(config_state->buffer_before_query->user_data))->mark_head;
 
           while(line > 0){
                itr = itr->next;
@@ -2012,7 +2012,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
      }else if(buffer_view->buffer == &config_state->macro_list_buffer){
           int64_t line = cursor->y - 1; // account for buffer list row header
           if(line < 0) return;
-          MacroNode_t* itr = config_state->vim_state.macro_head;
+          VimMacroNode_t* itr = config_state->vim_state.macro_head;
 
           while(line > 0){
                itr = itr->next;
@@ -2032,7 +2032,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           int64_t line = cursor->y;
           if(line < 0) return;
 
-          YankNode_t* itr = config_state->vim_state.yank_head;
+          VimYankNode_t* itr = config_state->vim_state.yank_head;
           while(itr){
                line -= (ce_count_string_lines(itr->text) + 1);
                if(line < 0) break;
@@ -2162,7 +2162,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     break;
                }
 
-               if(handled_key) keys_free(&config_state->vim_state.command_head);
+               if(handled_key) ce_keys_free(&config_state->vim_state.command_head);
           } break;
           case 'm':
           {
@@ -2187,7 +2187,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     }
                }else{
                     char mark = key;
-                    mark_add(&buffer_state->mark_head, mark, cursor);
+                    vim_mark_add(&buffer_state->mark_head, mark, cursor);
                }
           } break;
           case '"':
@@ -2239,7 +2239,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                handled_key = true;
                Point_t* marked_location;
                char mark = key;
-               marked_location = mark_find(buffer_state->mark_head, mark);
+               marked_location = vim_mark_find(buffer_state->mark_head, mark);
                if(marked_location) {
                     cursor->y = marked_location->y;
                     center_view(buffer_view);
@@ -2338,7 +2338,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
                          if(cursor->y >= config_state->buffer_list_buffer.line_count) cursor->y = config_state->buffer_list_buffer.line_count - 1;
                          vim_enter_normal_mode(&config_state->vim_state);
-                         keys_free(&config_state->vim_state.command_head);
+                         ce_keys_free(&config_state->vim_state.command_head);
                     }
                }else if(vkh_result.completed_action.motion.type == VMT_SEARCH ||
                         vkh_result.completed_action.motion.type == VMT_SEARCH_WORD_UNDER_CURSOR){
@@ -2395,7 +2395,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     break;
                case 25: // Ctrl + y
                     confirm_action(config_state, *head);
-                    keys_free(&config_state->vim_state.command_head);
+                    ce_keys_free(&config_state->vim_state.command_head);
                     break;
                }
 
@@ -2422,7 +2422,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          }
 
                          vim_enter_normal_mode(&config_state->vim_state);
-                         keys_free(&config_state->vim_state.command_head);
+                         ce_keys_free(&config_state->vim_state.command_head);
                          if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
                     } break;
                     case KEY_ESCAPE:
@@ -2581,7 +2581,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
                          // if we are recording a macro, kill the last command we entered from the key list
                          if(config_state->vim_state.recording_macro){
-                              MacroCommitNode_t* last_macro_commit = config_state->vim_state.macro_commit_current->prev;
+                              VimMacroCommitNode_t* last_macro_commit = config_state->vim_state.macro_commit_current->prev;
                               if(last_macro_commit){
                                    do{
                                         KeyNode_t* itr = config_state->vim_state.record_macro_head;
@@ -2594,7 +2594,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
                                              if(itr){
                                                   // free the keys from our macro recording
-                                                  keys_free(&itr);
+                                                  ce_keys_free(&itr);
                                                   if(prev){
                                                        prev->next = NULL;
                                                   }else{
@@ -2603,7 +2603,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                              }
                                         }else{
                                              // NOTE: not sure this case can get hit anymore
-                                             keys_free(&itr);
+                                             ce_keys_free(&itr);
                                              config_state->vim_state.record_macro_head = NULL;
                                         }
 
@@ -2627,7 +2627,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                              KeyNode_t* itr = config_state->vim_state.macro_commit_current->command_copy;
                                              KeyNode_t* new_command_begin = NULL;
                                              while(itr){
-                                                  KeyNode_t* new_key = keys_push(&config_state->vim_state.record_macro_head, itr->key);
+                                                  KeyNode_t* new_key = ce_keys_push(&config_state->vim_state.record_macro_head, itr->key);
                                                   if(!new_command_begin) new_command_begin = new_key;
                                                   itr = itr->next;
                                              }
@@ -2977,7 +2977,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
      if(config_state->tab_current->view_overrideable && buffer_view->buffer == &config_state->mark_list_buffer){
           int64_t line = cursor->y - 1; // account for buffer list row header
           if(line >= 0){
-               MarkNode_t* itr = ((BufferState_t*)(config_state->buffer_before_query->user_data))->mark_head;
+               VimMarkNode_t* itr = ((BufferState_t*)(config_state->buffer_before_query->user_data))->mark_head;
 
                while(line > 0){
                     itr = itr->next;
@@ -3132,7 +3132,7 @@ void view_drawer(const BufferNode_t* head, void* user_data)
         config_state->view_input->buffer->lines && config_state->view_input->buffer->lines[0][0]){
           search = config_state->view_input->buffer->lines[0];
      }else{
-          YankNode_t* yank = yank_find(config_state->vim_state.yank_head, '/');
+          VimYankNode_t* yank = vim_yank_find(config_state->vim_state.yank_head, '/');
           if(yank) search = yank->text;
      }
 

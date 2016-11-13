@@ -703,6 +703,7 @@ typedef enum{
      VCT_JOIN_LINE,
      VCT_OPEN_ABOVE, // NOTE: using the vim cheat sheet terminalogy for 'O' and 'o'
      VCT_OPEN_BELOW,
+     VCT_SEARCH_WORD_UNDER_CURSOR,
      VCT_RECORD_MACRO,
      VCT_PLAY_MACRO,
 } VimChangeType_t;
@@ -787,7 +788,7 @@ typedef enum{
 typedef struct{
      VimMotionType_t motion_type;
      char ch;
-} FindState_t;
+} FindCharInLineState_t;
 
 typedef enum{
      VKH_UNHANDLED_KEY,
@@ -813,7 +814,7 @@ typedef struct{
 
      YankNode_t* yank_head;
 
-     FindState_t find_state;
+     FindCharInLineState_t find_char_in_line_state;
 
      Point_t visual_start;
      Point_t insert_start;
@@ -852,7 +853,7 @@ int itoi(int* str)
 
 VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action, VimMode_t vim_mode,
                                          Buffer_t* buffer, Point_t* cursor, Point_t* visual_start,
-                                         FindState_t* find_state, bool recording_macro)
+                                         FindCharInLineState_t* find_char_in_line_state, bool recording_macro)
 {
      int tmp[BUFSIZ];
      bool visual_mode = false;
@@ -1055,16 +1056,14 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           break;
      case ';':
           built_action.change.type = VCT_MOTION;
-          built_action.motion.type = find_state->motion_type;
-          built_action.motion.match_char = find_state->ch;
+          built_action.motion.type = find_char_in_line_state->motion_type;
           get_motion = false;
           break;
      case ',':
           built_action.change.type = VCT_MOTION;
-          built_action.motion.match_char = find_state->ch;
 
           // reverse the motion
-          switch(find_state->motion_type){
+          switch(find_char_in_line_state->motion_type){
           default:
                break;
           case VMT_FIND_NEXT_MATCHING_CHAR:
@@ -1391,7 +1390,7 @@ typedef struct {
      YankMode_t yank_mode;
 } VimActionRange_t;
 
-bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, FindState_t* find_state,
+bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, FindCharInLineState_t* find_char_in_line_state,
                           Point_t* visual_start, VimActionRange_t* action_range)
 {
      action_range->start = *cursor;
@@ -1491,39 +1490,70 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                     action_range->yank_mode = YANK_LINE;
                     break;
                case VMT_FIND_NEXT_MATCHING_CHAR:
-                    if(ce_move_cursor_forward_to_char(buffer, &action_range->end, action->motion.match_char)){
-                         find_state->motion_type = action->motion.type;
-                         find_state->ch = action->motion.match_char;
+                    if(action->motion.match_char){
+                         if(ce_move_cursor_forward_to_char(buffer, &action_range->end, action->motion.match_char)){
+                              find_char_in_line_state->motion_type = action->motion.type;
+                              find_char_in_line_state->ch = action->motion.match_char;
+                         }
+                    }else{
+                         ce_move_cursor_forward_to_char(buffer, &action_range->end, find_char_in_line_state->ch);
                     }
                     break;
                case VMT_FIND_PREV_MATCHING_CHAR:
-                    if(ce_move_cursor_backward_to_char(buffer, &action_range->end, action->motion.match_char)){
-                         find_state->motion_type = action->motion.type;
-                         find_state->ch = action->motion.match_char;
+                    if(action->motion.match_char){
+                         if(ce_move_cursor_backward_to_char(buffer, &action_range->end, action->motion.match_char)){
+                              find_char_in_line_state->motion_type = action->motion.type;
+                              find_char_in_line_state->ch = action->motion.match_char;
+                         }
+                    }else{
+                         ce_move_cursor_backward_to_char(buffer, &action_range->end, find_char_in_line_state->ch);
                     }
                     break;
                case VMT_TO_NEXT_MATCHING_CHAR:
                     action_range->end.x++;
-                    if(ce_move_cursor_forward_to_char(buffer, &action_range->end, action->motion.match_char)){
-                         find_state->motion_type = action->motion.type;
-                         find_state->ch = action->motion.match_char;
-                         action_range->end.x--;
-                         if(action_range->end.x < 0) action_range->end.x = 0;
+                    if(action->motion.match_char){
+                         if(ce_move_cursor_forward_to_char(buffer, &action_range->end, action->motion.match_char)){
+                              if(action->motion.match_char){
+                                   find_char_in_line_state->motion_type = action->motion.type;
+                                   find_char_in_line_state->ch = action->motion.match_char;
+                              }
+                              action_range->end.x--;
+                              if(action_range->end.x < 0) action_range->end.x = 0;
+                         }else{
+                              action_range->end.x--;
+                         }
                     }else{
-                         action_range->end.x--;
+                         if(ce_move_cursor_forward_to_char(buffer, &action_range->end, find_char_in_line_state->ch)){
+                              action_range->end.x--;
+                              if(action_range->end.x < 0) action_range->end.x = 0;
+                         }else{
+                              action_range->end.x--;
+                         }
                     }
                     break;
                case VMT_TO_PREV_MATCHING_CHAR:
                {
                     action_range->end.x--;
-                    if(ce_move_cursor_backward_to_char(buffer, &action_range->end, action->motion.match_char)){
-                         find_state->motion_type = action->motion.type;
-                         find_state->ch = action->motion.match_char;
-                         action_range->end.x++;
-                         int64_t line_len = strlen(buffer->lines[action_range->end.y]);
-                         if(action_range->end.x > line_len) action_range->end.x = line_len;
+                    if(action->motion.match_char){
+                         if(ce_move_cursor_backward_to_char(buffer, &action_range->end, action->motion.match_char)){
+                              if(action->motion.match_char){
+                                   find_char_in_line_state->motion_type = action->motion.type;
+                                   find_char_in_line_state->ch = action->motion.match_char;
+                              }
+                              action_range->end.x++;
+                              int64_t line_len = strlen(buffer->lines[action_range->end.y]);
+                              if(action_range->end.x > line_len) action_range->end.x = line_len;
+                         }else{
+                              action_range->end.x++;
+                         }
                     }else{
-                         action_range->end.x++;
+                         if(ce_move_cursor_backward_to_char(buffer, &action_range->end, find_char_in_line_state->ch)){
+                              action_range->end.x++;
+                              int64_t line_len = strlen(buffer->lines[action_range->end.y]);
+                              if(action_range->end.x > line_len) action_range->end.x = line_len;
+                         }else{
+                              action_range->end.x++;
+                         }
                     }
                }break;
                case VMT_BEGINNING_OF_FILE:
@@ -1783,7 +1813,7 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
      VimActionRange_t action_range;
      BufferCommitChain_t chain = vim_state->playing_macro ? BCC_KEEP_GOING : BCC_STOP;
 
-     if(!vim_action_get_range(action, buffer, cursor, &vim_state->find_state, &vim_state->visual_start, &action_range) ) return;
+     if(!vim_action_get_range(action, buffer, cursor, &vim_state->find_char_in_line_state, &vim_state->visual_start, &action_range) ) return;
 
      // perform action on range
      switch(action->change.type){
@@ -4296,7 +4326,7 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, BufferView
 
           VimAction_t vim_action;
           VimCommandState_t command_state = vim_action_from_string(built_command, &vim_action, vim_state->mode, buffer,
-                                                                   cursor, &vim_state->visual_start, &vim_state->find_state,
+                                                                   cursor, &vim_state->visual_start, &vim_state->find_char_in_line_state,
                                                                    vim_state->recording_macro);
           free(built_command);
 
@@ -4680,7 +4710,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           }else if(vkh_result.type == VKH_COMPLETED_ACTION){
                if(vkh_result.completed_action.change.type == VCT_DELETE && config_state->tab_current->view_current->buffer == &config_state->buffer_list_buffer){
                     VimActionRange_t action_range;
-                    if(vim_action_get_range(&vkh_result.completed_action, buffer, cursor, &config_state->vim_state.find_state,
+                    if(vim_action_get_range(&vkh_result.completed_action, buffer, cursor, &config_state->vim_state.find_char_in_line_state,
                                              &config_state->vim_state.visual_start, &action_range)){
                          int64_t delete_index = action_range.sorted_start->y - 1;
                          int64_t buffers_to_delete = (action_range.sorted_end->y - action_range.sorted_start->y) + 1;

@@ -1,30 +1,35 @@
 /*
-NOTES:
--tabs suck, do we have to deal with them?
--get full file path
+TODOS:
 
-TODO:
--user input
--use tabs instead of spaces
--client/server
--UNDO DURING MACROS!
--EDITABLE MACROS
--STEP THROUGH MACROS
--Make . work with visual mode
+BIG:
+-unicode support
+-network editing
+-autocomplete for: code, shell commands, etc.
+-parse c to do real syntax highlighting/autocomplete?
+-tail file
+-support python and other mode syntax highlighting so I don't go insane at work
+-async file saving/loading
+-async autocomplete building
+-incremental replace
+-regex search/replace
+-support tabs in addition to spaces
+-separate out vim functionality into module for inclusion and unittest it
 
-BUGS:
--SIGSEGV 'yy' to yank a line. 'p' on a new line to paste after the newline. 'u' to undo the change and we segfault
--double free corruption (something to do with calling ce_remove_char on an empty line)
-reproduce by: 1) 'O' 2) escape, 3) undo, 4) redo, 5) undo, 7) q I'm seeing a double free on quit
+LITTLE:
+-r<enter>
+-when re-opening a file, go to the cursor position you exited on
+-do searching inside macro
+-step through macro one change at a time
+-saw an undo bug around removing and pasting lines, looking for ways to reproduce
+ -visually selected then used 'o'?
+-separate dot for input buffer
+-valgrind run clean
+-'*' and '#' should be words not search strings
+-clean up trailing whitespace so i don't have to
+-matching pairs is still wrong when going CE_UP over multiple lines in some instances
+-word movement commands should work across lines
+-searching backwards is with multiple instances on the same line is wrong
 
-WANTS:
--realloc() rather than malloc() ?
--be able to yank from man pages
--regexes that don't suck, regcomp()
--tailing files
--visual section changes using . always uses the top of the region
--input box should act like a buffer in terms of key mappings
--pair programming? Each connected user can edit text with their own cursor? show other users' cursors!
 */
 
 #include <assert.h>
@@ -393,4 +398,3 @@ int main(int argc, char** argv)
 
      return 0;
 }
-

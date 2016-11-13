@@ -703,7 +703,6 @@ typedef enum{
      VCT_JOIN_LINE,
      VCT_OPEN_ABOVE, // NOTE: using the vim cheat sheet terminalogy for 'O' and 'o'
      VCT_OPEN_BELOW,
-     VCT_SEARCH_WORD_UNDER_CURSOR,
      VCT_RECORD_MACRO,
      VCT_PLAY_MACRO,
 } VimChangeType_t;
@@ -753,6 +752,8 @@ typedef enum{
      VMT_VISUAL_RANGE,
      VMT_VISUAL_LINE,
      VMT_VISUAL_SWAP_WITH_CURSOR,
+     VMT_SEARCH_WORD_UNDER_CURSOR,
+     VMT_SEARCH,
      VMT_MATCHING_PAIR,
      VMT_NEXT_BLANK_LINE,
      VMT_PREV_BLANK_LINE,
@@ -767,8 +768,10 @@ typedef struct{
           char around_pair;
           int64_t visual_length;
           int64_t visual_lines;
+          Direction_t search_direction;
      };
      bool visual_start_after; // false means after !
+     bool search_forward;
 } VimMotion_t;
 
 typedef struct{
@@ -1135,6 +1138,28 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           built_action.motion.type = VMT_MATCHING_PAIR;
           get_motion = false;
           break;
+     case '*':
+          built_action.motion.type = VMT_SEARCH_WORD_UNDER_CURSOR;
+          built_action.motion.search_direction = CE_DOWN;
+          built_action.motion.search_forward = true;
+          get_motion = false;
+          break;
+     case '#':
+          built_action.motion.type = VMT_SEARCH_WORD_UNDER_CURSOR;
+          built_action.motion.search_direction = CE_UP;
+          built_action.motion.search_forward = true;
+          get_motion = false;
+          break;
+     case 'n':
+          built_action.motion.type = VMT_SEARCH;
+          built_action.motion.search_forward = true;
+          get_motion = false;
+          break;
+     case 'N':
+          built_action.motion.type = VMT_SEARCH;
+          built_action.motion.search_forward = false;
+          get_motion = false;
+          break;
      }
 
      if(get_motion){
@@ -1390,8 +1415,7 @@ typedef struct {
      YankMode_t yank_mode;
 } VimActionRange_t;
 
-bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, FindCharInLineState_t* find_char_in_line_state,
-                          Point_t* visual_start, VimActionRange_t* action_range)
+bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, VimState_t* vim_state, VimActionRange_t* action_range)
 {
      action_range->start = *cursor;
      action_range->end = action_range->start;
@@ -1492,21 +1516,21 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                case VMT_FIND_NEXT_MATCHING_CHAR:
                     if(action->motion.match_char){
                          if(ce_move_cursor_forward_to_char(buffer, &action_range->end, action->motion.match_char)){
-                              find_char_in_line_state->motion_type = action->motion.type;
-                              find_char_in_line_state->ch = action->motion.match_char;
+                              vim_state->find_char_in_line_state.motion_type = action->motion.type;
+                              vim_state->find_char_in_line_state.ch = action->motion.match_char;
                          }
                     }else{
-                         ce_move_cursor_forward_to_char(buffer, &action_range->end, find_char_in_line_state->ch);
+                         ce_move_cursor_forward_to_char(buffer, &action_range->end, vim_state->find_char_in_line_state.ch);
                     }
                     break;
                case VMT_FIND_PREV_MATCHING_CHAR:
                     if(action->motion.match_char){
                          if(ce_move_cursor_backward_to_char(buffer, &action_range->end, action->motion.match_char)){
-                              find_char_in_line_state->motion_type = action->motion.type;
-                              find_char_in_line_state->ch = action->motion.match_char;
+                              vim_state->find_char_in_line_state.motion_type = action->motion.type;
+                              vim_state->find_char_in_line_state.ch = action->motion.match_char;
                          }
                     }else{
-                         ce_move_cursor_backward_to_char(buffer, &action_range->end, find_char_in_line_state->ch);
+                         ce_move_cursor_backward_to_char(buffer, &action_range->end, vim_state->find_char_in_line_state.ch);
                     }
                     break;
                case VMT_TO_NEXT_MATCHING_CHAR:
@@ -1514,8 +1538,8 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                     if(action->motion.match_char){
                          if(ce_move_cursor_forward_to_char(buffer, &action_range->end, action->motion.match_char)){
                               if(action->motion.match_char){
-                                   find_char_in_line_state->motion_type = action->motion.type;
-                                   find_char_in_line_state->ch = action->motion.match_char;
+                                   vim_state->find_char_in_line_state.motion_type = action->motion.type;
+                                   vim_state->find_char_in_line_state.ch = action->motion.match_char;
                               }
                               action_range->end.x--;
                               if(action_range->end.x < 0) action_range->end.x = 0;
@@ -1523,7 +1547,7 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                               action_range->end.x--;
                          }
                     }else{
-                         if(ce_move_cursor_forward_to_char(buffer, &action_range->end, find_char_in_line_state->ch)){
+                         if(ce_move_cursor_forward_to_char(buffer, &action_range->end, vim_state->find_char_in_line_state.ch)){
                               action_range->end.x--;
                               if(action_range->end.x < 0) action_range->end.x = 0;
                          }else{
@@ -1537,8 +1561,8 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                     if(action->motion.match_char){
                          if(ce_move_cursor_backward_to_char(buffer, &action_range->end, action->motion.match_char)){
                               if(action->motion.match_char){
-                                   find_char_in_line_state->motion_type = action->motion.type;
-                                   find_char_in_line_state->ch = action->motion.match_char;
+                                   vim_state->find_char_in_line_state.motion_type = action->motion.type;
+                                   vim_state->find_char_in_line_state.ch = action->motion.match_char;
                               }
                               action_range->end.x++;
                               int64_t line_len = strlen(buffer->lines[action_range->end.y]);
@@ -1547,7 +1571,7 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                               action_range->end.x++;
                          }
                     }else{
-                         if(ce_move_cursor_backward_to_char(buffer, &action_range->end, find_char_in_line_state->ch)){
+                         if(ce_move_cursor_backward_to_char(buffer, &action_range->end, vim_state->find_char_in_line_state.ch)){
                               action_range->end.x++;
                               int64_t line_len = strlen(buffer->lines[action_range->end.y]);
                               if(action_range->end.x > line_len) action_range->end.x = line_len;
@@ -1752,8 +1776,8 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                case VMT_VISUAL_SWAP_WITH_CURSOR:
                {
                     Point_t tmp = *cursor;
-                    *cursor = *visual_start;
-                    *visual_start = tmp;
+                    *cursor = vim_state->visual_start;
+                    vim_state->visual_start = tmp;
                } break;
                case VMT_MATCHING_PAIR:
                {
@@ -1775,6 +1799,37 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                          action_range->end.y--;
                     }
                     break;
+               case VMT_SEARCH_WORD_UNDER_CURSOR:
+               {
+                    Point_t word_start, word_end;
+                    if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) break;
+                    char* search_str = ce_dupe_string(buffer, word_start, word_end);
+                    add_yank(&vim_state->yank_head, '/', search_str, YANK_NORMAL);
+                    vim_state->search_direction = action->motion.search_direction;
+               }
+               // NOTE: fall through intentionally
+               case VMT_SEARCH:
+               {
+                    YankNode_t* yank = find_yank(vim_state->yank_head, '/');
+                    if(yank){
+                         assert(yank->mode == YANK_NORMAL);
+
+                         Direction_t dir = vim_state->search_direction;
+                         if(!action->motion.search_forward){
+                              if(vim_state->search_direction == CE_UP){
+                                   dir = CE_DOWN;
+                              }else{
+                                   dir = CE_UP;
+                              }
+                         }
+
+                         Point_t match;
+                         if(ce_find_string(buffer, *cursor, yank->text, &match, dir)){
+                              ce_set_cursor(buffer, cursor, match);
+                              //center_view(config_state->tab_current->view_current);
+                         }
+                    }
+               } break;
                }
           }
      }
@@ -1813,7 +1868,7 @@ void vim_action_apply(VimAction_t* action, BufferView_t* buffer_view, Point_t* c
      VimActionRange_t action_range;
      BufferCommitChain_t chain = vim_state->playing_macro ? BCC_KEEP_GOING : BCC_STOP;
 
-     if(!vim_action_get_range(action, buffer, cursor, &vim_state->find_char_in_line_state, &vim_state->visual_start, &action_range) ) return;
+     if(!vim_action_get_range(action, buffer, cursor, vim_state, &action_range) ) return;
 
      // perform action on range
      switch(action->change.type){
@@ -4710,8 +4765,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           }else if(vkh_result.type == VKH_COMPLETED_ACTION){
                if(vkh_result.completed_action.change.type == VCT_DELETE && config_state->tab_current->view_current->buffer == &config_state->buffer_list_buffer){
                     VimActionRange_t action_range;
-                    if(vim_action_get_range(&vkh_result.completed_action, buffer, cursor, &config_state->vim_state.find_char_in_line_state,
-                                             &config_state->vim_state.visual_start, &action_range)){
+                    if(vim_action_get_range(&vkh_result.completed_action, buffer, cursor, &config_state->vim_state, &action_range)){
                          int64_t delete_index = action_range.sorted_start->y - 1;
                          int64_t buffers_to_delete = (action_range.sorted_end->y - action_range.sorted_start->y) + 1;
                          for(int64_t b = 0; b < buffers_to_delete; ++b){
@@ -5085,28 +5139,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          input_start(config_state, "Goto Line", key);
                     }
                     break;
-                    case '#':
-                    {
-                         if(!buffer->lines || !buffer->lines[cursor->y]) break;
-
-                         Point_t word_start, word_end;
-                         if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) break;
-                         char* search_str = ce_dupe_string(buffer, word_start, word_end);
-                         add_yank(&config_state->vim_state.yank_head, '/', search_str, YANK_NORMAL);
-                         config_state->vim_state.search_direction = CE_UP;
-                         goto search;
-                    } break;
-                    case '*':
-                    {
-                         if(!buffer->lines || !buffer->lines[cursor->y]) break;
-
-                         Point_t word_start, word_end;
-                         if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) break;
-                         char* search_str = ce_dupe_string(buffer, word_start, word_end);
-                         add_yank(&config_state->vim_state.yank_head, '/', search_str, YANK_NORMAL);
-                         config_state->vim_state.search_direction = CE_DOWN;
-                         goto search;
-                    } break;
                     case '/':
                     {
                          input_start(config_state, "Search", key);
@@ -5121,32 +5153,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          config_state->vim_state.start_search = *cursor;
                          break;
                     }
-                    case 'n':
-          search:
-                    {
-                         YankNode_t* yank = find_yank(config_state->vim_state.yank_head, '/');
-                         if(yank){
-                              assert(yank->mode == YANK_NORMAL);
-                              Point_t match;
-                              if(ce_find_string(buffer, *cursor, yank->text, &match, config_state->vim_state.search_direction)){
-                                   ce_set_cursor(buffer, cursor, match);
-                                   center_view(config_state->tab_current->view_current);
-                              }
-                         }
-                    } break;
-                    case 'N':
-                    {
-                         YankNode_t* yank = find_yank(config_state->vim_state.yank_head, '/');
-                         if(yank){
-                              assert(yank->mode == YANK_NORMAL);
-                              Point_t match;
-                              if(ce_find_string(buffer, *cursor, yank->text, &match, ce_reverse_direction(config_state->vim_state.search_direction))){
-                                   ce_set_cursor(buffer, cursor, match);
-                                   center_view(config_state->tab_current->view_current);
-                              }
-                         }
-                    } break;
-                    break;
                     case '=':
                     {
 #if 0

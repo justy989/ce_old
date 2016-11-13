@@ -1826,7 +1826,6 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                          Point_t match;
                          if(ce_find_string(buffer, *cursor, yank->text, &match, dir)){
                               ce_set_cursor(buffer, cursor, match);
-                              //center_view(config_state->tab_current->view_current);
                          }
                     }
                } break;
@@ -4777,6 +4776,9 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          vim_enter_normal_mode(&config_state->vim_state);
                          keys_free(&config_state->vim_state.command_head);
                     }
+               }else if(vkh_result.completed_action.motion.type == VMT_SEARCH ||
+                        vkh_result.completed_action.motion.type == VMT_SEARCH_WORD_UNDER_CURSOR){
+                    center_view(buffer_view);
                }
           }else if(vkh_result.type == VKH_UNHANDLED_KEY){
                switch(key){

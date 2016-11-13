@@ -17,7 +17,7 @@ void vim_mark_add(VimMarkNode_t** head, char mark_char, const Point_t* location)
 {
      Point_t* mark_location = vim_mark_find(*head, mark_char);
      if(!mark_location){
-          VimMarkNode_t* new_mark = malloc(sizeof(*head));
+          VimMarkNode_t* new_mark = malloc(sizeof(**head));
           new_mark->reg_char = mark_char;
           new_mark->next = *head;
           *head = new_mark;

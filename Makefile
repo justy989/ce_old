@@ -12,16 +12,26 @@ cov: coverage
 coverage: CFLAGS += -fprofile-arcs -ftest-coverage
 coverage: clean_test test
 	llvm-cov gcov ce.test.o
+	llvm-cov gcov ce_vim.test.o
 
 test: LINK += -rdynamic
-test: clean_test test.c ce.test.o
-	$(CC) $(CFLAGS) $(filter-out $<,$^) -o $@ $(LINK)
-	./test 2> test_output.txt || (cat test_output.txt && false)
+test: clean_test test_ce test_vim
+
+test_ce: test_ce.c ce.test.o
+	$(CC) $(CFLAGS) $^ -o $@ $(LINK)
+	./$@ 2> test_output.txt || (cat test_output.txt && false)
+
+test_vim: test_vim.c ce.test.o ce_vim.test.o ce_auto_complete.test.o
+	$(CC) $(CFLAGS) $^ -o $@ $(LINK)
+	./$@ 2> test_output.txt || (cat test_output.txt && false)
 
 ce: main.c ce.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LINK) -ldl -Wl,-rpath,.
 
 %.o: %.c
+	$(CC) -c -fpic $(CFLAGS) $^ -o $@
+
+%.test.o: %.c
 	$(CC) -c -fpic $(CFLAGS) $^ -o $@
 
 ce_config.so: ce_config.o ce.o ce_vim.o ce_auto_complete.o
@@ -34,4 +44,4 @@ clean_config:
 	rm -f ce_config.so
 
 clean_test:
-	rm -f test ce.test.o *.gcda *.gcno *.gcov test_output.txt default.profraw
+	rm -f test_ce test_vim ce.test.o *.gcda *.gcno *.gcov test_output.txt default.profraw

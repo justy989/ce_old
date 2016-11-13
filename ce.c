@@ -3180,3 +3180,68 @@ int64_t ce_last_index(const char* string)
 
      return len;
 }
+
+KeyNode_t* keys_push(KeyNode_t** head, int key)
+{
+     KeyNode_t* new_node = malloc(sizeof(*new_node));
+     if(!new_node){
+          ce_message("%s() failed to malloc node", __FUNCTION__);
+          return NULL;
+     }
+
+     KeyNode_t* tail = *head;
+
+     if(tail){
+          while(tail->next){
+               tail = tail->next;
+          }
+     }
+
+     new_node->key = key;
+     new_node->next = NULL;
+
+     if(tail){
+          tail->next = new_node;
+     }else{
+          *head = new_node;
+     }
+
+     return new_node;
+}
+
+// string is allocated and returned, it is the user's responsibility to free it
+int* keys_get_string(KeyNode_t* head)
+{
+     int64_t len = 0;
+     KeyNode_t* itr = head;
+     while(itr){
+          len++;
+          itr = itr->next;
+     }
+
+     int* str = malloc((len + 1) * sizeof(*str));
+     if(!str){
+          ce_message("%s() failed to alloc string", __FUNCTION__);
+          return NULL;
+     }
+
+     int64_t s = 0;
+     itr = head;
+     while(itr){
+          str[s] = itr->key;
+          s++;
+          itr = itr->next;
+     }
+
+     str[len] = 0;
+     return str;
+}
+
+void keys_free(KeyNode_t** head)
+{
+     while(*head){
+          KeyNode_t* tmp = *head;
+          *head = (*head)->next;
+          free(tmp);
+     }
+}

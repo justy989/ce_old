@@ -24,7 +24,7 @@ ce: main.c ce.o
 %.o: %.c
 	$(CC) -c -fpic $(CFLAGS) $^ -o $@
 
-ce_config.so: ce_config.o ce.o ce_auto_complete.o
+ce_config.so: ce_config.o ce.o ce_vim.o ce_auto_complete.o
 	$(CC) -shared $(CFLAGS) $^ -o $@ $(LINK)
 
 clean: clean_config clean_test

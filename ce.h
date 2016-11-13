@@ -202,6 +202,11 @@ typedef enum {
      LF_SUCCESS,
 } LoadFileResult_t;
 
+typedef struct KeyNode_t{
+     int key;
+     struct KeyNode_t* next;
+} KeyNode_t;
+
 extern Point_t* g_terminal_dimensions;
 
 // CE Configuration-Defined Functions
@@ -337,6 +342,11 @@ int64_t ce_get_line_number_column_width(LineNumberType_t line_number_type, int64
 // Logging Functions
 #define ce_message(...) ({fprintf(stderr,__VA_ARGS__);\
                           fprintf(stderr,"\n");})
+
+// Key Node
+KeyNode_t* keys_push(KeyNode_t** head, int key);
+int* keys_get_string(KeyNode_t* head);
+void keys_free(KeyNode_t** head);
 
 // Misc. Utility Functions
 int64_t ce_count_string_lines   (const char* string);

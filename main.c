@@ -28,8 +28,6 @@ LITTLE:
 -clean up trailing whitespace so i don't have to
 -matching pairs is still wrong when going CE_UP over multiple lines in some instances
 -word movement commands should work across lines
--'o' then undo deletes a line?
--'R' replace infinite loops
 
 */
 

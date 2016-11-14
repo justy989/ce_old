@@ -1375,6 +1375,66 @@ TEST(change_delete_inside_word)
      key_handler_test_free(&kht);
 }
 
+TEST(change_delete_inside_big_word)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     const char* original_line = "if(best.food == F_TACOS){";
+     ce_append_line(&kht.buffer, original_line);
+     kht.cursor.x = 5;
+
+     key_handler_test_run(&kht, "diW");
+     EXPECT(kht.cursor.x == 0 && kht.cursor.y == 0);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     EXPECT(strcmp(kht.buffer.lines[0], " == F_TACOS){") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(change_delete_around_little_word)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     const char* original_line = "if(best.food == F_TACOS){";
+     ce_append_line(&kht.buffer, original_line);
+     kht.cursor.x = 5;
+
+     key_handler_test_run(&kht, "daw");
+     EXPECT(kht.cursor.x == 3 && kht.cursor.y == 0);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     EXPECT(strcmp(kht.buffer.lines[0], "if(.food == F_TACOS){") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(change_delete_around_big_word)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     const char* original_line = "if(best.food == F_TACOS){";
+     ce_append_line(&kht.buffer, original_line);
+     kht.cursor.x = 5;
+
+     key_handler_test_run(&kht, "daW");
+     EXPECT(kht.cursor.x == 0 && kht.cursor.y == 0);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     EXPECT(strcmp(kht.buffer.lines[0], "== F_TACOS){") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);
+
+     key_handler_test_free(&kht);
+}
+
 TEST(change_delete_around_pair)
 {
      KeyHandlerTest_t kht;
@@ -1959,6 +2019,9 @@ TEST(record_macro)
      EXPECT(strcmp(string_cmd, "ct_Taco\\ewcetaco\\ef{a0, 3\\e") == 0);
      free(string_cmd);
 
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], "Buffer_t buffer = {};") == 0);
+
      key_handler_test_free(&kht);
 }
 
@@ -1975,6 +2038,26 @@ TEST(play_macro)
      key_handler_test_run(&kht, "@a");
 
      EXPECT(strcmp(kht.buffer.lines[0], "Taco_t taco = {0, 3};") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], "Buffer_t buffer = {};") == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(flip_word_case)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "tacos");
+
+     key_handler_test_run(&kht, "~w");
+
+     EXPECT(strcmp(kht.buffer.lines[0], "TACOS") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], "tacos") == 0);
 
      key_handler_test_free(&kht);
 }

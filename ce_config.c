@@ -2,7 +2,6 @@
 #include <ctype.h>
 #include <ftw.h>
 #include <inttypes.h>
-#include <stdio.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <pthread.h>

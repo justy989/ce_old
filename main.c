@@ -31,6 +31,7 @@ LITTLE:
 -using 'N' crashes at the beginning of a file sometimes
 -when there are 3 lines in a file and you do 'dj', you still have 2 lines...
 -'2W' goes to line the end of the line, wtf
+-puting // inside quotes causing incorrect syntax highlighting
 
 */
 

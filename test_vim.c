@@ -148,6 +148,7 @@ void key_handler_test_init(KeyHandlerTest_t* kht)
 {
      memset(kht, 0, sizeof(*kht));
      kht->commit_tail = calloc(1, sizeof(BufferCommitNode_t));
+     auto_complete_end(&kht->auto_complete);
 }
 
 void key_handler_test_run(KeyHandlerTest_t* kht, const char* string_command)
@@ -877,6 +878,96 @@ TEST(insert_backspace)
      key_handler_test_free(&kht);
 }
 
+TEST(insert_backspace_to_prev_line)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "line one");
+     ce_append_line(&kht.buffer, "line two");
+     ce_append_line(&kht.buffer, "line three");
+     kht.cursor = (Point_t){1, 1};
+
+     key_handler_test_run(&kht, "i\\b\\b\\b\\e");
+     EXPECT(kht.cursor.x == 7 && kht.cursor.y == 0);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     ASSERT(kht.buffer.line_count == 2);
+     EXPECT(strcmp(kht.buffer.lines[0], "line onine two") == 0);
+     EXPECT(strcmp(kht.buffer.lines[1], "line three") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], "line one") == 0);
+     EXPECT(strcmp(kht.buffer.lines[1], "line two") == 0);
+     EXPECT(strcmp(kht.buffer.lines[2], "line three") == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(insert_tab)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     const char* original_line = "begin end";
+     ce_append_line(&kht.buffer, original_line);
+     kht.cursor.x = 5;
+
+     key_handler_test_run(&kht, "i\\t\\e");
+     EXPECT(kht.cursor.x == 10 && kht.cursor.y == 0);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     ASSERT(kht.buffer.line_count == 1);
+     EXPECT(strcmp(kht.buffer.lines[0], "begin      end") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(insert_indent)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     const char* original_line = "if(tacos){";
+     ce_append_line(&kht.buffer, original_line);
+
+     key_handler_test_run(&kht, "A\\reat(tacos);\\e");
+     EXPECT(kht.cursor.x == 15 && kht.cursor.y == 1);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     ASSERT(kht.buffer.line_count == 2);
+     EXPECT(strcmp(kht.buffer.lines[0], "if(tacos){") == 0);
+     EXPECT(strcmp(kht.buffer.lines[1], "     eat(tacos);") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(kht.buffer.line_count == 1);
+     EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(insert_indented_brace)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     const char* original_line = "if(tacos){";
+     ce_append_line(&kht.buffer, original_line);
+
+     key_handler_test_run(&kht, "A\\r}\\e");
+     EXPECT(kht.cursor.x == 0 && kht.cursor.y == 1);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     ASSERT(kht.buffer.line_count == 2);
+     EXPECT(strcmp(kht.buffer.lines[0], "if(tacos){") == 0);
+     EXPECT(strcmp(kht.buffer.lines[1], "}") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(kht.buffer.line_count == 1);
+     EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);
+
+     key_handler_test_free(&kht);
+}
+
 TEST(insert_soft_beginning_of_line)
 {
      KeyHandlerTest_t kht;
@@ -915,6 +1006,25 @@ TEST(visual_delete_range)
 
      key_handler_test_undo(&kht);
      EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(visual_delete_in_word)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "line one");
+     kht.cursor.x = 2;
+
+     key_handler_test_run(&kht, "viwd");
+     EXPECT(kht.cursor.x == 0 && kht.cursor.y == 0);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     EXPECT(strcmp(kht.buffer.lines[0], " one") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], "line one") == 0);
 
      key_handler_test_free(&kht);
 }
@@ -1219,6 +1329,26 @@ TEST(change_delete_inside_pair)
      EXPECT(kht.cursor.x == 3 && kht.cursor.y == 0);
      EXPECT(kht.vim_state.mode == VM_NORMAL);
      EXPECT(strcmp(kht.buffer.lines[0], "if(){") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(change_delete_inside_word)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     const char* original_line = "if(best.food == F_TACOS){";
+     ce_append_line(&kht.buffer, original_line);
+     kht.cursor.x = 5;
+
+     key_handler_test_run(&kht, "diw");
+     EXPECT(kht.cursor.x == 3 && kht.cursor.y == 0);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     EXPECT(strcmp(kht.buffer.lines[0], "if(.food == F_TACOS){") == 0);
 
      key_handler_test_undo(&kht);
      EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);
@@ -1550,6 +1680,244 @@ TEST(paste_line_before)
      EXPECT(kht.buffer.line_count == 2);
      EXPECT(strcmp(kht.buffer.lines[0], "if(true){") == 0);
      EXPECT(strcmp(kht.buffer.lines[1], "}") == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(paste_from_register)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     const char* original_line = "if(){";
+     ce_append_line(&kht.buffer, original_line);
+     kht.cursor.x = 2;
+     vim_yank_add(&kht.vim_state.yank_head, 'a', strdup("true"), YANK_NORMAL);
+
+     key_handler_test_run(&kht, "\"ap");
+     EXPECT(kht.cursor.x == 6 && kht.cursor.y == 0);
+     EXPECT(strcmp(kht.buffer.lines[0], "if(true){") == 0);
+
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(comment_line)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     const char* original_line = "if(true){";
+     ce_append_line(&kht.buffer, original_line);
+     kht.cursor.x = 2;
+
+     key_handler_test_run(&kht, "gc");
+     EXPECT(kht.cursor.x == 2 && kht.cursor.y == 0);
+     EXPECT(strcmp(kht.buffer.lines[0], "//if(true){") == 0);
+
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(comment_multi_line)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "if(tacos.are.the.best){");
+     ce_append_line(&kht.buffer, "     eat(tacos);");
+     ce_append_line(&kht.buffer, "}");
+     kht.cursor.x = 2;
+
+     key_handler_test_run(&kht, "Vjjgc");
+     EXPECT(kht.cursor.x == 0 && kht.cursor.y == 2);
+     EXPECT(strcmp(kht.buffer.lines[0], "//if(tacos.are.the.best){") == 0);
+     EXPECT(strcmp(kht.buffer.lines[1], "     //eat(tacos);") == 0);
+     EXPECT(strcmp(kht.buffer.lines[2], "//}") == 0);
+
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], "if(tacos.are.the.best){") == 0);
+     EXPECT(strcmp(kht.buffer.lines[1], "     eat(tacos);") == 0);
+     EXPECT(strcmp(kht.buffer.lines[2], "}") == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(uncomment_line)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     const char* original_line = "//if(true){";
+     ce_append_line(&kht.buffer, original_line);
+     kht.cursor.x = 2;
+
+     key_handler_test_run(&kht, "gu");
+     EXPECT(kht.cursor.x == 2 && kht.cursor.y == 0);
+     EXPECT(strcmp(kht.buffer.lines[0], "if(true){") == 0);
+
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(uncomment_multi_line)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "//if(tacos.are.the.best){");
+     ce_append_line(&kht.buffer, "     //eat(tacos);");
+     ce_append_line(&kht.buffer, "//}");
+     kht.cursor.x = 2;
+
+     key_handler_test_run(&kht, "Vjjgu");
+     EXPECT(kht.cursor.x == 0 && kht.cursor.y == 2);
+     EXPECT(strcmp(kht.buffer.lines[0], "if(tacos.are.the.best){") == 0);
+     EXPECT(strcmp(kht.buffer.lines[1], "     eat(tacos);") == 0);
+     EXPECT(strcmp(kht.buffer.lines[2], "}") == 0);
+
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], "//if(tacos.are.the.best){") == 0);
+     EXPECT(strcmp(kht.buffer.lines[1], "     //eat(tacos);") == 0);
+     EXPECT(strcmp(kht.buffer.lines[2], "//}") == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(indent_line)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     const char* original_line = "if(true){";
+     ce_append_line(&kht.buffer, original_line);
+     kht.cursor.x = 2;
+
+     key_handler_test_run(&kht, ">>");
+     EXPECT(kht.cursor.x == 2 && kht.cursor.y == 0);
+     EXPECT(strcmp(kht.buffer.lines[0], "     if(true){") == 0);
+
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(indent_multi_line)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "if(tacos.are.the.best){");
+     ce_append_line(&kht.buffer, "     eat(tacos);");
+     ce_append_line(&kht.buffer, "}");
+     kht.cursor.x = 2;
+
+     key_handler_test_run(&kht, "Vjj>>");
+     EXPECT(kht.cursor.x == 0 && kht.cursor.y == 2);
+     EXPECT(strcmp(kht.buffer.lines[0], "     if(tacos.are.the.best){") == 0);
+     EXPECT(strcmp(kht.buffer.lines[1], "          eat(tacos);") == 0);
+     EXPECT(strcmp(kht.buffer.lines[2], "     }") == 0);
+
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], "if(tacos.are.the.best){") == 0);
+     EXPECT(strcmp(kht.buffer.lines[1], "     eat(tacos);") == 0);
+     EXPECT(strcmp(kht.buffer.lines[2], "}") == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(unindent_line)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     const char* original_line = "     if(true){";
+     ce_append_line(&kht.buffer, original_line);
+     kht.cursor.x = 2;
+
+     key_handler_test_run(&kht, "<<");
+     EXPECT(kht.cursor.x == 2 && kht.cursor.y == 0);
+     EXPECT(strcmp(kht.buffer.lines[0], "if(true){") == 0);
+
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(unindent_multi_line)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "     if(tacos.are.the.best){");
+     ce_append_line(&kht.buffer, "          eat(tacos);");
+     ce_append_line(&kht.buffer, "     }");
+     kht.cursor.x = 2;
+
+     key_handler_test_run(&kht, "Vjj<<");
+     EXPECT(kht.cursor.x == 0 && kht.cursor.y == 2);
+     EXPECT(strcmp(kht.buffer.lines[0], "if(tacos.are.the.best){") == 0);
+     EXPECT(strcmp(kht.buffer.lines[1], "     eat(tacos);") == 0);
+     EXPECT(strcmp(kht.buffer.lines[2], "}") == 0);
+
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], "     if(tacos.are.the.best){") == 0);
+     EXPECT(strcmp(kht.buffer.lines[1], "          eat(tacos);") == 0);
+     EXPECT(strcmp(kht.buffer.lines[2], "     }") == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(changing_modes)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "unusde");
+
+     key_handler_test_run(&kht, "i");
+     EXPECT(kht.vim_state.mode == VM_INSERT);
+
+     key_handler_test_run(&kht, "\\e");
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+
+     key_handler_test_run(&kht, "v");
+     EXPECT(kht.vim_state.mode == VM_VISUAL_RANGE);
+
+     key_handler_test_run(&kht, "V");
+     EXPECT(kht.vim_state.mode == VM_VISUAL_LINE);
+
+     key_handler_test_run(&kht, "v");
+     EXPECT(kht.vim_state.mode == VM_VISUAL_RANGE);
+
+     key_handler_test_run(&kht, "\\e");
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
 
      key_handler_test_free(&kht);
 }

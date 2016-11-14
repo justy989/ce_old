@@ -721,8 +721,10 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           char next_ch = *(itr + 1);
           if(next_ch == 'c'){
                built_action.change.type = VCT_COMMENT;
+               built_action.end_in_vim_mode = VM_NORMAL;
           }else if(next_ch == 'u'){
                built_action.change.type = VCT_UNCOMMENT;
+               built_action.end_in_vim_mode = VM_NORMAL;
           }else if(next_ch == 0){
                return VCS_CONTINUE;
           }else{
@@ -970,9 +972,6 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
                break;
           case '$':
                built_action.motion.type = VMT_END_OF_LINE_HARD;
-               break;
-          case '0':
-               built_action.motion.type = VMT_BEGINNING_OF_LINE_HARD;
                break;
           case '^':
                built_action.motion.type = VMT_BEGINNING_OF_LINE_SOFT;

@@ -905,7 +905,14 @@ bool ce_move_cursor_to_end_of_word(const Buffer_t* buffer, Point_t* location, bo
           }
      }
 
-     if(i != first_check){
+     if(i == first_check && i >= line_len && location->y < buffer->line_count){
+          location->y++;
+          location->x = 0;
+          char first_char = buffer->lines[location->y][0];
+          if(isblank(first_char) || !ce_ispunct(first_char) || !punctuation_word_boundaries){
+               return ce_move_cursor_to_end_of_word(buffer, location, punctuation_word_boundaries);
+          }
+     }else if(i != first_check){
           location->x = i - 1;
      }
 

@@ -24,9 +24,8 @@ LITTLE:
  -visually selected then used 'o'?
 -separate dot for input buffer
 -valgrind run clean
--'*' and '#' should be words not search strings
+-'*' and '#' should be 'words' with boundaries not literal strings that can match anything
 -matching pairs is still wrong when going CE_UP over multiple lines in some instances
--word movement commands should work across lines
 -when there are 3 lines in a file and you do 'dj', you still have 2 lines...
 -puting // inside quotes causing incorrect syntax highlighting
 

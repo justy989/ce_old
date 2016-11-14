@@ -179,6 +179,22 @@ void vim_macro_commits_dump(const VimMacroCommitNode_t* macro_commit)
      }
 }
 
+static bool line_is_all_whitespace(Buffer_t* buffer, int64_t line)
+{
+     if(line < 0 || line >= buffer->line_count) return false;
+
+     const char* line_itr = buffer->lines[line];
+     if(!*line_itr) return false;
+
+     bool all_whitespace = true;
+     while(*line_itr){
+          if(!isspace(*line_itr)) all_whitespace = false;
+          line_itr++;
+     }
+
+     return all_whitespace;
+}
+
 VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* buffer, Point_t* cursor,
                                       BufferCommitNode_t** commit_tail, VimBufferState_t* vim_buffer_state,
                                       AutoComplete_t* auto_complete, bool repeating)
@@ -225,6 +241,18 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
 
                ce_keys_free(&vim_state->command_head);
 
+               if(line_is_all_whitespace(buffer, cursor->y)){
+                    Point_t remove_loc = {0, cursor->y};
+                    int64_t remove_len = strlen(buffer->lines[cursor->y]);
+                    char* remove_string = ce_dupe_string(buffer, remove_loc, (Point_t){remove_len - 1, remove_loc.y});
+
+                    if(ce_remove_string(buffer, remove_loc, remove_len)){
+                         ce_commit_remove_string(commit_tail, remove_loc, *cursor, remove_loc, remove_string, BCC_STOP);
+                    }else{
+                         free(remove_string);
+                    }
+               }
+
                vim_enter_normal_mode(vim_state);
                ce_clamp_cursor(buffer, cursor);
 
@@ -233,6 +261,8 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                }
           } break;
           case KEY_ENTER:
+          {
+               Point_t save_cursor = *cursor;
                key = NEWLINE;
 
                if(ce_insert_char(buffer, *cursor, key)){
@@ -256,8 +286,20 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                               ce_commit_insert_string(commit_tail, pre_insert, pre_insert, *cursor, indent, BCC_KEEP_GOING);
                          }
                     }
+
+                    if(line_is_all_whitespace(buffer, save_cursor.y)){
+                         Point_t remove_loc = {0, save_cursor.y};
+                         int64_t remove_len = strlen(buffer->lines[save_cursor.y]);
+                         char* remove_string = ce_dupe_string(buffer, remove_loc, (Point_t){remove_len - 1, remove_loc.y});
+
+                         if(ce_remove_string(buffer, remove_loc, remove_len)){
+                              ce_commit_remove_string(commit_tail, remove_loc, *cursor, remove_loc, remove_string, BCC_STOP);
+                         }else{
+                              free(remove_string);
+                         }
+                    }
                }
-               break;
+          } break;
           case KEY_BACKSPACE:
           {
                Point_t before_cursor = {cursor->x - 1, cursor->y};

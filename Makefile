@@ -44,4 +44,4 @@ clean_config:
 	rm -f ce_config.so
 
 clean_test:
-	rm -f test_ce test_vim ce.test.o *.gcda *.gcno *.gcov test_output.txt default.profraw
+	rm -f test_ce test_vim ce.test.o ce_vim.test.o ce_auto_complete.test.o *.gcda *.gcno *.gcov test_output.txt default.profraw

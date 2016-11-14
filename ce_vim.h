@@ -18,7 +18,6 @@ typedef enum{
 typedef enum{
      VCT_NONE,
      VCT_MOTION,
-     VCT_INSERT,
      VCT_DELETE,
      VCT_CHANGE_CHAR,
      VCT_PASTE_BEFORE,

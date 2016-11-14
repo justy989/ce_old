@@ -28,6 +28,8 @@ LITTLE:
 -clean up trailing whitespace so i don't have to
 -matching pairs is still wrong when going CE_UP over multiple lines in some instances
 -word movement commands should work across lines
+-using 'N' crashes at the beginning of a file sometimes
+-when there are 3 lines in a file and you do 'dj', you still have 2 lines...
 
 */
 

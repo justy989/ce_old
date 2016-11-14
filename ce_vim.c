@@ -897,7 +897,7 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           if(itr != start_itr){
                int64_t len = itr - start_itr;
                memcpy(tmp, start_itr, len * sizeof(*tmp));
-               tmp[len + 1] = 0;
+               tmp[len] = 0;
                built_action.motion.multiplier = itoi(tmp);
 
                if(built_action.motion.multiplier == 0){

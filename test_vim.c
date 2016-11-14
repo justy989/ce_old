@@ -1099,6 +1099,25 @@ TEST(change_delete_little_word)
      key_handler_test_free(&kht);
 }
 
+TEST(change_delete_multi_little_words)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     const char* original_line = "if(best.editor == ce){";
+     ce_append_line(&kht.buffer, original_line);
+
+     key_handler_test_run(&kht, "d3w");
+     EXPECT(kht.cursor.x == 0 && kht.cursor.y == 0);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     EXPECT(strcmp(kht.buffer.lines[0], ".editor == ce){") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);
+
+     key_handler_test_free(&kht);
+}
+
 TEST(change_change_little_word)
 {
      KeyHandlerTest_t kht;

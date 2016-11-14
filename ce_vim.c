@@ -1022,6 +1022,9 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           case '^':
                built_action.motion.type = VMT_BEGINNING_OF_LINE_SOFT;
                break;
+          case '0':
+               built_action.motion.type = VMT_BEGINNING_OF_LINE_HARD;
+               break;
           case 'i': // inside
           {
                char ch = *(++itr);
@@ -1596,22 +1599,23 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                } break;
                }
           }
-     }
 
-     // when we are not executing a motion delete up to the next word
-     if(action->change.type != VCT_MOTION){
-          if(action->motion.type == VMT_WORD_LITTLE || action->motion.type == VMT_WORD_BIG){
-               action_range->end.x--;
-               if(action_range->end.x < 0) action_range->end.x = 0;
-          }else if(action->motion.type == VMT_WORD_BEGINNING_LITTLE || action->motion.type == VMT_WORD_BEGINNING_BIG){
-               action_range->start.x--;
-               if(action_range->start.x < 0) action_range->start.x = 0;
-          }else if(action->motion.type == VMT_RIGHT){
-               action_range->end.x--;
-               if(action_range->end.x < 0) action_range->end.x = 0;
-          }else if(action->motion.type == VMT_LEFT){
-               if(action_range->end.x + 1 <= ce_last_index(buffer->lines[action_range->start.y])){
-                    action_range->end.x++;
+          // some rules when we are deleting or pasting outside of visual mode
+          if(action->change.type == VCT_DELETE || action->change.type == VCT_YANK || action->change.type == VCT_FLIP_CASE){
+               // deleting before the cursor never includes the character the cursor is on
+               if(ce_point_after(action_range->start, action_range->end)){
+                    if(action_range->start.x > 0) action_range->start.x--;
+               // deleting to the next word does not include the next word's first character
+               }else if(action->motion.type == VMT_WORD_LITTLE || action->motion.type == VMT_WORD_BIG){
+                    if(action_range->end.x > 0) action_range->end.x--;
+               // going left means just the character left of the cursor
+               }else if(action->motion.type == VMT_LEFT){
+                    if(action_range->end.x + 1 <= ce_last_index(buffer->lines[action_range->start.y])){
+                         action_range->end.x++;
+                    }
+               // going right means the character under the cursor
+               }else if(action->motion.type == VMT_RIGHT){
+                    if(action_range->end.x > 0) action_range->end.x--;
                }
           }
      }

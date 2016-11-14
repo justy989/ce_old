@@ -13,15 +13,12 @@ BIG:
 -incremental replace
 -regex search/replace
 -support tabs in addition to spaces
--separate out vim functionality into module for inclusion and unittest it
 
 LITTLE:
 -r<enter>
 -when re-opening a file, go to the cursor position you exited on
 -do searching inside macro
 -step through macro one change at a time
--saw an undo bug around removing and pasting lines, looking for ways to reproduce
- -visually selected then used 'o'?
 -separate dot for input buffer
 -valgrind run clean
 -'*' and '#' should be 'words' with boundaries not literal strings that can match anything

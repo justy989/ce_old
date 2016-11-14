@@ -862,6 +862,29 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           built_action.motion.search_forward = false;
           get_motion = false;
           break;
+     case 'm':
+          built_action.change.type = VCT_SET_MARK;
+          built_action.change.reg = *(++itr);
+          if(!built_action.change.reg){
+               return VCS_CONTINUE;
+          }
+          if(!isprint(built_action.change.reg)){
+               return VCS_INVALID;
+          }
+          get_motion = false;
+          break;
+     case '\'':
+          built_action.change.type = VCT_MOTION;
+          built_action.motion.type = VMT_GOTO_MARK;
+          built_action.motion.reg = *(++itr);
+          if(!built_action.motion.reg){
+               return VCS_CONTINUE;
+          }
+          if(!isprint(built_action.motion.reg)){
+               return VCS_INVALID;
+          }
+          get_motion = false;
+          break;
      }
 
      if(get_motion){
@@ -1092,7 +1115,8 @@ static int isnotsinglequote(int c)
      return c != '\'';
 }
 
-bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, VimState_t* vim_state, VimActionRange_t* action_range)
+bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, VimState_t* vim_state,
+                          VimBufferState_t* vim_buffer_state, VimActionRange_t* action_range)
 {
      action_range->start = *cursor;
      action_range->end = action_range->start;
@@ -1512,6 +1536,14 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                          }
                     }
                } break;
+               case VMT_GOTO_MARK:
+               {
+                    Point_t* marked_location = vim_mark_find(vim_buffer_state->mark_head, action->motion.reg);
+                    if(marked_location) {
+                         ce_move_cursor_to_soft_beginning_of_line(buffer, marked_location);
+                         action_range->end = *marked_location;
+                    }
+               } break;
                }
           }
      }
@@ -1548,7 +1580,7 @@ void vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
      VimActionRange_t action_range;
      BufferCommitChain_t chain = vim_state->playing_macro ? BCC_KEEP_GOING : BCC_STOP;
 
-     if(!vim_action_get_range(action, buffer, cursor, vim_state, &action_range) ) return;
+     if(!vim_action_get_range(action, buffer, cursor, vim_state, vim_buffer_state, &action_range) ) return;
 
      // perform action on range
      switch(action->change.type){
@@ -1879,6 +1911,10 @@ void vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                *cursor = (Point_t){indent_len, cursor->y + 1};
                ce_commit_insert_string(commit_tail, end_of_line, save_cursor, *cursor, nl_indent, BCC_KEEP_GOING);
           }
+     } break;
+     case VCT_SET_MARK:
+     {
+          vim_mark_add(&vim_buffer_state->mark_head, action->change.reg, cursor);
      } break;
      case VCT_RECORD_MACRO:
           if(vim_state->recording_macro){

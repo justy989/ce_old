@@ -31,6 +31,7 @@ typedef enum{
      VCT_JOIN_LINE,
      VCT_OPEN_ABOVE, // NOTE: using the vim cheat sheet terminalogy for 'O' and 'o'
      VCT_OPEN_BELOW,
+     VCT_SET_MARK,
      VCT_RECORD_MACRO,
      VCT_PLAY_MACRO,
 } VimChangeType_t;
@@ -85,12 +86,14 @@ typedef enum{
      VMT_MATCHING_PAIR,
      VMT_NEXT_BLANK_LINE,
      VMT_PREV_BLANK_LINE,
+     VMT_GOTO_MARK,
 } VimMotionType_t;
 
 typedef struct{
      VimMotionType_t type;
      int32_t multiplier;
      union{
+          char reg;
           char match_char;
           char inside_pair;
           char around_pair;
@@ -239,7 +242,7 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
                                          VimFindCharState_t* find_char_in_line_state, bool recording_macro);
 
 bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, VimState_t* vim_state,
-                          VimActionRange_t* action_range);
+                          VimBufferState_t* vim_buffer_state, VimActionRange_t* action_range);
 
 void vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, VimState_t* vim_state,
                       BufferCommitNode_t** commit_tail, VimBufferState_t* vim_buffer_state,

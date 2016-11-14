@@ -1887,6 +1887,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
 
           buffer_view->buffer = config_state->buffer_before_query;
           buffer_view->cursor.y = itr->location.y;
+          ce_move_cursor_to_soft_beginning_of_line(buffer_view->buffer, &buffer_view->cursor);
           center_view(buffer_view);
 
           if(config_state->tab_current->view_overrideable){
@@ -2051,8 +2052,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           {
                if(!isprint(key)) break;
 
-               handled_key = true;
-
                if(key == '?'){
                     update_mark_list_buffer(config_state, buffer);
 
@@ -2068,9 +2067,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          config_state->tab_current->view_current->top_row = 0;
                          config_state->tab_current->view_current->cursor = (Point_t){0, 1};
                     }
-               }else{
-                    char mark = key;
-                    vim_mark_add(&buffer_state->vim_buffer_state.mark_head, mark, cursor);
+
+                    handled_key = true;
                }
           } break;
           case '"':
@@ -2117,17 +2115,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     handled_key = true;
                }
                break;
-          case '\'':
-          {
-               handled_key = true;
-               Point_t* marked_location;
-               char mark = key;
-               marked_location = vim_mark_find(buffer_state->vim_buffer_state.mark_head, mark);
-               if(marked_location) {
-                    cursor->y = marked_location->y;
-                    center_view(buffer_view);
-               }
-          } break;
           case 'Z':
                switch(config_state->last_key){
                default:
@@ -2206,9 +2193,11 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                                       config_state->completion_buffer);
                }
           }else if(vkh_result.type == VKH_COMPLETED_ACTION){
-               if(vkh_result.completed_action.change.type == VCT_DELETE && config_state->tab_current->view_current->buffer == &config_state->buffer_list_buffer){
+               if(vkh_result.completed_action.change.type == VCT_DELETE &&
+                  config_state->tab_current->view_current->buffer == &config_state->buffer_list_buffer){
                     VimActionRange_t action_range;
-                    if(vim_action_get_range(&vkh_result.completed_action, buffer, cursor, &config_state->vim_state, &action_range)){
+                    if(vim_action_get_range(&vkh_result.completed_action, buffer, cursor, &config_state->vim_state,
+                                            &buffer_state->vim_buffer_state, &action_range)){
                          int64_t delete_index = action_range.sorted_start->y - 1;
                          int64_t buffers_to_delete = (action_range.sorted_end->y - action_range.sorted_start->y) + 1;
                          for(int64_t b = 0; b < buffers_to_delete; ++b){
@@ -2224,7 +2213,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          ce_keys_free(&config_state->vim_state.command_head);
                     }
                }else if(vkh_result.completed_action.motion.type == VMT_SEARCH ||
-                        vkh_result.completed_action.motion.type == VMT_SEARCH_WORD_UNDER_CURSOR){
+                        vkh_result.completed_action.motion.type == VMT_SEARCH_WORD_UNDER_CURSOR ||
+                        vkh_result.completed_action.motion.type == VMT_GOTO_MARK){
                     center_view(buffer_view);
                }
           }else if(vkh_result.type == VKH_UNHANDLED_KEY){
@@ -2855,25 +2845,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
      if(config_state->vim_state.mode != VM_INSERT){
           auto_complete_end(&config_state->auto_complete);
-     }
-
-     if(config_state->tab_current->view_overrideable && buffer_view->buffer == &config_state->mark_list_buffer){
-          int64_t line = cursor->y - 1; // account for buffer list row header
-          if(line >= 0){
-               VimMarkNode_t* itr = ((BufferState_t*)(config_state->buffer_before_query->user_data))->vim_buffer_state.mark_head;
-
-               while(line > 0){
-                    itr = itr->next;
-                    if(!itr) break;
-                    line--;
-               }
-
-               if(itr) {
-                    config_state->tab_current->view_overrideable->buffer = config_state->buffer_before_query;
-                    config_state->tab_current->view_overrideable->cursor.y = itr->location.y;
-                    center_view(config_state->tab_current->view_overrideable);
-               }
-          }
      }
 
      if(config_state->quit) return false;

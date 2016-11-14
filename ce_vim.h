@@ -245,4 +245,7 @@ void vim_enter_visual_line_mode(VimState_t* vim_state, Point_t cursor);
 
 void vim_stop_recording_macro(VimState_t* vim_state);
 
+char* vim_command_string_to_char_string(const int* int_str);
+int* vim_char_string_to_command_string(const char* char_str);
+
 #endif

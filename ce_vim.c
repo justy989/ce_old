@@ -2008,3 +2008,127 @@ void vim_stop_recording_macro(VimState_t* vim_state)
      ce_keys_free(&vim_state->record_macro_head);
      vim_state->last_macro_command_begin = NULL;
 }
+
+char* vim_command_string_to_char_string(const int* int_str)
+{
+     // build length
+     size_t len = 1; // account for NULL terminator
+     const int* int_itr = int_str;
+     while(*int_itr){
+          if(isprint(*int_itr)){
+               len++;
+          }else{
+               switch(*int_itr){
+               default:
+                    len++; // going to fill in with '~' for now
+                    break;
+               case KEY_BACKSPACE:
+               case KEY_ESCAPE:
+               case KEY_ENTER:
+               case KEY_TAB:
+                    len += 2;
+                    break;
+               }
+          }
+
+          int_itr++;
+     }
+
+     char* char_str = malloc(len);
+     if(!char_str) return NULL;
+
+     char* char_itr = char_str;
+     int_itr = int_str;
+     while(*int_itr){
+          if(isprint(*int_itr)){
+               *char_itr = *int_itr;
+               char_itr++;
+          }else{
+               switch(*int_itr){
+               default:
+                    *char_itr = '~';
+                    char_itr++;
+                    break;
+               case KEY_BACKSPACE:
+                    *char_itr = '\\'; char_itr++;
+                    *char_itr = 'b'; char_itr++;
+                    break;
+               case KEY_ESCAPE:
+                    *char_itr = '\\'; char_itr++;
+                    *char_itr = 'e'; char_itr++;
+                    break;
+               case KEY_ENTER:
+                    *char_itr = '\\'; char_itr++;
+                    *char_itr = 'r'; char_itr++;
+                    break;
+               case KEY_TAB:
+                    *char_itr = '\\'; char_itr++;
+                    *char_itr = 't'; char_itr++;
+                    break;
+               case '\\':
+                    *char_itr = '\\'; char_itr++;
+                    *char_itr = '\\'; char_itr++;
+                    break;
+               }
+          }
+
+          int_itr++;
+     }
+
+     char_str[len - 1] = 0;
+
+     return char_str;
+}
+
+int* vim_char_string_to_command_string(const char* char_str)
+{
+     // we can just use the strlen, and it'll be over allocated because the command string will always be
+     // the same size or small than the char string
+     size_t str_len = strlen(char_str);
+
+     int* int_str = malloc((str_len + 1) * sizeof(*int_str));
+     if(!int_str) return NULL;
+
+     int* int_itr = int_str;
+     const char* char_itr = char_str;
+     while(*char_itr){
+          if(!isprint(*char_itr)){
+               free(int_str);
+               return NULL;
+          }
+
+          if(*char_itr == '\\'){
+               char_itr++;
+               switch(*char_itr){
+               default:
+                    free(int_str);
+                    return NULL;
+               case 'b':
+                    *int_itr = KEY_BACKSPACE;
+                    break;
+               case 'e':
+                    *int_itr = KEY_ESCAPE;
+                    break;
+               case 'r':
+                    *int_itr = KEY_ENTER;
+                    break;
+               case 't':
+                    *int_itr = KEY_TAB;
+                    break;
+               case '\\':
+                    *int_itr = '\\';
+                    break;
+               }
+               char_itr++;
+               int_itr++;
+          }else{
+               *int_itr = *char_itr;
+               char_itr++;
+               int_itr++;
+          }
+     }
+
+     *int_itr = 0; // NULL terminate
+
+     return int_str;
+}

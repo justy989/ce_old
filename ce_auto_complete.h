@@ -1,5 +1,5 @@
-#ifndef CE_AUTOCOMPLETE_H
-#define CE_AUTOCOMPLETE_H
+#ifndef CE_AUTO_COMPLETE_H
+#define CE_AUTO_COMPLETE_H
 
 #include "ce.h"
 

@@ -767,6 +767,163 @@ TEST(motion_insert_next)
      key_handler_test_free(&kht);
 }
 
+TEST(insert_string)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     const char* original_line = "begin end";
+     ce_append_line(&kht.buffer, original_line);
+     kht.cursor.x = 5;
+
+     key_handler_test_run(&kht, "i and\\e");
+     EXPECT(kht.cursor.x == 9 && kht.cursor.y == 0);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     EXPECT(strcmp(kht.buffer.lines[0], "begin and end") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(insert_multiline_string)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     const char* original_line = "begin end";
+     ce_append_line(&kht.buffer, original_line);
+     kht.cursor.x = 5;
+
+     key_handler_test_run(&kht, "i\\rand\\r\\e");
+     EXPECT(kht.cursor.x == 0 && kht.cursor.y == 2);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     ASSERT(kht.buffer.line_count == 3);
+     EXPECT(strcmp(kht.buffer.lines[0], "begin") == 0);
+     EXPECT(strcmp(kht.buffer.lines[1], "and") == 0);
+     EXPECT(strcmp(kht.buffer.lines[2], " end") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(insert_backspace)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     const char* original_line = "begin end";
+     ce_append_line(&kht.buffer, original_line);
+     kht.cursor.x = 5;
+
+     key_handler_test_run(&kht, "i\\b\\b\\b\\e");
+     EXPECT(kht.cursor.x == 2 && kht.cursor.y == 0);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     ASSERT(kht.buffer.line_count == 1);
+     EXPECT(strcmp(kht.buffer.lines[0], "be end") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(insert_soft_beginning_of_line)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     const char* original_line = "     begin end";
+     ce_append_line(&kht.buffer, original_line);
+     kht.cursor.x = 9;
+
+     key_handler_test_run(&kht, "Imiddle \\e");
+     EXPECT(kht.cursor.x == 12 && kht.cursor.y == 0);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     ASSERT(kht.buffer.line_count == 1);
+     EXPECT(strcmp(kht.buffer.lines[0], "     middle begin end") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(visual_delete_range)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     const char* original_line = "begin end";
+     ce_append_line(&kht.buffer, original_line);
+     kht.cursor.x = 5;
+
+     key_handler_test_run(&kht, "vlld");
+     EXPECT(kht.cursor.x == 5 && kht.cursor.y == 0);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     ASSERT(kht.buffer.line_count == 1);
+     EXPECT(strcmp(kht.buffer.lines[0], "begind") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(visual_delete_line)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "line one");
+     ce_append_line(&kht.buffer, "line two");
+     ce_append_line(&kht.buffer, "line three");
+     kht.cursor.y = 1;
+
+     key_handler_test_run(&kht, "Vd");
+     EXPECT(kht.cursor.x == 0 && kht.cursor.y == 1);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     ASSERT(kht.buffer.line_count == 2);
+     EXPECT(strcmp(kht.buffer.lines[0], "line one") == 0);
+     EXPECT(strcmp(kht.buffer.lines[1], "line three") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], "line one") == 0);
+     EXPECT(strcmp(kht.buffer.lines[1], "line two") == 0);
+     EXPECT(strcmp(kht.buffer.lines[2], "line three") == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(visual_delete_multi_line)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "line one");
+     ce_append_line(&kht.buffer, "line two");
+     ce_append_line(&kht.buffer, "line three");
+     ce_append_line(&kht.buffer, "line four");
+     kht.cursor.y = 1;
+
+     key_handler_test_run(&kht, "Vjd");
+     EXPECT(kht.cursor.x == 0 && kht.cursor.y == 1);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     ASSERT(kht.buffer.line_count == 2);
+     EXPECT(strcmp(kht.buffer.lines[0], "line one") == 0);
+     EXPECT(strcmp(kht.buffer.lines[1], "line four") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], "line one") == 0);
+     EXPECT(strcmp(kht.buffer.lines[1], "line two") == 0);
+     EXPECT(strcmp(kht.buffer.lines[2], "line three") == 0);
+
+     key_handler_test_free(&kht);
+}
+
 TEST(change_delete_little_word)
 {
      KeyHandlerTest_t kht;
@@ -785,6 +942,26 @@ TEST(change_delete_little_word)
 
      key_handler_test_free(&kht);
 }
+
+TEST(change_change_little_word)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     const char* original_line = "if(best.editor == ce){";
+     ce_append_line(&kht.buffer, original_line);
+
+     key_handler_test_run(&kht, "cw");
+     EXPECT(kht.cursor.x == 0 && kht.cursor.y == 0);
+     EXPECT(kht.vim_state.mode == VM_INSERT);
+     EXPECT(strcmp(kht.buffer.lines[0], "(best.editor == ce){") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);
+
+     key_handler_test_free(&kht);
+}
+
 
 TEST(change_delete_little_beginning_of_word)
 {
@@ -957,6 +1134,66 @@ TEST(change_delete_around_pair)
      EXPECT(kht.cursor.x == 2 && kht.cursor.y == 0);
      EXPECT(kht.vim_state.mode == VM_NORMAL);
      EXPECT(strcmp(kht.buffer.lines[0], "if{") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(change_character)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     const char* original_line = "if(test.food == F_TACOS){";
+     ce_append_line(&kht.buffer, original_line);
+     kht.cursor.x = 3;
+
+     key_handler_test_run(&kht, "rb");
+     EXPECT(kht.cursor.x == 3 && kht.cursor.y == 0);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     EXPECT(strcmp(kht.buffer.lines[0], "if(best.food == F_TACOS){") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(change_character_then_insert)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     const char* original_line = "if(test.food == F_TACOS){";
+     ce_append_line(&kht.buffer, original_line);
+     kht.cursor.x = 3;
+
+     key_handler_test_run(&kht, "sbest\\e");
+     EXPECT(kht.cursor.x == 7 && kht.cursor.y == 0);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     EXPECT(strcmp(kht.buffer.lines[0], "if(bestest.food == F_TACOS){") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(delete_character)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     const char* original_line = "if(sbest.food == F_TACOS){";
+     ce_append_line(&kht.buffer, original_line);
+     kht.cursor.x = 3;
+
+     key_handler_test_run(&kht, "x");
+     EXPECT(kht.cursor.x == 3 && kht.cursor.y == 0);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     EXPECT(strcmp(kht.buffer.lines[0], "if(best.food == F_TACOS){") == 0);
 
      key_handler_test_undo(&kht);
      EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);

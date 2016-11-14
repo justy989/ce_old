@@ -694,6 +694,7 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           get_motion = false;
           break;
      case 'I':
+          built_action.change.type = VCT_MOTION;
           built_action.motion.type = VMT_BEGINNING_OF_LINE_SOFT;
           built_action.end_in_vim_mode = VM_INSERT;
           get_motion = false;

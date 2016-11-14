@@ -1899,7 +1899,7 @@ TEST(changing_modes)
      KeyHandlerTest_t kht;
      key_handler_test_init(&kht);
 
-     ce_append_line(&kht.buffer, "unusde");
+     ce_append_line(&kht.buffer, "unused");
 
      key_handler_test_run(&kht, "i");
      EXPECT(kht.vim_state.mode == VM_INSERT);
@@ -1918,6 +1918,44 @@ TEST(changing_modes)
 
      key_handler_test_run(&kht, "\\e");
      EXPECT(kht.vim_state.mode == VM_NORMAL);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(record_macro)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "Buffer_t buffer = {};");
+
+     key_handler_test_run(&kht, "qact_Taco\\ewcetaco\\ef{a0, 3\\eq");
+
+     EXPECT(strcmp(kht.buffer.lines[0], "Taco_t taco = {0, 3};") == 0);
+
+     VimMacroNode_t* macro = vim_macro_find(kht.vim_state.macro_head, 'a');
+     ASSERT(macro);
+
+     char* string_cmd = vim_command_string_to_char_string(macro->command);
+     EXPECT(strcmp(string_cmd, "ct_Taco\\ewcetaco\\ef{a0, 3\\e") == 0);
+     free(string_cmd);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(play_macro)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "Buffer_t buffer = {};");
+     const char* string_command = "ct_Taco\\ewcetaco\\ef{a0, 3\\e";
+     int* int_command = vim_char_string_to_command_string(string_command);
+     vim_macro_add(&kht.vim_state.macro_head, 'a', int_command);
+
+     key_handler_test_run(&kht, "@a");
+
+     EXPECT(strcmp(kht.buffer.lines[0], "Taco_t taco = {0, 3};") == 0);
 
      key_handler_test_free(&kht);
 }

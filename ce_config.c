@@ -657,7 +657,13 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
           BufferNode_t* node = new_buffer_from_file(*head, argv[i]);
 
           // if we loaded a file, set the view to point at the file
-          if(i == 0 && node) config_state->tab_current->view_current->buffer = node->buffer;
+          if(node){
+               if(i == 0){
+                    config_state->tab_current->view_current->buffer = node->buffer;
+               }else{
+                    ce_split_view(config_state->tab_current->view_head, node->buffer, true);
+               }
+          }
      }
 
      config_state->line_number_type = LNT_RELATIVE;
@@ -2192,7 +2198,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
      if(!handled_key){
           VimKeyHandlerResult_t vkh_result = vim_key_handler(key, &config_state->vim_state, config_state->tab_current->view_current->buffer,
                                                              &config_state->tab_current->view_current->cursor, &buffer_state->commit_tail,
-                                                             &config_state->auto_complete, false);
+                                                             &config_state->auto_complete, &buffer_state->cursor_save_column, false);
           if(vkh_result.type == VKH_HANDLED_KEY){
                if(config_state->vim_state.mode == VM_INSERT && config_state->input && config_state->input_key == 6){
                     calc_auto_complete_start_and_path(&config_state->auto_complete,
@@ -2284,7 +2290,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     case '.':
                     {
                          vim_action_apply(&config_state->vim_state.last_action, buffer, cursor, &config_state->vim_state,
-                                          &buffer_state->commit_tail, &config_state->auto_complete);
+                                          &buffer_state->commit_tail, &config_state->auto_complete,
+                                          &buffer_state->cursor_save_column);
 
                          if(config_state->vim_state.mode != VM_INSERT || !config_state->vim_state.last_insert_command ||
                             config_state->vim_state.last_action.change.type == VCT_PLAY_MACRO) break;
@@ -2295,7 +2302,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          while(*cmd_itr){
                               vim_key_handler(*cmd_itr, &config_state->vim_state, config_state->tab_current->view_current->buffer,
                                               &config_state->tab_current->view_current->cursor, &buffer_state->commit_tail,
-                                              &config_state->auto_complete, true);
+                                              &config_state->auto_complete, &buffer_state->cursor_save_column, true);
                               cmd_itr++;
                          }
 

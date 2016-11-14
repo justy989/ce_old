@@ -226,7 +226,8 @@ typedef struct {
 } VimActionRange_t;
 
 VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* buffer, Point_t* cursor,
-                                      BufferCommitNode_t** commit_tail, AutoComplete_t* auto_complete, bool repeating);
+                                      BufferCommitNode_t** commit_tail, AutoComplete_t* auto_complete,
+                                      int64_t* cursor_save_column, bool repeating);
 
 VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action, VimMode_t vim_mode,
                                          Buffer_t* buffer, Point_t* cursor, Point_t* visual_start,
@@ -236,7 +237,7 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                           VimActionRange_t* action_range);
 
 void vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, VimState_t* vim_state,
-                      BufferCommitNode_t** commit_tail, AutoComplete_t* auto_complete);
+                      BufferCommitNode_t** commit_tail, AutoComplete_t* auto_complete, int64_t* cursor_save_column);
 
 void vim_enter_normal_mode(VimState_t* vim_state);
 bool vim_enter_insert_mode(VimState_t* vim_state, Buffer_t* buffer);

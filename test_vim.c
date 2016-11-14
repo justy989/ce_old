@@ -141,7 +141,7 @@ typedef struct{
      BufferCommitNode_t* commit_tail;
      AutoComplete_t auto_complete;
      Point_t cursor;
-     int* command;
+     int64_t save_cursor_column;
 } KeyHandlerTest_t;
 
 void key_handler_test_init(KeyHandlerTest_t* kht)
@@ -150,20 +150,23 @@ void key_handler_test_init(KeyHandlerTest_t* kht)
      kht->commit_tail = calloc(1, sizeof(BufferCommitNode_t));
 }
 
-void key_handler_test_run(KeyHandlerTest_t* kht)
+void key_handler_test_run(KeyHandlerTest_t* kht, const char* string_command)
 {
-     int* itr = kht->command;
+     int* int_command = vim_char_string_to_command_string(string_command);
+     int* itr = int_command;
      while(*itr){
-          vim_key_handler(*itr, &kht->vim_state, &kht->buffer, &kht->cursor, &kht->commit_tail, &kht->auto_complete, false);
+          vim_key_handler(*itr, &kht->vim_state, &kht->buffer, &kht->cursor, &kht->commit_tail, &kht->auto_complete,
+                          &kht->save_cursor_column, false);
           itr++;
      }
+
+     free(int_command);
 }
 
 void key_handler_test_free(KeyHandlerTest_t* kht)
 {
      free(kht->commit_tail);
      ce_free_buffer(&kht->buffer);
-     free(kht->command);
 }
 
 TEST(motion_left)
@@ -173,9 +176,8 @@ TEST(motion_left)
 
      ce_insert_string(&kht.buffer, (Point_t){0, 0}, "Tacos are the best");
      kht.cursor.x = 3;
-     kht.command = vim_char_string_to_command_string("h");
 
-     key_handler_test_run(&kht);
+     key_handler_test_run(&kht, "h");
 
      EXPECT(kht.cursor.x == 2);
 
@@ -189,9 +191,8 @@ TEST(motion_right)
 
      ce_insert_string(&kht.buffer, (Point_t){0, 0}, "Tacos are the best");
      kht.cursor.x = 3;
-     kht.command = vim_char_string_to_command_string("l");
 
-     key_handler_test_run(&kht);
+     key_handler_test_run(&kht, "l");
 
      EXPECT(kht.cursor.x == 4);
 
@@ -206,9 +207,8 @@ TEST(motion_up)
      ce_insert_line(&kht.buffer, 0, "Tacos are the best");
      ce_insert_line(&kht.buffer, 1, "Yes they are");
      kht.cursor.y = 1;
-     kht.command = vim_char_string_to_command_string("k");
 
-     key_handler_test_run(&kht);
+     key_handler_test_run(&kht, "k");
 
      EXPECT(kht.cursor.y == 0);
 
@@ -223,11 +223,24 @@ TEST(motion_down)
      ce_insert_line(&kht.buffer, 0, "Tacos are the best");
      ce_insert_line(&kht.buffer, 1, "Yes they are");
      kht.cursor.y = 0;
-     kht.command = vim_char_string_to_command_string("j");
 
-     key_handler_test_run(&kht);
+     key_handler_test_run(&kht, "j");
 
      EXPECT(kht.cursor.y == 1);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(motion_word_little)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_insert_line(&kht.buffer, 0, "if(best_food == F_TACOS)");
+
+     key_handler_test_run(&kht, "w");
+
+     EXPECT(kht.cursor.x == 2);
 
      key_handler_test_free(&kht);
 }

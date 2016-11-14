@@ -912,16 +912,14 @@ bool ce_move_cursor_to_next_word(const Buffer_t* buffer, Point_t* location, bool
      int line_len = strlen(line);
      int64_t first_check = location->x + 1;
      int64_t i = first_check;
-     bool word_end = isblank(line[location->x]) || ce_ispunct(line[location->x]);
+     bool word_end = isblank(line[location->x]) || (punctuation_word_boundaries && ce_ispunct(line[location->x]));
 
      for(; i < line_len; ++i){
           if(isblank(line[i])){
                word_end = true;
           }else if(ce_ispunct(line[i])){
-               if(punctuation_word_boundaries){
-                    break;
-               }
-               word_end = true;
+               if(punctuation_word_boundaries) break;
+               if(word_end) break;
           }else if(word_end){
                break;
           }

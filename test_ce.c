@@ -2342,6 +2342,26 @@ TEST(points_equal)
      EXPECT(!ce_points_equal(a, b));
 }
 
+TEST(keynode_sanity)
+{
+     KeyNode_t* head = NULL;
+
+     ce_keys_push(&head, 3);
+     ce_keys_push(&head, 2);
+     ce_keys_push(&head, 1);
+
+     int* int_str = ce_keys_get_string(head);
+
+     EXPECT(int_str[0] == 3);
+     EXPECT(int_str[1] == 2);
+     EXPECT(int_str[2] == 1);
+     EXPECT(int_str[3] == 0);
+
+     free(int_str);
+
+     ce_keys_free(&head);
+}
+
 void segv_handler(int signo)
 {
      void *array[10];

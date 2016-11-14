@@ -105,6 +105,133 @@ TEST(macro_sanity)
      vim_macros_free(&macro_head);
 }
 
+TEST(macro_commit_sanity)
+{
+     VimMacroCommitNode_t* macro_commit_head = NULL;
+
+     vim_macro_commits_init(&macro_commit_head);
+
+     KeyNode_t* first_command = NULL;
+     KeyNode_t* second_command = NULL;
+     KeyNode_t* third_command = NULL;
+
+     ce_keys_push(&first_command, 1);
+     ce_keys_push(&second_command, 2);
+     ce_keys_push(&third_command, 3);
+
+     vim_macro_commit_push(&macro_commit_head, first_command, false);
+     vim_macro_commit_push(&macro_commit_head, second_command, true);
+     vim_macro_commit_push(&macro_commit_head, third_command, false);
+
+     VimMacroCommitNode_t* itr = macro_commit_head->prev;
+     EXPECT(itr->command_begin->key == third_command->key);
+
+     itr = itr->prev;
+     EXPECT(itr->command_begin->key == second_command->key);
+
+     itr = itr->prev;
+     EXPECT(itr->command_begin->key == first_command->key);
+
+     vim_macro_commits_free(&itr);
+}
+
+typedef struct{
+     VimState_t vim_state;
+     Buffer_t buffer;
+     BufferCommitNode_t* commit_tail;
+     AutoComplete_t auto_complete;
+     Point_t cursor;
+     int* command;
+} KeyHandlerTest_t;
+
+void key_handler_test_init(KeyHandlerTest_t* kht)
+{
+     memset(kht, 0, sizeof(*kht));
+     kht->commit_tail = calloc(1, sizeof(BufferCommitNode_t));
+}
+
+void key_handler_test_run(KeyHandlerTest_t* kht)
+{
+     int* itr = kht->command;
+     while(*itr){
+          vim_key_handler(*itr, &kht->vim_state, &kht->buffer, &kht->cursor, &kht->commit_tail, &kht->auto_complete, false);
+          itr++;
+     }
+}
+
+void key_handler_test_free(KeyHandlerTest_t* kht)
+{
+     free(kht->commit_tail);
+     ce_free_buffer(&kht->buffer);
+     free(kht->command);
+}
+
+TEST(motion_left)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_insert_string(&kht.buffer, (Point_t){0, 0}, "Tacos are the best");
+     kht.cursor.x = 3;
+     kht.command = vim_char_string_to_command_string("h");
+
+     key_handler_test_run(&kht);
+
+     EXPECT(kht.cursor.x == 2);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(motion_right)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_insert_string(&kht.buffer, (Point_t){0, 0}, "Tacos are the best");
+     kht.cursor.x = 3;
+     kht.command = vim_char_string_to_command_string("l");
+
+     key_handler_test_run(&kht);
+
+     EXPECT(kht.cursor.x == 4);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(motion_up)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_insert_line(&kht.buffer, 0, "Tacos are the best");
+     ce_insert_line(&kht.buffer, 1, "Yes they are");
+     kht.cursor.y = 1;
+     kht.command = vim_char_string_to_command_string("k");
+
+     key_handler_test_run(&kht);
+
+     EXPECT(kht.cursor.y == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(motion_down)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_insert_line(&kht.buffer, 0, "Tacos are the best");
+     ce_insert_line(&kht.buffer, 1, "Yes they are");
+     kht.cursor.y = 0;
+     kht.command = vim_char_string_to_command_string("j");
+
+     key_handler_test_run(&kht);
+
+     EXPECT(kht.cursor.y == 1);
+
+     key_handler_test_free(&kht);
+}
+
 void segv_handler(int signo)
 {
      void *array[10];

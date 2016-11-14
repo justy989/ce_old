@@ -141,7 +141,7 @@ typedef struct{
      BufferCommitNode_t* commit_tail;
      AutoComplete_t auto_complete;
      Point_t cursor;
-     int64_t save_cursor_column;
+     VimBufferState_t vim_buffer_state;
 } KeyHandlerTest_t;
 
 void key_handler_test_init(KeyHandlerTest_t* kht)
@@ -155,8 +155,8 @@ void key_handler_test_run(KeyHandlerTest_t* kht, const char* string_command)
      int* int_command = vim_char_string_to_command_string(string_command);
      int* itr = int_command;
      while(*itr){
-          vim_key_handler(*itr, &kht->vim_state, &kht->buffer, &kht->cursor, &kht->commit_tail, &kht->auto_complete,
-                          &kht->save_cursor_column, false);
+          vim_key_handler(*itr, &kht->vim_state, &kht->buffer, &kht->cursor, &kht->commit_tail, &kht->vim_buffer_state,
+                          &kht->auto_complete, false);
           itr++;
      }
 

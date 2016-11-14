@@ -843,6 +843,7 @@ bool ce_move_cursor_to_beginning_of_word(const Buffer_t* buffer, Point_t* cursor
      assert(ce_point_on_buffer(buffer, *cursor));
 
      const char* line = buffer->lines[cursor->y];
+     int64_t start_x = cursor->x;
      while(cursor->x > 0){
           if(isblank(line[cursor->x-1])){
                // we are starting at a boundary move to the beginning of the previous word
@@ -857,6 +858,14 @@ bool ce_move_cursor_to_beginning_of_word(const Buffer_t* buffer, Point_t* cursor
                break;
           }
      }
+
+     if(cursor->x == 0 && cursor->y > 0 && (isblank(line[cursor->x]) || start_x == 0)){
+          cursor->y--;
+          cursor->x = strlen(buffer->lines[cursor->y]);
+          if(cursor->x) return ce_move_cursor_to_beginning_of_word(buffer, cursor, punctuation_word_boundaries);
+          // if the previous line is empty, stop there
+     }
+
      return true;
 }
 

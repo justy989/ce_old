@@ -782,6 +782,7 @@ bool ce_find_string(const Buffer_t* buffer, Point_t location, const char* search
 
           if(location.x < 0){
                location.y--;
+               if(location.y < 0) break;
                location.x = strlen(buffer->lines[location.y]) - 1;
           }else if(location.x >= (int64_t)(strlen(buffer->lines[location.y]))){
                location.x = 0;

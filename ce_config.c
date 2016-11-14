@@ -1150,14 +1150,6 @@ bool iterate_history_input(ConfigState_t* config_state, bool previous)
      InputHistory_t* history = history_from_input_key(config_state);
      if(!history) return false;
 
-#if 0
-     // update the current history node if we are at the tail to save what the user typed
-     // skip this if they haven't typed anything
-     if(history->tail == history->cur && config_state->view_input->buffer->line_count){
-          history->tail->entry = ce_dupe_buffer(config_state->view_input->buffer);
-     }
-#endif
-
      bool success = false;
 
      if(previous){
@@ -2880,7 +2872,7 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferVi
      mvprintw(view->bottom_right.y, view->top_left.x + 1, " %s%s%s ",
               view == current_view ? mode_names[vim_mode] : "",
               buffer_flag_string(buffer), buffer->filename);
-#ifndef NDEBUG
+#if 0
      if(view == current_view) printw("%s %d ", keyname(last_key), last_key);
 #endif
      if(view == overrideable_view) printw("^ ");

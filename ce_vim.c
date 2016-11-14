@@ -180,8 +180,8 @@ void vim_macro_commits_dump(const VimMacroCommitNode_t* macro_commit)
 }
 
 VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* buffer, Point_t* cursor,
-                                      BufferCommitNode_t** commit_tail, AutoComplete_t* auto_complete,
-                                      int64_t* cursor_save_column, bool repeating)
+                                      BufferCommitNode_t** commit_tail, VimBufferState_t* vim_buffer_state,
+                                      AutoComplete_t* auto_complete, bool repeating)
 {
      char recording_macro = vim_state->recording_macro;
      VimMode_t vim_mode = vim_state->mode;
@@ -465,7 +465,7 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
           case VCS_COMPLETE:
           {
                VimMode_t original_mode = vim_state->mode;
-               vim_action_apply(&vim_action, buffer, cursor, vim_state, commit_tail, auto_complete, cursor_save_column);
+               vim_action_apply(&vim_action, buffer, cursor, vim_state, commit_tail, vim_buffer_state, auto_complete);
 
                if(vim_state->mode != original_mode){
                     switch(vim_state->mode){
@@ -1543,7 +1543,7 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
 }
 
 void vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, VimState_t* vim_state,
-                      BufferCommitNode_t** commit_tail, AutoComplete_t* auto_complete, int64_t* cursor_save_column)
+                      BufferCommitNode_t** commit_tail, VimBufferState_t* vim_buffer_state, AutoComplete_t* auto_complete)
 {
      VimActionRange_t action_range;
      BufferCommitChain_t chain = vim_state->playing_macro ? BCC_KEEP_GOING : BCC_STOP;
@@ -1563,7 +1563,7 @@ void vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
 
           if(action->motion.type == VMT_UP ||
              action->motion.type == VMT_DOWN){
-               cursor->x = *cursor_save_column;
+               cursor->x = vim_buffer_state->cursor_save_column;
           }
 
           if(vim_state->mode == VM_VISUAL_RANGE){
@@ -1939,7 +1939,7 @@ void vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                int* macro_itr = macro->command;
                while(*macro_itr){
                     VimKeyHandlerResult_t vkh_result =  vim_key_handler(*macro_itr, vim_state, buffer, cursor, commit_tail,
-                                                                        auto_complete, cursor_save_column, false);
+                                                                        vim_buffer_state, auto_complete, false);
 
                     if(vkh_result.type == VKH_UNHANDLED_KEY){
                          unhandled_key = true;
@@ -1972,7 +1972,7 @@ void vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
 
           if(old_cursor.x == cursor->x &&
              old_cursor.y == cursor->y){
-               *cursor_save_column = cursor->x;
+               vim_buffer_state->cursor_save_column = cursor->x;
           }
      }
 }

@@ -152,8 +152,7 @@ Point_t previous_point(Buffer_t* buffer, Point_t point)
 
 typedef struct{
      BufferCommitNode_t* commit_tail;
-     int64_t cursor_save_column;
-     VimMarkNode_t* mark_head;
+     VimBufferState_t vim_buffer_state;
 } BufferState_t;
 
 
@@ -489,7 +488,7 @@ void free_buffer_state(BufferState_t* buffer_state)
      BufferCommitNode_t* itr = buffer_state->commit_tail;
      while(itr->prev) itr = itr->prev;
      ce_commits_free(itr);
-     vim_marks_free(&buffer_state->mark_head);
+     vim_marks_free(&buffer_state->vim_buffer_state.mark_head);
      free(buffer_state);
 }
 
@@ -1231,14 +1230,14 @@ void update_mark_list_buffer(ConfigState_t* config_state, const Buffer_t* buffer
      ce_append_line(&config_state->mark_list_buffer, buffer_info);
 
      int max_digits = 1;
-     const VimMarkNode_t* itr = ((BufferState_t*)(buffer->user_data))->mark_head;
+     const VimMarkNode_t* itr = ((BufferState_t*)(buffer->user_data))->vim_buffer_state.mark_head;
      while(itr){
           int digits = count_digits(itr->location.y);
           if(digits > max_digits) max_digits = digits;
           itr = itr->next;
      }
 
-     itr = ((BufferState_t*)(buffer->user_data))->mark_head;
+     itr = ((BufferState_t*)(buffer->user_data))->vim_buffer_state.mark_head;
      while(itr){
           snprintf(buffer_info, BUFSIZ, "  '%c' %*"PRId64" %s",
                    itr->reg_char, max_digits, itr->location.y,
@@ -1876,7 +1875,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
      }else if(buffer_view->buffer == &config_state->mark_list_buffer){
           int64_t line = cursor->y - 1; // account for buffer list row header
           if(line < 0) return;
-          VimMarkNode_t* itr = ((BufferState_t*)(config_state->buffer_before_query->user_data))->mark_head;
+          VimMarkNode_t* itr = ((BufferState_t*)(config_state->buffer_before_query->user_data))->vim_buffer_state.mark_head;
 
           while(line > 0){
                itr = itr->next;
@@ -2071,7 +2070,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     }
                }else{
                     char mark = key;
-                    vim_mark_add(&buffer_state->mark_head, mark, cursor);
+                    vim_mark_add(&buffer_state->vim_buffer_state.mark_head, mark, cursor);
                }
           } break;
           case '"':
@@ -2123,7 +2122,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                handled_key = true;
                Point_t* marked_location;
                char mark = key;
-               marked_location = vim_mark_find(buffer_state->mark_head, mark);
+               marked_location = vim_mark_find(buffer_state->vim_buffer_state.mark_head, mark);
                if(marked_location) {
                     cursor->y = marked_location->y;
                     center_view(buffer_view);
@@ -2198,7 +2197,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
      if(!handled_key){
           VimKeyHandlerResult_t vkh_result = vim_key_handler(key, &config_state->vim_state, config_state->tab_current->view_current->buffer,
                                                              &config_state->tab_current->view_current->cursor, &buffer_state->commit_tail,
-                                                             &config_state->auto_complete, &buffer_state->cursor_save_column, false);
+                                                             &buffer_state->vim_buffer_state, &config_state->auto_complete, false);
           if(vkh_result.type == VKH_HANDLED_KEY){
                if(config_state->vim_state.mode == VM_INSERT && config_state->input && config_state->input_key == 6){
                     calc_auto_complete_start_and_path(&config_state->auto_complete,
@@ -2290,8 +2289,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     case '.':
                     {
                          vim_action_apply(&config_state->vim_state.last_action, buffer, cursor, &config_state->vim_state,
-                                          &buffer_state->commit_tail, &config_state->auto_complete,
-                                          &buffer_state->cursor_save_column);
+                                          &buffer_state->commit_tail, &buffer_state->vim_buffer_state, &config_state->auto_complete);
 
                          if(config_state->vim_state.mode != VM_INSERT || !config_state->vim_state.last_insert_command ||
                             config_state->vim_state.last_action.change.type == VCT_PLAY_MACRO) break;
@@ -2302,7 +2300,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          while(*cmd_itr){
                               vim_key_handler(*cmd_itr, &config_state->vim_state, config_state->tab_current->view_current->buffer,
                                               &config_state->tab_current->view_current->cursor, &buffer_state->commit_tail,
-                                              &config_state->auto_complete, &buffer_state->cursor_save_column, true);
+                                              &buffer_state->vim_buffer_state, &config_state->auto_complete, true);
                               cmd_itr++;
                          }
 
@@ -2862,7 +2860,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
      if(config_state->tab_current->view_overrideable && buffer_view->buffer == &config_state->mark_list_buffer){
           int64_t line = cursor->y - 1; // account for buffer list row header
           if(line >= 0){
-               VimMarkNode_t* itr = ((BufferState_t*)(config_state->buffer_before_query->user_data))->mark_head;
+               VimMarkNode_t* itr = ((BufferState_t*)(config_state->buffer_before_query->user_data))->vim_buffer_state.mark_head;
 
                while(line > 0){
                     itr = itr->next;

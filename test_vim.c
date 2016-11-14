@@ -174,7 +174,7 @@ TEST(motion_left)
      KeyHandlerTest_t kht;
      key_handler_test_init(&kht);
 
-     ce_insert_string(&kht.buffer, (Point_t){0, 0}, "Tacos are the best");
+     ce_append_line(&kht.buffer, "Tacos are the best");
      kht.cursor.x = 3;
 
      key_handler_test_run(&kht, "h");
@@ -189,7 +189,7 @@ TEST(motion_right)
      KeyHandlerTest_t kht;
      key_handler_test_init(&kht);
 
-     ce_insert_string(&kht.buffer, (Point_t){0, 0}, "Tacos are the best");
+     ce_append_line(&kht.buffer, "Tacos are the best");
      kht.cursor.x = 3;
 
      key_handler_test_run(&kht, "l");
@@ -204,8 +204,8 @@ TEST(motion_up)
      KeyHandlerTest_t kht;
      key_handler_test_init(&kht);
 
-     ce_insert_line(&kht.buffer, 0, "Tacos are the best");
-     ce_insert_line(&kht.buffer, 1, "Yes they are");
+     ce_append_line(&kht.buffer, "Tacos are the best");
+     ce_append_line(&kht.buffer, "Yes they are");
      kht.cursor.y = 1;
 
      key_handler_test_run(&kht, "k");
@@ -220,8 +220,8 @@ TEST(motion_down)
      KeyHandlerTest_t kht;
      key_handler_test_init(&kht);
 
-     ce_insert_line(&kht.buffer, 0, "Tacos are the best");
-     ce_insert_line(&kht.buffer, 1, "Yes they are");
+     ce_append_line(&kht.buffer, "Tacos are the best");
+     ce_append_line(&kht.buffer, "Yes they are");
      kht.cursor.y = 0;
 
      key_handler_test_run(&kht, "j");
@@ -236,11 +236,292 @@ TEST(motion_word_little)
      KeyHandlerTest_t kht;
      key_handler_test_init(&kht);
 
-     ce_insert_line(&kht.buffer, 0, "if(best_food == F_TACOS)");
+     ce_append_line(&kht.buffer, "if(best_food == F_TACOS)");
 
      key_handler_test_run(&kht, "w");
 
      EXPECT(kht.cursor.x == 2);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(motion_word_big)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "if(best_food == F_TACOS)");
+
+     key_handler_test_run(&kht, "W");
+
+     EXPECT(kht.cursor.x == 13);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(motion_word_beginning_little)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "if(best_food == F_TACOS)");
+     kht.cursor.x = 8;
+
+     key_handler_test_run(&kht, "b");
+
+     EXPECT(kht.cursor.x == 3);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(motion_word_beginning_big)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "if(best_food == F_TACOS)");
+     kht.cursor.x = 8;
+
+     key_handler_test_run(&kht, "B");
+
+     EXPECT(kht.cursor.x == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(motion_word_end_little)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "if(best_food == F_TACOS)");
+     kht.cursor.x = 0;
+
+     key_handler_test_run(&kht, "e");
+
+     EXPECT(kht.cursor.x == 1);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(motion_word_end_big)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "if(best_food == F_TACOS)");
+     kht.cursor.x = 0;
+
+     key_handler_test_run(&kht, "E");
+
+     EXPECT(kht.cursor.x == 11);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(motion_find_next_matching_char)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "if(ce_insert_line(buffer, 0, new_line)){");
+     kht.cursor.x = 0;
+
+     key_handler_test_run(&kht, "fe");
+     EXPECT(kht.cursor.x == 4);
+
+     key_handler_test_run(&kht, ";");
+     EXPECT(kht.cursor.x == 9);
+
+     key_handler_test_run(&kht, ",");
+     EXPECT(kht.cursor.x == 4);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(motion_find_prev_matching_char)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "if(ce_insert_line(buffer, 0, new_line)){");
+     kht.cursor.x = 15;
+
+     key_handler_test_run(&kht, "Fe");
+     EXPECT(kht.cursor.x == 9);
+
+     key_handler_test_run(&kht, ";");
+     EXPECT(kht.cursor.x == 4);
+
+     key_handler_test_run(&kht, ",");
+     EXPECT(kht.cursor.x == 9);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(motion_to_next_matching_char)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "if(ce_insert_line(buffer, 0, new_line)){");
+     kht.cursor.x = 0;
+
+     key_handler_test_run(&kht, "te");
+     EXPECT(kht.cursor.x == 3);
+
+     key_handler_test_run(&kht, ";");
+     EXPECT(kht.cursor.x == 8);
+
+     key_handler_test_run(&kht, ",");
+     EXPECT(kht.cursor.x == 5);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(motion_to_prev_matching_char)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "if(ce_insert_line(buffer, 0, new_line)){");
+     kht.cursor.x = 15;
+
+     key_handler_test_run(&kht, "Te");
+     EXPECT(kht.cursor.x == 10);
+
+     key_handler_test_run(&kht, ";");
+     EXPECT(kht.cursor.x == 5);
+
+     key_handler_test_run(&kht, ",");
+     EXPECT(kht.cursor.x == 8);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(motion_beginning_of_file)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "Line one");
+     ce_append_line(&kht.buffer, "Line two");
+     ce_append_line(&kht.buffer, "Line three");
+     kht.cursor = (Point_t){3, 3};
+
+     key_handler_test_run(&kht, "gg");
+     EXPECT(kht.cursor.x == 0 && kht.cursor.y == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(motion_beginning_of_line_hard)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "     if(best.editor == ce)");
+     kht.cursor.x = strlen(kht.buffer.lines[0]) - 1;
+
+     key_handler_test_run(&kht, "0");
+     EXPECT(kht.cursor.x == 0 && kht.cursor.y == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(motion_beginning_of_line_soft)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "     if(best.editor == ce)");
+     kht.cursor.x = strlen(kht.buffer.lines[0]) - 1;
+
+     key_handler_test_run(&kht, "^");
+     EXPECT(kht.cursor.x == 5 && kht.cursor.y == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(motion_end_of_line_hard)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "     if(best.editor == ce){");
+
+     key_handler_test_run(&kht, "$");
+     EXPECT(kht.cursor.x == 26 && kht.cursor.y == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(motion_end_of_file)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "if(best.editor == ce){");
+     ce_append_line(&kht.buffer, "     printf(\"hooray!\");");
+     ce_append_line(&kht.buffer, "}");
+
+     key_handler_test_run(&kht, "G");
+     EXPECT(kht.cursor.x == 0 && kht.cursor.y == 2);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(motion_search_word_under_cursor_forward)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "if(best.editor == ce){");
+     ce_append_line(&kht.buffer, "     printf(\"we're the best!\");");
+     ce_append_line(&kht.buffer, "}");
+     kht.cursor.x = 5;
+
+     key_handler_test_run(&kht, "*");
+     EXPECT(kht.cursor.x == 23 && kht.cursor.y == 1);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(motion_search_word_under_cursor_backward)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "if(best.editor == ce){");
+     ce_append_line(&kht.buffer, "     printf(\"we're the best!\");");
+     ce_append_line(&kht.buffer, "}");
+     kht.cursor = (Point_t){23, 1};
+
+     key_handler_test_run(&kht, "#");
+     EXPECT(kht.cursor.x == 3 && kht.cursor.y == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(motion_next_and_prev_blank_line)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "printf(\"we're the best!\");");
+     ce_append_line(&kht.buffer, "");
+     ce_append_line(&kht.buffer, "if(best.editor == ce){");
+     ce_append_line(&kht.buffer, "     printf(\"we're the best!\");");
+     ce_append_line(&kht.buffer, "}");
+     ce_append_line(&kht.buffer, "");
+     ce_append_line(&kht.buffer, "printf(\"we're the best!\");");
+     kht.cursor.y = 3;
+
+     key_handler_test_run(&kht, "{");
+     EXPECT(kht.cursor.x == 0 && kht.cursor.y == 1);
+
+     key_handler_test_run(&kht, "}");
+     EXPECT(kht.cursor.x == 0 && kht.cursor.y == 5);
 
      key_handler_test_free(&kht);
 }

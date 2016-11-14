@@ -913,9 +913,11 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           case '\0':
                return VCS_CONTINUE;
           case 'h':
+          case KEY_LEFT:
                built_action.motion.type = VMT_LEFT;
                break;
           case 'j':
+          case KEY_DOWN:
                if(built_action.change.type == VCT_MOTION){
                     built_action.motion.type = VMT_DOWN;
                }else{
@@ -923,12 +925,14 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
                }
                break;
           case 'k':
+          case KEY_UP:
                if(built_action.change.type == VCT_MOTION){
                     built_action.motion.type = VMT_UP;
                }else{
                     built_action.motion.type = VMT_LINE_UP;
                }
                break;
+          case KEY_RIGHT:
           case 'l':
                built_action.motion.type = VMT_RIGHT;
                break;

@@ -225,12 +225,16 @@ void tab_view_remove(TabView_t** head, TabView_t* view)
 
 void tab_view_save_overrideable(TabView_t* tab)
 {
+     if(!tab->view_overrideable) return;
+
      tab->overriden_buffer = tab->view_overrideable->buffer;
      tab->overriden_buffer->cursor = tab->view_overrideable->cursor;
 }
 
 void tab_view_restore_overrideable(TabView_t* tab)
 {
+     if(!tab->view_overrideable) return;
+
      tab->view_overrideable->buffer = tab->overriden_buffer;
      tab->view_overrideable->cursor = tab->overriden_buffer->cursor;
      center_view(tab->view_overrideable);

@@ -3037,7 +3037,7 @@ int64_t ce_get_line_number_column_width(LineNumberType_t line_number_type, int64
           if(view_height > buffer_line_count){
                column_width += count_digits(buffer_line_count) + 1;
           }else{
-               column_width += count_digits(view_height) + 1;
+               column_width += count_digits(view_height - 1) + 1;
           }
      }
 

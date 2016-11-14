@@ -670,7 +670,7 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           break;
      case 'S':
           built_action.change.type = VCT_DELETE;
-          built_action.motion.type = VMT_END_OF_LINE_HARD;
+          built_action.motion.type = VMT_LINE_SOFT;
           built_action.end_in_vim_mode = VM_INSERT;
           get_motion = false;
           break;
@@ -1052,7 +1052,7 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
                break;
           case 'c':
                if(change_char == 'c') {
-                    built_action.motion.type = VMT_LINE;
+                    built_action.motion.type = VMT_LINE_SOFT;
                }else if(change_char == 'g') {
                     built_action.motion.type = VMT_LINE;
                }else{
@@ -1214,6 +1214,11 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                     action_range->end.x = strlen(buffer->lines[action_range->end.y]);
                     action_range->yank_mode = YANK_LINE;
                     break;
+               case VMT_LINE_SOFT:
+               {
+                    ce_move_cursor_to_soft_beginning_of_line(buffer, &action_range->start);
+                    ce_move_cursor_to_end_of_line(buffer, &action_range->end);
+               } break;
                case VMT_FIND_NEXT_MATCHING_CHAR:
                     if(action->motion.match_char){
                          if(ce_move_cursor_forward_to_char(buffer, &action_range->end, action->motion.match_char)){
@@ -2000,6 +2005,10 @@ void vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
      vim_state->mode = action->end_in_vim_mode;
 
      if(action->end_in_vim_mode == VM_INSERT){
+          // the insert mode clamp
+          int64_t line_len = strlen(buffer->lines[cursor->y]);
+          if(cursor->x > line_len) cursor->x = line_len;
+
           // if we end in insert mode, make sure undo is chained with the action
           if(action->change.type != VCT_NONE && action->change.type != VCT_MOTION && *commit_tail) (*commit_tail)->commit.chain = BCC_KEEP_GOING;
      }else{

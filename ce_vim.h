@@ -63,6 +63,7 @@ typedef enum{
      VMT_LINE_DOWN,
      VMT_FIND_NEXT_MATCHING_CHAR,
      VMT_FIND_PREV_MATCHING_CHAR,
+     VMT_LINE_SOFT,
      VMT_TO_NEXT_MATCHING_CHAR,
      VMT_TO_PREV_MATCHING_CHAR,
      VMT_BEGINNING_OF_FILE,
@@ -137,10 +138,10 @@ typedef struct{
 
 
 // marks
-typedef struct MarkNode_t{
+typedef struct VimMarkNode_t{
      char reg_char;
      Point_t location;
-     struct MarkNode_t* next;
+     struct VimMarkNode_t* next;
 } VimMarkNode_t;
 
 Point_t* vim_mark_find(VimMarkNode_t* mark_head, char mark_char);

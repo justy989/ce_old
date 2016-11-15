@@ -2062,6 +2062,31 @@ TEST(flip_word_case)
      key_handler_test_free(&kht);
 }
 
+TEST(clear_blank_lines_on_return_and_escape)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "if(tacos){");
+     ce_append_line(&kht.buffer, "}");
+
+     key_handler_test_run(&kht, "o\\r\\e");
+
+     ASSERT(kht.buffer.line_count == 4);
+     EXPECT(strcmp(kht.buffer.lines[0], "if(tacos){") == 0);
+     EXPECT(kht.buffer.lines[1][0] == 0);
+     EXPECT(kht.buffer.lines[2][0] == 0);
+     EXPECT(strcmp(kht.buffer.lines[3], "}") == 0);
+
+     key_handler_test_undo(&kht);
+
+     EXPECT(kht.buffer.line_count == 2);
+     EXPECT(strcmp(kht.buffer.lines[0], "if(tacos){") == 0);
+     EXPECT(strcmp(kht.buffer.lines[1], "}") == 0);
+
+     key_handler_test_free(&kht);
+}
+
 void segv_handler(int signo)
 {
      void *array[10];

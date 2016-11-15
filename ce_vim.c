@@ -247,7 +247,7 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                     char* remove_string = ce_dupe_string(buffer, remove_loc, (Point_t){remove_len - 1, remove_loc.y});
 
                     if(ce_remove_string(buffer, remove_loc, remove_len)){
-                         ce_commit_remove_string(commit_tail, remove_loc, *cursor, remove_loc, remove_string, BCC_STOP);
+                         ce_commit_remove_string(commit_tail, remove_loc, *cursor, remove_loc, remove_string, BCC_KEEP_GOING);
                     }else{
                          free(remove_string);
                     }
@@ -293,7 +293,7 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                          char* remove_string = ce_dupe_string(buffer, remove_loc, (Point_t){remove_len - 1, remove_loc.y});
 
                          if(ce_remove_string(buffer, remove_loc, remove_len)){
-                              ce_commit_remove_string(commit_tail, remove_loc, *cursor, remove_loc, remove_string, BCC_STOP);
+                              ce_commit_remove_string(commit_tail, remove_loc, *cursor, remove_loc, remove_string, BCC_KEEP_GOING);
                          }else{
                               free(remove_string);
                          }
@@ -2055,7 +2055,8 @@ void vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
 
      if(action->end_in_vim_mode == VM_INSERT){
           // the insert mode clamp
-          int64_t line_len = strlen(buffer->lines[cursor->y]);
+          int64_t line_len = 0;
+          if(cursor->y < buffer->line_count) line_len = strlen(buffer->lines[cursor->y]);
           if(cursor->x > line_len) cursor->x = line_len;
 
           // if we end in insert mode, make sure undo is chained with the action

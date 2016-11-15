@@ -1951,7 +1951,8 @@ void vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
      case VCT_OPEN_BELOW:
      {
           Point_t end_of_line = *cursor;
-          end_of_line.x = strlen(buffer->lines[cursor->y]);
+          end_of_line.x = 0;
+          if(cursor->y < buffer->line_count) end_of_line.x = strlen(buffer->lines[cursor->y]);
 
           // indent if necessary
           int64_t indent_len = ce_get_indentation_for_next_line(buffer, *cursor, strlen(TAB_STRING));

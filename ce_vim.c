@@ -616,6 +616,7 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
 
           if(built_action.multiplier == 0){
                // it's actually just a motion to move to the beginning of the line!
+               built_action.end_in_vim_mode = vim_mode;
                built_action.multiplier = 1;
                built_action.change.type = VCT_MOTION;
                built_action.motion.type = VMT_BEGINNING_OF_LINE_HARD;

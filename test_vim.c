@@ -1011,6 +1011,27 @@ TEST(visual_delete_range)
      key_handler_test_free(&kht);
 }
 
+TEST(visual_delete_to_beginning_of_line)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     const char* original_line = "begin end";
+     ce_append_line(&kht.buffer, original_line);
+     kht.cursor.x = 7;
+
+     key_handler_test_run(&kht, "v0d");
+     EXPECT(kht.cursor.x == 0 && kht.cursor.y == 0);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     ASSERT(kht.buffer.line_count == 1);
+     EXPECT(strcmp(kht.buffer.lines[0], "d") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);
+
+     key_handler_test_free(&kht);
+}
+
 TEST(visual_delete_in_word)
 {
      KeyHandlerTest_t kht;

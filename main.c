@@ -31,6 +31,9 @@ LITTLE:
 -vim's 'ci}' and 'di}' behave differently in a nice way, emulate that
 -visual range mode crashes when you delete with the selection starting at the beginning of the line
 -handle case where filename doesn't fit in view status line
+-have vim_apply_action() return whether or not the action succeeded.
+-have vim_key_handler() return the difference between a command completing succeessfully and a command
+ completing but in a failed manner
 
 */
 

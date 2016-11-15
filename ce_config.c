@@ -275,6 +275,7 @@ typedef struct{
      AutoComplete_t auto_complete;
 
      LineNumberType_t line_number_type;
+     HighlightLineType_t highlight_line_type;
 
      char editting_register;
 
@@ -669,6 +670,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      }
 
      config_state->line_number_type = LNT_RELATIVE;
+     config_state->highlight_line_type = HLT_ENTIRE_LINE;
 
      input_history_init(&config_state->shell_command_history);
      input_history_init(&config_state->shell_input_history);
@@ -2986,7 +2988,7 @@ void view_drawer(const BufferNode_t* head, void* user_data)
      }
 
      // NOTE: always draw from the head
-     ce_draw_views(config_state->tab_current->view_head, search, config_state->line_number_type);
+     ce_draw_views(config_state->tab_current->view_head, search, config_state->line_number_type, config_state->highlight_line_type);
 
      draw_view_statuses(config_state->tab_current->view_head, config_state->tab_current->view_current,
                         config_state->tab_current->view_overrideable, config_state->vim_state.mode, config_state->last_key,
@@ -3015,7 +3017,7 @@ void view_drawer(const BufferNode_t* head, void* user_data)
                }
           }
 
-          ce_draw_views(config_state->view_input, NULL, LNT_NONE);
+          ce_draw_views(config_state->view_input, NULL, LNT_NONE, HLT_NONE);
           draw_view_statuses(config_state->view_input, config_state->tab_current->view_current,
                              NULL, config_state->vim_state.mode, config_state->last_key,
                              config_state->vim_state.recording_macro);

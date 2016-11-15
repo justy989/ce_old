@@ -1619,7 +1619,7 @@ static const char non_printable_repr = '~';
 
 bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t* term_top_left,
                     const Point_t* term_bottom_right, const Point_t* buffer_top_left, const char* highlight_word,
-                    LineNumberType_t line_number_type)
+                    LineNumberType_t line_number_type, HighlightLineType_t highlight_line_type)
 {
      CE_CHECK_PTR_ARG(buffer);
      CE_CHECK_PTR_ARG(term_top_left);
@@ -1720,7 +1720,17 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                standend();
           }
 
-          if(!buffer->lines[i][0]) continue;
+          if(!buffer->lines[i][0]){
+               if(i == cursor->y && highlight_line_type == HLT_ENTIRE_LINE){
+                    set_color(S_NORMAL, HL_CURRENT_LINE);
+                    for(int64_t c = 0; c < max_width; ++c){
+                         addch(' ');
+                    }
+               }
+
+               continue;
+          }
+
           const char* buffer_line = buffer->lines[i];
           int64_t line_length = strlen(buffer_line);
 
@@ -1877,21 +1887,21 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                               if(highlighting_left){
                                    highlighting_left--;
                                    if(!highlighting_left){
-                                        if(cursor->y == i){
+                                        if(cursor->y == i && highlight_line_type != HLT_NONE){
                                              highlight_type = HL_CURRENT_LINE;
                                         }else{
                                              highlight_type = HL_OFF;
                                         }
                                         set_color(fg_color, highlight_type);
                                    }
-                              }else if(cursor->y == i){
+                              }else if(cursor->y == i && highlight_line_type != HLT_NONE){
                                    highlight_type = HL_CURRENT_LINE;
                                    set_color(fg_color, highlight_type);
                               }else{
                                    highlight_type = HL_OFF;
                                    set_color(fg_color, highlight_type);
                               }
-                         }else if(cursor->y == i){
+                         }else if(cursor->y == i && highlight_line_type != HLT_NONE){
                               highlight_type = HL_CURRENT_LINE;
                               set_color(fg_color, highlight_type);
                          }
@@ -1995,6 +2005,13 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                          addch(line_to_print[c]);
                     }else{
                          addch(non_printable_repr);
+                    }
+               }
+
+               if(cursor->y == i && highlight_line_type == HLT_ENTIRE_LINE){
+                    fg_color = set_color(fg_color, HL_CURRENT_LINE);
+                    for(int64_t c = min; c < max_width; ++c){
+                         addch(' ');
                     }
                }
 
@@ -2882,9 +2899,11 @@ void draw_view_bottom_right_borders(const BufferView_t* view)
      }
 }
 
-bool draw_vertical_views(const BufferView_t* view, bool already_drawn, const char* highlight_word, LineNumberType_t line_number_type);
+bool draw_vertical_views(const BufferView_t* view, bool already_drawn, const char* highlight_word,
+                         LineNumberType_t line_number_type, HighlightLineType_t highlight_line_type);
 
-bool draw_horizontal_views(const BufferView_t* view, bool already_drawn, const char* highlight_word, LineNumberType_t line_number_type)
+bool draw_horizontal_views(const BufferView_t* view, bool already_drawn, const char* highlight_word,
+                           LineNumberType_t line_number_type, HighlightLineType_t highlight_line_type)
 {
      const BufferView_t* itr = view;
      while(itr){
@@ -2892,13 +2911,13 @@ bool draw_horizontal_views(const BufferView_t* view, bool already_drawn, const c
           // or if this is any view other than the first view
           // and we have a horizontal view below us, then draw the horizontal views
           if(((!already_drawn && itr == view) || (itr != view)) && itr->next_vertical){
-               draw_vertical_views(itr, true, highlight_word, line_number_type);
+               draw_vertical_views(itr, true, highlight_word, line_number_type, highlight_line_type);
           }else{
                assert(itr->left_column >= 0);
                assert(itr->top_row >= 0);
                Point_t buffer_top_left = {itr->left_column, itr->top_row};
                ce_draw_buffer(itr->buffer, &itr->cursor, &itr->top_left, &itr->bottom_right, &buffer_top_left,
-                              highlight_word, line_number_type);
+                              highlight_word, line_number_type, highlight_line_type);
                draw_view_bottom_right_borders(itr);
           }
 
@@ -2908,7 +2927,8 @@ bool draw_horizontal_views(const BufferView_t* view, bool already_drawn, const c
      return true;
 }
 
-bool draw_vertical_views(const BufferView_t* view, bool already_drawn, const char* highlight_word, LineNumberType_t line_number_type)
+bool draw_vertical_views(const BufferView_t* view, bool already_drawn, const char* highlight_word,
+                         LineNumberType_t line_number_type, HighlightLineType_t highlight_line_type)
 {
      const BufferView_t* itr = view;
      while(itr){
@@ -2916,11 +2936,11 @@ bool draw_vertical_views(const BufferView_t* view, bool already_drawn, const cha
           // or if this is any view other than the first view
           // and we have a vertical view below us, then draw the vertical views
           if(((!already_drawn && itr == view) || (itr != view)) && itr->next_horizontal){
-               draw_horizontal_views(itr, true, highlight_word, line_number_type);
+               draw_horizontal_views(itr, true, highlight_word, line_number_type, highlight_line_type);
           }else{
                Point_t buffer_top_left = {itr->left_column, itr->top_row};
                ce_draw_buffer(itr->buffer, &itr->cursor, &itr->top_left, &itr->bottom_right, &buffer_top_left,
-                              highlight_word, line_number_type);
+                              highlight_word, line_number_type, highlight_line_type);
                draw_view_bottom_right_borders(itr);
           }
 
@@ -2988,11 +3008,12 @@ bool connect_borders(const BufferView_t* view)
             ce_connect_border_lines(bottom_right) && ce_connect_border_lines(bottom_left);
 }
 
-bool ce_draw_views(const BufferView_t* view, const char* highlight_word, LineNumberType_t line_number_type)
+bool ce_draw_views(const BufferView_t* view, const char* highlight_word, LineNumberType_t line_number_type,
+                   HighlightLineType_t highlight_line_type)
 {
      CE_CHECK_PTR_ARG(view);
 
-     if(!draw_horizontal_views(view, false, highlight_word, line_number_type)){
+     if(!draw_horizontal_views(view, false, highlight_word, line_number_type, highlight_line_type)){
           return false;
      }
 

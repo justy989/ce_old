@@ -2987,8 +2987,15 @@ void view_drawer(const BufferNode_t* head, void* user_data)
           if(yank) search = yank->text;
      }
 
+     HighlightLineType_t highlight_line_type = config_state->highlight_line_type;
+
+     // turn off highlighting the current line when in visual mode
+     if(config_state->vim_state.mode == VM_VISUAL_RANGE || config_state->vim_state.mode == VM_VISUAL_LINE){
+          highlight_line_type = HLT_NONE;
+     }
+
      // NOTE: always draw from the head
-     ce_draw_views(config_state->tab_current->view_head, search, config_state->line_number_type, config_state->highlight_line_type);
+     ce_draw_views(config_state->tab_current->view_head, search, config_state->line_number_type, highlight_line_type);
 
      draw_view_statuses(config_state->tab_current->view_head, config_state->tab_current->view_current,
                         config_state->tab_current->view_overrideable, config_state->vim_state.mode, config_state->last_key,

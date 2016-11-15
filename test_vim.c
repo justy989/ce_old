@@ -132,6 +132,7 @@ TEST(macro_commit_sanity)
      itr = itr->prev;
      EXPECT(itr->command_begin->key == first_command->key);
 
+     vim_macro_commits_dump(itr);
      vim_macro_commits_free(&itr);
 }
 
@@ -1029,6 +1030,25 @@ TEST(visual_delete_in_word)
      key_handler_test_free(&kht);
 }
 
+TEST(visual_delete_around_word)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "line one");
+     kht.cursor.x = 2;
+
+     key_handler_test_run(&kht, "vawd");
+     EXPECT(kht.cursor.x == 0 && kht.cursor.y == 0);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     EXPECT(strcmp(kht.buffer.lines[0], "one") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], "line one") == 0);
+
+     key_handler_test_free(&kht);
+}
+
 TEST(visual_delete_line)
 {
      KeyHandlerTest_t kht;
@@ -1335,6 +1355,44 @@ TEST(change_delete_to_end_of_line)
      key_handler_test_free(&kht);
 }
 
+TEST(change_delete_to_soft_beginning_of_line)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "     if(tacos){");
+     kht.cursor.x = 10;
+
+     key_handler_test_run(&kht, "d^");
+     EXPECT(kht.cursor.x == 5 && kht.cursor.y == 0);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     EXPECT(strcmp(kht.buffer.lines[0], "     cos){") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], "     if(tacos){") == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(change_delete_to_hard_beginning_of_line)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "Line one");
+     kht.cursor.x = 6;
+
+     key_handler_test_run(&kht, "d0");
+     EXPECT(kht.cursor.x == 0 && kht.cursor.y == 0);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     EXPECT(strcmp(kht.buffer.lines[0], "ne") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(strcmp(kht.buffer.lines[0], "Line one") == 0);
+
+     key_handler_test_free(&kht);
+}
+
 TEST(change_delete_inside_pair)
 {
      KeyHandlerTest_t kht;
@@ -1533,6 +1591,28 @@ TEST(join_line)
      ASSERT(kht.buffer.line_count == 2);
      EXPECT(strcmp(kht.buffer.lines[0], "line one") == 0);
      EXPECT(strcmp(kht.buffer.lines[1], "line two") == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(join_line_with_whitespace)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "my_func(arg_one,");
+     ce_append_line(&kht.buffer, "        arg_two);");
+
+     key_handler_test_run(&kht, "J");
+     EXPECT(kht.cursor.x == 16 && kht.cursor.y == 0);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     ASSERT(kht.buffer.line_count == 1);
+     EXPECT(strcmp(kht.buffer.lines[0], "my_func(arg_one, arg_two);") == 0);
+
+     key_handler_test_undo(&kht);
+     ASSERT(kht.buffer.line_count == 2);
+     EXPECT(strcmp(kht.buffer.lines[0], "my_func(arg_one,") == 0);
+     EXPECT(strcmp(kht.buffer.lines[1], "        arg_two);") == 0);
 
      key_handler_test_free(&kht);
 }
@@ -2083,6 +2163,21 @@ TEST(clear_blank_lines_on_return_and_escape)
      EXPECT(kht.buffer.line_count == 2);
      EXPECT(strcmp(kht.buffer.lines[0], "if(tacos){") == 0);
      EXPECT(strcmp(kht.buffer.lines[1], "}") == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(invalid_input)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "line one");
+
+     key_handler_test_run(&kht, "ds");
+
+     EXPECT(strcmp(kht.buffer.lines[0], "line one") == 0);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
 
      key_handler_test_free(&kht);
 }

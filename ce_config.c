@@ -2869,7 +2869,13 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferVi
      attron(COLOR_PAIR(S_BORDERS));
      move(view->bottom_right.y, view->top_left.x);
      for(int i = view->top_left.x; i < view->bottom_right.x; ++i) addch(ACS_HLINE);
+     int right_status_offset = 0;
+     if(view->bottom_right.x == (g_terminal_dimensions->x - 1)){
+          addch(ACS_HLINE);
+          right_status_offset = 1;
+     }
 
+     // TODO: handle case where filename is too long to fit in the status bar
      attron(COLOR_PAIR(S_VIEW_STATUS));
      mvprintw(view->bottom_right.y, view->top_left.x + 1, " %s%s%s ",
               view == current_view ? mode_names[vim_mode] : "",
@@ -2883,7 +2889,8 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferVi
      int64_t column = view->cursor.x + 1;
      int64_t digits_in_line = count_digits(row);
      digits_in_line += count_digits(column);
-     mvprintw(view->bottom_right.y, (view->bottom_right.x - (digits_in_line + 5)), " %"PRId64", %"PRId64" ", column, row);
+     mvprintw(view->bottom_right.y, (view->bottom_right.x - (digits_in_line + 5)) + right_status_offset,
+              " %"PRId64", %"PRId64" ", column, row);
 }
 
 void view_drawer(const BufferNode_t* head, void* user_data)

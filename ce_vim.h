@@ -103,7 +103,6 @@ typedef struct{
           Direction_t search_direction;
      };
      bool visual_start_after; // false means after !
-     bool search_forward;
 } VimMotion_t;
 
 typedef struct{

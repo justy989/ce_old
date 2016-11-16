@@ -885,26 +885,24 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           built_action.change.type = VCT_MOTION;
           built_action.motion.type = VMT_SEARCH_WORD_UNDER_CURSOR;
           built_action.motion.search_direction = CE_DOWN;
-          built_action.motion.search_forward = true;
           get_motion = false;
           break;
      case '#':
           built_action.change.type = VCT_MOTION;
           built_action.motion.type = VMT_SEARCH_WORD_UNDER_CURSOR;
           built_action.motion.search_direction = CE_UP;
-          built_action.motion.search_forward = true;
           get_motion = false;
           break;
      case 'n':
           built_action.change.type = VCT_MOTION;
           built_action.motion.type = VMT_SEARCH;
-          built_action.motion.search_forward = true;
+          built_action.motion.search_direction = CE_DOWN;
           get_motion = false;
           break;
      case 'N':
           built_action.change.type = VCT_MOTION;
           built_action.motion.type = VMT_SEARCH;
-          built_action.motion.search_forward = false;
+          built_action.motion.search_direction = CE_UP;
           get_motion = false;
           break;
      case 'm':
@@ -1560,30 +1558,22 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                     if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) break;
                     char* search_str = ce_dupe_string(buffer, word_start, word_end);
                     vim_yank_add(&vim_state->yank_head, '/', search_str, YANK_NORMAL);
-                    vim_state->search_direction = action->motion.search_direction;
                }
                // NOTE: fall through intentionally
                case VMT_SEARCH:
                {
+                    vim_state->search_direction = action->motion.search_direction;
                     VimYankNode_t* yank = vim_yank_find(vim_state->yank_head, '/');
                     if(yank){
                          assert(yank->mode == YANK_NORMAL);
 
-                         Direction_t dir = vim_state->search_direction;
-                         if(!action->motion.search_forward){
-                              if(vim_state->search_direction == CE_UP){
-                                   dir = CE_DOWN;
-                              }else{
-                                   dir = CE_UP;
-                              }
-                         }
-
-                         if(dir == CE_UP){
+                         if(vim_state->search_direction == CE_UP){
+                              ce_message("who ha");
                               ce_move_cursor_to_beginning_of_word(buffer, &action_range->end, true);
                          }
 
                          Point_t match;
-                         if(ce_find_string(buffer, action_range->end, yank->text, &match, dir)){
+                         if(ce_find_string(buffer, action_range->end, yank->text, &match, vim_state->search_direction)){
                               ce_set_cursor(buffer, &action_range->end, match);
                          }else{
                               action_range->end = *cursor;

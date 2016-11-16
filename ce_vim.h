@@ -12,7 +12,7 @@ typedef enum{
      VM_INSERT,
      VM_VISUAL_RANGE,
      VM_VISUAL_LINE,
-     // TODO: VM_VISUAL_BLOCK,
+     VM_VISUAL_BLOCK,
 } VimMode_t;
 
 typedef enum{
@@ -81,6 +81,7 @@ typedef enum{
      VMT_AROUND_WORD_BIG,
      VMT_VISUAL_RANGE,
      VMT_VISUAL_LINE,
+     VMT_VISUAL_BLOCK,
      VMT_VISUAL_SWAP_WITH_CURSOR,
      VMT_SEARCH_WORD_UNDER_CURSOR,
      VMT_SEARCH,
@@ -100,10 +101,10 @@ typedef struct{
           char around_pair;
           int64_t visual_length;
           int64_t visual_lines;
+          Point_t visual_offset;
           Direction_t search_direction;
      };
      bool visual_start_after; // false means after !
-     bool search_forward;
 } VimMotion_t;
 
 typedef struct{
@@ -153,6 +154,7 @@ void vim_marks_free(VimMarkNode_t** head);
 typedef enum{
      YANK_NORMAL,
      YANK_LINE,
+     YANK_BLOCK,
 } VimYankMode_t;
 
 typedef struct VimYankNode_t{
@@ -253,6 +255,7 @@ void vim_enter_normal_mode(VimState_t* vim_state);
 bool vim_enter_insert_mode(VimState_t* vim_state, Buffer_t* buffer);
 void vim_enter_visual_range_mode(VimState_t* vim_state, Point_t cursor);
 void vim_enter_visual_line_mode(VimState_t* vim_state, Point_t cursor);
+void vim_enter_visual_block_mode(VimState_t* vim_state, Point_t cursor);
 
 void vim_stop_recording_macro(VimState_t* vim_state);
 

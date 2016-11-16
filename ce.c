@@ -1389,7 +1389,7 @@ int64_t ce_is_c_typename(const char* line, int64_t start_offset)
      itr = line + start_offset;
      if(count >= 2 && itr[count-2] == '_' && itr[count-1] == 't') return count;
 
-#if 0
+#if 1
      // NOTE: Justin uses this while working on Bryte!
      if(isupper(*itr)){
           return count;
@@ -1874,7 +1874,10 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                for(int64_t c = 0; c < min; ++c){
                     // check for the highlight
                     Point_t point = {c + buffer_top_left->x, i};
-                    if(ce_point_in_range(point, buffer->highlight_start, buffer->highlight_end)){
+                    if(!buffer->highlight_block && ce_point_in_range(point, buffer->highlight_start, buffer->highlight_end)){
+                         highlight_type = HL_ON;
+                         set_color(fg_color, highlight_type);
+                    }else if(buffer->highlight_block && ce_point_in_block(point, buffer->highlight_start, buffer->highlight_end)){
                          highlight_type = HL_ON;
                          set_color(fg_color, highlight_type);
                     }else{
@@ -3236,6 +3239,15 @@ bool ce_point_in_range(Point_t p, Point_t start, Point_t end)
 {
     if( ((p.y == start.y && p.x >= start.x) || (p.y > start.y)) &&
         ((p.y == end.y && p.x <= end.x) || (p.y < end.y )) ){
+         return true;
+    }
+
+     return false;
+}
+
+bool ce_point_in_block(Point_t p, Point_t start, Point_t end)
+{
+    if(p.x >= start.x && p.x <= end.x && p.y >= start.y && p.y <= end.y){
          return true;
     }
 

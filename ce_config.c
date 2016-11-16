@@ -2968,6 +2968,16 @@ void view_drawer(const BufferNode_t* head, void* user_data)
 
           buffer->highlight_start = *start;
           buffer->highlight_end = *end;
+          buffer->highlight_block = false;
+     }else if(config_state->vim_state.mode == VM_VISUAL_BLOCK){
+          const Point_t* start = &config_state->vim_state.visual_start;
+          const Point_t* end = &config_state->tab_current->view_current->cursor;
+
+          ce_sort_points(&start, &end);
+
+          buffer->highlight_start = *start;
+          buffer->highlight_end = *end;
+          buffer->highlight_block = true;
      }else if(config_state->vim_state.mode == VM_VISUAL_LINE){
           int64_t start_line = config_state->vim_state.visual_start.y;
           int64_t end_line = config_state->tab_current->view_current->cursor.y;
@@ -2980,6 +2990,7 @@ void view_drawer(const BufferNode_t* head, void* user_data)
 
           buffer->highlight_start = (Point_t){0, start_line};
           buffer->highlight_end = (Point_t){strlen(config_state->tab_current->view_current->buffer->lines[end_line]), end_line};
+          buffer->highlight_block = false;
      }else{
           buffer->highlight_start = (Point_t){0, 0};
           buffer->highlight_end = (Point_t){-1, 0};

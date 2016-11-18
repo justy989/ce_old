@@ -1278,6 +1278,33 @@ TEST(change_delete_big_beginning_of_word)
      key_handler_test_free(&kht);
 }
 
+TEST(change_delete_big_word_at_end_of_line)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     ce_append_line(&kht.buffer, "if(best.editor == ce){");
+     ce_append_line(&kht.buffer, "     success = true;");
+     ce_append_line(&kht.buffer, "}");
+     kht.cursor.x = 18;
+
+     key_handler_test_run(&kht, "dW");
+     EXPECT(kht.cursor.x == 17 && kht.cursor.y == 0);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     EXPECT(kht.buffer.line_count == 3);
+     EXPECT(strcmp(kht.buffer.lines[0], "if(best.editor == ") == 0);
+     EXPECT(strcmp(kht.buffer.lines[1], "     success = true;") == 0);
+     EXPECT(strcmp(kht.buffer.lines[2], "}") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(kht.buffer.line_count == 3);
+     EXPECT(strcmp(kht.buffer.lines[0], "if(best.editor == ce){") == 0);
+     EXPECT(strcmp(kht.buffer.lines[1], "     success = true;") == 0);
+     EXPECT(strcmp(kht.buffer.lines[2], "}") == 0);
+
+     key_handler_test_free(&kht);
+}
+
 TEST(change_delete_line)
 {
      KeyHandlerTest_t kht;

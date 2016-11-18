@@ -949,7 +949,7 @@ bool ce_move_cursor_to_next_word(const Buffer_t* buffer, Point_t* location, bool
           location->x = 0;
           char first_char = buffer->lines[location->y][0];
           if(line[0] != 0 && first_char != 0){
-               if(isblank(first_char) || !ce_ispunct(first_char) || !punctuation_word_boundaries){
+               if(isblank(first_char)){
                     return ce_move_cursor_to_next_word(buffer, location, punctuation_word_boundaries);
                }
           }

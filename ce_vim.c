@@ -1598,7 +1598,12 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                     if(action_range->start.x > 0) action_range->start.x--;
                // deleting to the next word does not include the next word's first character
                }else if(action->motion.type == VMT_WORD_LITTLE || action->motion.type == VMT_WORD_BIG){
-                    if(action_range->end.x > 0) action_range->end.x--;
+                    if(action_range->end.y != action_range->start.y){
+                         action_range->end.y = action_range->start.y;
+                         action_range->end.x = ce_last_index(buffer->lines[action_range->end.y]);
+                    }else if(action_range->end.x > 0){
+                         action_range->end.x--;
+                    }
                // going left means just the character left of the cursor
                }else if(action->motion.type == VMT_LEFT){
                     if(action_range->end.x + 1 <= ce_last_index(buffer->lines[action_range->start.y])){

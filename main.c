@@ -34,6 +34,7 @@ LITTLE:
 -have vim_apply_action() return whether or not the action succeeded.
 -have vim_key_handler() return the difference between a command completing succeessfully and a command
  completing but in a failed manner
+-when you 'dW' and the end of the big word is the end of the line, it does a join
 
 */
 

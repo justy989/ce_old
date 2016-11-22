@@ -29,12 +29,7 @@ LITTLE:
  ce_points_equal(a, b) being false when b is at the end of a line.
 -make char codes for arrow keys (like how backspace is '\b' and return is '\r'), so they can work in macros
 -vim's 'ci}' and 'di}' behave differently in a nice way, emulate that
--visual range mode crashes when you delete with the selection starting at the beginning of the line
 -handle case where filename doesn't fit in view status line
--have vim_apply_action() return whether or not the action succeeded.
--have vim_key_handler() return the difference between a command completing succeessfully and a command
- completing but in a failed manner
--when you 'dW' and the end of the big word is the end of the line, it does a join
 
 */
 

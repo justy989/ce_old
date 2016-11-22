@@ -2189,7 +2189,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                                       *cursor,
                                                       config_state->completion_buffer);
                }
-          }else if(vkh_result.type == VKH_COMPLETED_ACTION){
+          }else if(vkh_result.type == VKH_COMPLETED_ACTION_SUCCESS){
                if(vkh_result.completed_action.change.type == VCT_DELETE &&
                   config_state->tab_current->view_current->buffer == &config_state->buffer_list_buffer){
                     VimActionRange_t action_range;

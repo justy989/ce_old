@@ -127,7 +127,8 @@ typedef struct{
 typedef enum{
      VKH_UNHANDLED_KEY,
      VKH_HANDLED_KEY,
-     VKH_COMPLETED_ACTION,
+     VKH_COMPLETED_ACTION_FAILURE,
+     VKH_COMPLETED_ACTION_SUCCESS,
 } VimKeyHandlerResultType_t;
 
 typedef struct{
@@ -244,7 +245,7 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
 bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, VimState_t* vim_state,
                           VimBufferState_t* vim_buffer_state, VimActionRange_t* action_range);
 
-void vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, VimState_t* vim_state,
+bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, VimState_t* vim_state,
                       BufferCommitNode_t** commit_tail, VimBufferState_t* vim_buffer_state,
                       AutoComplete_t* auto_complete);
 

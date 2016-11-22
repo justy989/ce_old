@@ -826,7 +826,7 @@ bool destroyer(BufferNode_t** head, void* user_data)
      vim_macros_free(&config_state->vim_state.macro_head);
 
      VimMacroCommitNode_t* macro_commit_head = config_state->vim_state.macro_commit_current;
-     while(macro_commit_head->prev) macro_commit_head = macro_commit_head->prev;
+     while(macro_commit_head && macro_commit_head->prev) macro_commit_head = macro_commit_head->prev;
      vim_macro_commits_free(&macro_commit_head);
 
      free(config_state);

@@ -352,7 +352,6 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                if(vim_state->last_insert_command) free(vim_state->last_insert_command);
                vim_state->last_insert_command = built_command;
                ce_keys_free(&vim_state->command_head);
-
           } break;
           case KEY_LEFT:
           case KEY_RIGHT:
@@ -2141,6 +2140,11 @@ char* vim_command_string_to_char_string(const int* int_str)
                case KEY_ESCAPE:
                case KEY_ENTER:
                case KEY_TAB:
+               case KEY_UP:
+               case KEY_DOWN:
+               case KEY_LEFT:
+               case KEY_RIGHT:
+               case '\\':
                     len += 2;
                     break;
                }
@@ -2179,6 +2183,22 @@ char* vim_command_string_to_char_string(const int* int_str)
                case KEY_TAB:
                     *char_itr = '\\'; char_itr++;
                     *char_itr = 't'; char_itr++;
+                    break;
+               case KEY_UP:
+                    *char_itr = '\\'; char_itr++;
+                    *char_itr = 'u'; char_itr++;
+                    break;
+               case KEY_DOWN:
+                    *char_itr = '\\'; char_itr++;
+                    *char_itr = 'd'; char_itr++;
+                    break;
+               case KEY_LEFT:
+                    *char_itr = '\\'; char_itr++;
+                    *char_itr = 'l'; char_itr++;
+                    break;
+               case KEY_RIGHT:
+                    *char_itr = '\\'; char_itr++;
+                    *char_itr = 'i'; char_itr++; // NOTE: not happy with 'i'
                     break;
                case '\\':
                     *char_itr = '\\'; char_itr++;
@@ -2230,10 +2250,23 @@ int* vim_char_string_to_command_string(const char* char_str)
                case 't':
                     *int_itr = KEY_TAB;
                     break;
+               case 'u':
+                    *int_itr = KEY_UP;
+                    break;
+               case 'd':
+                    *int_itr = KEY_DOWN;
+                    break;
+               case 'l':
+                    *int_itr = KEY_LEFT;
+                    break;
+               case 'i':
+                    *int_itr = KEY_RIGHT;
+                    break;
                case '\\':
                     *int_itr = '\\';
                     break;
                }
+
                char_itr++;
                int_itr++;
           }else{

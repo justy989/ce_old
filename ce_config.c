@@ -1306,6 +1306,10 @@ void update_macro_list_buffer(ConfigState_t* config_state)
      ce_append_line(&config_state->macro_list_buffer, "+ \\e -> KEY_ESCAPE");
      ce_append_line(&config_state->macro_list_buffer, "+ \\r -> KEY_ENTER");
      ce_append_line(&config_state->macro_list_buffer, "+ \\t -> KEY_TAB");
+     ce_append_line(&config_state->macro_list_buffer, "+ \\u -> KEY_UP");
+     ce_append_line(&config_state->macro_list_buffer, "+ \\d -> KEY_DOWN");
+     ce_append_line(&config_state->macro_list_buffer, "+ \\l -> KEY_LEFT");
+     ce_append_line(&config_state->macro_list_buffer, "+ \\i -> KEY_RIGHT");
      ce_append_line(&config_state->macro_list_buffer, "+ \\\\ -> \\"); // HAHAHAHAHA
 
      config_state->macro_list_buffer.modified = false;
@@ -2066,6 +2070,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     }
 
                     handled_key = true;
+                    key = 0;
                }
           } break;
           case '"':
@@ -2088,6 +2093,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     }
 
                     handled_key = true;
+                    key = 0;
                }
                break;
           case 'y':
@@ -2110,6 +2116,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     }
 
                     handled_key = true;
+                    key = 0;
                }
                break;
           case 'Z':
@@ -2139,6 +2146,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     }
 
                     handled_key = true;
+                    key = 0;
                }
                break;
 #if 0 // useful for debugging commit history
@@ -2173,6 +2181,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     }
 
                     handled_key = true;
+                    key = 0;
                }
           } break;
           }

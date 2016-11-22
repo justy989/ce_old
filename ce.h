@@ -92,12 +92,6 @@ typedef enum {
      HLT_ENTIRE_LINE,
 }HighlightLineType_t;
 
-#define CE_CHECK_PTR_ARG(arg)                                                 \
-     if(!arg){                                                                \
-          ce_message("%s() received NULL argument %s\n", __FUNCTION__, #arg); \
-          return false;                                                       \
-     }
-
 #define CE_MAX(a,b)\
      ({ __typeof__ (a) _a = (a); \
         __typeof__ (b) _b = (b); \

@@ -317,7 +317,7 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                          ce_keys_push(&vim_state->command_head, key);
                     }
                }
-           } break;
+          } break;
           case KEY_TAB:
           {
                if(auto_completing(auto_complete)){

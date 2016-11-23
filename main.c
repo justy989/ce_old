@@ -2,35 +2,31 @@
 TODOS:
 
 BIG:
--unicode support
--network editing
--autocomplete for: code, shell commands, etc.
--parse c to do real syntax highlighting/autocomplete?
--tail file
--support python and other mode syntax highlighting so I don't go insane at work
--async file saving/loading
--async autocomplete building
--incremental replace
--regex search/replace
--support tabs in addition to spaces
+ -unicode support
+ -network editing
+ -autocomplete for: code, shell commands, etc.
+ -parse c to do real syntax highlighting/autocomplete?
+ -tail file
+ -support python and other mode syntax highlighting so I don't go insane at work
+ -async file saving/loading
+ -async autocomplete building
+ -incremental replace (although already doable with 'n.')
+ -regex search/replace
+ -support tabs in addition to spaces
 
 LITTLE:
--r<enter>
--when re-opening a file, go to the cursor position you exited on
--do searching inside macro
--step through macro one change at a time
--separate dot for input buffer
--valgrind run clean
--'*' and '#' should be 'words' with boundaries not literal strings that can match anything
--matching pairs is still wrong when going CE_UP over multiple lines in some instances
--when there are 3 lines in a file and you do 'dj', you still have 2 lines...
--puting // inside quotes causing incorrect syntax highlighting
--user code can infinite loop if you call ce_advance_cursor(buffer, &a, 1) and rely on
- ce_points_equal(a, b) being false when b is at the end of a line.
--make char codes for arrow keys (like how backspace is '\b' and return is '\r'), so they can work in macros
--vim's 'ci}' and 'di}' behave differently in a nice way, emulate that
--handle case where filename doesn't fit in view status line
-
+ -r<enter>
+ -when re-opening a file, go to the cursor position you exited on
+ -do searching inside macro
+ -step through macro one change at a time
+ -separate dot for input buffer
+ -valgrind run clean
+ -'*' and '#' should be 'words' with boundaries not literal strings that can match anything
+ -when there are 3 lines in a file and you do 'dj', you still have 2 lines...
+ -user code can infinite loop if you call ce_advance_cursor(buffer, &a, 1) and rely on
+  ce_points_equal(a, b) being false when b is at the end of a line.
+ -vim's 'ci}' and 'di}' behave differently in a nice way, emulate that
+ -handle case where filename doesn't fit in view status line
 */
 
 #include <assert.h>

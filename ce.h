@@ -358,7 +358,7 @@ int64_t ce_is_c_keyword     (const char* line, int64_t start_offset);
 int64_t ce_is_c_contrl      (const char* line, int64_t start_offset);
 int64_t ce_is_preprocessor  (const char* line, int64_t start_offset);
 int64_t ce_is_c_typename    (const char* line, int64_t start_offset);
-CommentType_t ce_is_comment (const char* line, int64_t start_offset);
+CommentType_t ce_is_comment (const char* line, int64_t start_offset, bool inside_string);
 void ce_is_string_literal   (const char* line, int64_t start_offset, int64_t line_len, bool* inside_string, char* last_quote_char);
 int64_t ce_is_caps_var      (const char* line, int64_t start_offset);
 

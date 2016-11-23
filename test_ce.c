@@ -1421,10 +1421,10 @@ TEST(sanity_is_comment)
      const char* begin_multiline_comment_line = "     /* ";
      const char* end_multiline_comment_line = "    */ ";
 
-     EXPECT(ce_is_comment(non_comment_line, 0) == CT_NONE);
-     EXPECT(ce_is_comment(comment_line, 5) == CT_SINGLE_LINE);
-     EXPECT(ce_is_comment(begin_multiline_comment_line, 5) == CT_BEGIN_MULTILINE);
-     EXPECT(ce_is_comment(end_multiline_comment_line, 5) == CT_END_MULTILINE);
+     EXPECT(ce_is_comment(non_comment_line, 0, false) == CT_NONE);
+     EXPECT(ce_is_comment(comment_line, 5, false) == CT_SINGLE_LINE);
+     EXPECT(ce_is_comment(begin_multiline_comment_line, 5, false) == CT_BEGIN_MULTILINE);
+     EXPECT(ce_is_comment(end_multiline_comment_line, 5, false) == CT_END_MULTILINE);
 }
 
 TEST(sanity_is_string_literal)

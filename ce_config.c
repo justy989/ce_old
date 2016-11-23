@@ -1530,7 +1530,7 @@ void* run_shell_commands(void* user_data)
 
           // append the return code
           shell_command_data.shell_command_input_fd = 0;
-          snprintf(tmp, BUFSIZ, "// exitted with code: %d", exit_code);
+          snprintf(tmp, BUFSIZ, "// exited with code: %d", exit_code);
 
           pthread_mutex_lock(&shell_buffer_lock);
           ce_append_line_readonly(shell_command_data.output_buffer, tmp);

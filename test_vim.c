@@ -2254,7 +2254,8 @@ int main()
      sa.sa_handler = segv_handler;
      sigemptyset(&sa.sa_mask);
      if(sigaction(SIGSEGV, &sa, NULL) == -1){
-          // TODO: handle error
+          printf("failed to setup signal handler: '%s'\n", strerror(errno));
+          return -1;
      }
 
      RUN_TESTS();

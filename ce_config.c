@@ -687,8 +687,6 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      init_pair(S_CONSTANT, COLOR_MAGENTA, COLOR_BACKGROUND);
      init_pair(S_PREPROCESSOR, COLOR_BRIGHT_MAGENTA, COLOR_BACKGROUND);
      init_pair(S_FILEPATH, COLOR_BLUE, COLOR_BACKGROUND);
-     init_pair(S_DIFF_ADD, COLOR_GREEN, COLOR_BACKGROUND);
-     init_pair(S_DIFF_REMOVE, COLOR_RED, COLOR_BACKGROUND);
 
      init_pair(S_NORMAL_HIGHLIGHTED, COLOR_FOREGROUND, COLOR_WHITE);
      init_pair(S_KEYWORD_HIGHLIGHTED, COLOR_BLUE, COLOR_WHITE);
@@ -699,8 +697,6 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      init_pair(S_CONSTANT_HIGHLIGHTED, COLOR_MAGENTA, COLOR_WHITE);
      init_pair(S_PREPROCESSOR_HIGHLIGHTED, COLOR_BRIGHT_MAGENTA, COLOR_WHITE);
      init_pair(S_FILEPATH_HIGHLIGHTED, COLOR_BLUE, COLOR_WHITE);
-     init_pair(S_DIFF_ADD_HIGHLIGHTED, COLOR_GREEN, COLOR_WHITE);
-     init_pair(S_DIFF_REMOVE_HIGHLIGHTED, COLOR_RED, COLOR_WHITE);
 
      init_pair(S_NORMAL_CURRENT_LINE, COLOR_FOREGROUND, COLOR_BRIGHT_BLACK);
      init_pair(S_KEYWORD_CURRENT_LINE, COLOR_BLUE, COLOR_BRIGHT_BLACK);
@@ -711,8 +707,36 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      init_pair(S_CONSTANT_CURRENT_LINE, COLOR_MAGENTA, COLOR_BRIGHT_BLACK);
      init_pair(S_PREPROCESSOR_CURRENT_LINE, COLOR_BRIGHT_MAGENTA, COLOR_BRIGHT_BLACK);
      init_pair(S_FILEPATH_CURRENT_LINE, COLOR_BLUE, COLOR_BRIGHT_BLACK);
-     init_pair(S_DIFF_ADD_CURRENT_LINE, COLOR_GREEN, COLOR_BRIGHT_BLACK);
-     init_pair(S_DIFF_REMOVE_CURRENT_LINE, COLOR_RED, COLOR_BRIGHT_BLACK);
+
+     init_pair(S_NORMAL_DIFF_ADD, COLOR_FOREGROUND, COLOR_BRIGHT_GREEN);
+     init_pair(S_KEYWORD_DIFF_ADD, COLOR_BLUE, COLOR_BRIGHT_GREEN);
+     init_pair(S_TYPE_DIFF_ADD, COLOR_BRIGHT_BLUE, COLOR_BRIGHT_GREEN);
+     init_pair(S_CONTROL_DIFF_ADD, COLOR_YELLOW, COLOR_BRIGHT_GREEN);
+     init_pair(S_COMMENT_DIFF_ADD, COLOR_GREEN, COLOR_BRIGHT_GREEN);
+     init_pair(S_STRING_DIFF_ADD, COLOR_RED, COLOR_BRIGHT_GREEN);
+     init_pair(S_CONSTANT_DIFF_ADD, COLOR_MAGENTA, COLOR_BRIGHT_GREEN);
+     init_pair(S_PREPROCESSOR_DIFF_ADD, COLOR_BRIGHT_MAGENTA, COLOR_BRIGHT_GREEN);
+     init_pair(S_FILEPATH_DIFF_ADD, COLOR_BLUE, COLOR_BRIGHT_GREEN);
+
+     init_pair(S_NORMAL_DIFF_REMOVE, COLOR_FOREGROUND, COLOR_BRIGHT_RED);
+     init_pair(S_KEYWORD_DIFF_REMOVE, COLOR_BLUE, COLOR_BRIGHT_RED);
+     init_pair(S_TYPE_DIFF_REMOVE, COLOR_BRIGHT_BLUE, COLOR_BRIGHT_RED);
+     init_pair(S_CONTROL_DIFF_REMOVE, COLOR_YELLOW, COLOR_BRIGHT_RED);
+     init_pair(S_COMMENT_DIFF_REMOVE, COLOR_GREEN, COLOR_BRIGHT_RED);
+     init_pair(S_STRING_DIFF_REMOVE, COLOR_RED, COLOR_BRIGHT_RED);
+     init_pair(S_CONSTANT_DIFF_REMOVE, COLOR_MAGENTA, COLOR_BRIGHT_RED);
+     init_pair(S_PREPROCESSOR_DIFF_REMOVE, COLOR_BRIGHT_MAGENTA, COLOR_BRIGHT_RED);
+     init_pair(S_FILEPATH_DIFF_REMOVE, COLOR_BLUE, COLOR_BRIGHT_RED);
+
+     init_pair(S_NORMAL_DIFF_HEADER, COLOR_FOREGROUND, COLOR_BLACK);
+     init_pair(S_KEYWORD_DIFF_HEADER, COLOR_BLUE, COLOR_BLACK);
+     init_pair(S_TYPE_DIFF_HEADER, COLOR_BRIGHT_BLUE, COLOR_BLACK);
+     init_pair(S_CONTROL_DIFF_HEADER, COLOR_YELLOW, COLOR_BLACK);
+     init_pair(S_COMMENT_DIFF_HEADER, COLOR_GREEN, COLOR_BLACK);
+     init_pair(S_STRING_DIFF_HEADER, COLOR_RED, COLOR_BLACK);
+     init_pair(S_CONSTANT_DIFF_HEADER, COLOR_MAGENTA, COLOR_BLACK);
+     init_pair(S_PREPROCESSOR_DIFF_HEADER, COLOR_BRIGHT_MAGENTA, COLOR_BLACK);
+     init_pair(S_FILEPATH_DIFF_HEADER, COLOR_BLUE, COLOR_BLACK);
 
      init_pair(S_LINE_NUMBERS, COLOR_WHITE, COLOR_BACKGROUND);
 
@@ -864,73 +888,112 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
      assert(line >= 0);
      assert(line < buffer->line_count);
 
-     char file_tmp[BUFSIZ];
-     char line_number_tmp[BUFSIZ];
-     char* file_end = strpbrk(buffer->lines[line], ": ");
-     if(!file_end) return false;
-     int64_t filename_len = file_end - buffer->lines[line];
-     strncpy(file_tmp, buffer->lines[line], filename_len);
-     file_tmp[filename_len] = 0;
-     if(access(file_tmp, F_OK) == -1) return false; // file does not exist
-     char* line_number_begin_delim = NULL;
-     char* line_number_end_delim = NULL;
-     if(*file_end == ' '){
-          // format: 'filepath search_symbol line '
-          char* second_space = strchr(file_end + 1, ' ');
-          if(!second_space) return false;
-          line_number_begin_delim = second_space;
-          line_number_end_delim = strchr(second_space + 1, ' ');
-          if(!line_number_end_delim) return false;
-     }else{
-          // format: 'filepath:line:column:'
-          line_number_begin_delim = file_end;
-          char* second_colon = strchr(line_number_begin_delim + 1, ':');
-          if(!second_colon) return false;
-          line_number_end_delim = second_colon;
-     }
+     char filename[BUFSIZ];
+     char line_number[BUFSIZ];
+     char column_number[BUFSIZ];
 
-     int64_t line_number_len = line_number_end_delim - (line_number_begin_delim + 1);
-     strncpy(line_number_tmp, line_number_begin_delim + 1, line_number_len);
-     line_number_tmp[line_number_len] = 0;
-
-     bool all_digits = true;
-     for(char* c = line_number_tmp; *c; c++){
-          if(!isdigit(*c)){
-               all_digits = false;
-               break;
+     // handle git diff format
+     if(buffer->lines[line][0] == '@' && buffer->lines[line][1] == '@'){
+          // search backward for a filename
+          int64_t file_line = line - 1;
+          for(;file_line >= 0; --file_line){
+               if(buffer->lines[file_line][0] == '-' && buffer->lines[file_line][1] == '-' && buffer->lines[file_line][2] == '-'){
+                    break;
+               }else if(buffer->lines[file_line][0] == '+' && buffer->lines[file_line][1] == '+' && buffer->lines[file_line][2] == '+'){
+                    break;
+               }
           }
-     }
 
-     if(!all_digits) return false;
+          if(file_line < 0) return false;
 
-     Buffer_t* new_buffer = open_file_buffer(head, file_tmp);
-     if(new_buffer){
-          view->buffer = new_buffer;
-          Point_t dst = {0, atoi(line_number_tmp) - 1}; // line numbers are 1 indexed
-          ce_set_cursor(new_buffer, &view->cursor, dst);
+          // --- a/ce.c
+          // +++ b/ce.c
+          char* first_slash = strchr(buffer->lines[file_line], '/');
+          if(!first_slash) return false;
+          strncpy(filename, first_slash + 1, BUFSIZ);
+          if(access(filename, F_OK) == -1) return false; // file does not exist
 
-          // check for optional column number
+          // @@ -1633,9 +1636,26 @@ static int set_color(Syntax_t syntax, HighlightType_t highlight_type)
+          char* plus = strchr(buffer->lines[line], '+');
+          if(!plus) return false;
+          char* comma = strchr(plus, ',');
+          if(!comma) return false;
+
+          int64_t line_number_len = comma - (plus + 1);
+          assert(line_number_len < BUFSIZ);
+          strncpy(line_number, plus + 1, line_number_len);
+          line_number[line_number_len] = 0;
+     }else{
+          // handle grep and cscope formats
+          char* file_end = strpbrk(buffer->lines[line], ": ");
+          if(!file_end) return false;
+          int64_t filename_len = file_end - buffer->lines[line];
+          strncpy(filename, buffer->lines[line], filename_len);
+          filename[filename_len] = 0;
+          if(access(filename, F_OK) == -1) return false; // file does not exist
+
+          char* line_number_begin_delim = NULL;
+          char* line_number_end_delim = NULL;
+          if(*file_end == ' '){
+               // format: 'filepath search_symbol line '
+               char* second_space = strchr(file_end + 1, ' ');
+               if(!second_space) return false;
+               line_number_begin_delim = second_space;
+               line_number_end_delim = strchr(second_space + 1, ' ');
+               if(!line_number_end_delim) return false;
+          }else{
+               // format: 'filepath:line:column:'
+               line_number_begin_delim = file_end;
+               char* second_colon = strchr(line_number_begin_delim + 1, ':');
+               if(!second_colon) return false;
+               line_number_end_delim = second_colon;
+          }
+
+          int64_t line_number_len = line_number_end_delim - (line_number_begin_delim + 1);
+          strncpy(line_number, line_number_begin_delim + 1, line_number_len);
+          line_number[line_number_len] = 0;
+
+          bool all_digits = true;
+          for(char* c = line_number; *c; c++){
+               if(!isdigit(*c)){
+                    all_digits = false;
+                    break;
+               }
+          }
+
+          if(!all_digits) return false;
+
           char* third_colon = strchr(line_number_end_delim + 1, ':');
           if(third_colon){
                line_number_len = third_colon - (line_number_end_delim + 1);
-               strncpy(line_number_tmp, line_number_end_delim + 1, line_number_len);
-               line_number_tmp[line_number_len] = 0;
+               strncpy(column_number, line_number_end_delim + 1, line_number_len);
+               column_number[line_number_len] = 0;
 
                all_digits = true;
-               for(char* c = line_number_tmp; *c; c++){
+               for(char* c = column_number; *c; c++){
                     if(!isdigit(*c)){
                          all_digits = false;
                          break;
                     }
                }
 
-               if(all_digits){
-                    dst.x = atoi(line_number_tmp) - 1; // column numbers are 1 indexed
-                    assert(dst.x >= 0);
-                    ce_set_cursor(new_buffer, &view->cursor, dst);
-               }else{
-                    ce_move_cursor_to_soft_beginning_of_line(new_buffer, &view->cursor);
+               if(!all_digits){
+                    column_number[0] = 0;
                }
+          }
+     }
+
+     Buffer_t* new_buffer = open_file_buffer(head, filename);
+     if(new_buffer){
+          view->buffer = new_buffer;
+          Point_t dst = {0, atoi(line_number) - 1}; // line numbers are 1 indexed
+          ce_set_cursor(new_buffer, &view->cursor, dst);
+
+          // check for optional column number
+          if(column_number[0]){
+               dst.x = atoi(column_number) - 1; // column numbers are 1 indexed
+               assert(dst.x >= 0);
+               ce_set_cursor(new_buffer, &view->cursor, dst);
           }else{
                ce_move_cursor_to_soft_beginning_of_line(new_buffer, &view->cursor);
           }
@@ -1197,13 +1260,13 @@ void update_buffer_list_buffer(ConfigState_t* config_state, const BufferNode_t* 
      // build format string, OMG THIS IS SO UNREADABLE HOLY MOLY BATMAN
      char format_string[BUFSIZ];
      // build header
-     snprintf(format_string, BUFSIZ, "+ %%5s %%-%"PRId64"s %%-%"PRId64"s", max_name_len,
+     snprintf(format_string, BUFSIZ, "// %%5s %%-%"PRId64"s %%-%"PRId64"s", max_name_len,
               max_buffer_lines_digits);
      snprintf(buffer_info, BUFSIZ, format_string, "flags", "buffer name", "lines");
      ce_append_line(&config_state->buffer_list_buffer, buffer_info);
 
      // build buffer info
-     snprintf(format_string, BUFSIZ, "  %%5s %%-%"PRId64"s %%%"PRId64 PRId64, max_name_len, max_buffer_lines_digits);
+     snprintf(format_string, BUFSIZ, "   %%5s %%-%"PRId64"s %%%"PRId64 PRId64, max_name_len, max_buffer_lines_digits);
 
      itr = head;
      while(itr){
@@ -1223,7 +1286,7 @@ void update_mark_list_buffer(ConfigState_t* config_state, const Buffer_t* buffer
      config_state->mark_list_buffer.readonly = false;
      ce_clear_lines(&config_state->mark_list_buffer);
 
-     snprintf(buffer_info, BUFSIZ, "+ reg line");
+     snprintf(buffer_info, BUFSIZ, "// reg line");
      ce_append_line(&config_state->mark_list_buffer, buffer_info);
 
      int max_digits = 1;
@@ -1255,7 +1318,7 @@ void update_yank_list_buffer(ConfigState_t* config_state)
 
      const VimYankNode_t* itr = config_state->vim_state.yank_head;
      while(itr){
-          snprintf(buffer_info, BUFSIZ, "+ reg '%c'", itr->reg_char);
+          snprintf(buffer_info, BUFSIZ, "// reg '%c'", itr->reg_char);
           ce_append_line(&config_state->yank_list_buffer, buffer_info);
           ce_append_line(&config_state->yank_list_buffer, itr->text);
           itr = itr->next;
@@ -1271,7 +1334,7 @@ void update_macro_list_buffer(ConfigState_t* config_state)
      config_state->macro_list_buffer.readonly = false;
      ce_clear_lines(&config_state->macro_list_buffer);
 
-     ce_append_line(&config_state->macro_list_buffer, "+ reg actions");
+     ce_append_line(&config_state->macro_list_buffer, "// reg actions");
 
      const VimMacroNode_t* itr = config_state->vim_state.macro_head;
      while(itr){
@@ -1284,7 +1347,7 @@ void update_macro_list_buffer(ConfigState_t* config_state)
 
      if(config_state->vim_state.recording_macro){
           ce_append_line(&config_state->macro_list_buffer, "");
-          ce_append_line(&config_state->macro_list_buffer, "+ recording:");
+          ce_append_line(&config_state->macro_list_buffer, "// recording:");
 
           int* int_cmd = ce_keys_get_string(config_state->vim_state.record_macro_head);
 
@@ -1301,16 +1364,16 @@ void update_macro_list_buffer(ConfigState_t* config_state)
      }
 
      ce_append_line(&config_state->macro_list_buffer, "");
-     ce_append_line(&config_state->macro_list_buffer, "+ escape conversions");
-     ce_append_line(&config_state->macro_list_buffer, "+ \\b -> KEY_BACKSPACE");
-     ce_append_line(&config_state->macro_list_buffer, "+ \\e -> KEY_ESCAPE");
-     ce_append_line(&config_state->macro_list_buffer, "+ \\r -> KEY_ENTER");
-     ce_append_line(&config_state->macro_list_buffer, "+ \\t -> KEY_TAB");
-     ce_append_line(&config_state->macro_list_buffer, "+ \\u -> KEY_UP");
-     ce_append_line(&config_state->macro_list_buffer, "+ \\d -> KEY_DOWN");
-     ce_append_line(&config_state->macro_list_buffer, "+ \\l -> KEY_LEFT");
-     ce_append_line(&config_state->macro_list_buffer, "+ \\i -> KEY_RIGHT");
-     ce_append_line(&config_state->macro_list_buffer, "+ \\\\ -> \\"); // HAHAHAHAHA
+     ce_append_line(&config_state->macro_list_buffer, "// escape conversions");
+     ce_append_line(&config_state->macro_list_buffer, "// \\b -> KEY_BACKSPACE");
+     ce_append_line(&config_state->macro_list_buffer, "// \\e -> KEY_ESCAPE");
+     ce_append_line(&config_state->macro_list_buffer, "// \\r -> KEY_ENTER");
+     ce_append_line(&config_state->macro_list_buffer, "// \\t -> KEY_TAB");
+     ce_append_line(&config_state->macro_list_buffer, "// \\u -> KEY_UP");
+     ce_append_line(&config_state->macro_list_buffer, "// \\d -> KEY_DOWN");
+     ce_append_line(&config_state->macro_list_buffer, "// \\l -> KEY_LEFT");
+     ce_append_line(&config_state->macro_list_buffer, "// \\i -> KEY_RIGHT");
+     ce_append_line(&config_state->macro_list_buffer, "// \\\\ -> \\"); // HAHAHAHAHA
 
      config_state->macro_list_buffer.modified = false;
      config_state->macro_list_buffer.readonly = true;
@@ -1416,7 +1479,7 @@ void* run_shell_commands(void* user_data)
           shell_command_data.shell_command_output_fd = out_fd;
 
           // append the command to the buffer
-          snprintf(tmp, BUFSIZ, "+ %s", current_command);
+          snprintf(tmp, BUFSIZ, "// $ %s", current_command);
 
           pthread_mutex_lock(&shell_buffer_lock);
           ce_append_line_readonly(shell_command_data.output_buffer, tmp);
@@ -1467,7 +1530,7 @@ void* run_shell_commands(void* user_data)
 
           // append the return code
           shell_command_data.shell_command_input_fd = 0;
-          snprintf(tmp, BUFSIZ, "+ exit %d", exit_code);
+          snprintf(tmp, BUFSIZ, "// exitted with code: %d", exit_code);
 
           pthread_mutex_lock(&shell_buffer_lock);
           ce_append_line_readonly(shell_command_data.output_buffer, tmp);

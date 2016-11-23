@@ -879,30 +879,35 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
      case '%':
           built_action.change.type = VCT_MOTION;
           built_action.motion.type = VMT_MATCHING_PAIR;
+          built_action.end_in_vim_mode = vim_mode;
           get_motion = false;
           break;
      case '*':
           built_action.change.type = VCT_MOTION;
           built_action.motion.type = VMT_SEARCH_WORD_UNDER_CURSOR;
           built_action.motion.search_direction = CE_DOWN;
+          built_action.end_in_vim_mode = vim_mode;
           get_motion = false;
           break;
      case '#':
           built_action.change.type = VCT_MOTION;
           built_action.motion.type = VMT_SEARCH_WORD_UNDER_CURSOR;
           built_action.motion.search_direction = CE_UP;
+          built_action.end_in_vim_mode = vim_mode;
           get_motion = false;
           break;
      case 'n':
           built_action.change.type = VCT_MOTION;
           built_action.motion.type = VMT_SEARCH;
           built_action.motion.search_direction = CE_DOWN;
+          built_action.end_in_vim_mode = vim_mode;
           get_motion = false;
           break;
      case 'N':
           built_action.change.type = VCT_MOTION;
           built_action.motion.type = VMT_SEARCH;
           built_action.motion.search_direction = CE_UP;
+          built_action.end_in_vim_mode = vim_mode;
           get_motion = false;
           break;
      case 'm':

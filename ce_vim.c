@@ -1573,7 +1573,6 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                          assert(yank->mode == YANK_NORMAL);
 
                          if(vim_state->search_direction == CE_UP){
-                              ce_message("who ha");
                               ce_move_cursor_to_beginning_of_word(buffer, &action_range->end, true);
                          }
 

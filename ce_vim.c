@@ -1576,8 +1576,17 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                               ce_move_cursor_to_beginning_of_word(buffer, &action_range->end, true);
                          }
 
+                         regex_t regex;
+                         int rc = regcomp(&regex, yank->text, REG_EXTENDED);
+                         if(rc != 0){
+                              char error_buffer[BUFSIZ];
+                              regerror(rc, &regex, error_buffer, BUFSIZ);
+                              ce_message("regcomp() failed: '%s'", error_buffer);
+                              return false;
+                         }
+
                          Point_t match;
-                         if(ce_find_string(buffer, action_range->end, yank->text, &match, vim_state->search_direction)){
+                         if(ce_find_regex(buffer, action_range->end, &regex, &match, vim_state->search_direction)){
                               ce_set_cursor(buffer, &action_range->end, match);
                          }else{
                               action_range->end = *cursor;

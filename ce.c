@@ -879,6 +879,84 @@ bool ce_find_string(const Buffer_t* buffer, Point_t location, const char* search
      return false;
 }
 
+bool ce_find_regex(const Buffer_t* buffer, Point_t location, const regex_t* regex, Point_t* match, Direction_t direction)
+{
+     if(!ce_point_on_buffer(buffer, location)) return false;
+
+     const size_t match_count = 1;
+     regmatch_t matches[match_count];
+
+     if(direction == CE_DOWN){
+          location.x++;
+
+          while(location.y < buffer->line_count){
+               int rc = regexec(regex, buffer->lines[location.y] + location.x, match_count, matches, 0);
+
+               // did we find a match?
+               if(rc == 0){
+                    *match = location;
+                    match->x += matches[0].rm_so;
+                    return true;
+               }
+
+               // keep going on 'no match' error, but error out if we hit some other error
+               if(rc != REG_NOMATCH){
+                    char error_buffer[BUFSIZ];
+                    regerror(rc, regex, error_buffer, BUFSIZ);
+                    ce_message("regexec() failed: '%s'", error_buffer);
+                    return false;
+               }
+
+               location.y++;
+               location.x = 0;
+          }
+     }else{
+          Point_t start_point = location;
+
+          // loop over each line, backwards
+          while(true){
+
+               // execute more and more of the string until you execute the whole line
+               while(location.x >= 0){
+                    // dupe the line up to the current index
+                    char* search_str = strdup(buffer->lines[location.y] + location.x);
+
+                    // truncate search_str on the current line so we don't find a forward match
+                    if(start_point.y == location.y) search_str[(start_point.x - location.x)] = 0;
+
+                    int rc = regexec(regex, search_str, match_count, matches, 0);
+                    free(search_str);
+
+                    // did we find a match?
+                    if(rc == 0){
+                         *match = location;
+                         match->x += matches[0].rm_so;
+                         return true;
+                    }
+
+                    // keep going on 'no match' error, but error out if we hit some other error
+                    if(rc != REG_NOMATCH){
+                         char error_buffer[BUFSIZ];
+                         regerror(rc, regex, error_buffer, BUFSIZ);
+                         ce_message("regexec() failed: '%s'", error_buffer);
+                         return false;
+                    }
+
+                    location.x--;
+               }
+
+               location.y--;
+               if(location.y >= 0){
+                    location.x = ce_last_index(buffer->lines[location.y]);
+               }else{
+                    break;
+               }
+          }
+     }
+
+     return false;
+}
+
 void ce_move_cursor_to_beginning_of_line(const Buffer_t* buffer __attribute__((unused)), Point_t* cursor)
 {
      assert(ce_point_on_buffer(buffer, *cursor));

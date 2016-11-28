@@ -2892,22 +2892,32 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                config_state->tab_current->view_input_save->cursor = config_state->vim_state.start_search;
                pthread_mutex_unlock(&view_input_save_lock);
           }else{
-               const char* search_str = config_state->view_input->buffer->lines[0];
-               Point_t match = {};
-               if(search_str[0] &&
-                  ce_find_string(config_state->tab_current->view_input_save->buffer,
-                                 config_state->vim_state.start_search, search_str, &match,
-                                 config_state->vim_state.search_direction)){
-                    pthread_mutex_lock(&view_input_save_lock);
-                    ce_set_cursor(config_state->tab_current->view_input_save->buffer,
-                                  &config_state->tab_current->view_input_save->cursor, match);
-                    pthread_mutex_unlock(&view_input_save_lock);
-                    center_view(config_state->tab_current->view_input_save);
+               regex_t regex;
+               int rc = regcomp(&regex, config_state->view_input->buffer->lines[0], REG_EXTENDED);
+               if(rc == 0){
+                    Point_t match = {};
+                    if(config_state->view_input->buffer->lines[0][0] &&
+                       ce_find_regex(config_state->tab_current->view_input_save->buffer,
+                                     config_state->vim_state.start_search, &regex, &match,
+                                     config_state->vim_state.search_direction)){
+                         pthread_mutex_lock(&view_input_save_lock);
+                         ce_set_cursor(config_state->tab_current->view_input_save->buffer,
+                                       &config_state->tab_current->view_input_save->cursor, match);
+                         pthread_mutex_unlock(&view_input_save_lock);
+                         center_view(config_state->tab_current->view_input_save);
+                    }else{
+                         pthread_mutex_lock(&view_input_save_lock);
+                         config_state->tab_current->view_input_save->cursor = config_state->vim_state.start_search;
+                         pthread_mutex_unlock(&view_input_save_lock);
+                         center_view(config_state->tab_current->view_input_save);
+                    }
                }else{
-                    pthread_mutex_lock(&view_input_save_lock);
-                    config_state->tab_current->view_input_save->cursor = config_state->vim_state.start_search;
-                    pthread_mutex_unlock(&view_input_save_lock);
-                    center_view(config_state->tab_current->view_input_save);
+#if DEBUG
+                    // NOTE: this might be too noisy in practice
+                    char error_buffer[BUFSIZ];
+                    regerror(rc, &regex, error_buffer, BUFSIZ);
+                    ce_message("regcomp() failed: '%s'", error_buffer);
+#endif
                }
           }
      }

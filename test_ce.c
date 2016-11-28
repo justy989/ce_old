@@ -1066,6 +1066,71 @@ TEST(find_match_next_line)
      ce_free_buffer(&buffer);
 }
 
+TEST(find_match_prev_line)
+{
+     Buffer_t buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE SO");
+     buffer.lines[2] = strdup("AWESOME");
+
+     Point_t point = {2, 1};
+     Point_t delta = {};
+     ce_find_string(&buffer, point, "COS", &delta, CE_UP);
+
+     EXPECT(delta.x == 2);
+     EXPECT(delta.y == 0);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(find_regex_next_line)
+{
+     Buffer_t buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE SO");
+     buffer.lines[2] = strdup("AWESOME");
+
+     regex_t regex;
+     int rc = regcomp(&regex, "SO", 0);
+     ASSERT(rc == 0);
+
+     Point_t point = {2, 0};
+     Point_t delta = {};
+     ce_find_regex(&buffer, point, &regex, &delta, CE_DOWN);
+
+     EXPECT(delta.x == 4);
+     EXPECT(delta.y == 1);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(find_regex_prev_line)
+{
+     Buffer_t buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE SO");
+     buffer.lines[2] = strdup("AWESOME");
+
+     regex_t regex;
+     int rc = regcomp(&regex, "COS", 0);
+     ASSERT(rc == 0);
+
+     Point_t point = {2, 1};
+     Point_t delta = {};
+     ce_find_regex(&buffer, point, &regex, &delta, CE_UP);
+
+     EXPECT(delta.x == 2);
+     EXPECT(delta.y == 0);
+
+     ce_free_buffer(&buffer);
+}
+
 TEST(clamp_cursor_horizontal)
 {
      Buffer_t buffer = {};

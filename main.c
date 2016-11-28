@@ -11,7 +11,7 @@ BIG:
  -async file saving/loading
  -async autocomplete building
  -incremental replace (although already doable with 'n.')
- -regex search/replace
+ -regex search/replace/highlighting
  -support tabs in addition to spaces
 
 LITTLE:
@@ -27,6 +27,7 @@ LITTLE:
   ce_points_equal(a, b) being false when b is at the end of a line.
  -vim's 'ci}' and 'di}' behave differently in a nice way, emulate that
  -handle case where filename doesn't fit in view status line
+ -auto complete shell commands then files
 */
 
 #include <assert.h>

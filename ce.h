@@ -313,7 +313,7 @@ int64_t ce_get_indentation_for_next_line (const Buffer_t* buffer, Point_t locati
 
 // Find Point_t Functions
 bool ce_find_string              (const Buffer_t* buffer, Point_t location, const char* search_str, Point_t* match, Direction_t direction);
-bool ce_find_regex               (const Buffer_t* buffer, Point_t location, const regex_t* regex, Point_t* match, Direction_t direction);
+bool ce_find_regex               (const Buffer_t* buffer, Point_t location, const regex_t* regex, Point_t* match, int64_t* match_len, Direction_t direction);
 bool ce_get_word_at_location     (const Buffer_t* buffer, Point_t location, Point_t* word_start, Point_t* word_end); // TODO: Is location necessary?
 bool ce_get_homogenous_adjacents (const Buffer_t* buffer, Point_t* start, Point_t* end, int (*is_homogenous)(int));
 

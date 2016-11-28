@@ -1100,7 +1100,8 @@ TEST(find_regex_next_line)
 
      Point_t point = {2, 0};
      Point_t delta = {};
-     ce_find_regex(&buffer, point, &regex, &delta, CE_DOWN);
+     int64_t match_len = 0;
+     ce_find_regex(&buffer, point, &regex, &delta, &match_len, CE_DOWN);
 
      EXPECT(delta.x == 4);
      EXPECT(delta.y == 1);
@@ -1123,7 +1124,8 @@ TEST(find_regex_prev_line)
 
      Point_t point = {2, 1};
      Point_t delta = {};
-     ce_find_regex(&buffer, point, &regex, &delta, CE_UP);
+     int64_t match_len = 0;
+     ce_find_regex(&buffer, point, &regex, &delta, &match_len, CE_UP);
 
      EXPECT(delta.x == 2);
      EXPECT(delta.y == 0);

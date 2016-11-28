@@ -1814,15 +1814,19 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                int rc = regcomp(&regex, search_str, REG_EXTENDED);
                if(rc == 0){
                     Point_t match = {};
+                    int64_t match_len = 0;
                     int64_t replace_count = 0;
-                    while(ce_find_regex(buffer, begin, &regex, &match, CE_DOWN)){
+                    while(ce_find_regex(buffer, begin, &regex, &match, &match_len, CE_DOWN)){
                          if(ce_point_after(match, end)) break;
-                         if(!ce_remove_string(buffer, match, search_len)) break;
+                         Point_t end_match = match;
+                         ce_advance_cursor(buffer, &end_match, match_len - 1);
+                         char* searched_dup = ce_dupe_string(buffer, match, end_match);
+                         if(!ce_remove_string(buffer, match, match_len)) break;
                          if(replace_len){
                               if(!ce_insert_string(buffer, match, replace_str)) break;
                          }
                          ce_commit_change_string(&buffer_state->commit_tail, match, match, match, strdup(replace_str),
-                                                 strdup(search_str), BCC_KEEP_GOING);
+                                                 searched_dup, BCC_KEEP_GOING);
                          begin = match;
                          replace_count++;
                     }
@@ -2904,10 +2908,11 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                int rc = regcomp(&regex, config_state->view_input->buffer->lines[0], REG_EXTENDED);
                if(rc == 0){
                     Point_t match = {};
+                    int64_t match_len = 0;
                     if(config_state->view_input->buffer->lines[0][0] &&
                        ce_find_regex(config_state->tab_current->view_input_save->buffer,
                                      config_state->vim_state.start_search, &regex, &match,
-                                     config_state->vim_state.search_direction)){
+                                     &match_len, config_state->vim_state.search_direction)){
                          pthread_mutex_lock(&view_input_save_lock);
                          ce_set_cursor(config_state->tab_current->view_input_save->buffer,
                                        &config_state->tab_current->view_input_save->cursor, match);

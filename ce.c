@@ -879,7 +879,7 @@ bool ce_find_string(const Buffer_t* buffer, Point_t location, const char* search
      return false;
 }
 
-bool ce_find_regex(const Buffer_t* buffer, Point_t location, const regex_t* regex, Point_t* match, Direction_t direction)
+bool ce_find_regex(const Buffer_t* buffer, Point_t location, const regex_t* regex, Point_t* match, int64_t* match_len, Direction_t direction)
 {
      if(!ce_point_on_buffer(buffer, location)) return false;
 
@@ -894,6 +894,7 @@ bool ce_find_regex(const Buffer_t* buffer, Point_t location, const regex_t* rege
                if(rc == 0){
                     *match = location;
                     match->x += matches[0].rm_so;
+                    *match_len = matches[0].rm_eo - matches[0].rm_so;
                     return true;
                }
 
@@ -929,6 +930,7 @@ bool ce_find_regex(const Buffer_t* buffer, Point_t location, const regex_t* rege
                     if(rc == 0){
                          *match = location;
                          match->x += matches[0].rm_so;
+                         *match_len = matches[0].rm_eo - matches[0].rm_so;
                          return true;
                     }
 

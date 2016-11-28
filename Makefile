@@ -12,29 +12,36 @@ cov: coverage
 coverage: CFLAGS += -fprofile-arcs -ftest-coverage
 coverage: clean_test test
 	llvm-cov gcov ce.test.o
+	llvm-cov gcov ce_vim.test.o
 
 test: LINK += -rdynamic
-test: clean_test test.c ce.test.o
-	$(CC) $(CFLAGS) $(filter-out $<,$^) -o $@ $(LINK)
-	./test 2> test_output.txt || (cat test_output.txt && false)
+test: clean_test test_ce test_vim
+
+test_ce: test_ce.c ce.test.o
+	$(CC) $(CFLAGS) $^ -o $@ $(LINK)
+	./$@ 2> test_ce_output.txt || (cat test_ce_output.txt && false)
+
+test_vim: test_vim.c ce.test.o ce_vim.test.o ce_auto_complete.test.o
+	$(CC) $(CFLAGS) $^ -o $@ $(LINK)
+	./$@ 2> test_vim_output.txt || (cat test_vim_output.txt && false)
 
 ce: main.c ce.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LINK) -ldl -Wl,-rpath,.
 
-ce%o: ce.c
+%.o: %.c
 	$(CC) -c -fpic $(CFLAGS) $^ -o $@
 
-ce_config.o: ce_config.c
+%.test.o: %.c
 	$(CC) -c -fpic $(CFLAGS) $^ -o $@
 
-ce_config.so: ce_config.o ce.o
+ce_config.so: ce_config.o ce.o ce_vim.o ce_auto_complete.o
 	$(CC) -shared $(CFLAGS) $^ -o $@ $(LINK)
 
 clean: clean_config clean_test
-	rm -rf ce messages buffers shell_output ce.o valgrind_results.txt *.dSYM
+	rm -rf ce *.o valgrind_results.txt *.dSYM
 
 clean_config:
-	rm -f ce_config.o ce_config.so ce.o
+	rm -f ce_config.so
 
 clean_test:
-	rm -f test ce.test.o *.gcda *.gcno *.gcov test_output.txt default.profraw
+	rm -f test_ce test_vim ce.test.o ce_vim.test.o ce_auto_complete.test.o *.gcda *.gcno *.gcov test_ce_output.txt test_vim_output.txt default.profraw

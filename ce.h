@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <ncurses.h>
 #include <errno.h>
+#include <regex.h>
 
 #define CE_CONFIG "ce_config.so"
 #define MESSAGE_FILE "messages"
@@ -37,8 +38,6 @@ typedef enum {
      S_CONSTANT,
      S_PREPROCESSOR,
      S_FILEPATH,
-     S_DIFF_ADD,
-     S_DIFF_REMOVE,
 
      S_NORMAL_HIGHLIGHTED,
      S_KEYWORD_HIGHLIGHTED,
@@ -49,8 +48,6 @@ typedef enum {
      S_CONSTANT_HIGHLIGHTED,
      S_PREPROCESSOR_HIGHLIGHTED,
      S_FILEPATH_HIGHLIGHTED,
-     S_DIFF_ADD_HIGHLIGHTED,
-     S_DIFF_REMOVE_HIGHLIGHTED,
 
      S_NORMAL_CURRENT_LINE,
      S_KEYWORD_CURRENT_LINE,
@@ -61,8 +58,36 @@ typedef enum {
      S_CONSTANT_CURRENT_LINE,
      S_PREPROCESSOR_CURRENT_LINE,
      S_FILEPATH_CURRENT_LINE,
-     S_DIFF_ADD_CURRENT_LINE,
-     S_DIFF_REMOVE_CURRENT_LINE,
+
+     S_NORMAL_DIFF_ADD,
+     S_KEYWORD_DIFF_ADD,
+     S_TYPE_DIFF_ADD,
+     S_CONTROL_DIFF_ADD,
+     S_COMMENT_DIFF_ADD,
+     S_STRING_DIFF_ADD,
+     S_CONSTANT_DIFF_ADD,
+     S_PREPROCESSOR_DIFF_ADD,
+     S_FILEPATH_DIFF_ADD,
+
+     S_NORMAL_DIFF_REMOVE,
+     S_KEYWORD_DIFF_REMOVE,
+     S_TYPE_DIFF_REMOVE,
+     S_CONTROL_DIFF_REMOVE,
+     S_COMMENT_DIFF_REMOVE,
+     S_STRING_DIFF_REMOVE,
+     S_CONSTANT_DIFF_REMOVE,
+     S_PREPROCESSOR_DIFF_REMOVE,
+     S_FILEPATH_DIFF_REMOVE,
+
+     S_NORMAL_DIFF_HEADER,
+     S_KEYWORD_DIFF_HEADER,
+     S_TYPE_DIFF_HEADER,
+     S_CONTROL_DIFF_HEADER,
+     S_COMMENT_DIFF_HEADER,
+     S_STRING_DIFF_HEADER,
+     S_CONSTANT_DIFF_HEADER,
+     S_PREPROCESSOR_DIFF_HEADER,
+     S_FILEPATH_DIFF_HEADER,
 
      S_LINE_NUMBERS,
 
@@ -86,11 +111,11 @@ typedef enum {
      LNT_RELATIVE_AND_ABSOLUTE,
 } LineNumberType_t;
 
-#define CE_CHECK_PTR_ARG(arg)                                                 \
-     if(!arg){                                                                \
-          ce_message("%s() received NULL argument %s\n", __FUNCTION__, #arg); \
-          return false;                                                       \
-     }
+typedef enum {
+     HLT_NONE,
+     HLT_TO_END_OF_TEXT,
+     HLT_ENTIRE_LINE,
+}HighlightLineType_t;
 
 #define CE_MAX(a,b)\
      ({ __typeof__ (a) _a = (a); \
@@ -121,6 +146,7 @@ typedef struct {
      Point_t highlight_end;
      bool modified;
      bool readonly;
+     bool newfile;
      union {
           char* filename;
           char* name;
@@ -194,6 +220,18 @@ typedef enum {
      CT_END_MULTILINE,
 } CommentType_t;
 
+// NOTE: temporary, we probably want something like CeRC_t type of thing?
+typedef enum {
+     LF_DOES_NOT_EXIST,
+     LF_IS_DIRECTORY,
+     LF_SUCCESS,
+} LoadFileResult_t;
+
+typedef struct KeyNode_t{
+     int key;
+     struct KeyNode_t* next;
+} KeyNode_t;
+
 extern Point_t* g_terminal_dimensions;
 
 // CE Configuration-Defined Functions
@@ -209,14 +247,15 @@ bool ce_remove_buffer_from_list        (BufferNode_t** head, Buffer_t* buffer);
 
 
 // BufferView Manipulation Functions
-BufferView_t* ce_split_view       (BufferView_t* view, Buffer_t* buffer, bool horizontal);
-bool ce_remove_view               (BufferView_t** head, BufferView_t* view);
-bool ce_calc_views                (BufferView_t* head, Point_t top_left, Point_t top_right);
-bool ce_draw_views                (const BufferView_t* head, const char* highlight_word, LineNumberType_t line_number_type);
-bool ce_change_buffer_in_views    (BufferView_t* head, Buffer_t* match, Buffer_t* new);
-bool ce_free_views                (BufferView_t** view);
+BufferView_t* ce_split_view         (BufferView_t* view, Buffer_t* buffer, bool horizontal);
+bool ce_remove_view                 (BufferView_t** head, BufferView_t* view);
+bool ce_calc_views                  (BufferView_t* head, Point_t top_left, Point_t top_right);
+bool ce_draw_views                  (const BufferView_t* head, const char* highlight_word, LineNumberType_t line_number_type,
+                                     HighlightLineType_t highlight_line_type);
+bool ce_change_buffer_in_views      (BufferView_t* head, Buffer_t* match, Buffer_t* new);
+bool ce_free_views                  (BufferView_t** view);
 BufferView_t* ce_find_view_at_point (BufferView_t* head, Point_t point);
-BufferView_t* ce_buffer_in_view(BufferView_t* head, const Buffer_t* buffer);
+BufferView_t* ce_buffer_in_view     (BufferView_t* head, const Buffer_t* buffer);
 
 
 // Buffer_t Manipulation Functions
@@ -229,7 +268,7 @@ void ce_clear_lines             (Buffer_t* buffer);
 void ce_clear_lines_readonly    (Buffer_t* buffer);
 
 bool ce_load_string             (Buffer_t* buffer, const char* string);
-bool ce_load_file               (Buffer_t* buffer, const char* filename);
+LoadFileResult_t ce_load_file   (Buffer_t* buffer, const char* filename);
 
 bool ce_insert_char             (Buffer_t* buffer, Point_t location, char c);
 bool ce_append_char             (Buffer_t* buffer, char c);
@@ -258,7 +297,8 @@ bool ce_insert_newline          (Buffer_t* buffer, int64_t line);
 // Buffer Inspection Functions
 bool    ce_draw_buffer                   (const Buffer_t* buffer, const Point_t* cursor, const Point_t* term_top_left,
                                           const Point_t* term_bottom_right, const Point_t* buffer_top_left,
-                                          const char* highlight_word, LineNumberType_t line_number_type);
+                                          const char* highlight_word, LineNumberType_t line_number_type,
+                                          HighlightLineType_t highlight_line_type);
 bool    ce_save_buffer                   (Buffer_t* buffer, const char* filename);
 bool    ce_point_on_buffer               (const Buffer_t* buffer, Point_t location);
 bool    ce_get_char                      (const Buffer_t* buffer, Point_t location, char* c);
@@ -273,6 +313,7 @@ int64_t ce_get_indentation_for_next_line (const Buffer_t* buffer, Point_t locati
 
 // Find Point_t Functions
 bool ce_find_string              (const Buffer_t* buffer, Point_t location, const char* search_str, Point_t* match, Direction_t direction);
+bool ce_find_regex               (const Buffer_t* buffer, Point_t location, const regex_t* regex, Point_t* match, int64_t* match_len, Direction_t direction);
 bool ce_get_word_at_location     (const Buffer_t* buffer, Point_t location, Point_t* word_start, Point_t* word_end); // TODO: Is location necessary?
 bool ce_get_homogenous_adjacents (const Buffer_t* buffer, Point_t* start, Point_t* end, int (*is_homogenous)(int));
 
@@ -319,7 +360,7 @@ int64_t ce_is_c_keyword     (const char* line, int64_t start_offset);
 int64_t ce_is_c_contrl      (const char* line, int64_t start_offset);
 int64_t ce_is_preprocessor  (const char* line, int64_t start_offset);
 int64_t ce_is_c_typename    (const char* line, int64_t start_offset);
-CommentType_t ce_is_comment (const char* line, int64_t start_offset);
+CommentType_t ce_is_comment (const char* line, int64_t start_offset, bool inside_string);
 void ce_is_string_literal   (const char* line, int64_t start_offset, int64_t line_len, bool* inside_string, char* last_quote_char);
 int64_t ce_is_caps_var      (const char* line, int64_t start_offset);
 
@@ -330,10 +371,15 @@ int64_t ce_get_line_number_column_width(LineNumberType_t line_number_type, int64
 #define ce_message(...) ({fprintf(stderr,__VA_ARGS__);\
                           fprintf(stderr,"\n");})
 
+// Key Node
+KeyNode_t* ce_keys_push(KeyNode_t** head, int key);
+int* ce_keys_get_string(KeyNode_t* head);
+void ce_keys_free(KeyNode_t** head);
+
 // Misc. Utility Functions
 int64_t ce_count_string_lines   (const char* string);
 bool    ce_point_after          (Point_t a, Point_t b);
-bool    ce_points_equal          (Point_t a, Point_t b);
+bool    ce_points_equal         (Point_t a, Point_t b);
 void    ce_sort_points          (const Point_t** a, const Point_t** b);
 int     ce_ispunct              (int c);
 int     ce_iswordchar           (int c);

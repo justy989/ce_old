@@ -1,30 +1,34 @@
 /*
-NOTES:
--tabs suck, do we have to deal with them?
--get full file path
+TODOS:
 
-TODO:
--user input
--use tabs instead of spaces
--client/server
--UNDO DURING MACROS!
--EDITABLE MACROS
--STEP THROUGH MACROS
--Make . work with visual mode
+BIG:
+ -unicode support
+ -network editing
+ -autocomplete for: code, shell commands, etc.
+ -parse c to do real syntax highlighting/autocomplete?
+ -tail file
+ -support python and other mode syntax highlighting so I don't go insane at work
+ -async file saving/loading
+ -async autocomplete building
+ -incremental replace (although already doable with 'n.')
+ -support tabs in addition to spaces
 
-BUGS:
--SIGSEGV 'yy' to yank a line. 'p' on a new line to paste after the newline. 'u' to undo the change and we segfault
--double free corruption (something to do with calling ce_remove_char on an empty line)
-reproduce by: 1) 'O' 2) escape, 3) undo, 4) redo, 5) undo, 7) q I'm seeing a double free on quit
-
-WANTS:
--realloc() rather than malloc() ?
--be able to yank from man pages
--regexes that don't suck, regcomp()
--tailing files
--visual section changes using . always uses the top of the region
--input box should act like a buffer in terms of key mappings
--pair programming? Each connected user can edit text with their own cursor? show other users' cursors!
+LITTLE:
+ -r<enter>
+ -when re-opening a file, go to the cursor position you exited on
+ -do searching inside macro
+ -step through macro one change at a time
+ -separate dot for input buffer
+ -valgrind run clean
+ -'*' and '#' should be 'words' with boundaries not literal strings that can match anything
+ -when there are 3 lines in a file and you do 'dj', you still have 2 lines...
+ -user code can infinite loop if you call ce_advance_cursor(buffer, &a, 1) and rely on
+  ce_points_equal(a, b) being false when b is at the end of a line.
+ -vim's 'ci}' and 'di}' behave differently in a nice way, emulate that
+ -handle case where filename doesn't fit in view status line
+ -auto complete shell commands then files
+ -hit an undo brace bug, unsure how to reproduce. I wrapped some code in an if statement,
+  then decided I didn't want the if statement. The closing if statement brace did not get undone.
 */
 
 #include <assert.h>
@@ -84,6 +88,7 @@ void config_close(Config_t* config)
 {
      if(!config->so_handle) return;
      free(config->path);
+     // NOTE: comment out dlclose() so valgrind can get a helpful stack frame
      if(dlclose(config->so_handle)) ce_message("dlclose() failed with error %s", dlerror());
 }
 
@@ -140,6 +145,7 @@ const char* random_greeting()
           "Oy! ce's a beaut!",
           "The default config has a great vimplementation!",
           "They see me slurpin' They hatin'",
+          "'Days of pain are worth the years of upcoming prosperity' -confucius",
      };
 
      srand(time(NULL));
@@ -391,4 +397,3 @@ int main(int argc, char** argv)
 
      return 0;
 }
-

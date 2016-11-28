@@ -591,6 +591,25 @@ TEST(remove_string_whole_line)
      ce_free_buffer(&buffer);
 }
 
+TEST(remove_string_whole_line_in_multiline)
+{
+     Buffer_t buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE");
+     buffer.lines[2] = strdup("AWESOME");
+
+     Point_t point = {0, 0};
+     ce_remove_string(&buffer, point, 6);
+
+     ASSERT(buffer.line_count == 2);
+     EXPECT(strcmp(buffer.lines[0], "ARE") == 0);
+     EXPECT(strcmp(buffer.lines[1], "AWESOME") == 0);
+
+     ce_free_buffer(&buffer);
+}
+
 TEST(remove_string_multiline_begin)
 {
      Buffer_t buffer = {};
@@ -957,6 +976,22 @@ TEST(sanity_find_matching_pair_same_line)
      ce_free_buffer(&buffer);
 }
 
+TEST(sanity_find_matching_pair_same_line_with_match_in_quotes)
+{
+     Buffer_t buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("if(strcmp(name == \"dog(a)\"))");
+
+     Point_t point = {2, 0};
+     ce_move_cursor_to_matching_pair(&buffer, &point, '(');
+
+     EXPECT(point.x == 27);
+     EXPECT(point.y == 0);
+
+     ce_free_buffer(&buffer);
+}
+
 TEST(sanity_find_matching_pair_multiline)
 {
      Buffer_t buffer = {};
@@ -1027,6 +1062,73 @@ TEST(find_match_next_line)
 
      EXPECT(delta.x == 4);
      EXPECT(delta.y == 1);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(find_match_prev_line)
+{
+     Buffer_t buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE SO");
+     buffer.lines[2] = strdup("AWESOME");
+
+     Point_t point = {2, 1};
+     Point_t delta = {};
+     ce_find_string(&buffer, point, "COS", &delta, CE_UP);
+
+     EXPECT(delta.x == 2);
+     EXPECT(delta.y == 0);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(find_regex_next_line)
+{
+     Buffer_t buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE SO");
+     buffer.lines[2] = strdup("AWESOME");
+
+     regex_t regex;
+     int rc = regcomp(&regex, "SO", 0);
+     ASSERT(rc == 0);
+
+     Point_t point = {2, 0};
+     Point_t delta = {};
+     int64_t match_len = 0;
+     ce_find_regex(&buffer, point, &regex, &delta, &match_len, CE_DOWN);
+
+     EXPECT(delta.x == 4);
+     EXPECT(delta.y == 1);
+
+     ce_free_buffer(&buffer);
+}
+
+TEST(find_regex_prev_line)
+{
+     Buffer_t buffer = {};
+     buffer.line_count = 3;
+     buffer.lines = malloc(3 * sizeof(char*));
+     buffer.lines[0] = strdup("TACOS");
+     buffer.lines[1] = strdup("ARE SO");
+     buffer.lines[2] = strdup("AWESOME");
+
+     regex_t regex;
+     int rc = regcomp(&regex, "COS", 0);
+     ASSERT(rc == 0);
+
+     Point_t point = {2, 1};
+     Point_t delta = {};
+     int64_t match_len = 0;
+     ce_find_regex(&buffer, point, &regex, &delta, &match_len, CE_UP);
+
+     EXPECT(delta.x == 2);
+     EXPECT(delta.y == 0);
 
      ce_free_buffer(&buffer);
 }
@@ -1134,7 +1236,7 @@ TEST(advance_cursor_next_line)
      Point_t cursor = {1, 0};
      ce_advance_cursor(&buffer, &cursor, 6);
 
-     EXPECT(cursor.x == 2);
+     EXPECT(cursor.x == 1);
      EXPECT(cursor.y == 1);
 
      ce_free_buffer(&buffer);
@@ -1386,10 +1488,10 @@ TEST(sanity_is_comment)
      const char* begin_multiline_comment_line = "     /* ";
      const char* end_multiline_comment_line = "    */ ";
 
-     EXPECT(ce_is_comment(non_comment_line, 0) == CT_NONE);
-     EXPECT(ce_is_comment(comment_line, 5) == CT_SINGLE_LINE);
-     EXPECT(ce_is_comment(begin_multiline_comment_line, 5) == CT_BEGIN_MULTILINE);
-     EXPECT(ce_is_comment(end_multiline_comment_line, 5) == CT_END_MULTILINE);
+     EXPECT(ce_is_comment(non_comment_line, 0, false) == CT_NONE);
+     EXPECT(ce_is_comment(comment_line, 5, false) == CT_SINGLE_LINE);
+     EXPECT(ce_is_comment(begin_multiline_comment_line, 5, false) == CT_BEGIN_MULTILINE);
+     EXPECT(ce_is_comment(end_multiline_comment_line, 5, false) == CT_END_MULTILINE);
 }
 
 TEST(sanity_is_string_literal)
@@ -1558,7 +1660,7 @@ TEST(sanity_split_view)
      // draw views
      // NOTE: we are not initializing curses or anything, so the calls should be nops? We make the call to 
      //       ensure no crashes, but can't really validate anything
-     EXPECT(ce_draw_views(head, NULL, LNT_NONE));
+     EXPECT(ce_draw_views(head, NULL, LNT_NONE, HLT_NONE));
 
      // remove views
      ASSERT(ce_remove_view(&head, vertical_split_view) == true);
@@ -1571,6 +1673,41 @@ TEST(sanity_split_view)
      EXPECT(head->next_horizontal == horizontal_split_view);
 
      // free views
+     ASSERT(ce_free_views(&head));
+}
+
+TEST(change_buffer_in_views)
+{
+     BufferView_t* head = calloc(1, sizeof(*head));
+     ASSERT(head);
+
+     Buffer_t a;
+     Buffer_t b;
+     Buffer_t c;
+
+     head->buffer = &a;
+
+     BufferView_t* horizontal_split = ce_split_view(head, &a, true);
+     ASSERT(horizontal_split);
+
+     BufferView_t* vertical_split = ce_split_view(head, &b, false);
+     ASSERT(vertical_split);
+
+     BufferView_t* vertical_horizontal_split = ce_split_view(vertical_split, &a, true);
+     ASSERT(vertical_horizontal_split);
+
+     EXPECT(head->buffer == &a);
+     EXPECT(horizontal_split->buffer == &a);
+     EXPECT(vertical_split->buffer == &b);
+     EXPECT(vertical_horizontal_split->buffer == &a);
+
+     EXPECT(ce_change_buffer_in_views(head, &a, &c));
+
+     EXPECT(head->buffer == &c);
+     EXPECT(horizontal_split->buffer == &c);
+     EXPECT(vertical_split->buffer == &b);
+     EXPECT(vertical_horizontal_split->buffer == &c);
+
      ASSERT(ce_free_views(&head));
 }
 
@@ -2228,6 +2365,27 @@ TEST(join_line)
      ce_free_buffer(&buffer);
 }
 
+TEST(get_line_number_column_width)
+{
+     EXPECT(ce_get_line_number_column_width(LNT_NONE, 2500, 950, 1050) == 0);
+     EXPECT(ce_get_line_number_column_width(LNT_NONE, 0, 0, 0) == 0);
+
+     EXPECT(ce_get_line_number_column_width(LNT_ABSOLUTE, 2500, 0, 10) == 5);
+     EXPECT(ce_get_line_number_column_width(LNT_ABSOLUTE, 2500, 0, 150) == 5);
+     EXPECT(ce_get_line_number_column_width(LNT_ABSOLUTE, 100, 0, 10) == 4);
+     EXPECT(ce_get_line_number_column_width(LNT_ABSOLUTE, 100, 0, 150) == 4);
+
+     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE_AND_ABSOLUTE, 2500, 0, 10) == 5);
+     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE_AND_ABSOLUTE, 2500, 0, 150) == 5);
+     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE_AND_ABSOLUTE, 100, 0, 10) == 4);
+     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE_AND_ABSOLUTE, 100, 0, 150) == 4);
+
+     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE, 2500, 0, 15) == 3);
+     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE, 2500, 0, 150) == 4);
+     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE, 100, 0, 15) == 3);
+     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE, 100, 0, 150) == 4);
+}
+
 TEST(point_after)
 {
      Point_t a = {1, 3};
@@ -2249,6 +2407,26 @@ TEST(points_equal)
 
      EXPECT(ce_points_equal(a, a));
      EXPECT(!ce_points_equal(a, b));
+}
+
+TEST(keynode_sanity)
+{
+     KeyNode_t* head = NULL;
+
+     ce_keys_push(&head, 3);
+     ce_keys_push(&head, 2);
+     ce_keys_push(&head, 1);
+
+     int* int_str = ce_keys_get_string(head);
+
+     EXPECT(int_str[0] == 3);
+     EXPECT(int_str[1] == 2);
+     EXPECT(int_str[2] == 1);
+     EXPECT(int_str[3] == 0);
+
+     free(int_str);
+
+     ce_keys_free(&head);
 }
 
 void segv_handler(int signo)
@@ -2278,7 +2456,8 @@ int main()
      sa.sa_handler = segv_handler;
      sigemptyset(&sa.sa_mask);
      if(sigaction(SIGSEGV, &sa, NULL) == -1){
-          // TODO: handle error
+          printf("failed to setup signal handler: '%s'\n", strerror(errno));
+          return -1;
      }
 
      RUN_TESTS();

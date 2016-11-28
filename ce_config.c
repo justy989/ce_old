@@ -498,20 +498,28 @@ void free_buffer_state(BufferState_t* buffer_state)
 
 Buffer_t* open_file_buffer(BufferNode_t* head, const char* filename)
 {
-     BufferNode_t* itr = head;
-     while(itr){
-          if(!strcmp(itr->buffer->name, filename)){
-               return itr->buffer; // already open
-          }
-          itr = itr->next;
-     }
+     struct stat new_file_stat;
+     struct stat open_file_stat;
 
-     // clang doesn't support nested functions so we need to deal with global state
-     nftw_state.search_filename = filename;
-     nftw_state.head = head;
-     nftw_state.new_node = NULL;
-     nftw(".", nftw_find_file, 20, FTW_CHDIR);
-     if(nftw_state.new_node) return nftw_state.new_node->buffer;
+     if(stat(filename, &new_file_stat) == 0){
+          BufferNode_t* itr = head;
+          while(itr){
+               stat(itr->buffer->name, &open_file_stat);
+
+               if(open_file_stat.st_ino == new_file_stat.st_ino){
+                    return itr->buffer; // already open
+               }
+
+               itr = itr->next;
+          }
+     }else{
+          // clang doesn't support nested functions so we need to deal with global state
+          nftw_state.search_filename = filename;
+          nftw_state.head = head;
+          nftw_state.new_node = NULL;
+          nftw(".", nftw_find_file, 20, FTW_CHDIR);
+          if(nftw_state.new_node) return nftw_state.new_node->buffer;
+     }
 
      BufferNode_t* node = new_buffer_from_file(head, filename);
      if(node) return node->buffer;
@@ -2267,11 +2275,17 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                                              &config_state->tab_current->view_current->cursor, &buffer_state->commit_tail,
                                                              &buffer_state->vim_buffer_state, &config_state->auto_complete, false);
           if(vkh_result.type == VKH_HANDLED_KEY){
-               if(config_state->vim_state.mode == VM_INSERT && config_state->input && config_state->input_key == 6){
-                    calc_auto_complete_start_and_path(&config_state->auto_complete,
-                                                      buffer->lines[cursor->y],
-                                                      *cursor,
-                                                      config_state->completion_buffer);
+               if(config_state->vim_state.mode == VM_INSERT && config_state->input){
+                    switch(config_state->input_key){
+                    default:
+                         break;
+                    case 6: // load file
+                         calc_auto_complete_start_and_path(&config_state->auto_complete,
+                                                           buffer->lines[cursor->y],
+                                                           *cursor,
+                                                           config_state->completion_buffer);
+                         break;
+                    }
                }
           }else if(vkh_result.type == VKH_COMPLETED_ACTION_SUCCESS){
                if(vkh_result.completed_action.change.type == VCT_DELETE &&

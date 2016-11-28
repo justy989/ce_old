@@ -887,8 +887,6 @@ bool ce_find_regex(const Buffer_t* buffer, Point_t location, const regex_t* rege
      regmatch_t matches[match_count];
 
      if(direction == CE_DOWN){
-          location.x++;
-
           while(location.y < buffer->line_count){
                int rc = regexec(regex, buffer->lines[location.y] + location.x, match_count, matches, 0);
 
@@ -1829,8 +1827,13 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
      }
 
      // TODO: if we found a closing multiline comment, make sure there is a matching opening multiline comment
-     size_t highlight_word_len = 0;
-     if(highlight_word) highlight_word_len = strlen(highlight_word);
+
+     // NOTE: when optimizing, we will want to make this regex_t a paramter, rather than compiling it at each draw_buffer call
+     regex_t highlight_regex;
+     int regex_compile_rc;
+     if(highlight_word){
+          regex_compile_rc = regcomp(&highlight_regex, highlight_word, REG_EXTENDED);
+     }
 
      standend();
 
@@ -1884,8 +1887,15 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                bool diff_remove = buffer->lines[i][0] == '-';
                bool diff_header = buffer->lines[i][0] == '@' && buffer->lines[i][1] == '@';
                HighlightType_t highlight_type = HL_OFF;
+               int64_t chars_til_highlighted_word = -1;
                int64_t highlighting_left = 0;
                int fg_color = 0;
+
+               regmatch_t regex_matches[1];
+               if(highlight_word && regex_compile_rc == 0){
+                    int regex_rc = regexec(&highlight_regex, buffer->lines[i], 1, regex_matches, 0);
+                    if(regex_rc == 0) chars_til_highlighted_word = regex_matches[0].rm_so;
+               }
 
                if(diff_add){
                     highlight_type = HL_DIFF_ADD;
@@ -1925,13 +1935,22 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                          break;
                     }
 
-                    if(highlight_word && strncmp(buffer_line + c, highlight_word, highlight_word_len) == 0){
-                         highlighting_left = highlight_word_len;
+                    if(highlight_word && chars_til_highlighted_word == 0){
+                         highlighting_left = regex_matches[0].rm_eo - regex_matches[0].rm_so;
                          highlight_type = HL_ON;
                     }else if(highlight_type){
                          highlighting_left--;
+
                          if(!highlighting_left){
-                              if(diff_add){
+                              if(highlight_word && regex_compile_rc == 0){
+                                   int regex_rc = regexec(&highlight_regex, buffer->lines[i], 1, regex_matches, 0);
+                                   if(regex_rc == 0) chars_til_highlighted_word = regex_matches[0].rm_so;
+                              }
+
+                              if(chars_til_highlighted_word == 0){
+                                   highlighting_left = regex_matches[0].rm_eo - regex_matches[0].rm_so;
+                                   highlight_type = HL_ON;
+                              }else if(diff_add){
                                    highlight_type = HL_DIFF_ADD;
                               }else if(diff_remove){
                                    highlight_type = HL_DIFF_REMOVE;
@@ -2001,6 +2020,8 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                               }
                          }
                     }
+
+                    chars_til_highlighted_word--;
                }
 
                // skip line if we are offset by too much and can't show the line
@@ -2023,16 +2044,27 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                          highlight_type = HL_ON;
                          set_color(fg_color, highlight_type);
                     }else{
-                         if(highlight_word && strncmp(buffer_line + c + buffer_top_left->x, highlight_word,
-                                                      highlight_word_len) == 0){
-                              highlighting_left = highlight_word_len;
+                         if(highlight_word && chars_til_highlighted_word == 0){
+                              highlighting_left = regex_matches[0].rm_eo - regex_matches[0].rm_so;
                               highlight_type = HL_ON;
                               set_color(fg_color, highlight_type);
                          }else if(highlight_type){
                               if(highlighting_left){
                                    highlighting_left--;
+
                                    if(!highlighting_left){
-                                        if(cursor->y == i && highlight_line_type != HLT_NONE){
+
+                                        if(highlight_word && regex_compile_rc == 0){
+                                             int regex_rc = regexec(&highlight_regex, buffer->lines[i] + c, 1, regex_matches, 0);
+                                             if(regex_rc == 0){
+                                                  chars_til_highlighted_word = regex_matches[0].rm_so;
+                                             }
+                                        }
+
+                                        if(chars_til_highlighted_word == 0){
+                                             highlighting_left = regex_matches[0].rm_eo - regex_matches[0].rm_so;
+                                             highlight_type = HL_ON;
+                                        }else if(cursor->y == i && highlight_line_type != HLT_NONE){
                                              highlight_type = HL_CURRENT_LINE;
                                         }else if(diff_add){
                                              highlight_type = HL_DIFF_ADD;
@@ -2167,8 +2199,11 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                     }else{
                          addch(non_printable_repr);
                     }
+
+                    chars_til_highlighted_word--;
                }
 
+               // highlight the rest of the line, if configured
                if(cursor->y == i && highlight_line_type == HLT_ENTIRE_LINE){
                     fg_color = set_color(fg_color, HL_CURRENT_LINE);
                     for(int64_t c = min; c < max_width; ++c){

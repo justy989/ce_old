@@ -1810,26 +1810,34 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                Point_t end = config_state->tab_current->view_input_save->buffer->highlight_end;
                if(end.x < 0) ce_move_cursor_to_end_of_file(config_state->tab_current->view_input_save->buffer, &end);
 
-               Point_t match = {};
-               int64_t replace_count = 0;
-               while(ce_find_string(buffer, begin, search_str, &match, CE_DOWN)){
-                    if(ce_point_after(match, end)) break;
-                    if(!ce_remove_string(buffer, match, search_len)) break;
-                    if(replace_len){
-                         if(!ce_insert_string(buffer, match, replace_str)) break;
+               regex_t regex;
+               int rc = regcomp(&regex, search_str, REG_EXTENDED);
+               if(rc == 0){
+                    Point_t match = {};
+                    int64_t replace_count = 0;
+                    while(ce_find_regex(buffer, begin, &regex, &match, CE_DOWN)){
+                         if(ce_point_after(match, end)) break;
+                         if(!ce_remove_string(buffer, match, search_len)) break;
+                         if(replace_len){
+                              if(!ce_insert_string(buffer, match, replace_str)) break;
+                         }
+                         ce_commit_change_string(&buffer_state->commit_tail, match, match, match, strdup(replace_str),
+                                                 strdup(search_str), BCC_KEEP_GOING);
+                         begin = match;
+                         replace_count++;
                     }
-                    ce_commit_change_string(&buffer_state->commit_tail, match, match, match, strdup(replace_str),
-                                            strdup(search_str), BCC_KEEP_GOING);
-                    begin = match;
-                    replace_count++;
-               }
 
-               if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
+                    if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
 
-               if(replace_count){
-                    ce_message("replaced %" PRId64 " matches", replace_count);
+                    if(replace_count){
+                         ce_message("replaced %" PRId64 " matches", replace_count);
+                    }else{
+                         ce_message("no matches found to replace");
+                    }
                }else{
-                    ce_message("no matches found to replace");
+                    char error_buffer[BUFSIZ];
+                    regerror(rc, &regex, error_buffer, BUFSIZ);
+                    ce_message("regcomp() failed: '%s'", error_buffer);
                }
 
                *cursor = begin;

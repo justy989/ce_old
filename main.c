@@ -11,7 +11,6 @@ BIG:
  -async file saving/loading
  -async autocomplete building
  -incremental replace (although already doable with 'n.')
- -regex search/replace/highlighting
  -support tabs in addition to spaces
 
 LITTLE:
@@ -28,6 +27,8 @@ LITTLE:
  -vim's 'ci}' and 'di}' behave differently in a nice way, emulate that
  -handle case where filename doesn't fit in view status line
  -auto complete shell commands then files
+ -hit an undo brace bug, unsure how to reproduce. I wrapped some code in an if statement,
+  then decided I didn't want the if statement. The closing if statement brace did not get undone.
 */
 
 #include <assert.h>

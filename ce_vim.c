@@ -1592,8 +1592,11 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                               return false;
                          }
 
+                         Point_t search_start = action_range->end;
+                         if(vim_state->search_direction == CE_DOWN) search_start.x++;
+
                          Point_t match;
-                         if(ce_find_regex(buffer, action_range->end, &regex, &match, vim_state->search_direction)){
+                         if(ce_find_regex(buffer, search_start, &regex, &match, vim_state->search_direction)){
                               ce_set_cursor(buffer, &action_range->end, match);
                          }else{
                               action_range->end = *cursor;

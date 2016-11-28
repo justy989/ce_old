@@ -10,13 +10,15 @@
   - Vim's modal editting. We really like it! It also makes the transition to using ce easier.
     (Note: the default configuration implements vim-like editting, but your configuration can implement
     any arbitrary editting style)
-- The config is written in 'c' and compiled into a shared object that you can reload while running. No need to
-  learn a new language!
+- The config is written in the C programming language and compiled into a shared object that you can reload
+  while running. No need to learn a new language!
 - Input boxes in both vim and emacs are special 'insert mode only' constructs. In ce, the input box works just
   like any other buffer. So it's easy to do things like paste. It also means the input box can be multiple lines.
-- Registers in vim are also awesome, but it's not easy to see what you have in registers or even know what
+- Registers in vim are awesome, but it's not easy to see what you have in registers or even know what
   registers are occupied. In ce, for example, you can type 'q?' to see which macros you have defined. This
-  also works for paste registers and marks.
+  also works for yank registers and mark registers.
+- Search in vim/emacs with regular expressions is awesome, but each have a special implementation on regexes
+  with special syntax in certain cases. We just want to use the c standard library's regex implementation.
 - Macros in vim are awesome, but:
   - If you mess up while creating a macro, you have to start over. In ce, when you are viewing your recorded macros,
     you can select any macro to edit it

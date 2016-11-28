@@ -1562,7 +1562,14 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                     Point_t word_start, word_end;
                     if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) break;
                     char* search_str = ce_dupe_string(buffer, word_start, word_end);
-                    vim_yank_add(&vim_state->yank_head, '/', search_str, YANK_NORMAL);
+                    int64_t search_len = strlen(search_str);
+                    int64_t word_search_len = search_len + 4; // make room for prepended and appended "\b", word boundaries
+                    char* word_search_str = malloc(word_search_len + 1);
+                    snprintf(word_search_str, word_search_len + 1, "\\b%s\\b", search_str);
+                    word_search_str[word_search_len] = 0;
+                    free(search_str);
+
+                    vim_yank_add(&vim_state->yank_head, '/', word_search_str, YANK_NORMAL);
                }
                // NOTE: fall through intentionally
                case VMT_SEARCH:

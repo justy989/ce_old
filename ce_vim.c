@@ -262,8 +262,10 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
           } break;
           case KEY_ENTER:
           {
-               Point_t save_cursor = *cursor;
                key = NEWLINE;
+
+               Point_t save_cursor = *cursor;
+               int64_t indent_len = ce_get_indentation_for_next_line(buffer, *cursor, strlen(TAB_STRING));
 
                if(ce_insert_char(buffer, *cursor, key)){
                     cursor->y++;
@@ -273,8 +275,6 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                     ce_keys_push(&vim_state->command_head, KEY_ENTER);
 
                     // indent if necessary
-                    Point_t prev_line = {0, cursor->y-1};
-                    int64_t indent_len = ce_get_indentation_for_next_line(buffer, prev_line, strlen(TAB_STRING));
                     if(indent_len > 0){
                          char* indent = malloc(indent_len + 1);
                          memset(indent, ' ', indent_len);
@@ -1972,7 +1972,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
           Point_t begin_line = {0, cursor->y};
 
           // indent if necessary
-          int64_t indent_len = ce_get_indentation_for_next_line(buffer, *cursor, strlen(TAB_STRING));
+          int64_t indent_len = ce_get_indentation_for_next_line(buffer, begin_line, strlen(TAB_STRING));
           char* indent_nl = malloc(sizeof '\n' + indent_len + sizeof '\0');
           memset(&indent_nl[0], ' ', indent_len);
           indent_nl[indent_len] = '\n';
@@ -1992,7 +1992,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
           if(cursor->y < buffer->line_count) end_of_line.x = strlen(buffer->lines[cursor->y]);
 
           // indent if necessary
-          int64_t indent_len = ce_get_indentation_for_next_line(buffer, *cursor, strlen(TAB_STRING));
+          int64_t indent_len = ce_get_indentation_for_next_line(buffer, end_of_line, strlen(TAB_STRING));
           char* nl_indent = malloc(sizeof '\n' + indent_len + sizeof '\0');
           nl_indent[0] = '\n';
           memset(&nl_indent[1], ' ', indent_len);

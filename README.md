@@ -17,8 +17,9 @@
 - Registers in vim are awesome, but it's not easy to see what you have in registers or even know what
   registers are occupied. In ce, for example, you can type 'q?' to see which macros you have defined. This
   also works for yank registers and mark registers.
-- Search in vim/emacs with regular expressions is awesome, but each have a special implementation on regexes
-  with special syntax in certain cases. We just want to use the c standard library's regex implementation.
+- Search in vim/emacs with regular expressions is awesome, but each have a special implementation of regexes
+  with special syntax in certain cases. We just want to use the c standard library's regex implementation, so we
+  don't have to remember special rules.
 - Macros in vim are awesome, but:
   - If you mess up while creating a macro, you have to start over. In ce, when you are viewing your recorded macros,
     you can select any macro to edit it
@@ -60,8 +61,8 @@ Ctrl+h|move cursor to the view to the left
 Ctrl+j|move cursor to the view to the below
 Ctrl+k|move cursor to the view to the above
 Ctrl+l|move cursor to the view to the right
-Ctrl+n|goto the next file definition in the shell command buffer (works with compilation errors, fgrep, etc)
-Ctrl+p|goto the previous file definition in the shell command buffer (works with compilation errors, fgrep, etc)
+Ctrl+n|goto the next file definition in the shell command buffer (works with compilation errors, fgrep, git diff, etc)
+Ctrl+p|goto the previous file definition in the shell command buffer (works with compilation errors, fgrep, git diff, etc)
 i|enter insert mode
 esc|enter normal mode
 h|move cursor left

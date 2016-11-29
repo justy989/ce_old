@@ -12,6 +12,7 @@ BIG:
  -async autocomplete building
  -incremental replace (although already doable with 'n.')
  -support tabs in addition to spaces
+ -multiline regex search/replace
 
 LITTLE:
  -r<enter>

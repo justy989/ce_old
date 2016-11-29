@@ -2673,14 +2673,14 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     break;
                     case '/':
                     {
-                         input_start(config_state, "Search", key);
+                         input_start(config_state, "Regex Search", key);
                          config_state->vim_state.search_direction = CE_DOWN;
                          config_state->vim_state.start_search = *cursor;
                          break;
                     }
                     case '?':
                     {
-                         input_start(config_state, "Reverse Search", key);
+                         input_start(config_state, "Reverse Regex Search", key);
                          config_state->vim_state.search_direction = CE_UP;
                          config_state->vim_state.start_search = *cursor;
                          break;

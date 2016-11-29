@@ -499,9 +499,9 @@ void free_buffer_state(BufferState_t* buffer_state)
 Buffer_t* open_file_buffer(BufferNode_t* head, const char* filename)
 {
      struct stat new_file_stat;
-     struct stat open_file_stat;
 
      if(stat(filename, &new_file_stat) == 0){
+          struct stat open_file_stat;
           BufferNode_t* itr = head;
           while(itr){
                stat(itr->buffer->name, &open_file_stat);
@@ -780,11 +780,88 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
 
      auto_complete_end(&config_state->auto_complete);
      config_state->vim_state.insert_start = (Point_t){-1, -1};
+
+     // read in state file if it exists
+     {
+          char path[128];
+          snprintf(path, 128, "%s/%s", getenv("HOME"), ".ce");
+
+          FILE* in_file = fopen(path, "r");
+          if(in_file){
+               ce_message("restoring state from %s", path);
+
+               // write out last searched text
+               char str[256];
+               int64_t index = 0;
+               int n = 0;
+
+               n = fscanf(in_file, "%s\n", str);
+
+               if(n == 1){
+                    vim_yank_add(&config_state->vim_state.yank_head, '/', strdup(str), YANK_NORMAL);
+                    ce_message("  search pattern '%s'", str);
+
+                    // write out all buffers and cursor positions
+                    while(!feof(in_file)){
+                         n = fscanf(in_file, "%s %"PRId64"\n", str, &index);
+                         if(n == 2){
+                              BufferNode_t* itr = *head;
+                              while(itr){
+                                   if(strcmp(itr->buffer->name, str) == 0){
+                                        ce_message(" '%s' line %" PRId64, str, index);
+                                        itr->buffer->cursor.y = index;
+                                        ce_move_cursor_to_soft_beginning_of_line(itr->buffer, &itr->buffer->cursor);
+                                        BufferView_t* view = ce_buffer_in_view(config_state->tab_current->view_head, itr->buffer);
+                                        if(view) view->cursor = view->buffer->cursor;
+                                        break;
+                                   }
+                                   itr = itr->next;
+                              }
+                         }
+                    }
+               }
+
+               fclose(in_file);
+          }
+     }
+
      return true;
 }
 
 bool destroyer(BufferNode_t** head, void* user_data)
 {
+     ConfigState_t* config_state = user_data;
+
+     // write out file with some state we can use to restore
+     {
+          char path[128];
+          snprintf(path, 128, "%s/%s", getenv("HOME"), ".ce");
+
+          FILE* out_file = fopen(path, "w");
+          if(out_file){
+               // write out last searched text
+               VimYankNode_t* yank = vim_yank_find(config_state->vim_state.yank_head, '/');
+               if(yank){
+                    fprintf(out_file, "%s\n", yank->text);
+               }else{
+                    fprintf(out_file, "\n");
+               }
+
+               // TODO: vim last command
+
+               // write out all buffers and cursor positions
+               BufferNode_t* itr = *head;
+               while(itr){
+                    if(!itr->buffer->readonly){
+                         fprintf(out_file, "%s %"PRId64"\n", itr->buffer->name, itr->buffer->cursor.y);
+                    }
+                    itr = itr->next;
+               }
+
+               fclose(out_file);
+          }
+     }
+
      BufferNode_t* itr = *head;
      while(itr){
           free_buffer_state(itr->buffer->user_data);
@@ -792,7 +869,6 @@ bool destroyer(BufferNode_t** head, void* user_data)
           itr = itr->next;
      }
 
-     ConfigState_t* config_state = user_data;
      TabView_t* tab_itr = config_state->tab_head;
      while(tab_itr){
           if(tab_itr->view_head){

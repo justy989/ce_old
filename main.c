@@ -16,7 +16,6 @@ BIG:
 
 LITTLE:
  -r<enter>
- -when re-opening a file, go to the cursor position you exited on
  -do searching inside macro
  -step through macro one change at a time
  -separate dot for input buffer

@@ -504,10 +504,10 @@ Buffer_t* open_file_buffer(BufferNode_t* head, const char* filename)
           struct stat open_file_stat;
           BufferNode_t* itr = head;
           while(itr){
-               stat(itr->buffer->name, &open_file_stat);
-
-               if(open_file_stat.st_ino == new_file_stat.st_ino){
-                    return itr->buffer; // already open
+               if(stat(itr->buffer->name, &open_file_stat) == 0){
+                    if(open_file_stat.st_ino == new_file_stat.st_ino){
+                         return itr->buffer; // already open
+                    }
                }
 
                itr = itr->next;

@@ -728,13 +728,17 @@ bool find_matching_string_backward(const Buffer_t* buffer, Point_t* location, ch
 
      char curr = 0;
      char prev = 0;
+     Point_t prev_itr;
      while(ce_point_on_buffer(buffer, itr)){
           ce_get_char(buffer, itr, &curr);
 
-          if(curr == matchee && prev != '\\'){
-               *location = itr;
+          if(prev == matchee && curr != '\\'){
+               *location = prev_itr;
                return true;
           }
+
+          prev = curr;
+          prev_itr = itr;
 
           itr.x--;
           if(itr.x < 0){

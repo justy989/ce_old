@@ -422,6 +422,7 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                                    if(can_unindent){
                                         Point_t end_of_delete = *cursor;
                                         end_of_delete.x--;
+                                        if(end_of_delete.x < 0) end_of_delete.x = 0;
                                         cursor->x -= n_deletes;
                                         char* duped_str = ce_dupe_string(buffer, *cursor, end_of_delete);
                                         if(ce_remove_string(buffer, *cursor, n_deletes)){

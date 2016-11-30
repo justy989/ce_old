@@ -295,20 +295,20 @@ bool ce_insert_newline          (Buffer_t* buffer, int64_t line);
 
 
 // Buffer Inspection Functions
-bool    ce_draw_buffer                   (const Buffer_t* buffer, const Point_t* cursor, const Point_t* term_top_left,
-                                          const Point_t* term_bottom_right, const Point_t* buffer_top_left,
-                                          const char* highlight_word, LineNumberType_t line_number_type,
-                                          HighlightLineType_t highlight_line_type);
-bool    ce_save_buffer                   (Buffer_t* buffer, const char* filename);
-bool    ce_point_on_buffer               (const Buffer_t* buffer, Point_t location);
-bool    ce_get_char                      (const Buffer_t* buffer, Point_t location, char* c);
-char    ce_get_char_raw                  (const Buffer_t* buffer, Point_t location);
-int64_t ce_compute_length                (const Buffer_t* buffer, Point_t start, Point_t end);
-char*   ce_dupe_string                   (const Buffer_t* buffer, Point_t start, Point_t end);
-char*   ce_dupe_buffer                   (const Buffer_t* buffer);
-char*   ce_dupe_line                     (const Buffer_t* buffer, int64_t line);
-char*   ce_dupe_lines                    (const Buffer_t* buffer, int64_t start_line, int64_t end_line);
-int64_t ce_get_indentation_for_next_line (const Buffer_t* buffer, Point_t location, int64_t tab_len);
+bool    ce_draw_buffer              (const Buffer_t* buffer, const Point_t* cursor, const Point_t* term_top_left,
+                                     const Point_t* term_bottom_right, const Point_t* buffer_top_left,
+                                     const char* highlight_word, LineNumberType_t line_number_type,
+                                     HighlightLineType_t highlight_line_type);
+bool    ce_save_buffer              (Buffer_t* buffer, const char* filename);
+bool    ce_point_on_buffer          (const Buffer_t* buffer, Point_t location);
+bool    ce_get_char                 (const Buffer_t* buffer, Point_t location, char* c);
+char    ce_get_char_raw             (const Buffer_t* buffer, Point_t location);
+int64_t ce_compute_length           (const Buffer_t* buffer, Point_t start, Point_t end);
+char*   ce_dupe_string              (const Buffer_t* buffer, Point_t start, Point_t end);
+char*   ce_dupe_buffer              (const Buffer_t* buffer);
+char*   ce_dupe_line                (const Buffer_t* buffer, int64_t line);
+char*   ce_dupe_lines               (const Buffer_t* buffer, int64_t start_line, int64_t end_line);
+int64_t ce_get_indentation_for_line (const Buffer_t* buffer, Point_t location, int64_t tab_len);
 
 
 // Find Point_t Functions

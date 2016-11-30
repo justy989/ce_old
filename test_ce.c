@@ -1994,7 +1994,7 @@ TEST(sanity_get_word_at_location)
      ce_free_buffer(&buffer);
 }
 
-TEST(get_indentation_for_next_line_open_bracket)
+TEST(get_indentation_for_line_open_bracket)
 {
      const size_t tab_len = 5;
 
@@ -2010,23 +2010,23 @@ TEST(get_indentation_for_next_line_open_bracket)
 
      Point_t cursor;
 
-     cursor = (Point_t) {5, 0};
-     ASSERT(ce_get_indentation_for_next_line(&buffer, cursor, tab_len) == 5);
+     cursor = (Point_t) {5, 1};
+     ASSERT(ce_get_indentation_for_line(&buffer, cursor, tab_len) == 5);
 
-     cursor = (Point_t) {7, 1};
-     ASSERT(ce_get_indentation_for_next_line(&buffer, cursor, tab_len) == 10);
+     cursor = (Point_t) {7, 2};
+     ASSERT(ce_get_indentation_for_line(&buffer, cursor, tab_len) == 10);
 
      cursor = (Point_t) {4, 2};
-     ASSERT(ce_get_indentation_for_next_line(&buffer, cursor, tab_len) == 10);
+     ASSERT(ce_get_indentation_for_line(&buffer, cursor, tab_len) == 10);
 
-     cursor = (Point_t) {2, 3};
-     ASSERT(ce_get_indentation_for_next_line(&buffer, cursor, tab_len) == 7); // un-aligned!
+     cursor = (Point_t) {2, 4};
+     ASSERT(ce_get_indentation_for_line(&buffer, cursor, tab_len) == 5); // un-aligned!
 
      cursor = (Point_t) {1, 4};
-     ASSERT(ce_get_indentation_for_next_line(&buffer, cursor, tab_len) == 5);
+     ASSERT(ce_get_indentation_for_line(&buffer, cursor, tab_len) == 5);
 
-     cursor = (Point_t) {0, 5};
-     ASSERT(ce_get_indentation_for_next_line(&buffer, cursor, tab_len) == 0);
+     cursor = (Point_t) {1, 5};
+     ASSERT(ce_get_indentation_for_line(&buffer, cursor, tab_len) == 0);
 
      ce_free_buffer(&buffer);
 }

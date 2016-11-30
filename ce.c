@@ -3309,7 +3309,7 @@ bool ce_get_word_at_location(const Buffer_t* buffer, Point_t location, Point_t* 
      return true;
 }
 
-int64_t ce_get_indentation_for_next_line(const Buffer_t* buffer, Point_t location, int64_t tab_len)
+int64_t ce_get_indentation_for_line(const Buffer_t* buffer, Point_t location, int64_t tab_len)
 {
      // first, match this line's indentation
      char curr;
@@ -3317,7 +3317,7 @@ int64_t ce_get_indentation_for_next_line(const Buffer_t* buffer, Point_t locatio
      // then, check the line for a '{' that is unmatched on location's line + indent if you find one
      for(int64_t y = location.y; y >= 0; --y){
           int64_t start_x = last_index_before_comment(buffer, y);
-          if(y == location.y && start_x > location.x) start_x = location.x;
+          if(y == location.y && start_x > location.x) start_x = location.x - 1;
 
           for(int64_t x = start_x; x >= 0; x--){
                Point_t iter = {x, y};
@@ -3339,9 +3339,9 @@ int64_t ce_get_indentation_for_next_line(const Buffer_t* buffer, Point_t locatio
                case '{':
                {
                     Point_t match = iter;
-                    ce_move_cursor_to_matching_pair(buffer, &match, '{');
+                    bool matched = ce_move_cursor_to_matching_pair(buffer, &match, '{');
 
-                    if(ce_point_after(match, location) || ce_points_equal(match, location)){
+                    if(ce_point_after(match, location) || ce_points_equal(match, location) || !matched){
                          // '{' is globally unmatched, or unmatched on our line
                          Point_t bol = {0, y};
                          ce_move_cursor_to_soft_beginning_of_line(buffer, &bol);
@@ -3351,9 +3351,9 @@ int64_t ce_get_indentation_for_next_line(const Buffer_t* buffer, Point_t locatio
                case '(':
                {
                     Point_t match = iter;
-                    ce_move_cursor_to_matching_pair(buffer, &match, '(');
+                    bool matched = ce_move_cursor_to_matching_pair(buffer, &match, '(');
 
-                    if(ce_point_after(match, location) || ce_points_equal(match, location)){
+                    if(ce_point_after(match, location) || ce_points_equal(match, location) || !matched){
                          return iter.x + 1; // if a line has "{{", we don't want to double tab the next line!
                     }
                } break;

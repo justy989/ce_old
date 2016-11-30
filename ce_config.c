@@ -16,9 +16,16 @@
 
 const char* buffer_flag_string(Buffer_t* buffer)
 {
-     if(buffer->readonly) return "[RO] ";
-     if(buffer->newfile) return "[NEW] ";
-     if(buffer->modified) return "*";
+     switch(buffer->status){
+     default:
+          break;
+     case BS_READONLY:
+           return "[RO] ";
+     case BS_NEW_FILE:
+          return "[NEW] ";
+     case BS_MODIFIED:
+          return "*";
+     }
 
      return "";
 }
@@ -507,7 +514,7 @@ BufferNode_t* new_buffer_from_file(BufferNode_t* head, const char* filename)
           assert(!"unsupported LoadFileResult_t");
           return false;
      case LF_DOES_NOT_EXIST:
-          buffer->newfile = true;
+          buffer->status = BS_NEW_FILE;
           buffer->name = strdup(filename);
           break;
      case LF_IS_DIRECTORY:
@@ -748,19 +755,19 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      // setup buffer list buffer
      config_state->buffer_list_buffer.name = strdup("[buffers]");
      initialize_buffer(&config_state->buffer_list_buffer);
-     config_state->buffer_list_buffer.readonly = true;
+     config_state->buffer_list_buffer.status = BS_READONLY;
 
      config_state->mark_list_buffer.name = strdup("[marks]");
      initialize_buffer(&config_state->mark_list_buffer);
-     config_state->mark_list_buffer.readonly = true;
+     config_state->mark_list_buffer.status = BS_READONLY;
 
      config_state->yank_list_buffer.name = strdup("[yanks]");
      initialize_buffer(&config_state->yank_list_buffer);
-     config_state->yank_list_buffer.readonly = true;
+     config_state->yank_list_buffer.status = BS_READONLY;
 
      config_state->macro_list_buffer.name = strdup("[macros]");
      initialize_buffer(&config_state->macro_list_buffer);
-     config_state->macro_list_buffer.readonly = true;
+     config_state->macro_list_buffer.status = BS_READONLY;
 
      // if we reload, the shell command buffer may already exist, don't recreate it
      BufferNode_t* itr = *head;
@@ -777,7 +784,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      if(!config_state->shell_command_buffer){
           config_state->shell_command_buffer = calloc(1, sizeof(*config_state->shell_command_buffer));
           config_state->shell_command_buffer->name = strdup("[shell_output]");
-          config_state->shell_command_buffer->readonly = true;
+          config_state->shell_command_buffer->status = BS_READONLY;
           ce_alloc_lines(config_state->shell_command_buffer, 1);
           BufferNode_t* new_buffer_node = ce_append_buffer_to_list(*head, config_state->shell_command_buffer);
           if(!new_buffer_node){
@@ -789,7 +796,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      if(!config_state->completion_buffer){
           config_state->completion_buffer = calloc(1, sizeof(*config_state->shell_command_buffer));
           config_state->completion_buffer->name = strdup("[completions]");
-          config_state->completion_buffer->readonly = true;
+          config_state->completion_buffer->status = BS_READONLY;
           BufferNode_t* new_buffer_node = ce_append_buffer_to_list(*head, config_state->completion_buffer);
           if(!new_buffer_node){
                ce_message("failed to add shell command buffer to list");
@@ -997,7 +1004,7 @@ bool destroyer(BufferNode_t** head, void* user_data)
                // write out all buffers and cursor positions
                BufferNode_t* itr = *head;
                while(itr){
-                    if(!itr->buffer->readonly){
+                    if(itr->buffer->status != BS_READONLY){
                          fprintf(out_file, "%s %"PRId64"\n", itr->buffer->name, itr->buffer->cursor.y);
                     }
                     itr = itr->next;
@@ -1466,7 +1473,7 @@ bool iterate_history_input(ConfigState_t* config_state, bool previous)
 void update_buffer_list_buffer(ConfigState_t* config_state, const BufferNode_t* head)
 {
      char buffer_info[BUFSIZ];
-     config_state->buffer_list_buffer.readonly = false;
+     config_state->buffer_list_buffer.status = BS_NONE;
      ce_clear_lines(&config_state->buffer_list_buffer);
 
      // calc maxes of things we care about for formatting
@@ -1505,14 +1512,14 @@ void update_buffer_list_buffer(ConfigState_t* config_state, const BufferNode_t* 
           ce_append_line(&config_state->buffer_list_buffer, buffer_info);
           itr = itr->next;
      }
-     config_state->buffer_list_buffer.modified = false;
-     config_state->buffer_list_buffer.readonly = true;
+
+     config_state->buffer_list_buffer.status = BS_READONLY;
 }
 
 void update_mark_list_buffer(ConfigState_t* config_state, const Buffer_t* buffer)
 {
      char buffer_info[BUFSIZ];
-     config_state->mark_list_buffer.readonly = false;
+     config_state->mark_list_buffer.status = BS_NONE;
      ce_clear_lines(&config_state->mark_list_buffer);
 
      snprintf(buffer_info, BUFSIZ, "// reg line");
@@ -1535,14 +1542,13 @@ void update_mark_list_buffer(ConfigState_t* config_state, const Buffer_t* buffer
           itr = itr->next;
      }
 
-     config_state->mark_list_buffer.modified = false;
-     config_state->mark_list_buffer.readonly = true;
+     config_state->mark_list_buffer.status = BS_READONLY;
 }
 
 void update_yank_list_buffer(ConfigState_t* config_state)
 {
      char buffer_info[BUFSIZ];
-     config_state->yank_list_buffer.readonly = false;
+     config_state->yank_list_buffer.status = BS_NONE;
      ce_clear_lines(&config_state->yank_list_buffer);
 
      const VimYankNode_t* itr = config_state->vim_state.yank_head;
@@ -1553,14 +1559,13 @@ void update_yank_list_buffer(ConfigState_t* config_state)
           itr = itr->next;
      }
 
-     config_state->yank_list_buffer.modified = false;
-     config_state->yank_list_buffer.readonly = true;
+     config_state->yank_list_buffer.status = BS_READONLY;
 }
 
 void update_macro_list_buffer(ConfigState_t* config_state)
 {
      char buffer_info[BUFSIZ];
-     config_state->macro_list_buffer.readonly = false;
+     config_state->macro_list_buffer.status = BS_NONE;
      ce_clear_lines(&config_state->macro_list_buffer);
 
      ce_append_line(&config_state->macro_list_buffer, "// reg actions");
@@ -1604,8 +1609,7 @@ void update_macro_list_buffer(ConfigState_t* config_state)
      ce_append_line(&config_state->macro_list_buffer, "// \\i -> KEY_RIGHT");
      ce_append_line(&config_state->macro_list_buffer, "// \\\\ -> \\"); // HAHAHAHAHA
 
-     config_state->macro_list_buffer.modified = false;
-     config_state->macro_list_buffer.readonly = true;
+     config_state->macro_list_buffer.status = BS_READONLY;
 }
 
 Point_t get_cursor_on_terminal(const Point_t* cursor, const BufferView_t* buffer_view, LineNumberType_t line_number_type)
@@ -1775,7 +1779,7 @@ void* run_shell_commands(void* user_data)
 
 void update_completion_buffer(Buffer_t* completion_buffer, AutoComplete_t* auto_complete, const char* match)
 {
-     assert(completion_buffer->readonly);
+     assert(completion_buffer->status == BS_READONLY);
      ce_clear_lines_readonly(completion_buffer);
 
      int64_t match_len = strlen(match);
@@ -2014,7 +2018,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                shell_command_data.view_current = buffer_view;
                shell_command_data.user_data = config_state;
 
-               assert(command_buffer->readonly);
+               assert(command_buffer->status == BS_READONLY);
                pthread_mutex_lock(&shell_buffer_lock);
                ce_clear_lines_readonly(command_buffer);
                pthread_mutex_unlock(&shell_buffer_lock);
@@ -2312,7 +2316,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     }
 
                     // reload file
-                    if(buffer->readonly){
+                    if(buffer->status == BS_READONLY){
                          // NOTE: maybe ce_clear_lines shouldn't care about readonly
                          ce_clear_lines_readonly(buffer);
                     }else{
@@ -2673,7 +2677,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               uint64_t unsaved_buffers = 0;
                               BufferNode_t* itr = *head;
                               while(itr){
-                                   if(!itr->buffer->readonly && itr->buffer->modified) unsaved_buffers++;
+                                   if(itr->buffer->status == BS_MODIFIED) unsaved_buffers++;
                                    itr = itr->next;
                               }
 
@@ -2764,7 +2768,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               int64_t buffer_index = 1;
                               bool found_good_buffer = false;
                               while(itr){
-                                   if(!itr->buffer->readonly && !ce_buffer_in_view(config_state->tab_current->view_head, itr->buffer)){
+                                   if(itr->buffer->status != BS_READONLY && !ce_buffer_in_view(config_state->tab_current->view_head, itr->buffer)){
                                         config_state->tab_current->view_current->cursor.y = buffer_index;
                                         found_good_buffer = true;
                                         break;
@@ -2785,7 +2789,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          if(buffer_state->commit_tail && buffer_state->commit_tail->commit.type != BCT_NONE){
                               ce_commit_undo(buffer, &buffer_state->commit_tail, cursor);
                               if(buffer_state->commit_tail->commit.type == BCT_NONE){
-                                   buffer->modified = false;
+                                   buffer->status = BS_NONE;
                               }
                          }
 

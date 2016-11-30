@@ -189,7 +189,7 @@ TEST(sanity_insert_char_readonly)
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
-     buffer.readonly = true;
+     buffer.status = BS_READONLY;
 
      Point_t point = {2, 0};
      ce_insert_char_readonly(&buffer, point, 'R');
@@ -317,7 +317,7 @@ TEST(insert_string_readonly_begin)
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
-     buffer.readonly = true;
+     buffer.status = BS_READONLY;
 
      Point_t point = {0, 0};
      ce_insert_string_readonly(&buffer, point, "AHHH ");
@@ -486,7 +486,7 @@ TEST(sanity_append_string_readonly)
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
-     buffer.readonly = true;
+     buffer.status = BS_READONLY;
 
      ce_append_string_readonly(&buffer, 0, " ARE AWESOME");
 
@@ -739,7 +739,7 @@ TEST(sanity_insert_line_readonly)
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
-     buffer.readonly = true;
+     buffer.status = BS_READONLY;
 
      ce_insert_line_readonly(&buffer, 0, "ARE AWESOME");
 
@@ -756,7 +756,7 @@ TEST(insert_line_multiline)
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
-     buffer.readonly = true;
+     buffer.status = BS_READONLY;
 
      ce_insert_line_readonly(&buffer, 0, "ARE\nAWESOME");
 
@@ -791,7 +791,7 @@ TEST(sanity_append_line_readonly)
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
-     buffer.readonly = true;
+     buffer.status = BS_READONLY;
 
      ce_append_line_readonly(&buffer, "ARE AWESOME");
 
@@ -846,7 +846,7 @@ TEST(sanity_clear_lines_readonly)
      buffer.lines = malloc(2 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
      buffer.lines[1] = strdup("ARE AWESOME");
-     buffer.readonly = true;
+     buffer.status = BS_READONLY;
 
      ce_clear_lines_readonly(&buffer);
 
@@ -2121,7 +2121,7 @@ TEST(sanity_append_char_readonly)
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS ARE AWESOM");
-     buffer.readonly = true;
+     buffer.status = BS_READONLY;
 
      ASSERT(ce_append_char_readonly(&buffer, 'E'));
      ASSERT(buffer.line_count == 1);

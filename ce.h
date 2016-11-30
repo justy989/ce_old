@@ -138,19 +138,28 @@ typedef enum{
 
 Direction_t ce_reverse_direction(Direction_t to_reverse);
 
+typedef enum {
+     BS_NONE,
+     BS_MODIFIED,
+     BS_READONLY,
+     BS_NEW_FILE,
+} BufferStatus_t;
+
 typedef struct {
      char** lines; // '\0' terminated, does not contain newlines, NULL if empty
      int64_t line_count;
+
+     BufferStatus_t status;
+
      Point_t cursor;
      Point_t highlight_start;
      Point_t highlight_end;
-     bool modified;
-     bool readonly;
-     bool newfile;
+
      union {
           char* filename;
           char* name;
      };
+
      void* user_data;
 } Buffer_t;
 
@@ -177,13 +186,17 @@ typedef enum {
 typedef struct {
      BufferCommitType_t type;
      BufferCommitChain_t chain;
+
      Point_t start;
+
      Point_t undo_cursor;
      Point_t redo_cursor;
+
      union {
           char c;
           char* str;
      };
+
      union {
           char prev_c;
           char* prev_str;
@@ -204,11 +217,15 @@ typedef struct BufferCommitNode_t {
 // []
 typedef struct BufferView_t {
      Point_t cursor;
+
      Point_t top_left;
      Point_t bottom_right;
+
      int64_t top_row;
      int64_t left_column;
+
      Buffer_t* buffer;
+
      struct BufferView_t* next_horizontal;
      struct BufferView_t* next_vertical;
 } BufferView_t;

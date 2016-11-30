@@ -2110,7 +2110,7 @@ void vim_enter_normal_mode(VimState_t* vim_state)
 
 bool vim_enter_insert_mode(VimState_t* vim_state, Buffer_t* buffer)
 {
-     if(buffer->readonly) return false;
+     if(buffer->status == BS_READONLY) return false;
 
      vim_state->mode = VM_INSERT;
      return true;

@@ -29,7 +29,6 @@ LITTLE:
  -auto complete shell commands then files
  -hit an undo brace bug, unsure how to reproduce. I wrapped some code in an if statement,
   then decided I didn't want the if statement. The closing if statement brace did not get undone.
- -change readonly, modified, new file to single enum, since they don't seem to intersect
 */
 
 #include <assert.h>
@@ -204,8 +203,7 @@ int main(int argc, char** argv)
      message_buffer->line_count = 0;
      message_buffer->user_data = NULL;
      ce_alloc_lines(message_buffer, 1);
-     message_buffer->readonly = true;
-     message_buffer->modified = false;
+     message_buffer->status = BS_READONLY;
 
      // init buffer list
      BufferNode_t* buffer_list_head = calloc(1, sizeof(*buffer_list_head));
@@ -316,7 +314,7 @@ int main(int argc, char** argv)
      // main loop
      while(!done){
           // NOTE: only allow message buffer modifying here
-          message_buffer->readonly = false;
+          message_buffer->status = BS_NONE;
 
           // add new input to message buffer
           while(fgets(message_buffer_buf, BUFSIZ, message_stderr) != NULL){
@@ -331,8 +329,7 @@ int main(int argc, char** argv)
                assert(ret);
           }
 
-          message_buffer->readonly = true;
-          message_buffer->modified = false;
+          message_buffer->status = BS_READONLY;
 
           // ncurses macro that gets height and width
           getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);

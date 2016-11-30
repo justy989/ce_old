@@ -197,7 +197,7 @@ static bool line_is_all_whitespace(Buffer_t* buffer, int64_t line)
 
 VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* buffer, Point_t* cursor,
                                       BufferCommitNode_t** commit_tail, VimBufferState_t* vim_buffer_state,
-                                      AutoComplete_t* auto_complete, bool repeating)
+                                      bool repeating)
 {
      char recording_macro = vim_state->recording_macro;
      VimMode_t vim_mode = vim_state->mode;
@@ -320,24 +320,11 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
           } break;
           case KEY_TAB:
           {
-               if(auto_completing(auto_complete)){
-                    char* complete = auto_complete_get_completion(auto_complete, cursor->x);
-                    int64_t complete_len = strlen(complete);
-                    if(ce_insert_string(buffer, *cursor, complete)){
-                         Point_t save_cursor = *cursor;
-                         ce_move_cursor(buffer, cursor, (Point_t){complete_len, cursor->y});
-                         cursor->x++;
-                         ce_commit_insert_string(commit_tail, save_cursor, save_cursor, *cursor, complete, BCC_KEEP_GOING);
-                    }else{
-                         free(complete);
-                    }
-               }else{
-                    if(ce_insert_string(buffer, insert_start, TAB_STRING)){
-                         ce_move_cursor(buffer, cursor, (Point_t){strlen(TAB_STRING) - 1, 0});
-                         cursor->x++; // we want to be after the tabs
-                         ce_commit_insert_string(commit_tail, insert_start, undo_cursor, *cursor, strdup(TAB_STRING), BCC_KEEP_GOING);
-                         ce_keys_push(&vim_state->command_head, key);
-                    }
+               if(ce_insert_string(buffer, insert_start, TAB_STRING)){
+                    ce_move_cursor(buffer, cursor, (Point_t){strlen(TAB_STRING) - 1, 0});
+                    cursor->x++; // we want to be after the tabs
+                    ce_commit_insert_string(commit_tail, insert_start, undo_cursor, *cursor, strdup(TAB_STRING), BCC_KEEP_GOING);
+                    ce_keys_push(&vim_state->command_head, key);
                }
           } break;
           case KEY_UP:
@@ -508,7 +495,7 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
           {
                VimMode_t original_mode = vim_state->mode;
                bool successful_action = vim_action_apply(&vim_action, buffer, cursor, vim_state, commit_tail,
-                                                         vim_buffer_state, auto_complete);
+                                                         vim_buffer_state);
 
                if(vim_state->mode != original_mode){
                     switch(vim_state->mode){
@@ -1650,7 +1637,7 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
 }
 
 bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, VimState_t* vim_state,
-                      BufferCommitNode_t** commit_tail, VimBufferState_t* vim_buffer_state, AutoComplete_t* auto_complete)
+                      BufferCommitNode_t** commit_tail, VimBufferState_t* vim_buffer_state)
 {
      VimActionRange_t action_range;
      BufferCommitChain_t chain = vim_state->playing_macro ? BCC_KEEP_GOING : BCC_STOP;
@@ -2069,7 +2056,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                int* macro_itr = macro->command;
                while(*macro_itr){
                     VimKeyHandlerResult_t vkh_result =  vim_key_handler(*macro_itr, vim_state, buffer, cursor, commit_tail,
-                                                                        vim_buffer_state, auto_complete, false);
+                                                                        vim_buffer_state, false);
 
                     if(vkh_result.type == VKH_UNHANDLED_KEY){
                          unhandled_key = true;

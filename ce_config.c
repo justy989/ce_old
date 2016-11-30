@@ -239,6 +239,150 @@ void tab_view_restore_overrideable(TabView_t* tab)
      center_view(tab->view_overrideable);
 }
 
+typedef struct CompleteNode_t{
+     char* option;
+     struct CompleteNode_t* next;
+     struct CompleteNode_t* prev;
+} CompleteNode_t;
+
+typedef struct{
+     CompleteNode_t* head;
+     CompleteNode_t* tail;
+     CompleteNode_t* current;
+     Point_t start;
+} AutoComplete_t;
+
+bool auto_complete_insert(AutoComplete_t* auto_complete, const char* option)
+{
+     CompleteNode_t* new_node = calloc(1, sizeof(*new_node));
+     if(!new_node){
+          ce_message("failed to allocate auto complete option");
+          return false;
+     }
+
+     new_node->option = strdup(option);
+
+     if(auto_complete->tail){
+          auto_complete->tail->next = new_node;
+          new_node->prev = auto_complete->tail;
+     }
+
+     auto_complete->tail = new_node;
+     if(!auto_complete->head){
+          auto_complete->head = new_node;
+     }
+
+     return true;
+}
+
+void auto_complete_start(AutoComplete_t* auto_complete, Point_t start)
+{
+     assert(start.x >= 0);
+     auto_complete->start = start;
+     auto_complete->current = auto_complete->head;
+}
+
+void auto_complete_end(AutoComplete_t* auto_complete)
+{
+     auto_complete->start.x = -1;
+}
+
+bool auto_completing(AutoComplete_t* auto_complete)
+{
+    return auto_complete->start.x >= 0;
+}
+
+int64_t string_common_beginning(const char* a, const char* b)
+{
+     size_t common = 0;
+
+     while(*a && *b){
+          if(*a == *b){
+               common++;
+          }else{
+               break;
+          }
+
+          a++;
+          b++;
+     }
+
+     return common;
+}
+
+// NOTE: allocates the string that is returned to the user
+char* auto_complete_get_completion(AutoComplete_t* auto_complete, int64_t x)
+{
+     int64_t offset = x - auto_complete->start.x;
+
+     CompleteNode_t* itr = auto_complete->current;
+     int64_t complete_len = strlen(auto_complete->current->option + offset);
+     int64_t min_complete_len = complete_len;
+
+     do{
+          itr = itr->next;
+          if(!itr) itr = auto_complete->head;
+          int64_t option_len = strlen(itr->option);
+
+          if(option_len <= offset) continue;
+          if(strncmp(auto_complete->current->option, itr->option, offset) != 0) continue;
+
+          int64_t check_complete_len = string_common_beginning(auto_complete->current->option + offset, itr->option + offset);
+          if(check_complete_len < min_complete_len) min_complete_len = check_complete_len;
+     }while(itr != auto_complete->current);
+
+     if(min_complete_len) complete_len = min_complete_len;
+
+     char* completion = malloc(complete_len + 1);
+     strncpy(completion, auto_complete->current->option + offset, complete_len);
+     completion[complete_len] = 0;
+
+     return completion;
+}
+
+void auto_complete_free(AutoComplete_t* auto_complete)
+{
+    CompleteNode_t* itr = auto_complete->head;
+    while(itr){
+         CompleteNode_t* tmp = itr;
+         itr = itr->next;
+         free(tmp->option);
+         free(tmp);
+    }
+
+    auto_complete->head = NULL;
+    auto_complete->tail = NULL;
+    auto_complete->current = NULL;
+}
+
+void auto_complete_next(AutoComplete_t* auto_complete, const char* match)
+{
+     int64_t match_len = strlen(match);
+     CompleteNode_t* initial_node = auto_complete->current;
+
+     do{
+          auto_complete->current = auto_complete->current->next;
+          if(!auto_complete->current) auto_complete->current = auto_complete->head;
+          if(strncmp(auto_complete->current->option, match, match_len) == 0) return;
+     }while(auto_complete->current != initial_node);
+
+     auto_complete_end(auto_complete);
+}
+
+void auto_complete_prev(AutoComplete_t* auto_complete, const char* match)
+{
+     int64_t match_len = strlen(match);
+     CompleteNode_t* initial_node = auto_complete->current;
+
+     do{
+          auto_complete->current = auto_complete->current->prev;
+          if(!auto_complete->current) auto_complete->current = auto_complete->tail;
+          if(strncmp(auto_complete->current->option, match, match_len) == 0) return;
+     }while(auto_complete->current != initial_node);
+
+     auto_complete_end(auto_complete);
+}
+
 typedef struct{
      bool input;
      const char* input_message;
@@ -504,6 +648,7 @@ Buffer_t* open_file_buffer(BufferNode_t* head, const char* filename)
           struct stat open_file_stat;
           BufferNode_t* itr = head;
           while(itr){
+               // NOTE: should we cache inodes?
                if(stat(itr->buffer->name, &open_file_stat) == 0){
                     if(open_file_stat.st_ino == new_file_stat.st_ino){
                          return itr->buffer; // already open
@@ -2344,12 +2489,33 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                }
           } break;
           }
+     }else{
+          switch(key){
+          default:
+               break;
+          case KEY_TAB:
+               if(auto_completing(&config_state->auto_complete)){
+                    char* complete = auto_complete_get_completion(&config_state->auto_complete, cursor->x);
+                    int64_t complete_len = strlen(complete);
+                    if(ce_insert_string(buffer, *cursor, complete)){
+                         Point_t save_cursor = *cursor;
+                         ce_move_cursor(buffer, cursor, (Point_t){complete_len, cursor->y});
+                         cursor->x++;
+                         ce_commit_insert_string(&buffer_state->commit_tail, save_cursor, save_cursor, *cursor, complete, BCC_KEEP_GOING);
+                    }else{
+                         free(complete);
+                    }
+                    handled_key = true;
+                    key = 0;
+               }
+               break;
+          }
      }
 
      if(!handled_key){
           VimKeyHandlerResult_t vkh_result = vim_key_handler(key, &config_state->vim_state, config_state->tab_current->view_current->buffer,
                                                              &config_state->tab_current->view_current->cursor, &buffer_state->commit_tail,
-                                                             &buffer_state->vim_buffer_state, &config_state->auto_complete, false);
+                                                             &buffer_state->vim_buffer_state, false);
           if(vkh_result.type == VKH_HANDLED_KEY){
                if(config_state->vim_state.mode == VM_INSERT && config_state->input){
                     switch(config_state->input_key){
@@ -2450,7 +2616,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     case '.':
                     {
                          vim_action_apply(&config_state->vim_state.last_action, buffer, cursor, &config_state->vim_state,
-                                          &buffer_state->commit_tail, &buffer_state->vim_buffer_state, &config_state->auto_complete);
+                                          &buffer_state->commit_tail, &buffer_state->vim_buffer_state);
 
                          if(config_state->vim_state.mode != VM_INSERT || !config_state->vim_state.last_insert_command ||
                             config_state->vim_state.last_action.change.type == VCT_PLAY_MACRO) break;
@@ -2461,7 +2627,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          while(*cmd_itr){
                               vim_key_handler(*cmd_itr, &config_state->vim_state, config_state->tab_current->view_current->buffer,
                                               &config_state->tab_current->view_current->cursor, &buffer_state->commit_tail,
-                                              &buffer_state->vim_buffer_state, &config_state->auto_complete, true);
+                                              &buffer_state->vim_buffer_state, true);
                               cmd_itr++;
                          }
 

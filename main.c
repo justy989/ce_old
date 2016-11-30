@@ -29,6 +29,7 @@ LITTLE:
  -auto complete shell commands then files
  -hit an undo brace bug, unsure how to reproduce. I wrapped some code in an if statement,
   then decided I didn't want the if statement. The closing if statement brace did not get undone.
+ -change readonly, modified, new file to single enum, since they don't seem to intersect
 */
 
 #include <assert.h>
@@ -146,6 +147,7 @@ const char* random_greeting()
           "The default config has a great vimplementation!",
           "They see me slurpin' They hatin'",
           "'Days of pain are worth the years of upcoming prosperity' -confucius",
+          "ce, aka, 'the cache miss king'",
      };
 
      srand(time(NULL));

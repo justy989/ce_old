@@ -25,7 +25,6 @@ LITTLE:
  -user code can infinite loop if you call ce_advance_cursor(buffer, &a, 1) and rely on
   ce_points_equal(a, b) being false when b is at the end of a line.
  -vim's 'ci}' and 'di}' behave differently in a nice way, emulate that
- -handle case where filename doesn't fit in view status line
  -auto complete shell commands then files
  -hit an undo brace bug, unsure how to reproduce. I wrapped some code in an if statement,
   then decided I didn't want the if statement. The closing if statement brace did not get undone.
@@ -150,7 +149,6 @@ const char* random_greeting()
      };
 
      srand(time(NULL));
-
      return greetings[ rand() % (sizeof(greetings) / sizeof(greetings[0]))];
 }
 

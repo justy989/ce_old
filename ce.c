@@ -107,10 +107,11 @@ LoadFileResult_t ce_load_file(Buffer_t* buffer, const char* filename)
 
      if(access(filename, W_OK) != 0){
           buffer->status = BS_READONLY;
+     }else{
+          buffer->status = BS_NONE;
      }
 
      free(contents);
-     buffer->status = BS_MODIFIED;
      return LF_SUCCESS;
 }
 
@@ -3343,11 +3344,13 @@ int64_t ce_get_indentation_for_line(const Buffer_t* buffer, Point_t location, in
                     if(!find_matching_string_backward(buffer, &iter, '"')){
                          return false;
                     }
+                    x = iter.x;
                     break;
                case '\'':
                     if(!find_matching_string_backward(buffer, &iter, '\'')){
                          return false;
                     }
+                    x = iter.x;
                     break;
                case '{':
                {

@@ -1724,9 +1724,6 @@ typedef enum {
      HL_OFF,
      HL_ON,
      HL_CURRENT_LINE,
-     HL_DIFF_ADD,
-     HL_DIFF_REMOVE,
-     HL_DIFF_HEADER,
 } HighlightType_t;
 
 static int set_color(Syntax_t syntax, HighlightType_t highlight_type)
@@ -1743,15 +1740,6 @@ static int set_color(Syntax_t syntax, HighlightType_t highlight_type)
                break;
           case HL_CURRENT_LINE:
                attron(COLOR_PAIR(syntax + S_NORMAL_CURRENT_LINE - 1));
-               break;
-          case HL_DIFF_ADD:
-               attron(COLOR_PAIR(syntax + S_NORMAL_DIFF_ADD - 1));
-               break;
-          case HL_DIFF_REMOVE:
-               attron(COLOR_PAIR(syntax + S_NORMAL_DIFF_REMOVE - 1));
-               break;
-          case HL_DIFF_HEADER:
-               attron(COLOR_PAIR(syntax + S_NORMAL_DIFF_HEADER - 1));
                break;
           }
      } else {
@@ -1864,6 +1852,16 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
           line_number_size--;
      }
 
+     bool seen_diff_header = false;
+
+     // look for any diff headers earlier in the file
+     for(int64_t i = buffer_top_left->y - 1; i >= 0; --i){
+          if(buffer->lines[i][0] == '@' && buffer->lines[i][1] == '@'){
+               seen_diff_header = true;
+               break;
+          }
+     }
+
      for(int64_t i = buffer_top_left->y; i <= last_line; ++i) {
           move(term_top_left->y + (i - buffer_top_left->y), term_top_left->x);
 
@@ -1903,26 +1901,20 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                bool inside_comment = false;
                int64_t color_left = 0;
                int highlight_color = 0;
-               bool diff_add = buffer->lines[i][0] == '+';
-               bool diff_remove = buffer->lines[i][0] == '-';
                bool diff_header = buffer->lines[i][0] == '@' && buffer->lines[i][1] == '@';
+               if(diff_header) seen_diff_header = true;
+               bool diff_add = seen_diff_header && buffer->lines[i][0] == '+';
+               bool diff_remove = seen_diff_header && buffer->lines[i][0] == '-';
                HighlightType_t highlight_type = HL_OFF;
                int64_t chars_til_highlighted_word = -1;
                int64_t highlighting_left = 0;
                int fg_color = 0;
 
+
                regmatch_t regex_matches[1];
                if(highlight_word && regex_compile_rc == 0){
                     int regex_rc = regexec(&highlight_regex, buffer->lines[i], 1, regex_matches, 0);
                     if(regex_rc == 0) chars_til_highlighted_word = regex_matches[0].rm_so;
-               }
-
-               if(diff_add){
-                    highlight_type = HL_DIFF_ADD;
-               } else if(diff_remove){
-                    highlight_type = HL_DIFF_REMOVE;
-               } else if(diff_header){
-                    highlight_type = HL_DIFF_HEADER;
                }
 
                int64_t begin_trailing_whitespace = line_length;
@@ -1970,10 +1962,6 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                               if(chars_til_highlighted_word == 0){
                                    highlighting_left = regex_matches[0].rm_eo - regex_matches[0].rm_so;
                                    highlight_type = HL_ON;
-                              }else if(diff_add){
-                                   highlight_type = HL_DIFF_ADD;
-                              }else if(diff_remove){
-                                   highlight_type = HL_DIFF_REMOVE;
                               }else{
                                    highlight_type = HL_OFF;
                               }
@@ -2053,6 +2041,12 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                     fg_color = set_color(S_COMMENT, highlight_type);
                }else if(inside_string){
                     fg_color = set_color(S_STRING, highlight_type);
+               }else if(diff_add){
+                    fg_color = set_color(S_DIFF_ADDED, highlight_type);
+               }else if(diff_remove){
+                    fg_color = set_color(S_DIFF_REMOVED, highlight_type);
+               }else if(diff_header){
+                    fg_color = set_color(S_DIFF_HEADER, highlight_type);
                }else if(color_left){
                     fg_color = set_color(highlight_color, highlight_type);
                }
@@ -2086,33 +2080,19 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                                              highlight_type = HL_ON;
                                         }else if(cursor->y == i && highlight_line_type != HLT_NONE){
                                              highlight_type = HL_CURRENT_LINE;
-                                        }else if(diff_add){
-                                             highlight_type = HL_DIFF_ADD;
-                                        }else if(diff_remove){
-                                             highlight_type = HL_DIFF_REMOVE;
-                                        }else if(diff_header){
-                                             highlight_type = HL_DIFF_HEADER;
                                         }else{
                                              highlight_type = HL_OFF;
                                         }
                                         set_color(fg_color, highlight_type);
                                    }
-                              }else if(cursor->y == i && highlight_line_type != HLT_NONE && !diff_add && !diff_remove && !diff_header){
+                              }else if(cursor->y == i && highlight_line_type != HLT_NONE){
                                    highlight_type = HL_CURRENT_LINE;
                                    set_color(fg_color, highlight_type);
                               }else{
-                                   if(diff_add){
-                                        highlight_type = HL_DIFF_ADD;
-                                   }else if(diff_remove){
-                                        highlight_type = HL_DIFF_REMOVE;
-                                   }else if(diff_header){
-                                        highlight_type = HL_DIFF_HEADER;
-                                   }else{
-                                        highlight_type = HL_OFF;
-                                   }
+                                   highlight_type = HL_OFF;
                                    set_color(fg_color, highlight_type);
                               }
-                         }else if(cursor->y == i && highlight_line_type != HLT_NONE && !diff_add && !diff_remove && !diff_header){
+                         }else if(cursor->y == i && highlight_line_type != HLT_NONE){
                               highlight_type = HL_CURRENT_LINE;
                               set_color(fg_color, highlight_type);
                          }
@@ -2200,11 +2180,11 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                               }else if(inside_string){
                                    fg_color = set_color(S_STRING, highlight_type);
                               }else if(diff_add){
-                                   highlight_type = HL_DIFF_ADD;
-                                   fg_color = set_color(fg_color, highlight_type);
+                                   fg_color = set_color(S_DIFF_ADDED, highlight_type);
                               }else if(diff_remove){
-                                   highlight_type = HL_DIFF_REMOVE;
-                                   fg_color = set_color(fg_color, highlight_type);
+                                   fg_color = set_color(S_DIFF_REMOVED, highlight_type);
+                              }else if(diff_header){
+                                   fg_color = set_color(S_DIFF_HEADER, highlight_type);
                               }
                          }
                     }

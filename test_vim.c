@@ -966,6 +966,29 @@ TEST(insert_indented_brace)
      key_handler_test_free(&kht);
 }
 
+TEST(insert_indented_paren)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     const char* original_line = "if(tacos)";
+     ce_append_line(&kht.buffer, original_line);
+
+     key_handler_test_run(&kht, "fati\\rmy_\\e");
+     EXPECT(kht.cursor.x == 6 && kht.cursor.y == 1);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     for(int i = 0; i < kht.buffer.line_count; ++i) printf("%s\n", kht.buffer.lines[i]);
+     ASSERT(kht.buffer.line_count == 2);
+     EXPECT(strcmp(kht.buffer.lines[0], "if(") == 0);
+     EXPECT(strcmp(kht.buffer.lines[1], "   my_tacos)") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(kht.buffer.line_count == 1);
+     EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);
+
+     key_handler_test_free(&kht);
+}
+
 TEST(insert_soft_beginning_of_line)
 {
      KeyHandlerTest_t kht;

@@ -28,8 +28,7 @@ LITTLE:
  -auto complete shell commands then files
  -hit an undo brace bug, unsure how to reproduce. I wrapped some code in an if statement,
   then decided I didn't want the if statement. The closing if statement brace did not get undone.
- -revert to old git diff highlighting
- -visual replace infinite loops
+ -visual replace *sometimes* infinite loops
 */
 
 #include <assert.h>

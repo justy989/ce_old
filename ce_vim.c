@@ -358,6 +358,7 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
           case '}':
           {
                if(ce_insert_char(buffer, *cursor, key)){
+                    ce_keys_push(&vim_state->command_head, key);
                     Point_t next_cursor = {cursor->x + 1, cursor->y};
                     ce_commit_insert_char(commit_tail, *cursor, *cursor, next_cursor, key, BCC_KEEP_GOING);
 

@@ -3345,12 +3345,14 @@ int64_t ce_get_indentation_for_line(const Buffer_t* buffer, Point_t location, in
                          return false;
                     }
                     x = iter.x;
+                    y = iter.y;
                     break;
                case '\'':
                     if(!find_matching_string_backward(buffer, &iter, '\'')){
                          return false;
                     }
                     x = iter.x;
+                    y = iter.y;
                     break;
                case '{':
                {

@@ -23,16 +23,16 @@
 - Macros in vim are awesome, but:
   - If you mess up while creating a macro, you have to start over. In ce, when you are viewing your recorded macros,
     you can select any macro to edit it
-  - If you accidently 'undo' while creating a macro, it won't replay correctly. In ce, undo clears the part of the macro associated with
-    change you want to undo. You can also redo that macro.
+  - If you accidently 'undo' while creating a macro, it won't replay correctly. In ce, undo clears the part of the
+    macro associated with change you want to undo. You can also redo while creating a macro.
 - The authors need to work remotely, so the editor needs to be able to run in a terminal.
-- It is fun learning how to make a text editor. Also, using something on a daily basis that we created gives us
-  the warm and fuzzies.
+- It is fun learning how to make a text editor.
+- Using something on a daily basis that we created gives us the warm and fuzzies.
 
 ###How To Build
 - Requirements
-  - ncurses library
   - c11 compiler
+  - ncurses library
 - Step(s)
   - `$ make`
 
@@ -106,13 +106,13 @@ zb|scroll view so cursor is at the bottom
 gf|goto file under cursor
 gt|goto next tab
 gT|goto previous tab
-gc|comment line
-gu|uncomment line
+gc|comment current line or all lines in visual selection
+gu|uncomment current line or all lines in visual selection
 gr|reload buffer from associated file
 gv|mark the view as overrideable
 gl|cycle through line number modes
-<<|unindent line
->>|indent line
+<<|unindent current line or all lines in visual selection
+>>|indent current line or all lines in visual selection
 %|find matching quotes, parents, brackets, square brackets, angled brackets
 \*|search forward for the word under the cursor
 #|search forward for the word under the cursor

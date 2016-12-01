@@ -20,7 +20,6 @@ LITTLE:
  -step through macro one change at a time
  -separate dot for input buffer
  -valgrind run clean
- -'*' and '#' should be 'words' with boundaries not literal strings that can match anything
  -when there are 3 lines in a file and you do 'dj', you still have 2 lines...
  -user code can infinite loop if you call ce_advance_cursor(buffer, &a, 1) and rely on
   ce_points_equal(a, b) being false when b is at the end of a line.
@@ -230,8 +229,6 @@ int main(int argc, char** argv)
      // ncurses_init()
      initscr();
      keypad(stdscr, TRUE);
-     mousemask(~((mmask_t)0), NULL);
-     mouseinterval(0);
      raw();
      cbreak();
      noecho();

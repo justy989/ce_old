@@ -832,6 +832,12 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      config_state->line_number_type = LNT_RELATIVE;
      config_state->highlight_line_type = HLT_ENTIRE_LINE;
 
+#if 0
+     // enable mouse events
+     mousemask(~((mmask_t)0), NULL);
+     mouseinterval(0);
+#endif
+
      input_history_init(&config_state->shell_command_history);
      input_history_init(&config_state->shell_input_history);
      input_history_init(&config_state->search_history);
@@ -921,32 +927,63 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
           if(in_file){
                ce_message("restoring state from %s", path);
 
-               // write out last searched text
-               char str[256];
                int64_t index = 0;
                int n = 0;
 
-               n = fscanf(in_file, "%s\n", str);
+               // read in last searched text
+               n = fscanf(in_file, "%"PRId64"\n", &index);
 
                if(n == 1){
-                    vim_yank_add(&config_state->vim_state.yank_head, '/', strdup(str), YANK_NORMAL);
-                    ce_message("  search pattern '%s'", str);
+                    char* line = NULL;
+                    size_t len = 0;
+                    ssize_t read = 0;
+                    Buffer_t scrap_buffer = {};
+                    ce_alloc_lines(&scrap_buffer, 1);
+                    for(int64_t i = 0; i < index; ++i){
+                         read = getline(&line, &len, in_file);
+                         if(read > 0){
+                              ce_append_line(&scrap_buffer, line);
+                         }
+                    }
 
-                    // write out all buffers and cursor positions
-                    while(!feof(in_file)){
-                         n = fscanf(in_file, "%s %"PRId64"\n", str, &index);
-                         if(n == 2){
-                              BufferNode_t* itr = *head;
-                              while(itr){
-                                   if(strcmp(itr->buffer->name, str) == 0){
-                                        ce_message(" '%s' line %" PRId64, str, index);
-                                        itr->buffer->cursor.y = index;
-                                        ce_move_cursor_to_soft_beginning_of_line(itr->buffer, &itr->buffer->cursor);
-                                        BufferView_t* view = ce_buffer_in_view(config_state->tab_current->view_head, itr->buffer);
-                                        if(view) view->cursor = view->buffer->cursor;
-                                        break;
+                    if(n == 1){
+                         char* yank_text = ce_dupe_buffer(&scrap_buffer);
+                         vim_yank_add(&config_state->vim_state.yank_head, '/', yank_text, YANK_NORMAL);
+                         ce_message("  search pattern '%s'", yank_text);
+
+                         // read in shell command history
+                         n = fscanf(in_file, "%"PRId64"\n", &index);
+                         if(n == 1){
+                              ce_message("  %"PRId64" shell commands", index);
+
+                              for(int64_t i = 0; i < index; ++i){
+                                   if(feof(in_file)) break;
+
+                                   read = getline(&line, &len, in_file);
+                                   if(read > 0){
+                                        config_state->shell_command_history.cur->entry = strdup(line);
+                                        input_history_commit_current(&config_state->shell_command_history);
                                    }
-                                   itr = itr->next;
+                              }
+
+                              // write out all buffers and cursor positions
+                              char str[256];
+                              while(!feof(in_file)){
+                                   n = fscanf(in_file, "%s %"PRId64"\n", str, &index);
+                                   if(n == 2){
+                                        BufferNode_t* itr = *head;
+                                        while(itr){
+                                             if(strcmp(itr->buffer->name, str) == 0){
+                                                  ce_message(" '%s' line %" PRId64, str, index);
+                                                  itr->buffer->cursor.y = index;
+                                                  ce_move_cursor_to_soft_beginning_of_line(itr->buffer, &itr->buffer->cursor);
+                                                  BufferView_t* view = ce_buffer_in_view(config_state->tab_current->view_head, itr->buffer);
+                                                  if(view) view->cursor = view->buffer->cursor;
+                                                  break;
+                                             }
+                                             itr = itr->next;
+                                        }
+                                   }
                               }
                          }
                     }
@@ -973,9 +1010,27 @@ bool destroyer(BufferNode_t** head, void* user_data)
                // write out last searched text
                VimYankNode_t* yank = vim_yank_find(config_state->vim_state.yank_head, '/');
                if(yank){
+                    int64_t line_count = ce_count_string_lines(yank->text);
+                    fprintf(out_file, "%"PRId64"\n", line_count);
                     fprintf(out_file, "%s\n", yank->text);
                }else{
-                    fprintf(out_file, "\n");
+                    fprintf(out_file, "0\n");
+               }
+
+               // shell command history
+               int64_t shell_command_count = 0;
+               InputHistoryNode_t* history_itr = config_state->shell_command_history.head;
+               while(history_itr && history_itr->entry){
+                    shell_command_count++;
+                    history_itr = history_itr->next;
+               }
+
+               fprintf(out_file, "%"PRId64"\n", shell_command_count);
+
+               history_itr = config_state->shell_command_history.head;
+               for(int32_t i = 0; i < shell_command_count; ++i){
+                    fprintf(out_file, "%s\n", history_itr->entry);
+                    history_itr = history_itr->next;
                }
 
                // TODO: vim last command
@@ -1440,7 +1495,7 @@ bool iterate_history_input(ConfigState_t* config_state, bool previous)
 
      if(success){
           ce_clear_lines(config_state->view_input->buffer);
-          ce_append_string(config_state->view_input->buffer, 0, history->cur->entry);
+          if(history->cur->entry) ce_append_string(config_state->view_input->buffer, 0, history->cur->entry);
           config_state->view_input->cursor = (Point_t){0, 0};
           ce_move_cursor_to_end_of_file(config_state->view_input->buffer, &config_state->view_input->cursor);
           reset_buffer_commits(&buffer_state->commit_tail);

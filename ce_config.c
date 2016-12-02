@@ -927,6 +927,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
           if(in_file){
                ce_message("restoring state from %s", path);
 
+               char* line = NULL;
                int64_t index = 0;
                int n = 0;
 
@@ -934,61 +935,66 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
                n = fscanf(in_file, "%"PRId64"\n", &index);
 
                if(n == 1){
-                    char* line = NULL;
                     size_t len = 0;
                     ssize_t read = 0;
                     Buffer_t scrap_buffer = {};
-                    ce_alloc_lines(&scrap_buffer, 1);
+
                     for(int64_t i = 0; i < index; ++i){
                          read = getline(&line, &len, in_file);
-                         if(read > 0){
+                         if(read >= 0){
                               ce_append_line(&scrap_buffer, line);
                          }
                     }
 
-                    if(n == 1){
+                    if(scrap_buffer.line_count){
                          char* yank_text = ce_dupe_buffer(&scrap_buffer);
+                         ce_free_buffer(&scrap_buffer);
                          vim_yank_add(&config_state->vim_state.yank_head, '/', yank_text, YANK_NORMAL);
                          ce_message("  search pattern '%s'", yank_text);
+                    }
 
-                         // read in shell command history
-                         n = fscanf(in_file, "%"PRId64"\n", &index);
-                         if(n == 1){
-                              ce_message("  %"PRId64" shell commands", index);
+                    // read in shell command history
+                    n = fscanf(in_file, "%"PRId64"\n", &index);
+                    if(n == 1){
+                         ce_message("  %"PRId64" shell commands", index);
 
-                              for(int64_t i = 0; i < index; ++i){
-                                   if(feof(in_file)) break;
+                         for(int64_t i = 0; i < index; ++i){
+                              if(feof(in_file)) break;
 
-                                   read = getline(&line, &len, in_file);
-                                   if(read > 0){
+                              read = getline(&line, &len, in_file);
+                              if(read > 0){
+                                   int64_t len = strlen(line);
+                                   if(len){
+                                        line[len-1] = 0; // overwrite the newline character included by getline()
                                         config_state->shell_command_history.cur->entry = strdup(line);
                                         input_history_commit_current(&config_state->shell_command_history);
                                    }
                               }
+                         }
 
-                              // write out all buffers and cursor positions
-                              char str[256];
-                              while(!feof(in_file)){
-                                   n = fscanf(in_file, "%s %"PRId64"\n", str, &index);
-                                   if(n == 2){
-                                        BufferNode_t* itr = *head;
-                                        while(itr){
-                                             if(strcmp(itr->buffer->name, str) == 0){
-                                                  ce_message(" '%s' line %" PRId64, str, index);
-                                                  itr->buffer->cursor.y = index;
-                                                  ce_move_cursor_to_soft_beginning_of_line(itr->buffer, &itr->buffer->cursor);
-                                                  BufferView_t* view = ce_buffer_in_view(config_state->tab_current->view_head, itr->buffer);
-                                                  if(view) view->cursor = view->buffer->cursor;
-                                                  break;
-                                             }
-                                             itr = itr->next;
+                         // write out all buffers and cursor positions
+                         char str[256];
+                         while(!feof(in_file)){
+                              n = fscanf(in_file, "%s %"PRId64"\n", str, &index);
+                              if(n == 2){
+                                   BufferNode_t* itr = *head;
+                                   while(itr){
+                                        if(strcmp(itr->buffer->name, str) == 0){
+                                             ce_message(" '%s' line %" PRId64, str, index);
+                                             itr->buffer->cursor.y = index;
+                                             ce_move_cursor_to_soft_beginning_of_line(itr->buffer, &itr->buffer->cursor);
+                                             BufferView_t* view = ce_buffer_in_view(config_state->tab_current->view_head, itr->buffer);
+                                             if(view) view->cursor = view->buffer->cursor;
+                                             break;
                                         }
+                                        itr = itr->next;
                                    }
                               }
                          }
                     }
                }
 
+               free(line);
                fclose(in_file);
           }
      }

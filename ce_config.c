@@ -2549,6 +2549,10 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     }else{
                          free(complete);
                     }
+                    calc_auto_complete_start_and_path(&config_state->auto_complete,
+                                                      buffer->lines[cursor->y],
+                                                      *cursor,
+                                                      config_state->completion_buffer);
                     handled_key = true;
                     key = 0;
                }

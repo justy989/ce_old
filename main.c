@@ -28,7 +28,6 @@ LITTLE:
  -hit an undo brace bug, unsure how to reproduce. I wrapped some code in an if statement,
   then decided I didn't want the if statement. The closing if statement brace did not get undone.
  -visual replace *sometimes* infinite loops
- -starting a multiline comment inside a comment ruins syntax highlighting!
  -something weird where you sometimes have to re-search to get search to actually move you
 */
 

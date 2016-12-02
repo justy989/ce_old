@@ -1940,7 +1940,7 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                          inside_comment = true;
                          break;
                     case CT_BEGIN_MULTILINE:
-                         inside_multiline_comment = true;
+                         if(!inside_comment) inside_multiline_comment = true;
                          break;
                     case CT_END_MULTILINE:
                          inside_multiline_comment = false;
@@ -2153,8 +2153,10 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                               fg_color = set_color(S_COMMENT, highlight_type);
                               break;
                          case CT_BEGIN_MULTILINE:
-                              inside_multiline_comment = true;
-                              fg_color = set_color(S_COMMENT, highlight_type);
+                              if(!inside_comment){
+                                   inside_multiline_comment = true;
+                                   fg_color = set_color(S_COMMENT, highlight_type);
+                              }
                               break;
                          case CT_END_MULTILINE:
                               inside_multiline_comment = false;
@@ -2218,7 +2220,7 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                     default:
                          break;
                     case CT_BEGIN_MULTILINE:
-                         inside_multiline_comment = true;
+                         if(!inside_comment) inside_multiline_comment = true;
                          break;
                     case CT_END_MULTILINE:
                          inside_multiline_comment = false;

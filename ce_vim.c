@@ -1590,6 +1590,7 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                               ce_set_cursor(buffer, &action_range->end, match);
                          }else{
                               action_range->end = *cursor;
+                              return false;
                          }
                     }
                } break;

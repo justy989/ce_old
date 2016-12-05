@@ -2,33 +2,36 @@
 TODOS:
 
 BIG:
- -unicode support
- -network editing
- -autocomplete for: code, shell commands, etc.
- -parse c to do real syntax highlighting/autocomplete?
- -tail file
- -support python and other mode syntax highlighting so I don't go insane at work
- -async file saving/loading
- -async autocomplete building
- -incremental replace (although already doable with 'n.')
- -support tabs in addition to spaces
- -multiline regex search/replace
+-unicode support
+-network editing
+-autocomplete for: code, shell commands, etc.
+-parse c to do real syntax highlighting/autocomplete?
+-tail file
+-support python and other mode syntax highlighting so I don't go insane at work
+-async file saving/loading
+-async autocomplete building
+-incremental replace (although already doable with 'n.')
+-support tabs in addition to spaces
+-multiline regex search/replace
 
 LITTLE:
- -r<enter>
- -do searching inside macro
- -step through macro one change at a time
- -separate dot for input buffer
- -valgrind run clean
- -when there are 3 lines in a file and you do 'dj', you still have 2 lines...
- -user code can infinite loop if you call ce_advance_cursor(buffer, &a, 1) and rely on
-  ce_points_equal(a, b) being false when b is at the end of a line.
- -vim's 'ci}' and 'di}' behave differently in a nice way, emulate that
- -auto complete shell commands then files
- -hit an undo brace bug, unsure how to reproduce. I wrapped some code in an if statement,
-  then decided I didn't want the if statement. The closing if statement brace did not get undone.
- -visual replace *sometimes* infinite loops
- -something weird where you sometimes have to re-search to get search to actually move you
+-r<enter>
+-do searching inside macro
+-step through macro one change at a time
+-separate dot for input buffer
+-valgrind run clean
+-when there are 3 lines in a file and you do 'dj', you still have 2 lines...
+-user code can infinite loop if you call ce_advance_cursor(buffer, &a, 1) and rely on
+ ce_points_equal(a, b) being false when b is at the end of a line.
+-vim's 'ci}' and 'di}' behave differently in a nice way, emulate that
+-auto complete shell commands then files
+-hit an undo brace bug, unsure how to reproduce. I wrapped some code in an if statement,
+ then decided I didn't want the if statement. The closing if statement brace did not get undone.
+-visual replace *sometimes* infinite loops
+-something weird where you sometimes have to re-search to get search to actually move you (seems to happen when you switch buffers)
+-syntax highlight printf formatters: '%s'
+-cursor off by 1 for files under 10 lines in relative line mode
+-shell command output sometimes doesn't come in til you send it input
 */
 
 #include <assert.h>

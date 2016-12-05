@@ -829,7 +829,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
           }
      }
 
-     config_state->line_number_type = LNT_RELATIVE;
+     config_state->line_number_type = LNT_NONE;
      config_state->highlight_line_type = HLT_ENTIRE_LINE;
 
 #if 0
@@ -919,6 +919,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      config_state->vim_state.insert_start = (Point_t){-1, -1};
 
      // read in state file if it exists
+     // TODO: load this into a buffer instead of dealing with the freakin scanf nonsense
      {
           char path[128];
           snprintf(path, 128, "%s/%s", getenv("HOME"), ".ce");
@@ -2210,7 +2211,6 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
 
           buffer_view->buffer = itr->buffer;
           buffer_view->cursor = itr->buffer->cursor;
-          *cursor = itr->buffer->cursor;
           center_view(buffer_view);
      }else if(buffer_view->buffer == config_state->shell_command_buffer){
           BufferView_t* view_to_change = buffer_view;
@@ -2807,14 +2807,15 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
                               if(empty_first_line) ce_remove_line(config_state->view_input->buffer, 0);
                          }else{
+                              buffer->cursor = config_state->tab_current->view_current->cursor;
+
                               // try to find a better place to put the cursor to start
                               BufferNode_t* itr = *head;
                               int64_t buffer_index = 1;
-                              bool found_good_buffer = false;
+                              bool found_good_buffer_index = false;
                               while(itr){
                                    if(itr->buffer->status != BS_READONLY && !ce_buffer_in_view(config_state->tab_current->view_head, itr->buffer)){
-                                        config_state->tab_current->view_current->cursor.y = buffer_index;
-                                        found_good_buffer = true;
+                                        found_good_buffer_index = true;
                                         break;
                                    }
                                    itr = itr->next;
@@ -2825,8 +2826,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               config_state->tab_current->view_current->buffer->cursor = *cursor;
                               config_state->tab_current->view_current->buffer = &config_state->buffer_list_buffer;
                               config_state->tab_current->view_current->top_row = 0;
-                              config_state->tab_current->view_current->cursor = (Point_t){0, found_good_buffer ? buffer_index : 1};
-
+                              config_state->tab_current->view_current->cursor = (Point_t){0, found_good_buffer_index ? buffer_index : 1};
                          }
                          break;
                     case 'u':
@@ -3144,6 +3144,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          break;
                     case 6: // Ctrl + f
                     {
+                         buffer->cursor = buffer_view->cursor;
+
                          input_start(config_state, "Load File", key);
                          calc_auto_complete_start_and_path(&config_state->auto_complete,
                                                            config_state->view_input->buffer->lines[0],

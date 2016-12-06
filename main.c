@@ -35,7 +35,7 @@ LITTLE:
 -we can still hit the drawing bug where config_state->tab_current->view_input_save is null
 -if the next search pattern is in view, don't center the view
 -show matching parens
--when matching constants, allow the f to be included
+-if you make a change and undo, the buffer still says modified
 */
 
 #include <assert.h>

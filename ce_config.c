@@ -154,21 +154,19 @@ void scroll_view_to_location(BufferView_t* buffer_view, const Point_t* location)
 void center_view(BufferView_t* view)
 {
      int64_t view_height = view->bottom_right.y - view->top_left.y;
-     int64_t view_width = view->bottom_right.x - view->top_left.x;
-     Point_t location = (Point_t) {view->cursor.x - (view_width / 2), view->cursor.y - (view_height / 2)};
+     Point_t location = (Point_t) {0, view->cursor.y - (view_height / 2)};
      scroll_view_to_location(view, &location);
 }
 
 void center_view_when_cursor_outside_portion(BufferView_t* view, float portion_start, float portion_end)
 {
      int64_t view_height = view->bottom_right.y - view->top_left.y;
-     int64_t view_width = view->bottom_right.x - view->top_left.x;
-     Point_t location = (Point_t) {view->cursor.x - (view_width / 2), view->cursor.y - (view_height / 2)};
+     Point_t location = (Point_t) {0, view->cursor.y - (view_height / 2)};
 
-     Point_t current_scroll = {view->cursor.x - view->left_column, view->cursor.y - view->top_row};
-     float y_portion = ((float)(current_scroll.y) / (float)(view_height));
+     int64_t current_scroll_y = view->cursor.y - view->top_row;
+     float y_portion = ((float)(current_scroll_y) / (float)(view_height));
 
-     if(y_portion < portion_start && y_portion > portion_end){
+     if(y_portion < portion_start || y_portion > portion_end){
           scroll_view_to_location(view, &location);
      }
 }
@@ -848,6 +846,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      init_pair(S_COMMENT, COLOR_GREEN, COLOR_BACKGROUND);
      init_pair(S_STRING, COLOR_RED, COLOR_BACKGROUND);
      init_pair(S_CONSTANT, COLOR_MAGENTA, COLOR_BACKGROUND);
+     init_pair(S_CONSTANT_NUMBER, COLOR_MAGENTA, COLOR_BACKGROUND);
      init_pair(S_PREPROCESSOR, COLOR_BRIGHT_MAGENTA, COLOR_BACKGROUND);
      init_pair(S_FILEPATH, COLOR_BLUE, COLOR_BACKGROUND);
      init_pair(S_DIFF_ADDED, COLOR_GREEN, COLOR_BACKGROUND);
@@ -861,6 +860,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      init_pair(S_COMMENT_HIGHLIGHTED, COLOR_GREEN, COLOR_WHITE);
      init_pair(S_STRING_HIGHLIGHTED, COLOR_RED, COLOR_WHITE);
      init_pair(S_CONSTANT_HIGHLIGHTED, COLOR_MAGENTA, COLOR_WHITE);
+     init_pair(S_CONSTANT_NUMBER_HIGHLIGHTED, COLOR_MAGENTA, COLOR_WHITE);
      init_pair(S_PREPROCESSOR_HIGHLIGHTED, COLOR_BRIGHT_MAGENTA, COLOR_WHITE);
      init_pair(S_FILEPATH_HIGHLIGHTED, COLOR_BLUE, COLOR_WHITE);
      init_pair(S_DIFF_ADDED_HIGHLIGHTED, COLOR_GREEN, COLOR_WHITE);
@@ -874,6 +874,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      init_pair(S_COMMENT_CURRENT_LINE, COLOR_GREEN, COLOR_BRIGHT_BLACK);
      init_pair(S_STRING_CURRENT_LINE, COLOR_RED, COLOR_BRIGHT_BLACK);
      init_pair(S_CONSTANT_CURRENT_LINE, COLOR_MAGENTA, COLOR_BRIGHT_BLACK);
+     init_pair(S_CONSTANT_NUMBER_CURRENT_LINE, COLOR_MAGENTA, COLOR_BRIGHT_BLACK);
      init_pair(S_PREPROCESSOR_CURRENT_LINE, COLOR_BRIGHT_MAGENTA, COLOR_BRIGHT_BLACK);
      init_pair(S_FILEPATH_CURRENT_LINE, COLOR_BLUE, COLOR_BRIGHT_BLACK);
      init_pair(S_DIFF_ADDED_CURRENT_LINE, COLOR_GREEN, COLOR_BRIGHT_BLACK);

@@ -637,6 +637,8 @@ bool find_matching_string_forward(const Buffer_t* buffer, Point_t* location, cha
                itr.x = 0;
                last_index = ce_last_index(buffer->lines[itr.y]);
           }
+
+          prev = curr;
      }
 
      return false;
@@ -1671,6 +1673,70 @@ int iscapsvarchar(int c)
      return isupper(c) || c == '_' || isdigit(c);
 }
 
+int64_t ce_is_constant_number(const char* line, int64_t start_offset)
+{
+     const char* start = line + start_offset;
+     const char* itr = start;
+     int64_t count = 0;
+     char ch = *itr;
+     bool seen_decimal = false;
+     bool seen_hex = false;
+
+     while(ch != 0){
+          if(isdigit(ch)){
+               count++;
+          }else if(!seen_decimal && ch == '.'){
+               seen_decimal = true;
+               count++;
+          }else if(ch == 'f' && seen_decimal){
+               count++;
+               break;
+          }else if(ch == '-' && itr == start){
+               count++;
+          }else if(ch == 'x' && itr == (start + 1)){
+               seen_hex = true;
+               count++;
+          }else if(seen_hex){
+               bool valid_hex_char = false;
+
+               switch(ch){
+               default:
+                    break;
+               case 'a':
+               case 'b':
+               case 'c':
+               case 'd':
+               case 'e':
+               case 'f':
+               case 'A':
+               case 'B':
+               case 'C':
+               case 'D':
+               case 'E':
+               case 'F':
+                    count++;
+                    valid_hex_char = true;
+                    break;
+               }
+
+               if(!valid_hex_char) break;
+          }else{
+               break;
+          }
+
+          itr++;
+          ch = *itr;
+     }
+
+     if(count == 1 && (start[0] == '-' || start[0] == '.')) return 0;
+
+     // check if the previous character is not a delimiter
+     int64_t prev_index = start_offset - 1;
+     if(prev_index >= 0 && (iscapsvarchar(line[prev_index]) || isalpha(line[prev_index]))) return 0;
+
+     return count;
+}
+
 int64_t ce_is_caps_var(const char* line, int64_t start_offset)
 {
      const char* itr = line + start_offset;
@@ -1970,10 +2036,18 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                               int64_t keyword_left = 0;
 
                               if(!keyword_left){
-                                   keyword_left = ce_is_caps_var(buffer_line, c);
+                                   keyword_left = ce_is_constant_number(buffer_line, c);
                                    if(keyword_left){
                                         color_left = keyword_left;
-                                        highlight_color = S_CONSTANT;
+                                        highlight_color = S_CONSTANT_NUMBER;
+                                   }
+
+                                   if(!keyword_left){
+                                        keyword_left = ce_is_caps_var(buffer_line, c);
+                                        if(keyword_left){
+                                             color_left = keyword_left;
+                                             highlight_color = S_CONSTANT;
+                                        }
                                    }
                               }
 
@@ -2093,9 +2167,16 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                     // syntax highlighting
                     if(color_left == 0){
                          if(!inside_string){
-                              color_left = ce_is_caps_var(line_to_print, c);
+                              color_left = ce_is_constant_number(line_to_print, c);
                               if(color_left){
-                                   fg_color = set_color(S_CONSTANT, highlight_type);
+                                   fg_color = set_color(S_CONSTANT_NUMBER, highlight_type);
+                              }
+
+                              if(!color_left){
+                                   color_left = ce_is_caps_var(line_to_print, c);
+                                   if(color_left){
+                                        fg_color = set_color(S_CONSTANT, highlight_type);
+                                   }
                               }
 
                               if(!inside_comment && !inside_multiline_comment){

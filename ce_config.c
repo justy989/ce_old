@@ -847,6 +847,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      init_pair(S_STRING, COLOR_RED, COLOR_BACKGROUND);
      init_pair(S_CONSTANT, COLOR_MAGENTA, COLOR_BACKGROUND);
      init_pair(S_CONSTANT_NUMBER, COLOR_MAGENTA, COLOR_BACKGROUND);
+     init_pair(S_MATCHING_PARENS, COLOR_BRIGHT_WHITE, COLOR_BACKGROUND);
      init_pair(S_PREPROCESSOR, COLOR_BRIGHT_MAGENTA, COLOR_BACKGROUND);
      init_pair(S_FILEPATH, COLOR_BLUE, COLOR_BACKGROUND);
      init_pair(S_DIFF_ADDED, COLOR_GREEN, COLOR_BACKGROUND);
@@ -861,6 +862,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      init_pair(S_STRING_HIGHLIGHTED, COLOR_RED, COLOR_WHITE);
      init_pair(S_CONSTANT_HIGHLIGHTED, COLOR_MAGENTA, COLOR_WHITE);
      init_pair(S_CONSTANT_NUMBER_HIGHLIGHTED, COLOR_MAGENTA, COLOR_WHITE);
+     init_pair(S_MATCHING_PARENS_HIGHLIGHTED, COLOR_BRIGHT_WHITE, COLOR_WHITE);
      init_pair(S_PREPROCESSOR_HIGHLIGHTED, COLOR_BRIGHT_MAGENTA, COLOR_WHITE);
      init_pair(S_FILEPATH_HIGHLIGHTED, COLOR_BLUE, COLOR_WHITE);
      init_pair(S_DIFF_ADDED_HIGHLIGHTED, COLOR_GREEN, COLOR_WHITE);
@@ -875,6 +877,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      init_pair(S_STRING_CURRENT_LINE, COLOR_RED, COLOR_BRIGHT_BLACK);
      init_pair(S_CONSTANT_CURRENT_LINE, COLOR_MAGENTA, COLOR_BRIGHT_BLACK);
      init_pair(S_CONSTANT_NUMBER_CURRENT_LINE, COLOR_MAGENTA, COLOR_BRIGHT_BLACK);
+     init_pair(S_MATCHING_PARENS_CURRENT_LINE, COLOR_BRIGHT_WHITE, COLOR_BRIGHT_BLACK);
      init_pair(S_PREPROCESSOR_CURRENT_LINE, COLOR_BRIGHT_MAGENTA, COLOR_BRIGHT_BLACK);
      init_pair(S_FILEPATH_CURRENT_LINE, COLOR_BLUE, COLOR_BRIGHT_BLACK);
      init_pair(S_DIFF_ADDED_CURRENT_LINE, COLOR_GREEN, COLOR_BRIGHT_BLACK);
@@ -893,12 +896,6 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      init_pair(S_VIEW_STATUS, COLOR_CYAN, COLOR_BACKGROUND);
      init_pair(S_INPUT_STATUS, COLOR_RED, COLOR_BACKGROUND);
      init_pair(S_AUTO_COMPLETE, COLOR_WHITE, COLOR_BACKGROUND);
-
-     // Doesn't work in insert mode :<
-     //define_key("h", KEY_LEFT);
-     //define_key("j", KEY_DOWN);
-     //define_key("k", KEY_UP);
-     //define_key("l", KEY_RIGHT);
 
      define_key(NULL, KEY_BACKSPACE);   // Blow away backspace
      define_key("\x7F", KEY_BACKSPACE); // Backspace  (127) (0x7F) ASCII "DEL" Delete

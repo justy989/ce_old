@@ -1921,6 +1921,28 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
           }
      }
 
+     // is our cursor on something we can match?
+     Point_t matched_pair = {-1, -1};
+     if(ce_point_on_buffer(buffer, *cursor)){
+          char ch = 0;
+          ch = ce_get_char_raw(buffer, *cursor);
+          switch(ch){
+          default:
+               break;
+          case '{':
+          case '}':
+          case '(':
+          case ')':
+          case '[':
+          case ']':
+          case '<':
+          case '>':
+               matched_pair = *cursor;
+               ce_move_cursor_to_matching_pair(buffer, &matched_pair, ch);
+               break;
+          }
+     }
+
      for(int64_t i = buffer_top_left->y; i <= last_line; ++i) {
           move(term_top_left->y + (i - buffer_top_left->y), term_top_left->x);
 
@@ -2041,13 +2063,13 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                                         color_left = keyword_left;
                                         highlight_color = S_CONSTANT_NUMBER;
                                    }
+                              }
 
-                                   if(!keyword_left){
-                                        keyword_left = ce_is_caps_var(buffer_line, c);
-                                        if(keyword_left){
-                                             color_left = keyword_left;
-                                             highlight_color = S_CONSTANT;
-                                        }
+                              if(!keyword_left){
+                                   keyword_left = ce_is_caps_var(buffer_line, c);
+                                   if(keyword_left){
+                                        color_left = keyword_left;
+                                        highlight_color = S_CONSTANT;
                                    }
                               }
 
@@ -2166,10 +2188,21 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
 
                     // syntax highlighting
                     if(color_left == 0){
+                         if(matched_pair.x >= 0){
+                              Point_t cur = {buffer_top_left->x + c, i};
+                              if(ce_points_equal(cur, *cursor) || ce_points_equal(cur, matched_pair)){
+                                   fg_color = set_color(S_MATCHING_PARENS, highlight_type);
+                              }else if(fg_color == S_MATCHING_PARENS){
+                                   fg_color = set_color(S_NORMAL, highlight_type);
+                              }
+                         }
+
                          if(!inside_string){
-                              color_left = ce_is_constant_number(line_to_print, c);
-                              if(color_left){
-                                   fg_color = set_color(S_CONSTANT_NUMBER, highlight_type);
+                              if(!color_left){
+                                   color_left = ce_is_constant_number(line_to_print, c);
+                                   if(color_left){
+                                        fg_color = set_color(S_CONSTANT_NUMBER, highlight_type);
+                                   }
                               }
 
                               if(!color_left){
@@ -2260,6 +2293,11 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                                    fg_color = set_color(S_DIFF_REMOVED, highlight_type);
                               }else if(diff_header){
                                    fg_color = set_color(S_DIFF_HEADER, highlight_type);
+                              }else if(matched_pair.x >= 0){
+                                   Point_t cur = {buffer_top_left->x + c, i};
+                                   if(ce_points_equal(cur, *cursor) || ce_points_equal(cur, matched_pair)){
+                                        fg_color = set_color(S_MATCHING_PARENS, highlight_type);
+                                   }
                               }
                          }
                     }

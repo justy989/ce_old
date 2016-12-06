@@ -28,10 +28,14 @@ LITTLE:
 -hit an undo brace bug, unsure how to reproduce. I wrapped some code in an if statement,
  then decided I didn't want the if statement. The closing if statement brace did not get undone.
 -visual replace *sometimes* infinite loops
--something weird where you sometimes have to re-search to get search to actually move you (seems to happen when you switch buffers)
 -syntax highlight printf formatters: '%s'
 -cursor off by 1 for files under 10 lines in relative line mode
 -shell command output sometimes doesn't come in til you send it input
+-when in insert mode, if there is only whitespace before the cursor and you type a '#', move it to the beginning of the line
+-we can still hit the drawing bug where config_state->tab_current->view_input_save is null
+-if the next search pattern is in view, don't center the view
+-show matching parens
+-when matching constants, allow the f to be included
 */
 
 #include <assert.h>

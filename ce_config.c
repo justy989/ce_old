@@ -139,28 +139,10 @@ bool input_history_prev(InputHistory_t* history)
      return true;
 }
 
-// TODO: should be replaced with ce_advance_cursor(buffer, cursor, -1), but it didn't work for me, and I'm not sure why!
-Point_t previous_point(Buffer_t* buffer, Point_t point)
-{
-     Point_t previous_point = {point.x - 1, point.y};
-
-     if(previous_point.x < 0){
-          previous_point.y--;
-          if(previous_point.y < 0){
-               previous_point = (Point_t){0, 0};
-          }else{
-               previous_point.x = ce_last_index(buffer->lines[previous_point.y]);
-          }
-     }
-
-     return previous_point;
-}
-
 typedef struct{
      BufferCommitNode_t* commit_tail;
      VimBufferState_t vim_buffer_state;
 } BufferState_t;
-
 
 // location is {left_column, top_line} for the view
 void scroll_view_to_location(BufferView_t* buffer_view, const Point_t* location){
@@ -172,8 +154,23 @@ void scroll_view_to_location(BufferView_t* buffer_view, const Point_t* location)
 void center_view(BufferView_t* view)
 {
      int64_t view_height = view->bottom_right.y - view->top_left.y;
-     Point_t location = (Point_t) {0, view->cursor.y - (view_height / 2)};
+     int64_t view_width = view->bottom_right.x - view->top_left.x;
+     Point_t location = (Point_t) {view->cursor.x - (view_width / 2), view->cursor.y - (view_height / 2)};
      scroll_view_to_location(view, &location);
+}
+
+void center_view_when_cursor_outside_portion(BufferView_t* view, float portion_start, float portion_end)
+{
+     int64_t view_height = view->bottom_right.y - view->top_left.y;
+     int64_t view_width = view->bottom_right.x - view->top_left.x;
+     Point_t location = (Point_t) {view->cursor.x - (view_width / 2), view->cursor.y - (view_height / 2)};
+
+     Point_t current_scroll = {view->cursor.x - view->left_column, view->cursor.y - view->top_row};
+     float y_portion = ((float)(current_scroll.y) / (float)(view_height));
+
+     if(y_portion < portion_start && y_portion > portion_end){
+          scroll_view_to_location(view, &location);
+     }
 }
 
 typedef struct TabView_t{
@@ -595,7 +592,7 @@ void input_cancel(ConfigState_t* config_state)
 {
      if(config_state->input_key == '/' || config_state->input_key == '?'){
           pthread_mutex_lock(&view_input_save_lock);
-          config_state->tab_current->view_input_save->cursor = config_state->vim_state.start_search;
+          config_state->tab_current->view_input_save->cursor = config_state->vim_state.search.start;
           pthread_mutex_unlock(&view_input_save_lock);
           center_view(config_state->tab_current->view_input_save);
      }else if(config_state->input_key == 6){
@@ -2084,38 +2081,30 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                Point_t end = config_state->tab_current->view_input_save->buffer->highlight_end;
                if(end.x < 0) ce_move_cursor_to_end_of_file(config_state->tab_current->view_input_save->buffer, &end);
 
-               regex_t regex;
-               int rc = regcomp(&regex, search_str, REG_EXTENDED);
-               if(rc == 0){
-                    Point_t match = {};
-                    int64_t match_len = 0;
-                    int64_t replace_count = 0;
-                    while(ce_find_regex(buffer, begin, &regex, &match, &match_len, CE_DOWN)){
-                         if(ce_point_after(match, end)) break;
-                         Point_t end_match = match;
-                         ce_advance_cursor(buffer, &end_match, match_len - 1);
-                         char* searched_dup = ce_dupe_string(buffer, match, end_match);
-                         if(!ce_remove_string(buffer, match, match_len)) break;
-                         if(replace_len){
-                              if(!ce_insert_string(buffer, match, replace_str)) break;
-                         }
-                         ce_commit_change_string(&buffer_state->commit_tail, match, match, match, strdup(replace_str),
-                                                 searched_dup, BCC_KEEP_GOING);
-                         begin = match;
-                         replace_count++;
+               Point_t match = {};
+               int64_t match_len = 0;
+               int64_t replace_count = 0;
+               while(ce_find_regex(buffer, begin, &config_state->vim_state.search.regex, &match, &match_len, CE_DOWN)){
+                    if(ce_point_after(match, end)) break;
+                    Point_t end_match = match;
+                    ce_advance_cursor(buffer, &end_match, match_len - 1);
+                    char* searched_dup = ce_dupe_string(buffer, match, end_match);
+                    if(!ce_remove_string(buffer, match, match_len)) break;
+                    if(replace_len){
+                         if(!ce_insert_string(buffer, match, replace_str)) break;
                     }
+                    ce_commit_change_string(&buffer_state->commit_tail, match, match, match, strdup(replace_str),
+                                            searched_dup, BCC_KEEP_GOING);
+                    begin = match;
+                    replace_count++;
+               }
 
-                    if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
+               if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
 
-                    if(replace_count){
-                         ce_message("replaced %" PRId64 " matches", replace_count);
-                    }else{
-                         ce_message("no matches found to replace");
-                    }
+               if(replace_count){
+                    ce_message("replaced %" PRId64 " matches", replace_count);
                }else{
-                    char error_buffer[BUFSIZ];
-                    regerror(rc, &regex, error_buffer, BUFSIZ);
-                    ce_message("regcomp() failed: '%s'", error_buffer);
+                    ce_message("no matches found to replace");
                }
 
                *cursor = begin;
@@ -2600,7 +2589,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                }else if(vkh_result.completed_action.motion.type == VMT_SEARCH ||
                         vkh_result.completed_action.motion.type == VMT_SEARCH_WORD_UNDER_CURSOR ||
                         vkh_result.completed_action.motion.type == VMT_GOTO_MARK){
-                    center_view(buffer_view);
+                    center_view_when_cursor_outside_portion(buffer_view, 0.25f, 0.75f);
                }
           }else if(vkh_result.type == VKH_UNHANDLED_KEY){
                switch(key){
@@ -2964,15 +2953,15 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     case '/':
                     {
                          input_start(config_state, "Regex Search", key);
-                         config_state->vim_state.search_direction = CE_DOWN;
-                         config_state->vim_state.start_search = *cursor;
+                         config_state->vim_state.search.direction = CE_DOWN;
+                         config_state->vim_state.search.start = *cursor;
                          break;
                     }
                     case '?':
                     {
                          input_start(config_state, "Reverse Regex Search", key);
-                         config_state->vim_state.search_direction = CE_UP;
-                         config_state->vim_state.start_search = *cursor;
+                         config_state->vim_state.search.direction = CE_UP;
+                         config_state->vim_state.search.start = *cursor;
                          break;
                     }
                     case '=':
@@ -3207,36 +3196,43 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
      if(config_state->input && (config_state->input_key == '/' || config_state->input_key == '?')){
           if(config_state->view_input->buffer->lines == NULL){
                pthread_mutex_lock(&view_input_save_lock);
-               config_state->tab_current->view_input_save->cursor = config_state->vim_state.start_search;
+               config_state->tab_current->view_input_save->cursor = config_state->vim_state.search.start;
                pthread_mutex_unlock(&view_input_save_lock);
           }else{
-               regex_t regex;
-               int rc = regcomp(&regex, config_state->view_input->buffer->lines[0], REG_EXTENDED);
-               if(rc == 0){
-                    Point_t match = {};
-                    int64_t match_len = 0;
-                    if(config_state->view_input->buffer->lines[0][0] &&
-                       ce_find_regex(config_state->tab_current->view_input_save->buffer,
-                                     config_state->vim_state.start_search, &regex, &match,
-                                     &match_len, config_state->vim_state.search_direction)){
-                         pthread_mutex_lock(&view_input_save_lock);
-                         ce_set_cursor(config_state->tab_current->view_input_save->buffer,
-                                       &config_state->tab_current->view_input_save->cursor, match);
-                         pthread_mutex_unlock(&view_input_save_lock);
-                         center_view(config_state->tab_current->view_input_save);
+               size_t search_len = strlen(config_state->view_input->buffer->lines[0]);
+               if(search_len){
+                    int rc = regcomp(&config_state->vim_state.search.regex, config_state->view_input->buffer->lines[0], REG_EXTENDED);
+                    if(rc == 0){
+                         config_state->vim_state.search.valid_regex = true;
+
+                         Point_t match = {};
+                         int64_t match_len = 0;
+                         if(config_state->view_input->buffer->lines[0][0] &&
+                            ce_find_regex(config_state->tab_current->view_input_save->buffer,
+                                          config_state->vim_state.search.start, &config_state->vim_state.search.regex, &match,
+                                          &match_len, config_state->vim_state.search.direction)){
+                              pthread_mutex_lock(&view_input_save_lock);
+                              ce_set_cursor(config_state->tab_current->view_input_save->buffer,
+                                            &config_state->tab_current->view_input_save->cursor, match);
+                              pthread_mutex_unlock(&view_input_save_lock);
+                              center_view(config_state->tab_current->view_input_save);
+                         }else{
+                              pthread_mutex_lock(&view_input_save_lock);
+                              config_state->tab_current->view_input_save->cursor = config_state->vim_state.search.start;
+                              pthread_mutex_unlock(&view_input_save_lock);
+                              center_view(config_state->tab_current->view_input_save);
+                         }
                     }else{
-                         pthread_mutex_lock(&view_input_save_lock);
-                         config_state->tab_current->view_input_save->cursor = config_state->vim_state.start_search;
-                         pthread_mutex_unlock(&view_input_save_lock);
-                         center_view(config_state->tab_current->view_input_save);
+                         config_state->vim_state.search.valid_regex = false;
+     #if DEBUG
+                         // NOTE: this might be too noisy in practice
+                         char error_buffer[BUFSIZ];
+                         regerror(rc, &regex, error_buffer, BUFSIZ);
+                         ce_message("regcomp() failed: '%s'", error_buffer);
+     #endif
                     }
                }else{
-#if DEBUG
-                    // NOTE: this might be too noisy in practice
-                    char error_buffer[BUFSIZ];
-                    regerror(rc, &regex, error_buffer, BUFSIZ);
-                    ce_message("regcomp() failed: '%s'", error_buffer);
-#endif
+                    config_state->vim_state.search.valid_regex = false;
                }
           }
      }
@@ -3402,8 +3398,11 @@ void view_drawer(const BufferNode_t* head, void* user_data)
           highlight_line_type = HLT_NONE;
      }
 
+     regex_t* highlight_regex = NULL;
+     if(config_state->vim_state.search.valid_regex) highlight_regex = &config_state->vim_state.search.regex;
+
      // NOTE: always draw from the head
-     ce_draw_views(config_state->tab_current->view_head, search, config_state->line_number_type, highlight_line_type);
+     ce_draw_views(config_state->tab_current->view_head, highlight_regex, config_state->line_number_type, highlight_line_type);
 
      draw_view_statuses(config_state->tab_current->view_head, config_state->tab_current->view_current,
                         config_state->tab_current->view_overrideable, config_state->vim_state.mode, config_state->last_key,

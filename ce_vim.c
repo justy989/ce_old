@@ -1559,36 +1559,44 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                     free(search_str);
 
                     vim_yank_add(&vim_state->yank_head, '/', word_search_str, YANK_NORMAL);
+
+                    int rc = regcomp(&vim_state->search.regex, word_search_str, REG_EXTENDED);
+                    vim_state->search.valid_regex = (rc == 0);
                }
                // NOTE: fall through intentionally
                case VMT_SEARCH:
                {
-                    vim_state->search_direction = action->motion.search_direction;
+                    if(!vim_state->search.valid_regex){
+                         return false;
+                    }
+
+                    vim_state->search.direction = action->motion.search_direction;
                     VimYankNode_t* yank = vim_yank_find(vim_state->yank_head, '/');
                     if(yank){
                          assert(yank->mode == YANK_NORMAL);
 
-                         if(vim_state->search_direction == CE_UP){
+                         if(vim_state->search.direction == CE_UP){
                               ce_move_cursor_to_beginning_of_word(buffer, &action_range->end, true);
                          }
 
-                         regex_t regex;
-                         int rc = regcomp(&regex, yank->text, REG_EXTENDED);
-                         if(rc != 0){
-                              char error_buffer[BUFSIZ];
-                              regerror(rc, &regex, error_buffer, BUFSIZ);
-                              ce_message("regcomp() failed: '%s'", error_buffer);
-                              return false;
+                         Point_t search_start = action_range->end;
+                         if(vim_state->search.direction == CE_DOWN) search_start.x++;
+
+                         if(search_start.y >= buffer->line_count) return false;
+
+                         if(search_start.x >= ce_last_index(buffer->lines[search_start.y])){
+                              search_start.x = 0;
+                              search_start.y++;
                          }
 
-                         Point_t search_start = action_range->end;
-                         if(vim_state->search_direction == CE_DOWN) search_start.x++;
+                         if(search_start.y >= buffer->line_count) return false;
 
                          Point_t match;
                          int64_t match_len;
-                         if(ce_find_regex(buffer, search_start, &regex, &match, &match_len, vim_state->search_direction)){
+                         if(ce_find_regex(buffer, search_start, &vim_state->search.regex, &match, &match_len, vim_state->search.direction)){
                               ce_set_cursor(buffer, &action_range->end, match);
                          }else{
+                              ce_message("failed to find match for '%s'", yank->text);
                               action_range->end = *cursor;
                               return false;
                          }

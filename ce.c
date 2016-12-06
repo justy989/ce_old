@@ -1524,7 +1524,7 @@ int64_t ce_is_c_typename(const char* line, int64_t start_offset)
      itr = line + start_offset;
      if(count >= 2 && itr[count-2] == '_' && itr[count-1] == 't') return count;
 
-#if 0
+#if 1
      // NOTE: Justin uses this while working on Bryte!
      if(isupper(*itr)){
           return count;
@@ -1763,7 +1763,7 @@ static int64_t count_digits(int64_t n)
 static const char non_printable_repr = '~';
 
 bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t* term_top_left,
-                    const Point_t* term_bottom_right, const Point_t* buffer_top_left, const char* highlight_word,
+                    const Point_t* term_bottom_right, const Point_t* buffer_top_left, const regex_t* highlight_regex,
                     LineNumberType_t line_number_type, HighlightLineType_t highlight_line_type)
 {
      if(!buffer->line_count) return true;
@@ -1836,13 +1836,6 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
 
      // TODO: if we found a closing multiline comment, make sure there is a matching opening multiline comment
 
-     // NOTE: when optimizing, we will want to make this regex_t a paramter, rather than compiling it at each draw_buffer call
-     regex_t highlight_regex;
-     int regex_compile_rc;
-     if(highlight_word){
-          regex_compile_rc = regcomp(&highlight_regex, highlight_word, REG_EXTENDED);
-     }
-
      standend();
 
      // figure out how wide the line number margin needs to be
@@ -1910,10 +1903,9 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                int64_t highlighting_left = 0;
                int fg_color = 0;
 
-
                regmatch_t regex_matches[1];
-               if(highlight_word && regex_compile_rc == 0){
-                    int regex_rc = regexec(&highlight_regex, buffer->lines[i], 1, regex_matches, 0);
+               if(highlight_regex){
+                    int regex_rc = regexec(highlight_regex, buffer->lines[i], 1, regex_matches, 0);
                     if(regex_rc == 0) chars_til_highlighted_word = regex_matches[0].rm_so;
                }
 
@@ -1947,15 +1939,15 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                          break;
                     }
 
-                    if(highlight_word && chars_til_highlighted_word == 0){
+                    if(highlight_regex && chars_til_highlighted_word == 0){
                          highlighting_left = regex_matches[0].rm_eo - regex_matches[0].rm_so;
                          highlight_type = HL_ON;
                     }else if(highlight_type){
                          highlighting_left--;
 
                          if(!highlighting_left){
-                              if(highlight_word && regex_compile_rc == 0){
-                                   int regex_rc = regexec(&highlight_regex, buffer->lines[i], 1, regex_matches, 0);
+                              if(highlight_regex){
+                                   int regex_rc = regexec(highlight_regex, buffer->lines[i], 1, regex_matches, 0);
                                    if(regex_rc == 0) chars_til_highlighted_word = regex_matches[0].rm_so;
                               }
 
@@ -2058,7 +2050,7 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                          highlight_type = HL_ON;
                          set_color(fg_color, highlight_type);
                     }else{
-                         if(highlight_word && chars_til_highlighted_word == 0){
+                         if(highlight_regex && chars_til_highlighted_word == 0){
                               highlighting_left = regex_matches[0].rm_eo - regex_matches[0].rm_so;
                               highlight_type = HL_ON;
                               set_color(fg_color, highlight_type);
@@ -2068,8 +2060,8 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
 
                                    if(!highlighting_left){
 
-                                        if(highlight_word && regex_compile_rc == 0){
-                                             int regex_rc = regexec(&highlight_regex, buffer->lines[i] + c, 1, regex_matches, 0);
+                                        if(highlight_regex){
+                                             int regex_rc = regexec(highlight_regex, buffer->lines[i] + c, 1, regex_matches, 0);
                                              if(regex_rc == 0){
                                                   chars_til_highlighted_word = regex_matches[0].rm_so;
                                              }
@@ -3030,10 +3022,10 @@ void draw_view_bottom_right_borders(const BufferView_t* view)
      }
 }
 
-bool draw_vertical_views(const BufferView_t* view, bool already_drawn, const char* highlight_word,
+bool draw_vertical_views(const BufferView_t* view, bool already_drawn, const regex_t* highlight_regex,
                          LineNumberType_t line_number_type, HighlightLineType_t highlight_line_type);
 
-bool draw_horizontal_views(const BufferView_t* view, bool already_drawn, const char* highlight_word,
+bool draw_horizontal_views(const BufferView_t* view, bool already_drawn, const regex_t* highlight_regex,
                            LineNumberType_t line_number_type, HighlightLineType_t highlight_line_type)
 {
      const BufferView_t* itr = view;
@@ -3042,13 +3034,13 @@ bool draw_horizontal_views(const BufferView_t* view, bool already_drawn, const c
           // or if this is any view other than the first view
           // and we have a horizontal view below us, then draw the horizontal views
           if(((!already_drawn && itr == view) || (itr != view)) && itr->next_vertical){
-               draw_vertical_views(itr, true, highlight_word, line_number_type, highlight_line_type);
+               draw_vertical_views(itr, true, highlight_regex, line_number_type, highlight_line_type);
           }else{
                assert(itr->left_column >= 0);
                assert(itr->top_row >= 0);
                Point_t buffer_top_left = {itr->left_column, itr->top_row};
                ce_draw_buffer(itr->buffer, &itr->cursor, &itr->top_left, &itr->bottom_right, &buffer_top_left,
-                              highlight_word, line_number_type, highlight_line_type);
+                              highlight_regex, line_number_type, highlight_line_type);
                draw_view_bottom_right_borders(itr);
           }
 
@@ -3058,7 +3050,7 @@ bool draw_horizontal_views(const BufferView_t* view, bool already_drawn, const c
      return true;
 }
 
-bool draw_vertical_views(const BufferView_t* view, bool already_drawn, const char* highlight_word,
+bool draw_vertical_views(const BufferView_t* view, bool already_drawn, const regex_t* highlight_regex,
                          LineNumberType_t line_number_type, HighlightLineType_t highlight_line_type)
 {
      const BufferView_t* itr = view;
@@ -3067,11 +3059,11 @@ bool draw_vertical_views(const BufferView_t* view, bool already_drawn, const cha
           // or if this is any view other than the first view
           // and we have a vertical view below us, then draw the vertical views
           if(((!already_drawn && itr == view) || (itr != view)) && itr->next_horizontal){
-               draw_horizontal_views(itr, true, highlight_word, line_number_type, highlight_line_type);
+               draw_horizontal_views(itr, true, highlight_regex, line_number_type, highlight_line_type);
           }else{
                Point_t buffer_top_left = {itr->left_column, itr->top_row};
                ce_draw_buffer(itr->buffer, &itr->cursor, &itr->top_left, &itr->bottom_right, &buffer_top_left,
-                              highlight_word, line_number_type, highlight_line_type);
+                              highlight_regex, line_number_type, highlight_line_type);
                draw_view_bottom_right_borders(itr);
           }
 
@@ -3137,10 +3129,10 @@ bool connect_borders(const BufferView_t* view)
             ce_connect_border_lines(bottom_right) && ce_connect_border_lines(bottom_left);
 }
 
-bool ce_draw_views(const BufferView_t* view, const char* highlight_word, LineNumberType_t line_number_type,
+bool ce_draw_views(const BufferView_t* view, const regex_t* highlight_regex, LineNumberType_t line_number_type,
                    HighlightLineType_t highlight_line_type)
 {
-     if(!draw_horizontal_views(view, false, highlight_word, line_number_type, highlight_line_type)){
+     if(!draw_horizontal_views(view, false, highlight_regex, line_number_type, highlight_line_type)){
           return false;
      }
 

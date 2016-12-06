@@ -135,6 +135,13 @@ typedef struct{
      VimAction_t completed_action;
 } VimKeyHandlerResult_t;
 
+typedef struct{
+     Direction_t direction;
+     Point_t start;
+     regex_t regex;
+     bool valid_regex;
+} VimSearch_t;
+
 
 // marks
 typedef struct VimMarkNode_t{
@@ -215,8 +222,7 @@ typedef struct{
      Point_t visual_start;
      Point_t insert_start;
 
-     Direction_t search_direction;
-     Point_t start_search;
+     VimSearch_t search;
 } VimState_t;
 
 // used to track info per buffer

@@ -2188,16 +2188,16 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
 
                     // syntax highlighting
                     if(color_left == 0){
-                         if(matched_pair.x >= 0){
-                              Point_t cur = {buffer_top_left->x + c, i};
-                              if(ce_points_equal(cur, *cursor) || ce_points_equal(cur, matched_pair)){
-                                   fg_color = set_color(S_MATCHING_PARENS, highlight_type);
-                              }else if(fg_color == S_MATCHING_PARENS){
-                                   fg_color = set_color(S_NORMAL, highlight_type);
-                              }
-                         }
-
                          if(!inside_string){
+                              if(matched_pair.x >= 0){
+                                   Point_t cur = {buffer_top_left->x + c, i};
+                                   if(ce_points_equal(cur, *cursor) || ce_points_equal(cur, matched_pair)){
+                                        fg_color = set_color(S_MATCHING_PARENS, highlight_type);
+                                   }else if(fg_color == S_MATCHING_PARENS){
+                                        fg_color = set_color(S_NORMAL, highlight_type);
+                                   }
+                              }
+
                               if(!color_left){
                                    color_left = ce_is_constant_number(line_to_print, c);
                                    if(color_left){

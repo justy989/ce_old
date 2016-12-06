@@ -36,6 +36,7 @@ LITTLE:
 -if the next search pattern is in view, don't center the view
 -show matching parens
 -if you make a change and undo, the buffer still says modified
+-support 'UL', 'LL', 'L' and all the others? in ce_is_constant_number()
 */
 
 #include <assert.h>

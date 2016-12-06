@@ -9,8 +9,7 @@
 #include <dirent.h>
 #include <sys/ioctl.h>
 
-#include "ce.h"
-#include "ce_vim.h"
+#include "ce_config.h"
 
 #define SCROLL_LINES 1
 
@@ -30,18 +29,6 @@ const char* buffer_flag_string(Buffer_t* buffer)
      return "";
 }
 
-typedef struct{
-     char** commands;
-     int64_t command_count;
-     Buffer_t* output_buffer;
-     BufferNode_t* buffer_node_head;
-     BufferView_t* view_head;
-     BufferView_t* view_current;
-     int shell_command_input_fd;
-     int shell_command_output_fd;
-     void* user_data;
-} ShellCommandData_t;
-
 ShellCommandData_t shell_command_data;
 pthread_mutex_t draw_lock;
 pthread_mutex_t shell_buffer_lock;
@@ -59,19 +46,6 @@ int64_t count_digits(int64_t n)
 }
 
 void view_drawer(const BufferNode_t* head, void* user_data);
-
-// TODO: move this to ce.h
-typedef struct InputHistoryNode_t {
-     char* entry;
-     struct InputHistoryNode_t* next;
-     struct InputHistoryNode_t* prev;
-} InputHistoryNode_t;
-
-typedef struct {
-     InputHistoryNode_t* head;
-     InputHistoryNode_t* tail;
-     InputHistoryNode_t* cur;
-} InputHistory_t;
 
 bool input_history_init(InputHistory_t* history)
 {
@@ -139,11 +113,6 @@ bool input_history_prev(InputHistory_t* history)
      return true;
 }
 
-typedef struct{
-     BufferCommitNode_t* commit_tail;
-     VimBufferState_t vim_buffer_state;
-} BufferState_t;
-
 // location is {left_column, top_line} for the view
 void scroll_view_to_location(BufferView_t* buffer_view, const Point_t* location){
      // TODO: should we be able to scroll the view above our first line?
@@ -170,16 +139,6 @@ void center_view_when_cursor_outside_portion(BufferView_t* view, float portion_s
           scroll_view_to_location(view, &location);
      }
 }
-
-typedef struct TabView_t{
-     BufferView_t* view_head;
-     BufferView_t* view_current;
-     BufferView_t* view_previous;
-     BufferView_t* view_input_save;
-     BufferView_t* view_overrideable;
-     Buffer_t* overriden_buffer;
-     struct TabView_t* next;
-} TabView_t;
 
 TabView_t* tab_view_insert(TabView_t* head)
 {
@@ -240,19 +199,6 @@ void tab_view_restore_overrideable(TabView_t* tab)
      tab->view_overrideable->cursor = tab->overriden_buffer->cursor;
      center_view(tab->view_overrideable);
 }
-
-typedef struct CompleteNode_t{
-     char* option;
-     struct CompleteNode_t* next;
-     struct CompleteNode_t* prev;
-} CompleteNode_t;
-
-typedef struct{
-     CompleteNode_t* head;
-     CompleteNode_t* tail;
-     CompleteNode_t* current;
-     Point_t start;
-} AutoComplete_t;
 
 bool auto_complete_insert(AutoComplete_t* auto_complete, const char* option)
 {
@@ -384,49 +330,6 @@ void auto_complete_prev(AutoComplete_t* auto_complete, const char* match)
 
      auto_complete_end(auto_complete);
 }
-
-typedef struct{
-     bool input;
-     const char* input_message;
-     int input_key;
-
-     Buffer_t* shell_command_buffer; // Allocate so it can be part of the buffer list and get free'd at the end
-     Buffer_t* completion_buffer;    // same as shell_command_buffer
-
-     Buffer_t input_buffer;
-     Buffer_t buffer_list_buffer;
-     Buffer_t mark_list_buffer;
-     Buffer_t yank_list_buffer;
-     Buffer_t macro_list_buffer;
-     Buffer_t* buffer_before_query;
-
-     VimState_t vim_state;
-
-     int64_t last_command_buffer_jump;
-     int last_key;
-
-     TabView_t* tab_head;
-     TabView_t* tab_current;
-
-     BufferView_t* view_input;
-
-     InputHistory_t shell_command_history;
-     InputHistory_t shell_input_history;
-     InputHistory_t search_history;
-     InputHistory_t load_file_history;
-
-     pthread_t shell_command_thread;
-     pthread_t shell_input_thread;
-
-     AutoComplete_t auto_complete;
-
-     LineNumberType_t line_number_type;
-     HighlightLineType_t highlight_line_type;
-
-     char editting_register;
-
-     bool quit;
-} ConfigState_t;
 
 bool initialize_buffer(Buffer_t* buffer){
      BufferState_t* buffer_state = calloc(1, sizeof(*buffer_state));

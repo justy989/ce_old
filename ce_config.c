@@ -2017,7 +2017,15 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
 
                     char* search_pattern = ce_dupe_string(&scrap_buffer, start, end);
                     vim_yank_add(&config_state->vim_state.yank_head, '/', search_pattern, YANK_NORMAL);
-                    ce_message("  search pattern '%s'", search_pattern);
+                    int rc = regcomp(&config_state->vim_state.search.regex, search_pattern, REG_EXTENDED);
+                    if(rc != 0){
+                         char error_buffer[BUFSIZ];
+                         regerror(rc, &config_state->vim_state.search.regex, error_buffer, BUFSIZ);
+                         ce_message("regcomp() failed: '%s'", error_buffer);
+                    }else{
+                         config_state->vim_state.search.valid_regex = true;
+                         ce_message("  search pattern '%s'", search_pattern);
+                    }
                }
 
                int64_t next_line = end.y + 1;

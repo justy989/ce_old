@@ -231,6 +231,39 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                     return result;
                }
                break;
+          case '#':
+          {
+               if(cursor->y < buffer->line_count){
+                    bool all_whitespace = true;
+
+                    for(int64_t i = 0; i < cursor->x; ++i){
+                         if(ce_get_char_raw(buffer, (Point_t){i, cursor->y}) != ' '){
+                              all_whitespace = false;
+                              break;
+                         }
+                    }
+
+                    if(all_whitespace){
+                         Point_t start = {0, cursor->y};
+                         Point_t end = {cursor->x - 1, cursor->y};
+                         char* removed_str = ce_dupe_string(buffer, start, end);
+                         if(ce_remove_string(buffer, start, cursor->x)){
+                              ce_commit_remove_string(commit_tail, start, *cursor, start, removed_str, BCC_KEEP_GOING);
+                              *cursor = start;
+                              insert_start = start;
+                              undo_cursor = insert_start;
+                         }else{
+                              free(removed_str);
+                         }
+                    }
+               }
+
+               if(ce_insert_char(buffer, *cursor, key)){
+                    ce_keys_push(&vim_state->command_head, key);
+                    cursor->x++;
+                    ce_commit_insert_char(commit_tail, insert_start, undo_cursor, *cursor, key, BCC_KEEP_GOING);
+               }
+          } break;
           case KEY_ESCAPE:
           {
                if(!repeating){

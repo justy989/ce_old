@@ -1682,11 +1682,13 @@ int64_t ce_is_constant_number(const char* line, int64_t start_offset)
      bool seen_decimal = false;
      bool seen_hex = false;
      bool seen_u = false;
+     bool seen_digit = false;
      int seen_l = 0;
 
      while(ch != 0){
           if(isdigit(ch)){
                if(seen_u || seen_l) break;
+               seen_digit = true;
                count++;
           }else if(!seen_decimal && ch == '.'){
                if(seen_u || seen_l) break;
@@ -1742,6 +1744,7 @@ int64_t ce_is_constant_number(const char* line, int64_t start_offset)
      }
 
      if(count == 1 && (start[0] == '-' || start[0] == '.')) return 0;
+     if((seen_l || seen_u) && !seen_digit) return 0;
 
      // check if the previous character is not a delimiter
      int64_t prev_index = start_offset - 1;

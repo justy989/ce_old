@@ -31,7 +31,6 @@ LITTLE:
 -syntax highlight printf formatters: '%s'
 -cursor off by 1 for files under 10 lines in relative line mode
 -shell command output sometimes doesn't come in til you send it input
--when in insert mode, if there is only whitespace before the cursor and you type a '#', move it to the beginning of the line
 -we can still hit the drawing bug where config_state->tab_current->view_input_save is null
 -if you make a change and undo, the buffer still says modified
 */

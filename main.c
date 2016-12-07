@@ -33,10 +33,7 @@ LITTLE:
 -shell command output sometimes doesn't come in til you send it input
 -when in insert mode, if there is only whitespace before the cursor and you type a '#', move it to the beginning of the line
 -we can still hit the drawing bug where config_state->tab_current->view_input_save is null
--if the next search pattern is in view, don't center the view
--show matching parens
 -if you make a change and undo, the buffer still says modified
--support 'UL', 'LL', 'L' and all the others? in ce_is_constant_number()
 */
 
 #include <assert.h>

@@ -1681,14 +1681,19 @@ int64_t ce_is_constant_number(const char* line, int64_t start_offset)
      char ch = *itr;
      bool seen_decimal = false;
      bool seen_hex = false;
+     bool seen_u = false;
+     int seen_l = 0;
 
      while(ch != 0){
           if(isdigit(ch)){
+               if(seen_u || seen_l) break;
                count++;
           }else if(!seen_decimal && ch == '.'){
+               if(seen_u || seen_l) break;
                seen_decimal = true;
                count++;
           }else if(ch == 'f' && seen_decimal){
+               if(seen_u || seen_l) break;
                count++;
                break;
           }else if(ch == '-' && itr == start){
@@ -1696,7 +1701,15 @@ int64_t ce_is_constant_number(const char* line, int64_t start_offset)
           }else if(ch == 'x' && itr == (start + 1)){
                seen_hex = true;
                count++;
+          }else if((ch == 'u' || ch == 'U') && !seen_u){
+               seen_u = true;
+               count++;
+          }else if((ch == 'l' || ch == 'L') && seen_l < 2){
+               seen_l++;
+               count++;
           }else if(seen_hex){
+               if(seen_u || seen_l) break;
+
                bool valid_hex_char = false;
 
                switch(ch){

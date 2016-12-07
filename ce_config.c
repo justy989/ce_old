@@ -612,426 +612,6 @@ bool delete_buffer_at_index(BufferNode_t** head, TabView_t* tab_head, int64_t bu
      return true;
 }
 
-bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, char** argv, void** user_data)
-{
-     // NOTE: need to set these in this module
-     g_terminal_dimensions = terminal_dimensions;
-
-     // setup the config's state
-     ConfigState_t* config_state = calloc(1, sizeof(*config_state));
-     if(!config_state){
-          ce_message("failed to allocate config state");
-          return false;
-     }
-
-     config_state->tab_head = calloc(1, sizeof(*config_state->tab_head));
-     if(!config_state->tab_head){
-          ce_message("failed to allocate tab");
-          return false;
-     }
-
-     config_state->tab_current = config_state->tab_head;
-
-     config_state->tab_head->view_head = calloc(1, sizeof(*config_state->tab_head->view_head));
-     if(!config_state->tab_head->view_head){
-          ce_message("failed to allocate buffer view");
-          return false;
-     }
-
-     config_state->view_input = calloc(1, sizeof(*config_state->view_input));
-     if(!config_state->view_input){
-          ce_message("failed to allocate buffer view for input");
-          return false;
-     }
-
-     // setup input buffer
-     ce_alloc_lines(&config_state->input_buffer, 1);
-     initialize_buffer(&config_state->input_buffer);
-     config_state->input_buffer.name = strdup("[input]");
-     config_state->view_input->buffer = &config_state->input_buffer;
-
-     // setup buffer list buffer
-     config_state->buffer_list_buffer.name = strdup("[buffers]");
-     initialize_buffer(&config_state->buffer_list_buffer);
-     config_state->buffer_list_buffer.status = BS_READONLY;
-
-     config_state->mark_list_buffer.name = strdup("[marks]");
-     initialize_buffer(&config_state->mark_list_buffer);
-     config_state->mark_list_buffer.status = BS_READONLY;
-
-     config_state->yank_list_buffer.name = strdup("[yanks]");
-     initialize_buffer(&config_state->yank_list_buffer);
-     config_state->yank_list_buffer.status = BS_READONLY;
-
-     config_state->macro_list_buffer.name = strdup("[macros]");
-     initialize_buffer(&config_state->macro_list_buffer);
-     config_state->macro_list_buffer.status = BS_READONLY;
-
-     // if we reload, the shell command buffer may already exist, don't recreate it
-     BufferNode_t* itr = *head;
-     while(itr){
-          if(strcmp(itr->buffer->name, "[shell_output]") == 0){
-               config_state->shell_command_buffer = itr->buffer;
-          }
-          if(strcmp(itr->buffer->name, "[completions]") == 0){
-               config_state->completion_buffer = itr->buffer;
-          }
-          itr = itr->next;
-     }
-
-     if(!config_state->shell_command_buffer){
-          config_state->shell_command_buffer = calloc(1, sizeof(*config_state->shell_command_buffer));
-          config_state->shell_command_buffer->name = strdup("[shell_output]");
-          config_state->shell_command_buffer->status = BS_READONLY;
-          ce_alloc_lines(config_state->shell_command_buffer, 1);
-          BufferNode_t* new_buffer_node = ce_append_buffer_to_list(*head, config_state->shell_command_buffer);
-          if(!new_buffer_node){
-               ce_message("failed to add shell command buffer to list");
-               return false;
-          }
-     }
-
-     if(!config_state->completion_buffer){
-          config_state->completion_buffer = calloc(1, sizeof(*config_state->shell_command_buffer));
-          config_state->completion_buffer->name = strdup("[completions]");
-          config_state->completion_buffer->status = BS_READONLY;
-          BufferNode_t* new_buffer_node = ce_append_buffer_to_list(*head, config_state->completion_buffer);
-          if(!new_buffer_node){
-               ce_message("failed to add shell command buffer to list");
-               return false;
-          }
-     }
-
-     *user_data = config_state;
-
-     // setup state for each buffer
-     itr = *head;
-     while(itr){
-          initialize_buffer(itr->buffer);
-          itr = itr->next;
-     }
-
-     config_state->tab_current->view_head->buffer = (*head)->buffer;
-     config_state->tab_current->view_current = config_state->tab_current->view_head;
-
-     for(int i = 0; i < argc; ++i){
-          BufferNode_t* node = new_buffer_from_file(*head, argv[i]);
-
-          // if we loaded a file, set the view to point at the file
-          if(node){
-               if(i == 0){
-                    config_state->tab_current->view_current->buffer = node->buffer;
-               }else{
-                    ce_split_view(config_state->tab_current->view_head, node->buffer, true);
-               }
-          }
-     }
-
-     config_state->line_number_type = LNT_NONE;
-     config_state->highlight_line_type = HLT_ENTIRE_LINE;
-
-#if 0
-     // enable mouse events
-     mousemask(~((mmask_t)0), NULL);
-     mouseinterval(0);
-#endif
-
-     input_history_init(&config_state->shell_command_history);
-     input_history_init(&config_state->shell_input_history);
-     input_history_init(&config_state->search_history);
-     input_history_init(&config_state->load_file_history);
-
-     // setup colors for syntax highlighting
-     init_pair(S_NORMAL, COLOR_FOREGROUND, COLOR_BACKGROUND);
-     init_pair(S_KEYWORD, COLOR_BLUE, COLOR_BACKGROUND);
-     init_pair(S_TYPE, COLOR_BRIGHT_BLUE, COLOR_BACKGROUND);
-     init_pair(S_CONTROL, COLOR_YELLOW, COLOR_BACKGROUND);
-     init_pair(S_COMMENT, COLOR_GREEN, COLOR_BACKGROUND);
-     init_pair(S_STRING, COLOR_RED, COLOR_BACKGROUND);
-     init_pair(S_CONSTANT, COLOR_MAGENTA, COLOR_BACKGROUND);
-     init_pair(S_CONSTANT_NUMBER, COLOR_MAGENTA, COLOR_BACKGROUND);
-     init_pair(S_MATCHING_PARENS, COLOR_BRIGHT_WHITE, COLOR_BACKGROUND);
-     init_pair(S_PREPROCESSOR, COLOR_BRIGHT_MAGENTA, COLOR_BACKGROUND);
-     init_pair(S_FILEPATH, COLOR_BLUE, COLOR_BACKGROUND);
-     init_pair(S_DIFF_ADDED, COLOR_GREEN, COLOR_BACKGROUND);
-     init_pair(S_DIFF_REMOVED, COLOR_RED, COLOR_BACKGROUND);
-     init_pair(S_DIFF_HEADER, COLOR_BRIGHT_WHITE, COLOR_BACKGROUND);
-
-     init_pair(S_NORMAL_HIGHLIGHTED, COLOR_FOREGROUND, COLOR_WHITE);
-     init_pair(S_KEYWORD_HIGHLIGHTED, COLOR_BLUE, COLOR_WHITE);
-     init_pair(S_TYPE_HIGHLIGHTED, COLOR_BRIGHT_BLUE, COLOR_WHITE);
-     init_pair(S_CONTROL_HIGHLIGHTED, COLOR_YELLOW, COLOR_WHITE);
-     init_pair(S_COMMENT_HIGHLIGHTED, COLOR_GREEN, COLOR_WHITE);
-     init_pair(S_STRING_HIGHLIGHTED, COLOR_RED, COLOR_WHITE);
-     init_pair(S_CONSTANT_HIGHLIGHTED, COLOR_MAGENTA, COLOR_WHITE);
-     init_pair(S_CONSTANT_NUMBER_HIGHLIGHTED, COLOR_MAGENTA, COLOR_WHITE);
-     init_pair(S_MATCHING_PARENS_HIGHLIGHTED, COLOR_BRIGHT_WHITE, COLOR_WHITE);
-     init_pair(S_PREPROCESSOR_HIGHLIGHTED, COLOR_BRIGHT_MAGENTA, COLOR_WHITE);
-     init_pair(S_FILEPATH_HIGHLIGHTED, COLOR_BLUE, COLOR_WHITE);
-     init_pair(S_DIFF_ADDED_HIGHLIGHTED, COLOR_GREEN, COLOR_WHITE);
-     init_pair(S_DIFF_REMOVED_HIGHLIGHTED, COLOR_RED, COLOR_WHITE);
-     init_pair(S_DIFF_HEADER_HIGHLIGHTED, COLOR_BRIGHT_WHITE, COLOR_WHITE);
-
-     init_pair(S_NORMAL_CURRENT_LINE, COLOR_FOREGROUND, COLOR_BRIGHT_BLACK);
-     init_pair(S_KEYWORD_CURRENT_LINE, COLOR_BLUE, COLOR_BRIGHT_BLACK);
-     init_pair(S_TYPE_CURRENT_LINE, COLOR_BRIGHT_BLUE, COLOR_BRIGHT_BLACK);
-     init_pair(S_CONTROL_CURRENT_LINE, COLOR_YELLOW, COLOR_BRIGHT_BLACK);
-     init_pair(S_COMMENT_CURRENT_LINE, COLOR_GREEN, COLOR_BRIGHT_BLACK);
-     init_pair(S_STRING_CURRENT_LINE, COLOR_RED, COLOR_BRIGHT_BLACK);
-     init_pair(S_CONSTANT_CURRENT_LINE, COLOR_MAGENTA, COLOR_BRIGHT_BLACK);
-     init_pair(S_CONSTANT_NUMBER_CURRENT_LINE, COLOR_MAGENTA, COLOR_BRIGHT_BLACK);
-     init_pair(S_MATCHING_PARENS_CURRENT_LINE, COLOR_BRIGHT_WHITE, COLOR_BRIGHT_BLACK);
-     init_pair(S_PREPROCESSOR_CURRENT_LINE, COLOR_BRIGHT_MAGENTA, COLOR_BRIGHT_BLACK);
-     init_pair(S_FILEPATH_CURRENT_LINE, COLOR_BLUE, COLOR_BRIGHT_BLACK);
-     init_pair(S_DIFF_ADDED_CURRENT_LINE, COLOR_GREEN, COLOR_BRIGHT_BLACK);
-     init_pair(S_DIFF_REMOVED_CURRENT_LINE, COLOR_RED, COLOR_BRIGHT_BLACK);
-     init_pair(S_DIFF_HEADER_CURRENT_LINE, COLOR_BRIGHT_WHITE, COLOR_BRIGHT_BLACK);
-
-     init_pair(S_LINE_NUMBERS, COLOR_WHITE, COLOR_BACKGROUND);
-
-     init_pair(S_TRAILING_WHITESPACE, COLOR_FOREGROUND, COLOR_RED);
-
-     init_pair(S_BORDERS, COLOR_WHITE, COLOR_BACKGROUND);
-
-     init_pair(S_TAB_NAME, COLOR_WHITE, COLOR_BACKGROUND);
-     init_pair(S_CURRENT_TAB_NAME, COLOR_CYAN, COLOR_BACKGROUND);
-
-     init_pair(S_VIEW_STATUS, COLOR_CYAN, COLOR_BACKGROUND);
-     init_pair(S_INPUT_STATUS, COLOR_RED, COLOR_BACKGROUND);
-     init_pair(S_AUTO_COMPLETE, COLOR_WHITE, COLOR_BACKGROUND);
-
-     define_key(NULL, KEY_BACKSPACE);   // Blow away backspace
-     define_key("\x7F", KEY_BACKSPACE); // Backspace  (127) (0x7F) ASCII "DEL" Delete
-     define_key("\x15", KEY_NPAGE);     // ctrl + d    (21) (0x15) ASCII "NAK" Negative Acknowledgement
-     define_key("\x04", KEY_PPAGE);     // ctrl + u     (4) (0x04) ASCII "EOT" End of Transmission
-     define_key("\x11", KEY_CLOSE);     // ctrl + q    (17) (0x11) ASCII "DC1" Device Control 1
-     define_key("\x12", KEY_REDO);      // ctrl + r    (18) (0x12) ASCII "DC2" Device Control 2
-     define_key("\x17", KEY_SAVE);      // ctrl + w    (23) (0x17) ASCII "ETB" End of Transmission Block
-     define_key(NULL, KEY_ENTER);       // Blow away enter
-     define_key("\x0D", KEY_ENTER);     // Enter       (13) (0x0D) ASCII "CR"  NL Carriage Return
-
-     pthread_mutex_init(&draw_lock, NULL);
-     pthread_mutex_init(&shell_buffer_lock, NULL);
-
-     auto_complete_end(&config_state->auto_complete);
-     config_state->vim_state.insert_start = (Point_t){-1, -1};
-
-     // read in state file if it exists
-     // TODO: load this into a buffer instead of dealing with the freakin scanf nonsense
-     {
-          char path[128];
-          snprintf(path, 128, "%s/%s", getenv("HOME"), ".ce");
-
-          FILE* in_file = fopen(path, "r");
-          if(in_file){
-               ce_message("restoring state from %s", path);
-
-               char* line = NULL;
-               int64_t index = 0;
-               int n = 0;
-
-               // read in last searched text
-               n = fscanf(in_file, "%"PRId64"\n", &index);
-
-               if(n == 1){
-                    size_t len = 0;
-                    ssize_t read = 0;
-                    Buffer_t scrap_buffer = {};
-
-                    for(int64_t i = 0; i < index; ++i){
-                         read = getline(&line, &len, in_file);
-                         if(read >= 0){
-                              ce_append_line(&scrap_buffer, line);
-                         }
-                    }
-
-                    if(scrap_buffer.line_count){
-                         char* yank_text = ce_dupe_buffer(&scrap_buffer);
-                         ce_free_buffer(&scrap_buffer);
-                         vim_yank_add(&config_state->vim_state.yank_head, '/', yank_text, YANK_NORMAL);
-                         ce_message("  search pattern '%s'", yank_text);
-                    }
-
-                    // read in shell command history
-                    n = fscanf(in_file, "%"PRId64"\n", &index);
-                    if(n == 1){
-                         ce_message("  %"PRId64" shell commands", index);
-
-                         for(int64_t i = 0; i < index; ++i){
-                              if(feof(in_file)) break;
-
-                              read = getline(&line, &len, in_file);
-                              if(read > 0){
-                                   int64_t len = strlen(line);
-                                   if(len){
-                                        line[len-1] = 0; // overwrite the newline character included by getline()
-                                        config_state->shell_command_history.cur->entry = strdup(line);
-                                        input_history_commit_current(&config_state->shell_command_history);
-                                   }
-                              }
-                         }
-
-                         // write out all buffers and cursor positions
-                         char str[256];
-                         while(!feof(in_file)){
-                              n = fscanf(in_file, "%s %"PRId64"\n", str, &index);
-                              if(n == 2){
-                                   BufferNode_t* itr = *head;
-                                   while(itr){
-                                        if(strcmp(itr->buffer->name, str) == 0){
-                                             ce_message(" '%s' line %" PRId64, str, index);
-                                             itr->buffer->cursor.y = index;
-                                             ce_move_cursor_to_soft_beginning_of_line(itr->buffer, &itr->buffer->cursor);
-                                             BufferView_t* view = ce_buffer_in_view(config_state->tab_current->view_head, itr->buffer);
-                                             if(view) view->cursor = view->buffer->cursor;
-                                             break;
-                                        }
-                                        itr = itr->next;
-                                   }
-                              }
-                         }
-                    }
-               }
-
-               free(line);
-               fclose(in_file);
-          }
-     }
-
-     return true;
-}
-
-bool destroyer(BufferNode_t** head, void* user_data)
-{
-     ConfigState_t* config_state = user_data;
-
-     // write out file with some state we can use to restore
-     {
-          char path[128];
-          snprintf(path, 128, "%s/%s", getenv("HOME"), ".ce");
-
-          FILE* out_file = fopen(path, "w");
-          if(out_file){
-               // write out last searched text
-               VimYankNode_t* yank = vim_yank_find(config_state->vim_state.yank_head, '/');
-               if(yank){
-                    int64_t line_count = ce_count_string_lines(yank->text);
-                    fprintf(out_file, "%"PRId64"\n", line_count);
-                    fprintf(out_file, "%s\n", yank->text);
-               }else{
-                    fprintf(out_file, "0\n");
-               }
-
-               // shell command history
-               int64_t shell_command_count = 0;
-               InputHistoryNode_t* history_itr = config_state->shell_command_history.head;
-               while(history_itr && history_itr->entry){
-                    shell_command_count++;
-                    history_itr = history_itr->next;
-               }
-
-               fprintf(out_file, "%"PRId64"\n", shell_command_count);
-
-               history_itr = config_state->shell_command_history.head;
-               for(int32_t i = 0; i < shell_command_count; ++i){
-                    fprintf(out_file, "%s\n", history_itr->entry);
-                    history_itr = history_itr->next;
-               }
-
-               // TODO: vim last command
-
-               // write out all buffers and cursor positions
-               BufferNode_t* itr = *head;
-               while(itr){
-                    if(itr->buffer->status != BS_READONLY){
-                         fprintf(out_file, "%s %"PRId64"\n", itr->buffer->name, itr->buffer->cursor.y);
-                    }
-                    itr = itr->next;
-               }
-
-               fclose(out_file);
-          }
-     }
-
-     BufferNode_t* itr = *head;
-     while(itr){
-          free_buffer_state(itr->buffer->user_data);
-          itr->buffer->user_data = NULL;
-          itr = itr->next;
-     }
-
-     TabView_t* tab_itr = config_state->tab_head;
-     while(tab_itr){
-          if(tab_itr->view_head){
-               ce_free_views(&tab_itr->view_head);
-          }
-          tab_itr = tab_itr->next;
-     }
-
-     tab_itr = config_state->tab_head;
-     while(tab_itr){
-          TabView_t* tmp = tab_itr;
-          tab_itr = tab_itr->next;
-          free(tmp);
-     }
-
-     // input buffer
-     {
-          ce_free_buffer(&config_state->input_buffer);
-          free_buffer_state(config_state->input_buffer.user_data);
-          free(config_state->view_input);
-     }
-
-     if(config_state->shell_command_thread){
-          pthread_cancel(config_state->shell_command_thread);
-          pthread_join(config_state->shell_command_thread, NULL);
-     }
-
-     if(config_state->shell_input_thread){
-          pthread_cancel(config_state->shell_input_thread);
-          pthread_join(config_state->shell_input_thread, NULL);
-     }
-
-     free_buffer_state(config_state->buffer_list_buffer.user_data);
-     ce_free_buffer(&config_state->buffer_list_buffer);
-
-     free_buffer_state(config_state->mark_list_buffer.user_data);
-     ce_free_buffer(&config_state->mark_list_buffer);
-
-     free_buffer_state(config_state->yank_list_buffer.user_data);
-     ce_free_buffer(&config_state->yank_list_buffer);
-
-     free_buffer_state(config_state->macro_list_buffer.user_data);
-     ce_free_buffer(&config_state->macro_list_buffer);
-
-     // history
-     input_history_free(&config_state->shell_command_history);
-     input_history_free(&config_state->shell_input_history);
-     input_history_free(&config_state->search_history);
-     input_history_free(&config_state->load_file_history);
-
-     pthread_mutex_destroy(&draw_lock);
-     pthread_mutex_destroy(&shell_buffer_lock);
-
-     auto_complete_free(&config_state->auto_complete);
-
-     free(config_state->vim_state.last_insert_command);
-
-     ce_keys_free(&config_state->vim_state.command_head);
-     ce_keys_free(&config_state->vim_state.record_macro_head);
-
-     vim_yanks_free(&config_state->vim_state.yank_head);
-
-     vim_macros_free(&config_state->vim_state.macro_head);
-
-     VimMacroCommitNode_t* macro_commit_head = config_state->vim_state.macro_commit_current;
-     while(macro_commit_head && macro_commit_head->prev) macro_commit_head = macro_commit_head->prev;
-     vim_macro_commits_free(&macro_commit_head);
-
-     free(config_state);
-     return true;
-}
-
 void scroll_view_to_last_line(BufferView_t* view)
 {
      view->top_row = view->buffer->line_count - (view->bottom_right.y - view->top_left.y);
@@ -2170,6 +1750,458 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
      }
 }
 
+void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferView_t* overrideable_view, VimMode_t vim_mode, int last_key,
+                        char recording_macro)
+{
+     Buffer_t* buffer = view->buffer;
+     if(view->next_horizontal) draw_view_statuses(view->next_horizontal, current_view, overrideable_view, vim_mode, last_key, recording_macro);
+     if(view->next_vertical) draw_view_statuses(view->next_vertical, current_view, overrideable_view, vim_mode, last_key, recording_macro);
+
+     // NOTE: mode names need space at the end for OCD ppl like me
+     static const char* mode_names[] = {
+          "NORMAL ",
+          "INSERT ",
+          "VISUAL ",
+          "VISUAL LINE ",
+          "VISUAL BLOCK ",
+     };
+
+     attron(COLOR_PAIR(S_BORDERS));
+     move(view->bottom_right.y, view->top_left.x);
+     for(int i = view->top_left.x; i < view->bottom_right.x; ++i) addch(ACS_HLINE);
+     int right_status_offset = 0;
+     if(view->bottom_right.x == (g_terminal_dimensions->x - 1)){
+          addch(ACS_HLINE);
+          right_status_offset = 1;
+     }
+
+     // TODO: handle case where filename is too long to fit in the status bar
+     attron(COLOR_PAIR(S_VIEW_STATUS));
+     mvprintw(view->bottom_right.y, view->top_left.x + 1, " %s%s%s ",
+              view == current_view ? mode_names[vim_mode] : "",
+              buffer_flag_string(buffer), buffer->filename);
+#if 0
+     if(view == current_view) printw("%s %d ", keyname(last_key), last_key);
+#endif
+     if(view == overrideable_view) printw("^ ");
+     if(view == current_view && recording_macro) printw("RECORDING %c ", recording_macro);
+     int64_t row = view->cursor.y + 1;
+     int64_t column = view->cursor.x + 1;
+     int64_t digits_in_line = count_digits(row);
+     digits_in_line += count_digits(column);
+     mvprintw(view->bottom_right.y, (view->bottom_right.x - (digits_in_line + 5)) + right_status_offset,
+              " %"PRId64", %"PRId64" ", column, row);
+}
+
+bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, char** argv, void** user_data)
+{
+     // NOTE: need to set these in this module
+     g_terminal_dimensions = terminal_dimensions;
+
+     // setup the config's state
+     ConfigState_t* config_state = calloc(1, sizeof(*config_state));
+     if(!config_state){
+          ce_message("failed to allocate config state");
+          return false;
+     }
+
+     config_state->tab_head = calloc(1, sizeof(*config_state->tab_head));
+     if(!config_state->tab_head){
+          ce_message("failed to allocate tab");
+          return false;
+     }
+
+     config_state->tab_current = config_state->tab_head;
+
+     config_state->tab_head->view_head = calloc(1, sizeof(*config_state->tab_head->view_head));
+     if(!config_state->tab_head->view_head){
+          ce_message("failed to allocate buffer view");
+          return false;
+     }
+
+     config_state->view_input = calloc(1, sizeof(*config_state->view_input));
+     if(!config_state->view_input){
+          ce_message("failed to allocate buffer view for input");
+          return false;
+     }
+
+     // setup input buffer
+     ce_alloc_lines(&config_state->input_buffer, 1);
+     initialize_buffer(&config_state->input_buffer);
+     config_state->input_buffer.name = strdup("[input]");
+     config_state->view_input->buffer = &config_state->input_buffer;
+
+     // setup buffer list buffer
+     config_state->buffer_list_buffer.name = strdup("[buffers]");
+     initialize_buffer(&config_state->buffer_list_buffer);
+     config_state->buffer_list_buffer.status = BS_READONLY;
+
+     config_state->mark_list_buffer.name = strdup("[marks]");
+     initialize_buffer(&config_state->mark_list_buffer);
+     config_state->mark_list_buffer.status = BS_READONLY;
+
+     config_state->yank_list_buffer.name = strdup("[yanks]");
+     initialize_buffer(&config_state->yank_list_buffer);
+     config_state->yank_list_buffer.status = BS_READONLY;
+
+     config_state->macro_list_buffer.name = strdup("[macros]");
+     initialize_buffer(&config_state->macro_list_buffer);
+     config_state->macro_list_buffer.status = BS_READONLY;
+
+     // if we reload, the shell command buffer may already exist, don't recreate it
+     BufferNode_t* itr = *head;
+     while(itr){
+          if(strcmp(itr->buffer->name, "[shell_output]") == 0){
+               config_state->shell_command_buffer = itr->buffer;
+          }
+          if(strcmp(itr->buffer->name, "[completions]") == 0){
+               config_state->completion_buffer = itr->buffer;
+          }
+          itr = itr->next;
+     }
+
+     if(!config_state->shell_command_buffer){
+          config_state->shell_command_buffer = calloc(1, sizeof(*config_state->shell_command_buffer));
+          config_state->shell_command_buffer->name = strdup("[shell_output]");
+          config_state->shell_command_buffer->status = BS_READONLY;
+          ce_alloc_lines(config_state->shell_command_buffer, 1);
+          BufferNode_t* new_buffer_node = ce_append_buffer_to_list(*head, config_state->shell_command_buffer);
+          if(!new_buffer_node){
+               ce_message("failed to add shell command buffer to list");
+               return false;
+          }
+     }
+
+     if(!config_state->completion_buffer){
+          config_state->completion_buffer = calloc(1, sizeof(*config_state->shell_command_buffer));
+          config_state->completion_buffer->name = strdup("[completions]");
+          config_state->completion_buffer->status = BS_READONLY;
+          BufferNode_t* new_buffer_node = ce_append_buffer_to_list(*head, config_state->completion_buffer);
+          if(!new_buffer_node){
+               ce_message("failed to add shell command buffer to list");
+               return false;
+          }
+     }
+
+     *user_data = config_state;
+
+     // setup state for each buffer
+     itr = *head;
+     while(itr){
+          initialize_buffer(itr->buffer);
+          itr = itr->next;
+     }
+
+     config_state->tab_current->view_head->buffer = (*head)->buffer;
+     config_state->tab_current->view_current = config_state->tab_current->view_head;
+
+     for(int i = 0; i < argc; ++i){
+          BufferNode_t* node = new_buffer_from_file(*head, argv[i]);
+
+          // if we loaded a file, set the view to point at the file
+          if(node){
+               if(i == 0){
+                    config_state->tab_current->view_current->buffer = node->buffer;
+               }else{
+                    ce_split_view(config_state->tab_current->view_head, node->buffer, true);
+               }
+          }
+     }
+
+     config_state->line_number_type = LNT_NONE;
+     config_state->highlight_line_type = HLT_ENTIRE_LINE;
+
+#if 0
+     // enable mouse events
+     mousemask(~((mmask_t)0), NULL);
+     mouseinterval(0);
+#endif
+
+     input_history_init(&config_state->shell_command_history);
+     input_history_init(&config_state->shell_input_history);
+     input_history_init(&config_state->search_history);
+     input_history_init(&config_state->load_file_history);
+
+     // setup colors for syntax highlighting
+     init_pair(S_NORMAL, COLOR_FOREGROUND, COLOR_BACKGROUND);
+     init_pair(S_KEYWORD, COLOR_BLUE, COLOR_BACKGROUND);
+     init_pair(S_TYPE, COLOR_BRIGHT_BLUE, COLOR_BACKGROUND);
+     init_pair(S_CONTROL, COLOR_YELLOW, COLOR_BACKGROUND);
+     init_pair(S_COMMENT, COLOR_GREEN, COLOR_BACKGROUND);
+     init_pair(S_STRING, COLOR_RED, COLOR_BACKGROUND);
+     init_pair(S_CONSTANT, COLOR_MAGENTA, COLOR_BACKGROUND);
+     init_pair(S_CONSTANT_NUMBER, COLOR_MAGENTA, COLOR_BACKGROUND);
+     init_pair(S_MATCHING_PARENS, COLOR_BRIGHT_WHITE, COLOR_BACKGROUND);
+     init_pair(S_PREPROCESSOR, COLOR_BRIGHT_MAGENTA, COLOR_BACKGROUND);
+     init_pair(S_FILEPATH, COLOR_BLUE, COLOR_BACKGROUND);
+     init_pair(S_DIFF_ADDED, COLOR_GREEN, COLOR_BACKGROUND);
+     init_pair(S_DIFF_REMOVED, COLOR_RED, COLOR_BACKGROUND);
+     init_pair(S_DIFF_HEADER, COLOR_BRIGHT_WHITE, COLOR_BACKGROUND);
+
+     init_pair(S_NORMAL_HIGHLIGHTED, COLOR_FOREGROUND, COLOR_WHITE);
+     init_pair(S_KEYWORD_HIGHLIGHTED, COLOR_BLUE, COLOR_WHITE);
+     init_pair(S_TYPE_HIGHLIGHTED, COLOR_BRIGHT_BLUE, COLOR_WHITE);
+     init_pair(S_CONTROL_HIGHLIGHTED, COLOR_YELLOW, COLOR_WHITE);
+     init_pair(S_COMMENT_HIGHLIGHTED, COLOR_GREEN, COLOR_WHITE);
+     init_pair(S_STRING_HIGHLIGHTED, COLOR_RED, COLOR_WHITE);
+     init_pair(S_CONSTANT_HIGHLIGHTED, COLOR_MAGENTA, COLOR_WHITE);
+     init_pair(S_CONSTANT_NUMBER_HIGHLIGHTED, COLOR_MAGENTA, COLOR_WHITE);
+     init_pair(S_MATCHING_PARENS_HIGHLIGHTED, COLOR_BRIGHT_WHITE, COLOR_WHITE);
+     init_pair(S_PREPROCESSOR_HIGHLIGHTED, COLOR_BRIGHT_MAGENTA, COLOR_WHITE);
+     init_pair(S_FILEPATH_HIGHLIGHTED, COLOR_BLUE, COLOR_WHITE);
+     init_pair(S_DIFF_ADDED_HIGHLIGHTED, COLOR_GREEN, COLOR_WHITE);
+     init_pair(S_DIFF_REMOVED_HIGHLIGHTED, COLOR_RED, COLOR_WHITE);
+     init_pair(S_DIFF_HEADER_HIGHLIGHTED, COLOR_BRIGHT_WHITE, COLOR_WHITE);
+
+     init_pair(S_NORMAL_CURRENT_LINE, COLOR_FOREGROUND, COLOR_BRIGHT_BLACK);
+     init_pair(S_KEYWORD_CURRENT_LINE, COLOR_BLUE, COLOR_BRIGHT_BLACK);
+     init_pair(S_TYPE_CURRENT_LINE, COLOR_BRIGHT_BLUE, COLOR_BRIGHT_BLACK);
+     init_pair(S_CONTROL_CURRENT_LINE, COLOR_YELLOW, COLOR_BRIGHT_BLACK);
+     init_pair(S_COMMENT_CURRENT_LINE, COLOR_GREEN, COLOR_BRIGHT_BLACK);
+     init_pair(S_STRING_CURRENT_LINE, COLOR_RED, COLOR_BRIGHT_BLACK);
+     init_pair(S_CONSTANT_CURRENT_LINE, COLOR_MAGENTA, COLOR_BRIGHT_BLACK);
+     init_pair(S_CONSTANT_NUMBER_CURRENT_LINE, COLOR_MAGENTA, COLOR_BRIGHT_BLACK);
+     init_pair(S_MATCHING_PARENS_CURRENT_LINE, COLOR_BRIGHT_WHITE, COLOR_BRIGHT_BLACK);
+     init_pair(S_PREPROCESSOR_CURRENT_LINE, COLOR_BRIGHT_MAGENTA, COLOR_BRIGHT_BLACK);
+     init_pair(S_FILEPATH_CURRENT_LINE, COLOR_BLUE, COLOR_BRIGHT_BLACK);
+     init_pair(S_DIFF_ADDED_CURRENT_LINE, COLOR_GREEN, COLOR_BRIGHT_BLACK);
+     init_pair(S_DIFF_REMOVED_CURRENT_LINE, COLOR_RED, COLOR_BRIGHT_BLACK);
+     init_pair(S_DIFF_HEADER_CURRENT_LINE, COLOR_BRIGHT_WHITE, COLOR_BRIGHT_BLACK);
+
+     init_pair(S_LINE_NUMBERS, COLOR_WHITE, COLOR_BACKGROUND);
+
+     init_pair(S_TRAILING_WHITESPACE, COLOR_FOREGROUND, COLOR_RED);
+
+     init_pair(S_BORDERS, COLOR_WHITE, COLOR_BACKGROUND);
+
+     init_pair(S_TAB_NAME, COLOR_WHITE, COLOR_BACKGROUND);
+     init_pair(S_CURRENT_TAB_NAME, COLOR_CYAN, COLOR_BACKGROUND);
+
+     init_pair(S_VIEW_STATUS, COLOR_CYAN, COLOR_BACKGROUND);
+     init_pair(S_INPUT_STATUS, COLOR_RED, COLOR_BACKGROUND);
+     init_pair(S_AUTO_COMPLETE, COLOR_WHITE, COLOR_BACKGROUND);
+
+     define_key(NULL, KEY_BACKSPACE);   // Blow away backspace
+     define_key("\x7F", KEY_BACKSPACE); // Backspace  (127) (0x7F) ASCII "DEL" Delete
+     define_key("\x15", KEY_NPAGE);     // ctrl + d    (21) (0x15) ASCII "NAK" Negative Acknowledgement
+     define_key("\x04", KEY_PPAGE);     // ctrl + u     (4) (0x04) ASCII "EOT" End of Transmission
+     define_key("\x11", KEY_CLOSE);     // ctrl + q    (17) (0x11) ASCII "DC1" Device Control 1
+     define_key("\x12", KEY_REDO);      // ctrl + r    (18) (0x12) ASCII "DC2" Device Control 2
+     define_key("\x17", KEY_SAVE);      // ctrl + w    (23) (0x17) ASCII "ETB" End of Transmission Block
+     define_key(NULL, KEY_ENTER);       // Blow away enter
+     define_key("\x0D", KEY_ENTER);     // Enter       (13) (0x0D) ASCII "CR"  NL Carriage Return
+
+     pthread_mutex_init(&draw_lock, NULL);
+     pthread_mutex_init(&shell_buffer_lock, NULL);
+
+     auto_complete_end(&config_state->auto_complete);
+     config_state->vim_state.insert_start = (Point_t){-1, -1};
+
+     // read in state file if it exists
+     // TODO: load this into a buffer instead of dealing with the freakin scanf nonsense
+     {
+          char path[128];
+          snprintf(path, 128, "%s/%s", getenv("HOME"), ".ce");
+
+          Buffer_t scrap_buffer = {};
+          if(ce_load_file(&scrap_buffer, path) && scrap_buffer.line_count){
+               ce_message("restoring state from %s", path);
+
+               int yank_lines = atoi(scrap_buffer.lines[0]);
+
+               Point_t start = {0, 1};
+               Point_t end = {0, start.y + (yank_lines - 1)};
+
+               if(yank_lines){
+                    end.x = ce_last_index(scrap_buffer.lines[end.y]);
+
+                    char* search_pattern = ce_dupe_string(&scrap_buffer, start, end);
+                    vim_yank_add(&config_state->vim_state.yank_head, '/', search_pattern, YANK_NORMAL);
+                    ce_message("  search pattern '%s'", search_pattern);
+               }
+
+               int64_t next_line = end.y + 1;
+               if(scrap_buffer.line_count > next_line){
+                    int shell_commands = atoi(scrap_buffer.lines[next_line]);
+                    next_line++;
+
+                    if(shell_commands){
+                         ce_message("  %d shell commands", shell_commands);
+
+                         for(int i = 0; i < shell_commands; ++i){
+                              config_state->shell_command_history.cur->entry = strdup(scrap_buffer.lines[next_line + i]);
+                              input_history_commit_current(&config_state->shell_command_history);
+                         }
+
+                         next_line += shell_commands;
+                    }
+               }
+
+               if(next_line < scrap_buffer.line_count){
+                    ce_message("  file cursor positions");
+               }
+
+               for(int64_t i = next_line; i < scrap_buffer.line_count; ++i){
+                    char* space = scrap_buffer.lines[i];
+                    while(*space && *space != ' ') space++;
+                    if(*space != ' ') break;
+
+                    char* filename = scrap_buffer.lines[i];
+                    ssize_t filename_len = space - filename;
+                    int line_number = atoi(space + 1);
+
+                    BufferNode_t* itr = *head;
+                    while(itr){
+                         if(strncmp(itr->buffer->name, filename, filename_len) == 0){
+                              ce_message(" '%s' at line %d", itr->buffer->name, line_number);
+                              itr->buffer->cursor.y = line_number;
+                              ce_move_cursor_to_soft_beginning_of_line(itr->buffer, &itr->buffer->cursor);
+                              BufferView_t* view = ce_buffer_in_view(config_state->tab_current->view_head, itr->buffer);
+                              if(view) view->cursor = view->buffer->cursor;
+                              break;
+                         }
+                         itr = itr->next;
+                    }
+               }
+
+               ce_free_buffer(&scrap_buffer);
+          }
+     }
+
+     return true;
+}
+
+bool destroyer(BufferNode_t** head, void* user_data)
+{
+     ConfigState_t* config_state = user_data;
+
+     // write out file with some state we can use to restore
+     {
+          char path[128];
+          snprintf(path, 128, "%s/%s", getenv("HOME"), ".ce");
+
+          FILE* out_file = fopen(path, "w");
+          if(out_file){
+               // write out last searched text
+               VimYankNode_t* yank = vim_yank_find(config_state->vim_state.yank_head, '/');
+               if(yank){
+                    int64_t line_count = ce_count_string_lines(yank->text);
+                    fprintf(out_file, "%"PRId64"\n", line_count);
+                    fprintf(out_file, "%s\n", yank->text);
+               }else{
+                    fprintf(out_file, "0\n");
+               }
+
+               // shell command history
+               int64_t shell_command_count = 0;
+               InputHistoryNode_t* history_itr = config_state->shell_command_history.head;
+               while(history_itr && history_itr->entry){
+                    shell_command_count++;
+                    history_itr = history_itr->next;
+               }
+
+               fprintf(out_file, "%"PRId64"\n", shell_command_count);
+
+               history_itr = config_state->shell_command_history.head;
+               for(int32_t i = 0; i < shell_command_count; ++i){
+                    fprintf(out_file, "%s\n", history_itr->entry);
+                    history_itr = history_itr->next;
+               }
+
+               // TODO: vim last command
+
+               // write out all buffers and cursor positions
+               BufferNode_t* itr = *head;
+               while(itr){
+                    if(itr->buffer->status != BS_READONLY){
+                         fprintf(out_file, "%s %"PRId64"\n", itr->buffer->name, itr->buffer->cursor.y);
+                    }
+                    itr = itr->next;
+               }
+
+               fclose(out_file);
+          }
+     }
+
+     BufferNode_t* itr = *head;
+     while(itr){
+          free_buffer_state(itr->buffer->user_data);
+          itr->buffer->user_data = NULL;
+          itr = itr->next;
+     }
+
+     TabView_t* tab_itr = config_state->tab_head;
+     while(tab_itr){
+          if(tab_itr->view_head){
+               ce_free_views(&tab_itr->view_head);
+          }
+          tab_itr = tab_itr->next;
+     }
+
+     tab_itr = config_state->tab_head;
+     while(tab_itr){
+          TabView_t* tmp = tab_itr;
+          tab_itr = tab_itr->next;
+          free(tmp);
+     }
+
+     // input buffer
+     {
+          ce_free_buffer(&config_state->input_buffer);
+          free_buffer_state(config_state->input_buffer.user_data);
+          free(config_state->view_input);
+     }
+
+     if(config_state->shell_command_thread){
+          pthread_cancel(config_state->shell_command_thread);
+          pthread_join(config_state->shell_command_thread, NULL);
+     }
+
+     if(config_state->shell_input_thread){
+          pthread_cancel(config_state->shell_input_thread);
+          pthread_join(config_state->shell_input_thread, NULL);
+     }
+
+     free_buffer_state(config_state->buffer_list_buffer.user_data);
+     ce_free_buffer(&config_state->buffer_list_buffer);
+
+     free_buffer_state(config_state->mark_list_buffer.user_data);
+     ce_free_buffer(&config_state->mark_list_buffer);
+
+     free_buffer_state(config_state->yank_list_buffer.user_data);
+     ce_free_buffer(&config_state->yank_list_buffer);
+
+     free_buffer_state(config_state->macro_list_buffer.user_data);
+     ce_free_buffer(&config_state->macro_list_buffer);
+
+     // history
+     input_history_free(&config_state->shell_command_history);
+     input_history_free(&config_state->shell_input_history);
+     input_history_free(&config_state->search_history);
+     input_history_free(&config_state->load_file_history);
+
+     pthread_mutex_destroy(&draw_lock);
+     pthread_mutex_destroy(&shell_buffer_lock);
+
+     auto_complete_free(&config_state->auto_complete);
+
+     free(config_state->vim_state.last_insert_command);
+
+     ce_keys_free(&config_state->vim_state.command_head);
+     ce_keys_free(&config_state->vim_state.record_macro_head);
+
+     vim_yanks_free(&config_state->vim_state.yank_head);
+
+     vim_macros_free(&config_state->vim_state.macro_head);
+
+     VimMacroCommitNode_t* macro_commit_head = config_state->vim_state.macro_commit_current;
+     while(macro_commit_head && macro_commit_head->prev) macro_commit_head = macro_commit_head->prev;
+     vim_macro_commits_free(&macro_commit_head);
+
+     free(config_state);
+     return true;
+}
+
 bool key_handler(int key, BufferNode_t** head, void* user_data)
 {
      ConfigState_t* config_state = user_data;
@@ -3146,49 +3178,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
      config_state->last_key = key;
      return true;
-}
-
-void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferView_t* overrideable_view, VimMode_t vim_mode, int last_key,
-                        char recording_macro)
-{
-     Buffer_t* buffer = view->buffer;
-     if(view->next_horizontal) draw_view_statuses(view->next_horizontal, current_view, overrideable_view, vim_mode, last_key, recording_macro);
-     if(view->next_vertical) draw_view_statuses(view->next_vertical, current_view, overrideable_view, vim_mode, last_key, recording_macro);
-
-     // NOTE: mode names need space at the end for OCD ppl like me
-     static const char* mode_names[] = {
-          "NORMAL ",
-          "INSERT ",
-          "VISUAL ",
-          "VISUAL LINE ",
-          "VISUAL BLOCK ",
-     };
-
-     attron(COLOR_PAIR(S_BORDERS));
-     move(view->bottom_right.y, view->top_left.x);
-     for(int i = view->top_left.x; i < view->bottom_right.x; ++i) addch(ACS_HLINE);
-     int right_status_offset = 0;
-     if(view->bottom_right.x == (g_terminal_dimensions->x - 1)){
-          addch(ACS_HLINE);
-          right_status_offset = 1;
-     }
-
-     // TODO: handle case where filename is too long to fit in the status bar
-     attron(COLOR_PAIR(S_VIEW_STATUS));
-     mvprintw(view->bottom_right.y, view->top_left.x + 1, " %s%s%s ",
-              view == current_view ? mode_names[vim_mode] : "",
-              buffer_flag_string(buffer), buffer->filename);
-#if 0
-     if(view == current_view) printw("%s %d ", keyname(last_key), last_key);
-#endif
-     if(view == overrideable_view) printw("^ ");
-     if(view == current_view && recording_macro) printw("RECORDING %c ", recording_macro);
-     int64_t row = view->cursor.y + 1;
-     int64_t column = view->cursor.x + 1;
-     int64_t digits_in_line = count_digits(row);
-     digits_in_line += count_digits(column);
-     mvprintw(view->bottom_right.y, (view->bottom_right.x - (digits_in_line + 5)) + right_status_offset,
-              " %"PRId64", %"PRId64" ", column, row);
 }
 
 void view_drawer(const BufferNode_t* head, void* user_data)

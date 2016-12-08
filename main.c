@@ -217,10 +217,6 @@ int main(int argc, char** argv)
      buffer_list_head->buffer = message_buffer;
      buffer_list_head->next = NULL;
 
-     Point_t terminal_dimensions = {};
-     getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);
-     g_terminal_dimensions = &terminal_dimensions;
-
      void* user_data = NULL;
 
      bool done = false;
@@ -242,6 +238,10 @@ int main(int argc, char** argv)
           start_color();
           use_default_colors();
      }
+
+     Point_t terminal_dimensions = {};
+     getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);
+     g_terminal_dimensions = &terminal_dimensions;
 
      // redirect stderr to the message buffer
      int message_buffer_fds[2];

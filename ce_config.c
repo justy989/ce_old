@@ -1908,6 +1908,12 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
           }
      }
 
+     // update view boundaries now that we have split them
+     Point_t top_left;
+     Point_t bottom_right;
+     get_terminal_view_rect(config_state->tab_head, &top_left, &bottom_right);
+     ce_calc_views(config_state->tab_current->view_head, top_left, bottom_right);
+
      config_state->line_number_type = LNT_NONE;
      config_state->highlight_line_type = HLT_ENTIRE_LINE;
 
@@ -2065,7 +2071,10 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
                               itr->buffer->cursor.y = line_number;
                               ce_move_cursor_to_soft_beginning_of_line(itr->buffer, &itr->buffer->cursor);
                               BufferView_t* view = ce_buffer_in_view(config_state->tab_current->view_head, itr->buffer);
-                              if(view) view->cursor = view->buffer->cursor;
+                              if(view){
+                                   view->cursor = view->buffer->cursor;
+                                   center_view(view);
+                              }
                               break;
                          }
                          itr = itr->next;
@@ -2122,7 +2131,13 @@ bool destroyer(BufferNode_t** head, void* user_data)
                BufferNode_t* itr = *head;
                while(itr){
                     if(itr->buffer->status != BS_READONLY){
-                         fprintf(out_file, "%s %"PRId64"\n", itr->buffer->name, itr->buffer->cursor.y);
+                         // TODO: handle all tabs
+                         BufferView_t* view = ce_buffer_in_view(config_state->tab_current->view_head, itr->buffer);
+                         if(view){
+                              fprintf(out_file, "%s %"PRId64"\n", itr->buffer->name, view->cursor.y);
+                         }else{
+                              fprintf(out_file, "%s %"PRId64"\n", itr->buffer->name, itr->buffer->cursor.y);
+                         }
                     }
                     itr = itr->next;
                }

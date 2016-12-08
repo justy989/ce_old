@@ -1833,6 +1833,8 @@ static int set_color(Syntax_t syntax, HighlightType_t highlight_type)
 
 static int64_t count_digits(int64_t n)
 {
+     if(n == 0) return 1;
+
      int count = 0;
      while(n > 0){
           n /= 10;
@@ -3324,6 +3326,8 @@ BufferView_t* ce_buffer_in_view(BufferView_t* head, const Buffer_t* buffer)
 
 int64_t ce_get_line_number_column_width(LineNumberType_t line_number_type, int64_t buffer_line_count, int64_t buffer_view_top, int64_t buffer_view_bottom)
 {
+     if(buffer_line_count == 0) return 0;
+
      int64_t column_width = 0;
 
      if(line_number_type == LNT_ABSOLUTE || line_number_type == LNT_RELATIVE_AND_ABSOLUTE){
@@ -3331,7 +3335,7 @@ int64_t ce_get_line_number_column_width(LineNumberType_t line_number_type, int64
      }else if(line_number_type == LNT_RELATIVE){
           int64_t view_height = (buffer_view_bottom - buffer_view_top) + 1;
           if(view_height > buffer_line_count){
-               column_width += count_digits(buffer_line_count) + 1;
+               column_width += count_digits(buffer_line_count - 1) + 1;
           }else{
                column_width += count_digits(view_height - 1) + 1;
           }

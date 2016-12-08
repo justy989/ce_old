@@ -36,9 +36,15 @@ typedef enum {
      S_COMMENT,
      S_STRING,
      S_CONSTANT,
+     S_CONSTANT_NUMBER,
+     S_MATCHING_PARENS,
      S_PREPROCESSOR,
      S_FILEPATH,
+     S_DIFF_ADDED,
+     S_DIFF_REMOVED,
+     S_DIFF_HEADER,
 
+     // NOTE: highlighted and current line groups must be in the same order as base syntax enums
      S_NORMAL_HIGHLIGHTED,
      S_KEYWORD_HIGHLIGHTED,
      S_TYPE_HIGHLIGHTED,
@@ -46,8 +52,13 @@ typedef enum {
      S_COMMENT_HIGHLIGHTED,
      S_STRING_HIGHLIGHTED,
      S_CONSTANT_HIGHLIGHTED,
+     S_CONSTANT_NUMBER_HIGHLIGHTED,
+     S_MATCHING_PARENS_HIGHLIGHTED,
      S_PREPROCESSOR_HIGHLIGHTED,
      S_FILEPATH_HIGHLIGHTED,
+     S_DIFF_ADDED_HIGHLIGHTED,
+     S_DIFF_REMOVED_HIGHLIGHTED,
+     S_DIFF_HEADER_HIGHLIGHTED,
 
      S_NORMAL_CURRENT_LINE,
      S_KEYWORD_CURRENT_LINE,
@@ -56,38 +67,13 @@ typedef enum {
      S_COMMENT_CURRENT_LINE,
      S_STRING_CURRENT_LINE,
      S_CONSTANT_CURRENT_LINE,
+     S_CONSTANT_NUMBER_CURRENT_LINE,
+     S_MATCHING_PARENS_CURRENT_LINE,
      S_PREPROCESSOR_CURRENT_LINE,
      S_FILEPATH_CURRENT_LINE,
-
-     S_NORMAL_DIFF_ADD,
-     S_KEYWORD_DIFF_ADD,
-     S_TYPE_DIFF_ADD,
-     S_CONTROL_DIFF_ADD,
-     S_COMMENT_DIFF_ADD,
-     S_STRING_DIFF_ADD,
-     S_CONSTANT_DIFF_ADD,
-     S_PREPROCESSOR_DIFF_ADD,
-     S_FILEPATH_DIFF_ADD,
-
-     S_NORMAL_DIFF_REMOVE,
-     S_KEYWORD_DIFF_REMOVE,
-     S_TYPE_DIFF_REMOVE,
-     S_CONTROL_DIFF_REMOVE,
-     S_COMMENT_DIFF_REMOVE,
-     S_STRING_DIFF_REMOVE,
-     S_CONSTANT_DIFF_REMOVE,
-     S_PREPROCESSOR_DIFF_REMOVE,
-     S_FILEPATH_DIFF_REMOVE,
-
-     S_NORMAL_DIFF_HEADER,
-     S_KEYWORD_DIFF_HEADER,
-     S_TYPE_DIFF_HEADER,
-     S_CONTROL_DIFF_HEADER,
-     S_COMMENT_DIFF_HEADER,
-     S_STRING_DIFF_HEADER,
-     S_CONSTANT_DIFF_HEADER,
-     S_PREPROCESSOR_DIFF_HEADER,
-     S_FILEPATH_DIFF_HEADER,
+     S_DIFF_ADDED_CURRENT_LINE,
+     S_DIFF_REMOVED_CURRENT_LINE,
+     S_DIFF_HEADER_CURRENT_LINE,
 
      S_LINE_NUMBERS,
 
@@ -138,19 +124,28 @@ typedef enum{
 
 Direction_t ce_reverse_direction(Direction_t to_reverse);
 
+typedef enum {
+     BS_NONE,
+     BS_MODIFIED,
+     BS_READONLY,
+     BS_NEW_FILE,
+} BufferStatus_t;
+
 typedef struct {
      char** lines; // '\0' terminated, does not contain newlines, NULL if empty
      int64_t line_count;
+
+     BufferStatus_t status;
+
      Point_t cursor;
      Point_t highlight_start;
      Point_t highlight_end;
-     bool modified;
-     bool readonly;
-     bool newfile;
+
      union {
           char* filename;
           char* name;
      };
+
      void* user_data;
 } Buffer_t;
 
@@ -177,13 +172,17 @@ typedef enum {
 typedef struct {
      BufferCommitType_t type;
      BufferCommitChain_t chain;
+
      Point_t start;
+
      Point_t undo_cursor;
      Point_t redo_cursor;
+
      union {
           char c;
           char* str;
      };
+
      union {
           char prev_c;
           char* prev_str;
@@ -204,11 +203,15 @@ typedef struct BufferCommitNode_t {
 // []
 typedef struct BufferView_t {
      Point_t cursor;
+
      Point_t top_left;
      Point_t bottom_right;
+
      int64_t top_row;
      int64_t left_column;
+
      Buffer_t* buffer;
+
      struct BufferView_t* next_horizontal;
      struct BufferView_t* next_vertical;
 } BufferView_t;
@@ -250,7 +253,7 @@ bool ce_remove_buffer_from_list        (BufferNode_t** head, Buffer_t* buffer);
 BufferView_t* ce_split_view         (BufferView_t* view, Buffer_t* buffer, bool horizontal);
 bool ce_remove_view                 (BufferView_t** head, BufferView_t* view);
 bool ce_calc_views                  (BufferView_t* head, Point_t top_left, Point_t top_right);
-bool ce_draw_views                  (const BufferView_t* head, const char* highlight_word, LineNumberType_t line_number_type,
+bool ce_draw_views                  (const BufferView_t* head, const regex_t* highlight_regex, LineNumberType_t line_number_type,
                                      HighlightLineType_t highlight_line_type);
 bool ce_change_buffer_in_views      (BufferView_t* head, Buffer_t* match, Buffer_t* new);
 bool ce_free_views                  (BufferView_t** view);
@@ -295,20 +298,20 @@ bool ce_insert_newline          (Buffer_t* buffer, int64_t line);
 
 
 // Buffer Inspection Functions
-bool    ce_draw_buffer                   (const Buffer_t* buffer, const Point_t* cursor, const Point_t* term_top_left,
-                                          const Point_t* term_bottom_right, const Point_t* buffer_top_left,
-                                          const char* highlight_word, LineNumberType_t line_number_type,
-                                          HighlightLineType_t highlight_line_type);
-bool    ce_save_buffer                   (Buffer_t* buffer, const char* filename);
-bool    ce_point_on_buffer               (const Buffer_t* buffer, Point_t location);
-bool    ce_get_char                      (const Buffer_t* buffer, Point_t location, char* c);
-char    ce_get_char_raw                  (const Buffer_t* buffer, Point_t location);
-int64_t ce_compute_length                (const Buffer_t* buffer, Point_t start, Point_t end);
-char*   ce_dupe_string                   (const Buffer_t* buffer, Point_t start, Point_t end);
-char*   ce_dupe_buffer                   (const Buffer_t* buffer);
-char*   ce_dupe_line                     (const Buffer_t* buffer, int64_t line);
-char*   ce_dupe_lines                    (const Buffer_t* buffer, int64_t start_line, int64_t end_line);
-int64_t ce_get_indentation_for_next_line (const Buffer_t* buffer, Point_t location, int64_t tab_len);
+bool    ce_draw_buffer              (const Buffer_t* buffer, const Point_t* cursor, const Point_t* term_top_left,
+                                     const Point_t* term_bottom_right, const Point_t* buffer_top_left,
+                                     const regex_t* highlight_regex, LineNumberType_t line_number_type,
+                                     HighlightLineType_t highlight_line_type);
+bool    ce_save_buffer              (Buffer_t* buffer, const char* filename);
+bool    ce_point_on_buffer          (const Buffer_t* buffer, Point_t location);
+bool    ce_get_char                 (const Buffer_t* buffer, Point_t location, char* c);
+char    ce_get_char_raw             (const Buffer_t* buffer, Point_t location);
+int64_t ce_compute_length           (const Buffer_t* buffer, Point_t start, Point_t end);
+char*   ce_dupe_string              (const Buffer_t* buffer, Point_t start, Point_t end);
+char*   ce_dupe_buffer              (const Buffer_t* buffer);
+char*   ce_dupe_line                (const Buffer_t* buffer, int64_t line);
+char*   ce_dupe_lines               (const Buffer_t* buffer, int64_t start_line, int64_t end_line);
+int64_t ce_get_indentation_for_line (const Buffer_t* buffer, Point_t location, int64_t tab_len);
 
 
 // Find Point_t Functions

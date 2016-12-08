@@ -33,7 +33,7 @@ typedef void test_func_t(bool*);
 {                                                          \
      int tests_failed = 0;                                 \
      int test_count = __COUNTER__;                         \
-     printf("executing %d tests\n\n", test_count);         \
+     printf("executing %d test(s)\n\n", test_count);       \
      for(int i = 0; i < test_count; ++i){                  \
           bool failed = false;                             \
           (*(&g_test_func_0 + i))(&failed);                \

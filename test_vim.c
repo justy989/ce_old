@@ -140,7 +140,6 @@ typedef struct{
      VimState_t vim_state;
      Buffer_t buffer;
      BufferCommitNode_t* commit_tail;
-     AutoComplete_t auto_complete;
      Point_t cursor;
      VimBufferState_t vim_buffer_state;
 } KeyHandlerTest_t;
@@ -149,7 +148,6 @@ void key_handler_test_init(KeyHandlerTest_t* kht)
 {
      memset(kht, 0, sizeof(*kht));
      kht->commit_tail = calloc(1, sizeof(BufferCommitNode_t));
-     auto_complete_end(&kht->auto_complete);
 }
 
 void key_handler_test_run(KeyHandlerTest_t* kht, const char* string_command)
@@ -157,8 +155,7 @@ void key_handler_test_run(KeyHandlerTest_t* kht, const char* string_command)
      int* int_command = vim_char_string_to_command_string(string_command);
      int* itr = int_command;
      while(*itr){
-          vim_key_handler(*itr, &kht->vim_state, &kht->buffer, &kht->cursor, &kht->commit_tail, &kht->vim_buffer_state,
-                          &kht->auto_complete, false);
+          vim_key_handler(*itr, &kht->vim_state, &kht->buffer, &kht->cursor, &kht->commit_tail, &kht->vim_buffer_state, false);
           itr++;
      }
 
@@ -961,6 +958,28 @@ TEST(insert_indented_brace)
      ASSERT(kht.buffer.line_count == 2);
      EXPECT(strcmp(kht.buffer.lines[0], "if(tacos){") == 0);
      EXPECT(strcmp(kht.buffer.lines[1], "}") == 0);
+
+     key_handler_test_undo(&kht);
+     EXPECT(kht.buffer.line_count == 1);
+     EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);
+
+     key_handler_test_free(&kht);
+}
+
+TEST(insert_indented_paren)
+{
+     KeyHandlerTest_t kht;
+     key_handler_test_init(&kht);
+
+     const char* original_line = "if(tacos)";
+     ce_append_line(&kht.buffer, original_line);
+
+     key_handler_test_run(&kht, "fti\\rmy_\\e");
+     EXPECT(kht.cursor.x == 6 && kht.cursor.y == 1);
+     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     ASSERT(kht.buffer.line_count == 2);
+     EXPECT(strcmp(kht.buffer.lines[0], "if(") == 0);
+     EXPECT(strcmp(kht.buffer.lines[1], "   my_tacos)") == 0);
 
      key_handler_test_undo(&kht);
      EXPECT(kht.buffer.line_count == 1);

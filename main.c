@@ -2,33 +2,37 @@
 TODOS:
 
 BIG:
- -unicode support
- -network editing
- -autocomplete for: code, shell commands, etc.
- -parse c to do real syntax highlighting/autocomplete?
- -tail file
- -support python and other mode syntax highlighting so I don't go insane at work
- -async file saving/loading
- -async autocomplete building
- -incremental replace (although already doable with 'n.')
- -support tabs in addition to spaces
+-unicode support
+-network editing
+-autocomplete for: code, shell commands, etc.
+-parse c to do real syntax highlighting/autocomplete?
+-tail file
+-support python and other mode syntax highlighting so I don't go insane at work
+-async file saving/loading
+-async autocomplete building
+-incremental replace (although already doable with 'n.')
+-support tabs in addition to spaces
+-multiline regex search/replace
+-terminal emulator
 
 LITTLE:
- -r<enter>
- -when re-opening a file, go to the cursor position you exited on
- -do searching inside macro
- -step through macro one change at a time
- -separate dot for input buffer
- -valgrind run clean
- -'*' and '#' should be 'words' with boundaries not literal strings that can match anything
- -when there are 3 lines in a file and you do 'dj', you still have 2 lines...
- -user code can infinite loop if you call ce_advance_cursor(buffer, &a, 1) and rely on
-  ce_points_equal(a, b) being false when b is at the end of a line.
- -vim's 'ci}' and 'di}' behave differently in a nice way, emulate that
- -handle case where filename doesn't fit in view status line
- -auto complete shell commands then files
- -hit an undo brace bug, unsure how to reproduce. I wrapped some code in an if statement,
-  then decided I didn't want the if statement. The closing if statement brace did not get undone.
+-r<enter>
+-do searching inside macro
+-step through macro one change at a time
+-separate dot for input buffer
+-valgrind run clean
+-when there are 3 lines in a file and you do 'dj', you still have 2 lines...
+-user code can infinite loop if you call ce_advance_cursor(buffer, &a, 1) and rely on
+ ce_points_equal(a, b) being false when b is at the end of a line.
+-vim's 'ci}' and 'di}' behave differently in a nice way, emulate that
+-auto complete shell commands then files
+-hit an undo brace bug, unsure how to reproduce. I wrapped some code in an if statement,
+ then decided I didn't want the if statement. The closing if statement brace did not get undone.
+-visual replace *sometimes* infinite loops
+-syntax highlight printf formatters: '%s'
+-shell command output sometimes doesn't come in til you send it input
+-we can still hit the drawing bug where config_state->tab_current->view_input_save is null
+-if you make a change and undo, the buffer still says modified
 */
 
 #include <assert.h>
@@ -146,10 +150,10 @@ const char* random_greeting()
           "The default config has a great vimplementation!",
           "They see me slurpin' They hatin'",
           "'Days of pain are worth the years of upcoming prosperity' -confucius",
+          "ce, aka, 'the cache miss king'",
      };
 
      srand(time(NULL));
-
      return greetings[ rand() % (sizeof(greetings) / sizeof(greetings[0]))];
 }
 
@@ -202,8 +206,7 @@ int main(int argc, char** argv)
      message_buffer->line_count = 0;
      message_buffer->user_data = NULL;
      ce_alloc_lines(message_buffer, 1);
-     message_buffer->readonly = true;
-     message_buffer->modified = false;
+     message_buffer->status = BS_READONLY;
 
      // init buffer list
      BufferNode_t* buffer_list_head = calloc(1, sizeof(*buffer_list_head));
@@ -213,10 +216,6 @@ int main(int argc, char** argv)
      }
      buffer_list_head->buffer = message_buffer;
      buffer_list_head->next = NULL;
-
-     Point_t terminal_dimensions = {};
-     getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);
-     g_terminal_dimensions = &terminal_dimensions;
 
      void* user_data = NULL;
 
@@ -231,8 +230,6 @@ int main(int argc, char** argv)
      // ncurses_init()
      initscr();
      keypad(stdscr, TRUE);
-     mousemask(~((mmask_t)0), NULL);
-     mouseinterval(0);
      raw();
      cbreak();
      noecho();
@@ -241,6 +238,10 @@ int main(int argc, char** argv)
           start_color();
           use_default_colors();
      }
+
+     Point_t terminal_dimensions = {};
+     getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);
+     g_terminal_dimensions = &terminal_dimensions;
 
      // redirect stderr to the message buffer
      int message_buffer_fds[2];
@@ -314,7 +315,7 @@ int main(int argc, char** argv)
      // main loop
      while(!done){
           // NOTE: only allow message buffer modifying here
-          message_buffer->readonly = false;
+          message_buffer->status = BS_NONE;
 
           // add new input to message buffer
           while(fgets(message_buffer_buf, BUFSIZ, message_stderr) != NULL){
@@ -329,8 +330,7 @@ int main(int argc, char** argv)
                assert(ret);
           }
 
-          message_buffer->readonly = true;
-          message_buffer->modified = false;
+          message_buffer->status = BS_READONLY;
 
           // ncurses macro that gets height and width
           getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);

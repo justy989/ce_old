@@ -189,7 +189,7 @@ TEST(sanity_insert_char_readonly)
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
-     buffer.readonly = true;
+     buffer.status = BS_READONLY;
 
      Point_t point = {2, 0};
      ce_insert_char_readonly(&buffer, point, 'R');
@@ -317,7 +317,7 @@ TEST(insert_string_readonly_begin)
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
-     buffer.readonly = true;
+     buffer.status = BS_READONLY;
 
      Point_t point = {0, 0};
      ce_insert_string_readonly(&buffer, point, "AHHH ");
@@ -486,7 +486,7 @@ TEST(sanity_append_string_readonly)
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
-     buffer.readonly = true;
+     buffer.status = BS_READONLY;
 
      ce_append_string_readonly(&buffer, 0, " ARE AWESOME");
 
@@ -739,7 +739,7 @@ TEST(sanity_insert_line_readonly)
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
-     buffer.readonly = true;
+     buffer.status = BS_READONLY;
 
      ce_insert_line_readonly(&buffer, 0, "ARE AWESOME");
 
@@ -756,7 +756,7 @@ TEST(insert_line_multiline)
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
-     buffer.readonly = true;
+     buffer.status = BS_READONLY;
 
      ce_insert_line_readonly(&buffer, 0, "ARE\nAWESOME");
 
@@ -791,7 +791,7 @@ TEST(sanity_append_line_readonly)
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
-     buffer.readonly = true;
+     buffer.status = BS_READONLY;
 
      ce_append_line_readonly(&buffer, "ARE AWESOME");
 
@@ -846,7 +846,7 @@ TEST(sanity_clear_lines_readonly)
      buffer.lines = malloc(2 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS");
      buffer.lines[1] = strdup("ARE AWESOME");
-     buffer.readonly = true;
+     buffer.status = BS_READONLY;
 
      ce_clear_lines_readonly(&buffer);
 
@@ -1994,7 +1994,7 @@ TEST(sanity_get_word_at_location)
      ce_free_buffer(&buffer);
 }
 
-TEST(get_indentation_for_next_line_open_bracket)
+TEST(get_indentation_for_line_open_bracket)
 {
      const size_t tab_len = 5;
 
@@ -2010,23 +2010,23 @@ TEST(get_indentation_for_next_line_open_bracket)
 
      Point_t cursor;
 
-     cursor = (Point_t) {5, 0};
-     ASSERT(ce_get_indentation_for_next_line(&buffer, cursor, tab_len) == 5);
+     cursor = (Point_t) {5, 1};
+     ASSERT(ce_get_indentation_for_line(&buffer, cursor, tab_len) == 5);
 
-     cursor = (Point_t) {7, 1};
-     ASSERT(ce_get_indentation_for_next_line(&buffer, cursor, tab_len) == 10);
+     cursor = (Point_t) {7, 2};
+     ASSERT(ce_get_indentation_for_line(&buffer, cursor, tab_len) == 10);
 
      cursor = (Point_t) {4, 2};
-     ASSERT(ce_get_indentation_for_next_line(&buffer, cursor, tab_len) == 10);
+     ASSERT(ce_get_indentation_for_line(&buffer, cursor, tab_len) == 10);
 
-     cursor = (Point_t) {2, 3};
-     ASSERT(ce_get_indentation_for_next_line(&buffer, cursor, tab_len) == 7); // un-aligned!
+     cursor = (Point_t) {2, 4};
+     ASSERT(ce_get_indentation_for_line(&buffer, cursor, tab_len) == 5); // un-aligned!
 
      cursor = (Point_t) {1, 4};
-     ASSERT(ce_get_indentation_for_next_line(&buffer, cursor, tab_len) == 5);
+     ASSERT(ce_get_indentation_for_line(&buffer, cursor, tab_len) == 5);
 
-     cursor = (Point_t) {0, 5};
-     ASSERT(ce_get_indentation_for_next_line(&buffer, cursor, tab_len) == 0);
+     cursor = (Point_t) {1, 5};
+     ASSERT(ce_get_indentation_for_line(&buffer, cursor, tab_len) == 0);
 
      ce_free_buffer(&buffer);
 }
@@ -2121,7 +2121,7 @@ TEST(sanity_append_char_readonly)
      buffer.line_count = 1;
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("TACOS ARE AWESOM");
-     buffer.readonly = true;
+     buffer.status = BS_READONLY;
 
      ASSERT(ce_append_char_readonly(&buffer, 'E'));
      ASSERT(buffer.line_count == 1);
@@ -2382,8 +2382,8 @@ TEST(get_line_number_column_width)
 
      EXPECT(ce_get_line_number_column_width(LNT_RELATIVE, 2500, 0, 15) == 3);
      EXPECT(ce_get_line_number_column_width(LNT_RELATIVE, 2500, 0, 150) == 4);
-     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE, 100, 0, 15) == 3);
-     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE, 100, 0, 150) == 4);
+     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE, 101, 0, 15) == 3);
+     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE, 101, 0, 150) == 4);
 }
 
 TEST(point_after)

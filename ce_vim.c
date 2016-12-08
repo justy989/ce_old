@@ -197,7 +197,7 @@ static bool line_is_all_whitespace(Buffer_t* buffer, int64_t line)
 
 VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* buffer, Point_t* cursor,
                                       BufferCommitNode_t** commit_tail, VimBufferState_t* vim_buffer_state,
-                                      AutoComplete_t* auto_complete, bool repeating)
+                                      bool repeating)
 {
      char recording_macro = vim_state->recording_macro;
      VimMode_t vim_mode = vim_state->mode;
@@ -231,6 +231,39 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                     return result;
                }
                break;
+          case '#':
+          {
+               if(cursor->y < buffer->line_count){
+                    bool all_whitespace = true;
+
+                    for(int64_t i = 0; i < cursor->x; ++i){
+                         if(ce_get_char_raw(buffer, (Point_t){i, cursor->y}) != ' '){
+                              all_whitespace = false;
+                              break;
+                         }
+                    }
+
+                    if(all_whitespace && cursor->x > 0){
+                         Point_t start = {0, cursor->y};
+                         Point_t end = {cursor->x - 1, cursor->y};
+                         char* removed_str = ce_dupe_string(buffer, start, end);
+                         if(ce_remove_string(buffer, start, cursor->x)){
+                              ce_commit_remove_string(commit_tail, start, *cursor, start, removed_str, BCC_KEEP_GOING);
+                              *cursor = start;
+                              insert_start = start;
+                              undo_cursor = insert_start;
+                         }else{
+                              free(removed_str);
+                         }
+                    }
+               }
+
+               if(ce_insert_char(buffer, *cursor, key)){
+                    ce_keys_push(&vim_state->command_head, key);
+                    cursor->x++;
+                    ce_commit_insert_char(commit_tail, insert_start, undo_cursor, *cursor, key, BCC_KEEP_GOING);
+               }
+          } break;
           case KEY_ESCAPE:
           {
                if(!repeating){
@@ -262,8 +295,10 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
           } break;
           case KEY_ENTER:
           {
-               Point_t save_cursor = *cursor;
                key = NEWLINE;
+
+               Point_t save_cursor = *cursor;
+               int64_t indent_len = ce_get_indentation_for_line(buffer, *cursor, strlen(TAB_STRING));
 
                if(ce_insert_char(buffer, *cursor, key)){
                     cursor->y++;
@@ -273,8 +308,6 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                     ce_keys_push(&vim_state->command_head, KEY_ENTER);
 
                     // indent if necessary
-                    Point_t prev_line = {0, cursor->y-1};
-                    int64_t indent_len = ce_get_indentation_for_next_line(buffer, prev_line, strlen(TAB_STRING));
                     if(indent_len > 0){
                          char* indent = malloc(indent_len + 1);
                          memset(indent, ' ', indent_len);
@@ -320,24 +353,11 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
           } break;
           case KEY_TAB:
           {
-               if(auto_completing(auto_complete)){
-                    char* complete = auto_complete_get_completion(auto_complete, cursor->x);
-                    int64_t complete_len = strlen(complete);
-                    if(ce_insert_string(buffer, *cursor, complete)){
-                         Point_t save_cursor = *cursor;
-                         ce_move_cursor(buffer, cursor, (Point_t){complete_len, cursor->y});
-                         cursor->x++;
-                         ce_commit_insert_string(commit_tail, save_cursor, save_cursor, *cursor, complete, BCC_KEEP_GOING);
-                    }else{
-                         free(complete);
-                    }
-               }else{
-                    if(ce_insert_string(buffer, insert_start, TAB_STRING)){
-                         ce_move_cursor(buffer, cursor, (Point_t){strlen(TAB_STRING) - 1, 0});
-                         cursor->x++; // we want to be after the tabs
-                         ce_commit_insert_string(commit_tail, insert_start, undo_cursor, *cursor, strdup(TAB_STRING), BCC_KEEP_GOING);
-                         ce_keys_push(&vim_state->command_head, key);
-                    }
+               if(ce_insert_string(buffer, insert_start, TAB_STRING)){
+                    ce_move_cursor(buffer, cursor, (Point_t){strlen(TAB_STRING) - 1, 0});
+                    cursor->x++; // we want to be after the tabs
+                    ce_commit_insert_string(commit_tail, insert_start, undo_cursor, *cursor, strdup(TAB_STRING), BCC_KEEP_GOING);
+                    ce_keys_push(&vim_state->command_head, key);
                }
           } break;
           case KEY_UP:
@@ -371,6 +391,7 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
           case '}':
           {
                if(ce_insert_char(buffer, *cursor, key)){
+                    ce_keys_push(&vim_state->command_head, key);
                     Point_t next_cursor = {cursor->x + 1, cursor->y};
                     ce_commit_insert_char(commit_tail, *cursor, *cursor, next_cursor, key, BCC_KEEP_GOING);
 
@@ -422,6 +443,7 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                                    if(can_unindent){
                                         Point_t end_of_delete = *cursor;
                                         end_of_delete.x--;
+                                        if(end_of_delete.x < 0) end_of_delete.x = 0;
                                         cursor->x -= n_deletes;
                                         char* duped_str = ce_dupe_string(buffer, *cursor, end_of_delete);
                                         if(ce_remove_string(buffer, *cursor, n_deletes)){
@@ -507,7 +529,7 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
           {
                VimMode_t original_mode = vim_state->mode;
                bool successful_action = vim_action_apply(&vim_action, buffer, cursor, vim_state, commit_tail,
-                                                         vim_buffer_state, auto_complete);
+                                                         vim_buffer_state);
 
                if(vim_state->mode != original_mode){
                     switch(vim_state->mode){
@@ -1570,37 +1592,46 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                     free(search_str);
 
                     vim_yank_add(&vim_state->yank_head, '/', word_search_str, YANK_NORMAL);
+
+                    int rc = regcomp(&vim_state->search.regex, word_search_str, REG_EXTENDED);
+                    vim_state->search.valid_regex = (rc == 0);
                }
                // NOTE: fall through intentionally
                case VMT_SEARCH:
                {
-                    vim_state->search_direction = action->motion.search_direction;
+                    if(!vim_state->search.valid_regex){
+                         return false;
+                    }
+
+                    vim_state->search.direction = action->motion.search_direction;
                     VimYankNode_t* yank = vim_yank_find(vim_state->yank_head, '/');
                     if(yank){
                          assert(yank->mode == YANK_NORMAL);
 
-                         if(vim_state->search_direction == CE_UP){
+                         if(vim_state->search.direction == CE_UP){
                               ce_move_cursor_to_beginning_of_word(buffer, &action_range->end, true);
                          }
 
-                         regex_t regex;
-                         int rc = regcomp(&regex, yank->text, REG_EXTENDED);
-                         if(rc != 0){
-                              char error_buffer[BUFSIZ];
-                              regerror(rc, &regex, error_buffer, BUFSIZ);
-                              ce_message("regcomp() failed: '%s'", error_buffer);
-                              return false;
+                         Point_t search_start = action_range->end;
+                         if(vim_state->search.direction == CE_DOWN) search_start.x++;
+
+                         if(search_start.y >= buffer->line_count) return false;
+
+                         if(search_start.x >= ce_last_index(buffer->lines[search_start.y])){
+                              search_start.x = 0;
+                              search_start.y++;
                          }
 
-                         Point_t search_start = action_range->end;
-                         if(vim_state->search_direction == CE_DOWN) search_start.x++;
+                         if(search_start.y >= buffer->line_count) return false;
 
                          Point_t match;
                          int64_t match_len;
-                         if(ce_find_regex(buffer, search_start, &regex, &match, &match_len, vim_state->search_direction)){
+                         if(ce_find_regex(buffer, search_start, &vim_state->search.regex, &match, &match_len, vim_state->search.direction)){
                               ce_set_cursor(buffer, &action_range->end, match);
                          }else{
+                              ce_message("failed to find match for '%s'", yank->text);
                               action_range->end = *cursor;
+                              return false;
                          }
                     }
                } break;
@@ -1649,7 +1680,7 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
 }
 
 bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, VimState_t* vim_state,
-                      BufferCommitNode_t** commit_tail, VimBufferState_t* vim_buffer_state, AutoComplete_t* auto_complete)
+                      BufferCommitNode_t** commit_tail, VimBufferState_t* vim_buffer_state)
 {
      VimActionRange_t action_range;
      BufferCommitChain_t chain = vim_state->playing_macro ? BCC_KEEP_GOING : BCC_STOP;
@@ -1972,7 +2003,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
           Point_t begin_line = {0, cursor->y};
 
           // indent if necessary
-          int64_t indent_len = ce_get_indentation_for_next_line(buffer, *cursor, strlen(TAB_STRING));
+          int64_t indent_len = ce_get_indentation_for_line(buffer, begin_line, strlen(TAB_STRING));
           char* indent_nl = malloc(sizeof '\n' + indent_len + sizeof '\0');
           memset(&indent_nl[0], ' ', indent_len);
           indent_nl[indent_len] = '\n';
@@ -1992,7 +2023,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
           if(cursor->y < buffer->line_count) end_of_line.x = strlen(buffer->lines[cursor->y]);
 
           // indent if necessary
-          int64_t indent_len = ce_get_indentation_for_next_line(buffer, *cursor, strlen(TAB_STRING));
+          int64_t indent_len = ce_get_indentation_for_line(buffer, end_of_line, strlen(TAB_STRING));
           char* nl_indent = malloc(sizeof '\n' + indent_len + sizeof '\0');
           nl_indent[0] = '\n';
           memset(&nl_indent[1], ' ', indent_len);
@@ -2068,7 +2099,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                int* macro_itr = macro->command;
                while(*macro_itr){
                     VimKeyHandlerResult_t vkh_result =  vim_key_handler(*macro_itr, vim_state, buffer, cursor, commit_tail,
-                                                                        vim_buffer_state, auto_complete, false);
+                                                                        vim_buffer_state, false);
 
                     if(vkh_result.type == VKH_UNHANDLED_KEY){
                          unhandled_key = true;
@@ -2122,7 +2153,7 @@ void vim_enter_normal_mode(VimState_t* vim_state)
 
 bool vim_enter_insert_mode(VimState_t* vim_state, Buffer_t* buffer)
 {
-     if(buffer->readonly) return false;
+     if(buffer->status == BS_READONLY) return false;
 
      vim_state->mode = VM_INSERT;
      return true;

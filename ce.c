@@ -30,7 +30,7 @@ int64_t ce_count_string_lines(const char* string)
 
 bool ce_alloc_lines(Buffer_t* buffer, int64_t line_count)
 {
-     if(buffer->readonly) return false;
+     if(buffer->status == BS_READONLY) return false;
 
      if(buffer->lines) ce_clear_lines(buffer);
 
@@ -57,7 +57,7 @@ bool ce_alloc_lines(Buffer_t* buffer, int64_t line_count)
           }
      }
 
-     buffer->modified = true;
+     buffer->status = BS_MODIFIED;
      return true;
 }
 
@@ -106,11 +106,12 @@ LoadFileResult_t ce_load_file(Buffer_t* buffer, const char* filename)
      }
 
      if(access(filename, W_OK) != 0){
-          buffer->readonly = true;
+          buffer->status = BS_READONLY;
+     }else{
+          buffer->status = BS_NONE;
      }
 
      free(contents);
-     buffer->modified = false;
      return LF_SUCCESS;
 }
 
@@ -127,8 +128,7 @@ void ce_free_buffer(Buffer_t* buffer)
 
      free(buffer->filename);
 
-     buffer->modified = false;
-     buffer->readonly = false;
+     buffer->status = BS_NONE;
 
      ce_clear_lines(buffer);
 }
@@ -144,21 +144,24 @@ void clear_lines_impl(Buffer_t* buffer)
           buffer->lines = NULL;
           buffer->line_count = 0;
      }
-     buffer->modified = true;
+
+     buffer->status = BS_MODIFIED;
 }
 
 void ce_clear_lines(Buffer_t* buffer)
 {
-     if(buffer->readonly) return;
+     if(buffer->status == BS_READONLY) return;
 
      clear_lines_impl(buffer);
 }
 
 void ce_clear_lines_readonly(Buffer_t* buffer)
 {
-     if(!buffer->readonly) return;
+     if(buffer->status != BS_READONLY) return;
 
      clear_lines_impl(buffer);
+
+     buffer->status = BS_READONLY;
 }
 
 bool ce_point_on_buffer(const Buffer_t* buffer, Point_t location)
@@ -209,7 +212,7 @@ bool insert_char_impl(Buffer_t* buffer, Point_t location, char c)
           }
           new_line[location.x] = 0;
           buffer->lines[location.y] = new_line;
-          buffer->modified = true;
+          buffer->status = BS_MODIFIED;
           return true;
      }
 
@@ -231,22 +234,26 @@ bool insert_char_impl(Buffer_t* buffer, Point_t location, char c)
      // NULL terminate the newline, and free the old line
      new_line[new_len - 1] = 0;
      buffer->lines[location.y] = new_line;
-     buffer->modified = true;
+     buffer->status = BS_MODIFIED;
      return true;
 }
 
 bool ce_insert_char(Buffer_t* buffer, Point_t location, char c)
 {
-     if(buffer->readonly) return false;
+     if(buffer->status == BS_READONLY) return false;
 
      return insert_char_impl(buffer, location, c);
 }
 
 bool ce_insert_char_readonly(Buffer_t* buffer, Point_t location, char c)
 {
-     if(!buffer->readonly) return false;
+     if(buffer->status != BS_READONLY) return false;
 
-     return insert_char_impl(buffer, location, c);
+     bool success = insert_char_impl(buffer, location, c);
+
+     buffer->status = BS_READONLY;
+
+     return success;
 }
 
 bool ce_append_char(Buffer_t* buffer, char c)
@@ -319,7 +326,7 @@ bool insert_string_impl(Buffer_t* buffer, Point_t location, const char* new_stri
                line++;
           }
 
-          buffer->modified = true;
+          buffer->status = BS_MODIFIED;
           return true;
      }
 
@@ -399,22 +406,26 @@ bool insert_string_impl(Buffer_t* buffer, Point_t location, const char* new_stri
           free(current_line);
      }
 
-     buffer->modified = true;
+     buffer->status = BS_MODIFIED;
      return true;
 }
 
 bool ce_insert_string(Buffer_t* buffer, Point_t location, const char* new_string)
 {
-     if(buffer->readonly) return false;
+     if(buffer->status == BS_READONLY) return false;
 
      return insert_string_impl(buffer, location, new_string);
 }
 
 bool ce_insert_string_readonly(Buffer_t* buffer, Point_t location, const char* new_string)
 {
-     if(!buffer->readonly) return false;
+     if(buffer->status != BS_READONLY) return false;
 
-     return insert_string_impl(buffer, location, new_string);
+     bool success = insert_string_impl(buffer, location, new_string);
+
+     buffer->status = BS_READONLY;
+
+     return success;
 }
 
 bool ce_prepend_string(Buffer_t* buffer, int64_t line, const char* new_string)
@@ -439,7 +450,7 @@ bool ce_append_string_readonly(Buffer_t* buffer, int64_t line, const char* new_s
 
 bool ce_remove_char(Buffer_t* buffer, Point_t location)
 {
-     if(buffer->readonly) return false;
+     if(buffer->status == BS_READONLY) return false;
 
      if(!ce_point_on_buffer(buffer, location)) return false;
 
@@ -468,7 +479,7 @@ bool ce_remove_char(Buffer_t* buffer, Point_t location)
      free(line);
      buffer->lines[location.y] = new_line;
 
-     buffer->modified = true;
+     buffer->status = BS_MODIFIED;
      return true;
 }
 
@@ -626,6 +637,8 @@ bool find_matching_string_forward(const Buffer_t* buffer, Point_t* location, cha
                itr.x = 0;
                last_index = ce_last_index(buffer->lines[itr.y]);
           }
+
+          prev = curr;
      }
 
      return false;
@@ -728,13 +741,17 @@ bool find_matching_string_backward(const Buffer_t* buffer, Point_t* location, ch
 
      char curr = 0;
      char prev = 0;
+     Point_t prev_itr;
      while(ce_point_on_buffer(buffer, itr)){
           ce_get_char(buffer, itr, &curr);
 
-          if(curr == matchee && prev != '\\'){
-               *location = itr;
+          if(prev == matchee && curr != '\\'){
+               *location = prev_itr;
                return true;
           }
+
+          prev = curr;
+          prev_itr = itr;
 
           itr.x--;
           if(itr.x < 0){
@@ -1150,14 +1167,14 @@ char ce_get_char_raw(const Buffer_t* buffer, Point_t location)
 
 bool ce_set_char(Buffer_t* buffer, Point_t location, char c)
 {
-     if(buffer->readonly) return false;
+     if(buffer->status == BS_READONLY) return false;
 
      if(!ce_point_on_buffer(buffer, location)) return false;
 
      if(c == NEWLINE) return ce_insert_string(buffer, location, "\n");
 
      buffer->lines[location.y][location.x] = c;
-     buffer->modified = true;
+     buffer->status = BS_MODIFIED;
      return true;
 }
 
@@ -1200,7 +1217,7 @@ bool insert_line_impl(Buffer_t* buffer, int64_t line, const char* string)
 
      buffer->lines = new_lines;
      buffer->line_count = new_line_count;
-     buffer->modified = true;
+     buffer->status = BS_MODIFIED;
 
      return true;
 }
@@ -1209,16 +1226,20 @@ bool insert_line_impl(Buffer_t* buffer, int64_t line, const char* string)
 // NOTE: passing NULL to string causes an empty line to be inserted
 bool ce_insert_line(Buffer_t* buffer, int64_t line, const char* string)
 {
-     if(buffer->readonly) return false;
+     if(buffer->status == BS_READONLY) return false;
 
      return insert_line_impl(buffer, line, string);
 }
 
 bool ce_insert_line_readonly(Buffer_t* buffer, int64_t line, const char* string)
 {
-     if(!buffer->readonly) return false;
+     if(buffer->status != BS_READONLY) return false;
 
-     return insert_line_impl(buffer, line, string);
+     bool success = insert_line_impl(buffer, line, string);
+
+     buffer->status = BS_READONLY;
+
+     return success;
 }
 
 bool ce_append_line(Buffer_t* buffer, const char* string)
@@ -1243,7 +1264,7 @@ bool ce_join_line(Buffer_t* buffer, int64_t line){
           return false;
      }
 
-     if(buffer->readonly) return false;
+     if(buffer->status == BS_READONLY) return false;
 
      if(line == buffer->line_count - 1) return true; // nothing to do
      char* l1 = buffer->lines[line];
@@ -1254,7 +1275,7 @@ bool ce_join_line(Buffer_t* buffer, int64_t line){
      if(!buffer->lines[line]) return false; // TODO: ENOMEM
      l1 = buffer->lines[line];
      memcpy(&l1[l1_len], l2, l2_len+1);
-     buffer->modified = true;
+     buffer->status = BS_MODIFIED;
      return ce_remove_line(buffer, line+1);
 }
 
@@ -1265,7 +1286,7 @@ bool ce_remove_line(Buffer_t* buffer, int64_t line)
           return false;
      }
 
-     if(buffer->readonly) return false;
+     if(buffer->status == BS_READONLY) return false;
 
      // free the old line
      free(buffer->lines[line]);
@@ -1284,13 +1305,13 @@ bool ce_remove_line(Buffer_t* buffer, int64_t line)
      }
 
      buffer->line_count = new_line_count;
-     buffer->modified = true;
+     buffer->status = BS_MODIFIED;
      return true;
 }
 
 bool ce_remove_string(Buffer_t* buffer, Point_t location, int64_t length)
 {
-     if(buffer->readonly) return false;
+     if(buffer->status == BS_READONLY) return false;
 
      if(length == 0) return true;
 
@@ -1317,7 +1338,7 @@ bool ce_remove_string(Buffer_t* buffer, Point_t location, int64_t length)
           }
           buffer->lines[location.y][new_line_len] = 0;
 
-          buffer->modified = true;
+          buffer->status = BS_MODIFIED;
           return true;
      }
 
@@ -1326,7 +1347,7 @@ bool ce_remove_string(Buffer_t* buffer, Point_t location, int64_t length)
      buffer->lines[location.y][location.x] = '\0';
      if(location.x == 0 && length == 0){
           ce_remove_line(buffer, location.y);
-          buffer->modified = true;
+          buffer->status = BS_MODIFIED;
           return true;
      }
 
@@ -1361,7 +1382,7 @@ bool ce_remove_string(Buffer_t* buffer, Point_t location, int64_t length)
           }
      }
 
-     buffer->modified = true;
+     buffer->status = BS_MODIFIED;
      return true;
 }
 
@@ -1384,8 +1405,7 @@ bool ce_save_buffer(Buffer_t* buffer, const char* filename)
      }
 
      fclose(file);
-     buffer->modified = false;
-     buffer->newfile = false;
+     buffer->status = BS_NONE;
      return true;
 }
 
@@ -1653,6 +1673,86 @@ int iscapsvarchar(int c)
      return isupper(c) || c == '_' || isdigit(c);
 }
 
+int64_t ce_is_constant_number(const char* line, int64_t start_offset)
+{
+     const char* start = line + start_offset;
+     const char* itr = start;
+     int64_t count = 0;
+     char ch = *itr;
+     bool seen_decimal = false;
+     bool seen_hex = false;
+     bool seen_u = false;
+     bool seen_digit = false;
+     int seen_l = 0;
+
+     while(ch != 0){
+          if(isdigit(ch)){
+               if(seen_u || seen_l) break;
+               seen_digit = true;
+               count++;
+          }else if(!seen_decimal && ch == '.'){
+               if(seen_u || seen_l) break;
+               seen_decimal = true;
+               count++;
+          }else if(ch == 'f' && seen_decimal){
+               if(seen_u || seen_l) break;
+               count++;
+               break;
+          }else if(ch == '-' && itr == start){
+               count++;
+          }else if(ch == 'x' && itr == (start + 1)){
+               seen_hex = true;
+               count++;
+          }else if((ch == 'u' || ch == 'U') && !seen_u){
+               seen_u = true;
+               count++;
+          }else if((ch == 'l' || ch == 'L') && seen_l < 2){
+               seen_l++;
+               count++;
+          }else if(seen_hex){
+               if(seen_u || seen_l) break;
+
+               bool valid_hex_char = false;
+
+               switch(ch){
+               default:
+                    break;
+               case 'a':
+               case 'b':
+               case 'c':
+               case 'd':
+               case 'e':
+               case 'f':
+               case 'A':
+               case 'B':
+               case 'C':
+               case 'D':
+               case 'E':
+               case 'F':
+                    count++;
+                    valid_hex_char = true;
+                    break;
+               }
+
+               if(!valid_hex_char) break;
+          }else{
+               break;
+          }
+
+          itr++;
+          ch = *itr;
+     }
+
+     if(count == 1 && (start[0] == '-' || start[0] == '.')) return 0;
+     if((seen_l || seen_u) && !seen_digit) return 0;
+
+     // check if the previous character is not a delimiter
+     int64_t prev_index = start_offset - 1;
+     if(prev_index >= 0 && (iscapsvarchar(line[prev_index]) || isalpha(line[prev_index]))) return 0;
+
+     return count;
+}
+
 int64_t ce_is_caps_var(const char* line, int64_t start_offset)
 {
      const char* itr = line + start_offset;
@@ -1706,9 +1806,6 @@ typedef enum {
      HL_OFF,
      HL_ON,
      HL_CURRENT_LINE,
-     HL_DIFF_ADD,
-     HL_DIFF_REMOVE,
-     HL_DIFF_HEADER,
 } HighlightType_t;
 
 static int set_color(Syntax_t syntax, HighlightType_t highlight_type)
@@ -1726,15 +1823,6 @@ static int set_color(Syntax_t syntax, HighlightType_t highlight_type)
           case HL_CURRENT_LINE:
                attron(COLOR_PAIR(syntax + S_NORMAL_CURRENT_LINE - 1));
                break;
-          case HL_DIFF_ADD:
-               attron(COLOR_PAIR(syntax + S_NORMAL_DIFF_ADD - 1));
-               break;
-          case HL_DIFF_REMOVE:
-               attron(COLOR_PAIR(syntax + S_NORMAL_DIFF_REMOVE - 1));
-               break;
-          case HL_DIFF_HEADER:
-               attron(COLOR_PAIR(syntax + S_NORMAL_DIFF_HEADER - 1));
-               break;
           }
      } else {
           attron(COLOR_PAIR(syntax));
@@ -1745,6 +1833,8 @@ static int set_color(Syntax_t syntax, HighlightType_t highlight_type)
 
 static int64_t count_digits(int64_t n)
 {
+     if(n == 0) return 1;
+
      int count = 0;
      while(n > 0){
           n /= 10;
@@ -1757,7 +1847,7 @@ static int64_t count_digits(int64_t n)
 static const char non_printable_repr = '~';
 
 bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t* term_top_left,
-                    const Point_t* term_bottom_right, const Point_t* buffer_top_left, const char* highlight_word,
+                    const Point_t* term_bottom_right, const Point_t* buffer_top_left, const regex_t* highlight_regex,
                     LineNumberType_t line_number_type, HighlightLineType_t highlight_line_type)
 {
      if(!buffer->line_count) return true;
@@ -1830,13 +1920,6 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
 
      // TODO: if we found a closing multiline comment, make sure there is a matching opening multiline comment
 
-     // NOTE: when optimizing, we will want to make this regex_t a paramter, rather than compiling it at each draw_buffer call
-     regex_t highlight_regex;
-     int regex_compile_rc;
-     if(highlight_word){
-          regex_compile_rc = regcomp(&highlight_regex, highlight_word, REG_EXTENDED);
-     }
-
      standend();
 
      // figure out how wide the line number margin needs to be
@@ -1844,6 +1927,38 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
      if(line_number_size){
           max_width -= line_number_size;
           line_number_size--;
+     }
+
+     bool seen_diff_header = false;
+
+     // look for any diff headers earlier in the file
+     for(int64_t i = buffer_top_left->y - 1; i >= 0; --i){
+          if(buffer->lines[i][0] == '@' && buffer->lines[i][1] == '@'){
+               seen_diff_header = true;
+               break;
+          }
+     }
+
+     // is our cursor on something we can match?
+     Point_t matched_pair = {-1, -1};
+     if(ce_point_on_buffer(buffer, *cursor)){
+          char ch = 0;
+          ch = ce_get_char_raw(buffer, *cursor);
+          switch(ch){
+          default:
+               break;
+          case '{':
+          case '}':
+          case '(':
+          case ')':
+          case '[':
+          case ']':
+          case '<':
+          case '>':
+               matched_pair = *cursor;
+               ce_move_cursor_to_matching_pair(buffer, &matched_pair, ch);
+               break;
+          }
      }
 
      for(int64_t i = buffer_top_left->y; i <= last_line; ++i) {
@@ -1885,26 +2000,19 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                bool inside_comment = false;
                int64_t color_left = 0;
                int highlight_color = 0;
-               bool diff_add = buffer->lines[i][0] == '+';
-               bool diff_remove = buffer->lines[i][0] == '-';
                bool diff_header = buffer->lines[i][0] == '@' && buffer->lines[i][1] == '@';
+               if(diff_header) seen_diff_header = true;
+               bool diff_add = seen_diff_header && buffer->lines[i][0] == '+';
+               bool diff_remove = seen_diff_header && buffer->lines[i][0] == '-';
                HighlightType_t highlight_type = HL_OFF;
                int64_t chars_til_highlighted_word = -1;
                int64_t highlighting_left = 0;
                int fg_color = 0;
 
                regmatch_t regex_matches[1];
-               if(highlight_word && regex_compile_rc == 0){
-                    int regex_rc = regexec(&highlight_regex, buffer->lines[i], 1, regex_matches, 0);
+               if(highlight_regex){
+                    int regex_rc = regexec(highlight_regex, buffer->lines[i], 1, regex_matches, 0);
                     if(regex_rc == 0) chars_til_highlighted_word = regex_matches[0].rm_so;
-               }
-
-               if(diff_add){
-                    highlight_type = HL_DIFF_ADD;
-               } else if(diff_remove){
-                    highlight_type = HL_DIFF_REMOVE;
-               } else if(diff_header){
-                    highlight_type = HL_DIFF_HEADER;
                }
 
                int64_t begin_trailing_whitespace = line_length;
@@ -1930,32 +2038,28 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                          inside_comment = true;
                          break;
                     case CT_BEGIN_MULTILINE:
-                         inside_multiline_comment = true;
+                         if(!inside_comment) inside_multiline_comment = true;
                          break;
                     case CT_END_MULTILINE:
                          inside_multiline_comment = false;
                          break;
                     }
 
-                    if(highlight_word && chars_til_highlighted_word == 0){
+                    if(highlight_regex && chars_til_highlighted_word == 0){
                          highlighting_left = regex_matches[0].rm_eo - regex_matches[0].rm_so;
                          highlight_type = HL_ON;
                     }else if(highlight_type){
                          highlighting_left--;
 
                          if(!highlighting_left){
-                              if(highlight_word && regex_compile_rc == 0){
-                                   int regex_rc = regexec(&highlight_regex, buffer->lines[i], 1, regex_matches, 0);
+                              if(highlight_regex){
+                                   int regex_rc = regexec(highlight_regex, buffer->lines[i], 1, regex_matches, 0);
                                    if(regex_rc == 0) chars_til_highlighted_word = regex_matches[0].rm_so;
                               }
 
                               if(chars_til_highlighted_word == 0){
                                    highlighting_left = regex_matches[0].rm_eo - regex_matches[0].rm_so;
                                    highlight_type = HL_ON;
-                              }else if(diff_add){
-                                   highlight_type = HL_DIFF_ADD;
-                              }else if(diff_remove){
-                                   highlight_type = HL_DIFF_REMOVE;
                               }else{
                                    highlight_type = HL_OFF;
                               }
@@ -1970,6 +2074,14 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                     }else{
                          if(!inside_string){
                               int64_t keyword_left = 0;
+
+                              if(!keyword_left){
+                                   keyword_left = ce_is_constant_number(buffer_line, c);
+                                   if(keyword_left){
+                                        color_left = keyword_left;
+                                        highlight_color = S_CONSTANT_NUMBER;
+                                   }
+                              }
 
                               if(!keyword_left){
                                    keyword_left = ce_is_caps_var(buffer_line, c);
@@ -2035,6 +2147,12 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                     fg_color = set_color(S_COMMENT, highlight_type);
                }else if(inside_string){
                     fg_color = set_color(S_STRING, highlight_type);
+               }else if(diff_add){
+                    fg_color = set_color(S_DIFF_ADDED, highlight_type);
+               }else if(diff_remove){
+                    fg_color = set_color(S_DIFF_REMOVED, highlight_type);
+               }else if(diff_header){
+                    fg_color = set_color(S_DIFF_HEADER, highlight_type);
                }else if(color_left){
                     fg_color = set_color(highlight_color, highlight_type);
                }
@@ -2046,7 +2164,7 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                          highlight_type = HL_ON;
                          set_color(fg_color, highlight_type);
                     }else{
-                         if(highlight_word && chars_til_highlighted_word == 0){
+                         if(highlight_regex && chars_til_highlighted_word == 0){
                               highlighting_left = regex_matches[0].rm_eo - regex_matches[0].rm_so;
                               highlight_type = HL_ON;
                               set_color(fg_color, highlight_type);
@@ -2056,8 +2174,8 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
 
                                    if(!highlighting_left){
 
-                                        if(highlight_word && regex_compile_rc == 0){
-                                             int regex_rc = regexec(&highlight_regex, buffer->lines[i] + c, 1, regex_matches, 0);
+                                        if(highlight_regex){
+                                             int regex_rc = regexec(highlight_regex, buffer->lines[i] + c, 1, regex_matches, 0);
                                              if(regex_rc == 0){
                                                   chars_til_highlighted_word = regex_matches[0].rm_so;
                                              }
@@ -2068,33 +2186,19 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                                              highlight_type = HL_ON;
                                         }else if(cursor->y == i && highlight_line_type != HLT_NONE){
                                              highlight_type = HL_CURRENT_LINE;
-                                        }else if(diff_add){
-                                             highlight_type = HL_DIFF_ADD;
-                                        }else if(diff_remove){
-                                             highlight_type = HL_DIFF_REMOVE;
-                                        }else if(diff_header){
-                                             highlight_type = HL_DIFF_HEADER;
                                         }else{
                                              highlight_type = HL_OFF;
                                         }
                                         set_color(fg_color, highlight_type);
                                    }
-                              }else if(cursor->y == i && highlight_line_type != HLT_NONE && !diff_add && !diff_remove && !diff_header){
+                              }else if(cursor->y == i && highlight_line_type != HLT_NONE){
                                    highlight_type = HL_CURRENT_LINE;
                                    set_color(fg_color, highlight_type);
                               }else{
-                                   if(diff_add){
-                                        highlight_type = HL_DIFF_ADD;
-                                   }else if(diff_remove){
-                                        highlight_type = HL_DIFF_REMOVE;
-                                   }else if(diff_header){
-                                        highlight_type = HL_DIFF_HEADER;
-                                   }else{
-                                        highlight_type = HL_OFF;
-                                   }
+                                   highlight_type = HL_OFF;
                                    set_color(fg_color, highlight_type);
                               }
-                         }else if(cursor->y == i && highlight_line_type != HLT_NONE && !diff_add && !diff_remove && !diff_header){
+                         }else if(cursor->y == i && highlight_line_type != HLT_NONE){
                               highlight_type = HL_CURRENT_LINE;
                               set_color(fg_color, highlight_type);
                          }
@@ -2103,9 +2207,16 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                     // syntax highlighting
                     if(color_left == 0){
                          if(!inside_string){
-                              color_left = ce_is_caps_var(line_to_print, c);
+                              color_left = ce_is_constant_number(line_to_print, c);
                               if(color_left){
-                                   fg_color = set_color(S_CONSTANT, highlight_type);
+                                   fg_color = set_color(S_CONSTANT_NUMBER, highlight_type);
+                              }
+
+                              if(!color_left){
+                                   color_left = ce_is_caps_var(line_to_print, c);
+                                   if(color_left){
+                                        fg_color = set_color(S_CONSTANT, highlight_type);
+                                   }
                               }
 
                               if(!inside_comment && !inside_multiline_comment){
@@ -2136,6 +2247,15 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                                              fg_color = set_color(S_PREPROCESSOR, highlight_type);
                                         }
                                    }
+
+                                   if(!color_left && matched_pair.x >= 0){
+                                        Point_t cur = {buffer_top_left->x + c, i};
+                                        if(ce_points_equal(cur, *cursor) || ce_points_equal(cur, matched_pair)){
+                                             fg_color = set_color(S_MATCHING_PARENS, highlight_type);
+                                        }else if(fg_color == S_MATCHING_PARENS){
+                                             fg_color = set_color(S_NORMAL, highlight_type);
+                                        }
+                                   }
                               }
 
                               if(!color_left){
@@ -2155,8 +2275,10 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                               fg_color = set_color(S_COMMENT, highlight_type);
                               break;
                          case CT_BEGIN_MULTILINE:
-                              inside_multiline_comment = true;
-                              fg_color = set_color(S_COMMENT, highlight_type);
+                              if(!inside_comment){
+                                   inside_multiline_comment = true;
+                                   fg_color = set_color(S_COMMENT, highlight_type);
+                              }
                               break;
                          case CT_END_MULTILINE:
                               inside_multiline_comment = false;
@@ -2182,11 +2304,16 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                               }else if(inside_string){
                                    fg_color = set_color(S_STRING, highlight_type);
                               }else if(diff_add){
-                                   highlight_type = HL_DIFF_ADD;
-                                   fg_color = set_color(fg_color, highlight_type);
+                                   fg_color = set_color(S_DIFF_ADDED, highlight_type);
                               }else if(diff_remove){
-                                   highlight_type = HL_DIFF_REMOVE;
-                                   fg_color = set_color(fg_color, highlight_type);
+                                   fg_color = set_color(S_DIFF_REMOVED, highlight_type);
+                              }else if(diff_header){
+                                   fg_color = set_color(S_DIFF_HEADER, highlight_type);
+                              }else if(matched_pair.x >= 0){
+                                   Point_t cur = {buffer_top_left->x + c, i};
+                                   if(ce_points_equal(cur, *cursor) || ce_points_equal(cur, matched_pair)){
+                                        fg_color = set_color(S_MATCHING_PARENS, highlight_type);
+                                   }
                               }
                          }
                     }
@@ -2220,7 +2347,7 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                     default:
                          break;
                     case CT_BEGIN_MULTILINE:
-                         inside_multiline_comment = true;
+                         if(!inside_comment) inside_multiline_comment = true;
                          break;
                     case CT_END_MULTILINE:
                          inside_multiline_comment = false;
@@ -3030,10 +3157,10 @@ void draw_view_bottom_right_borders(const BufferView_t* view)
      }
 }
 
-bool draw_vertical_views(const BufferView_t* view, bool already_drawn, const char* highlight_word,
+bool draw_vertical_views(const BufferView_t* view, bool already_drawn, const regex_t* highlight_regex,
                          LineNumberType_t line_number_type, HighlightLineType_t highlight_line_type);
 
-bool draw_horizontal_views(const BufferView_t* view, bool already_drawn, const char* highlight_word,
+bool draw_horizontal_views(const BufferView_t* view, bool already_drawn, const regex_t* highlight_regex,
                            LineNumberType_t line_number_type, HighlightLineType_t highlight_line_type)
 {
      const BufferView_t* itr = view;
@@ -3042,13 +3169,13 @@ bool draw_horizontal_views(const BufferView_t* view, bool already_drawn, const c
           // or if this is any view other than the first view
           // and we have a horizontal view below us, then draw the horizontal views
           if(((!already_drawn && itr == view) || (itr != view)) && itr->next_vertical){
-               draw_vertical_views(itr, true, highlight_word, line_number_type, highlight_line_type);
+               draw_vertical_views(itr, true, highlight_regex, line_number_type, highlight_line_type);
           }else{
                assert(itr->left_column >= 0);
                assert(itr->top_row >= 0);
                Point_t buffer_top_left = {itr->left_column, itr->top_row};
                ce_draw_buffer(itr->buffer, &itr->cursor, &itr->top_left, &itr->bottom_right, &buffer_top_left,
-                              highlight_word, line_number_type, highlight_line_type);
+                              highlight_regex, line_number_type, highlight_line_type);
                draw_view_bottom_right_borders(itr);
           }
 
@@ -3058,7 +3185,7 @@ bool draw_horizontal_views(const BufferView_t* view, bool already_drawn, const c
      return true;
 }
 
-bool draw_vertical_views(const BufferView_t* view, bool already_drawn, const char* highlight_word,
+bool draw_vertical_views(const BufferView_t* view, bool already_drawn, const regex_t* highlight_regex,
                          LineNumberType_t line_number_type, HighlightLineType_t highlight_line_type)
 {
      const BufferView_t* itr = view;
@@ -3067,11 +3194,11 @@ bool draw_vertical_views(const BufferView_t* view, bool already_drawn, const cha
           // or if this is any view other than the first view
           // and we have a vertical view below us, then draw the vertical views
           if(((!already_drawn && itr == view) || (itr != view)) && itr->next_horizontal){
-               draw_horizontal_views(itr, true, highlight_word, line_number_type, highlight_line_type);
+               draw_horizontal_views(itr, true, highlight_regex, line_number_type, highlight_line_type);
           }else{
                Point_t buffer_top_left = {itr->left_column, itr->top_row};
                ce_draw_buffer(itr->buffer, &itr->cursor, &itr->top_left, &itr->bottom_right, &buffer_top_left,
-                              highlight_word, line_number_type, highlight_line_type);
+                              highlight_regex, line_number_type, highlight_line_type);
                draw_view_bottom_right_borders(itr);
           }
 
@@ -3137,10 +3264,10 @@ bool connect_borders(const BufferView_t* view)
             ce_connect_border_lines(bottom_right) && ce_connect_border_lines(bottom_left);
 }
 
-bool ce_draw_views(const BufferView_t* view, const char* highlight_word, LineNumberType_t line_number_type,
+bool ce_draw_views(const BufferView_t* view, const regex_t* highlight_regex, LineNumberType_t line_number_type,
                    HighlightLineType_t highlight_line_type)
 {
-     if(!draw_horizontal_views(view, false, highlight_word, line_number_type, highlight_line_type)){
+     if(!draw_horizontal_views(view, false, highlight_regex, line_number_type, highlight_line_type)){
           return false;
      }
 
@@ -3199,6 +3326,8 @@ BufferView_t* ce_buffer_in_view(BufferView_t* head, const Buffer_t* buffer)
 
 int64_t ce_get_line_number_column_width(LineNumberType_t line_number_type, int64_t buffer_line_count, int64_t buffer_view_top, int64_t buffer_view_bottom)
 {
+     if(buffer_line_count == 0) return 0;
+
      int64_t column_width = 0;
 
      if(line_number_type == LNT_ABSOLUTE || line_number_type == LNT_RELATIVE_AND_ABSOLUTE){
@@ -3206,7 +3335,7 @@ int64_t ce_get_line_number_column_width(LineNumberType_t line_number_type, int64
      }else if(line_number_type == LNT_RELATIVE){
           int64_t view_height = (buffer_view_bottom - buffer_view_top) + 1;
           if(view_height > buffer_line_count){
-               column_width += count_digits(buffer_line_count) + 1;
+               column_width += count_digits(buffer_line_count - 1) + 1;
           }else{
                column_width += count_digits(view_height - 1) + 1;
           }
@@ -3305,29 +3434,63 @@ bool ce_get_word_at_location(const Buffer_t* buffer, Point_t location, Point_t* 
      return true;
 }
 
-int64_t ce_get_indentation_for_next_line(const Buffer_t* buffer, Point_t location, int64_t tab_len)
+int64_t ce_get_indentation_for_line(const Buffer_t* buffer, Point_t location, int64_t tab_len)
 {
      // first, match this line's indentation
-     Point_t bol = location;
-     ce_move_cursor_to_soft_beginning_of_line(buffer, &bol);
-     int64_t indent = bol.x;
+     char curr;
 
      // then, check the line for a '{' that is unmatched on location's line + indent if you find one
-     char curr;
-     for(Point_t iter = {ce_last_index(buffer->lines[location.y]), location.y};
-         ce_get_char(buffer, iter, &curr);
-         iter.x--){
-          if(curr == '{'){
-               Point_t match = iter;
-               if(!ce_move_cursor_to_matching_pair(buffer, &match, '{') || match.y != location.y){
-                    // '{' is globally unmatched, or unmatched on our line
-                    indent += tab_len;
-                    break; // if a line has "{{", we don't want to double tab the next line!
+     for(int64_t y = location.y; y >= 0; --y){
+          int64_t start_x = last_index_before_comment(buffer, y);
+          if(y == location.y && start_x > location.x) start_x = location.x - 1;
+
+          for(int64_t x = start_x; x >= 0; x--){
+               Point_t iter = {x, y};
+               ce_get_char(buffer, iter, &curr);
+
+               switch(curr){
+               default:
+                    break;
+               case '"':
+                    if(!find_matching_string_backward(buffer, &iter, '"')){
+                         return false;
+                    }
+                    x = iter.x;
+                    y = iter.y;
+                    break;
+               case '\'':
+                    if(!find_matching_string_backward(buffer, &iter, '\'')){
+                         return false;
+                    }
+                    x = iter.x;
+                    y = iter.y;
+                    break;
+               case '{':
+               {
+                    Point_t match = iter;
+                    bool matched = ce_move_cursor_to_matching_pair(buffer, &match, '{');
+
+                    if(ce_point_after(match, location) || ce_points_equal(match, location) || !matched){
+                         // '{' is globally unmatched, or unmatched on our line
+                         Point_t bol = {0, y};
+                         ce_move_cursor_to_soft_beginning_of_line(buffer, &bol);
+                         return bol.x + tab_len; // if a line has "{{", we don't want to double tab the next line!
+                    }
+               } break;
+               case '(':
+               {
+                    Point_t match = iter;
+                    bool matched = ce_move_cursor_to_matching_pair(buffer, &match, '(');
+
+                    if(ce_point_after(match, location) || ce_points_equal(match, location) || !matched){
+                         return iter.x + 1; // if a line has "{{", we don't want to double tab the next line!
+                    }
+               } break;
                }
-           }
+          }
      }
 
-     return indent;
+     return 0;
 }
 
 // return a > b

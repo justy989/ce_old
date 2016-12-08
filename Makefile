@@ -21,7 +21,7 @@ test_ce: test_ce.c ce.test.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LINK)
 	./$@ 2> test_ce_output.txt || (cat test_ce_output.txt && false)
 
-test_vim: test_vim.c ce.test.o ce_vim.test.o ce_auto_complete.test.o
+test_vim: test_vim.c ce.test.o ce_vim.test.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LINK)
 	./$@ 2> test_vim_output.txt || (cat test_vim_output.txt && false)
 
@@ -34,7 +34,7 @@ ce: main.c ce.o
 %.test.o: %.c
 	$(CC) -c -fpic $(CFLAGS) $^ -o $@
 
-ce_config.so: ce_config.o ce.o ce_vim.o ce_auto_complete.o
+ce_config.so: ce_config.o ce.o ce_vim.o
 	$(CC) -shared $(CFLAGS) $^ -o $@ $(LINK)
 
 clean: clean_config clean_test
@@ -44,4 +44,4 @@ clean_config:
 	rm -f ce_config.so
 
 clean_test:
-	rm -f test_ce test_vim ce.test.o ce_vim.test.o ce_auto_complete.test.o *.gcda *.gcno *.gcov test_ce_output.txt test_vim_output.txt default.profraw
+	rm -f test_ce test_vim ce.test.o ce_vim.test.o *.gcda *.gcno *.gcov test_ce_output.txt test_vim_output.txt default.profraw

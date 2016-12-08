@@ -9,31 +9,25 @@
 #include <dirent.h>
 #include <sys/ioctl.h>
 
-#include "ce.h"
-#include "ce_vim.h"
+#include "ce_config.h"
 
 #define SCROLL_LINES 1
 
 const char* buffer_flag_string(Buffer_t* buffer)
 {
-     if(buffer->readonly) return "[RO] ";
-     if(buffer->newfile) return "[NEW] ";
-     if(buffer->modified) return "*";
+     switch(buffer->status){
+     default:
+          break;
+     case BS_READONLY:
+           return "[RO] ";
+     case BS_NEW_FILE:
+          return "[NEW] ";
+     case BS_MODIFIED:
+          return "*";
+     }
 
      return "";
 }
-
-typedef struct{
-     char** commands;
-     int64_t command_count;
-     Buffer_t* output_buffer;
-     BufferNode_t* buffer_node_head;
-     BufferView_t* view_head;
-     BufferView_t* view_current;
-     int shell_command_input_fd;
-     int shell_command_output_fd;
-     void* user_data;
-} ShellCommandData_t;
 
 ShellCommandData_t shell_command_data;
 pthread_mutex_t draw_lock;
@@ -52,19 +46,6 @@ int64_t count_digits(int64_t n)
 }
 
 void view_drawer(const BufferNode_t* head, void* user_data);
-
-// TODO: move this to ce.h
-typedef struct InputHistoryNode_t {
-     char* entry;
-     struct InputHistoryNode_t* next;
-     struct InputHistoryNode_t* prev;
-} InputHistoryNode_t;
-
-typedef struct {
-     InputHistoryNode_t* head;
-     InputHistoryNode_t* tail;
-     InputHistoryNode_t* cur;
-} InputHistory_t;
 
 bool input_history_init(InputHistory_t* history)
 {
@@ -132,29 +113,6 @@ bool input_history_prev(InputHistory_t* history)
      return true;
 }
 
-// TODO: should be replaced with ce_advance_cursor(buffer, cursor, -1), but it didn't work for me, and I'm not sure why!
-Point_t previous_point(Buffer_t* buffer, Point_t point)
-{
-     Point_t previous_point = {point.x - 1, point.y};
-
-     if(previous_point.x < 0){
-          previous_point.y--;
-          if(previous_point.y < 0){
-               previous_point = (Point_t){0, 0};
-          }else{
-               previous_point.x = ce_last_index(buffer->lines[previous_point.y]);
-          }
-     }
-
-     return previous_point;
-}
-
-typedef struct{
-     BufferCommitNode_t* commit_tail;
-     VimBufferState_t vim_buffer_state;
-} BufferState_t;
-
-
 // location is {left_column, top_line} for the view
 void scroll_view_to_location(BufferView_t* buffer_view, const Point_t* location){
      // TODO: should we be able to scroll the view above our first line?
@@ -169,15 +127,18 @@ void center_view(BufferView_t* view)
      scroll_view_to_location(view, &location);
 }
 
-typedef struct TabView_t{
-     BufferView_t* view_head;
-     BufferView_t* view_current;
-     BufferView_t* view_previous;
-     BufferView_t* view_input_save;
-     BufferView_t* view_overrideable;
-     Buffer_t* overriden_buffer;
-     struct TabView_t* next;
-} TabView_t;
+void center_view_when_cursor_outside_portion(BufferView_t* view, float portion_start, float portion_end)
+{
+     int64_t view_height = view->bottom_right.y - view->top_left.y;
+     Point_t location = (Point_t) {0, view->cursor.y - (view_height / 2)};
+
+     int64_t current_scroll_y = view->cursor.y - view->top_row;
+     float y_portion = ((float)(current_scroll_y) / (float)(view_height));
+
+     if(y_portion < portion_start || y_portion > portion_end){
+          scroll_view_to_location(view, &location);
+     }
+}
 
 TabView_t* tab_view_insert(TabView_t* head)
 {
@@ -239,48 +200,136 @@ void tab_view_restore_overrideable(TabView_t* tab)
      center_view(tab->view_overrideable);
 }
 
-typedef struct{
-     bool input;
-     const char* input_message;
-     int input_key;
+bool auto_complete_insert(AutoComplete_t* auto_complete, const char* option)
+{
+     CompleteNode_t* new_node = calloc(1, sizeof(*new_node));
+     if(!new_node){
+          ce_message("failed to allocate auto complete option");
+          return false;
+     }
 
-     Buffer_t* shell_command_buffer; // Allocate so it can be part of the buffer list and get free'd at the end
-     Buffer_t* completion_buffer;    // same as shell_command_buffer
+     new_node->option = strdup(option);
 
-     Buffer_t input_buffer;
-     Buffer_t buffer_list_buffer;
-     Buffer_t mark_list_buffer;
-     Buffer_t yank_list_buffer;
-     Buffer_t macro_list_buffer;
-     Buffer_t* buffer_before_query;
+     if(auto_complete->tail){
+          auto_complete->tail->next = new_node;
+          new_node->prev = auto_complete->tail;
+     }
 
-     VimState_t vim_state;
+     auto_complete->tail = new_node;
+     if(!auto_complete->head){
+          auto_complete->head = new_node;
+     }
 
-     int64_t last_command_buffer_jump;
-     int last_key;
+     return true;
+}
 
-     TabView_t* tab_head;
-     TabView_t* tab_current;
+void auto_complete_start(AutoComplete_t* auto_complete, Point_t start)
+{
+     assert(start.x >= 0);
+     auto_complete->start = start;
+     auto_complete->current = auto_complete->head;
+}
 
-     BufferView_t* view_input;
+void auto_complete_end(AutoComplete_t* auto_complete)
+{
+     auto_complete->start.x = -1;
+}
 
-     InputHistory_t shell_command_history;
-     InputHistory_t shell_input_history;
-     InputHistory_t search_history;
-     InputHistory_t load_file_history;
+bool auto_completing(AutoComplete_t* auto_complete)
+{
+    return auto_complete->start.x >= 0;
+}
 
-     pthread_t shell_command_thread;
-     pthread_t shell_input_thread;
+int64_t string_common_beginning(const char* a, const char* b)
+{
+     size_t common = 0;
 
-     AutoComplete_t auto_complete;
+     while(*a && *b){
+          if(*a == *b){
+               common++;
+          }else{
+               break;
+          }
 
-     LineNumberType_t line_number_type;
-     HighlightLineType_t highlight_line_type;
+          a++;
+          b++;
+     }
 
-     char editting_register;
+     return common;
+}
 
-     bool quit;
-} ConfigState_t;
+// NOTE: allocates the string that is returned to the user
+char* auto_complete_get_completion(AutoComplete_t* auto_complete, int64_t x)
+{
+     int64_t offset = x - auto_complete->start.x;
+
+     CompleteNode_t* itr = auto_complete->current;
+     int64_t complete_len = strlen(auto_complete->current->option + offset);
+     int64_t min_complete_len = complete_len;
+
+     do{
+          itr = itr->next;
+          if(!itr) itr = auto_complete->head;
+          int64_t option_len = strlen(itr->option);
+
+          if(option_len <= offset) continue;
+          if(strncmp(auto_complete->current->option, itr->option, offset) != 0) continue;
+
+          int64_t check_complete_len = string_common_beginning(auto_complete->current->option + offset, itr->option + offset);
+          if(check_complete_len < min_complete_len) min_complete_len = check_complete_len;
+     }while(itr != auto_complete->current);
+
+     if(min_complete_len) complete_len = min_complete_len;
+
+     char* completion = malloc(complete_len + 1);
+     strncpy(completion, auto_complete->current->option + offset, complete_len);
+     completion[complete_len] = 0;
+
+     return completion;
+}
+
+void auto_complete_free(AutoComplete_t* auto_complete)
+{
+    CompleteNode_t* itr = auto_complete->head;
+    while(itr){
+         CompleteNode_t* tmp = itr;
+         itr = itr->next;
+         free(tmp->option);
+         free(tmp);
+    }
+
+    auto_complete->head = NULL;
+    auto_complete->tail = NULL;
+    auto_complete->current = NULL;
+}
+
+void auto_complete_next(AutoComplete_t* auto_complete, const char* match)
+{
+     int64_t match_len = strlen(match);
+     CompleteNode_t* initial_node = auto_complete->current;
+
+     do{
+          auto_complete->current = auto_complete->current->next;
+          if(!auto_complete->current) auto_complete->current = auto_complete->head;
+          if(strncmp(auto_complete->current->option, match, match_len) == 0) return;
+     }while(auto_complete->current != initial_node);
+
+     auto_complete_end(auto_complete);
+}
+
+void auto_complete_prev(AutoComplete_t* auto_complete, const char* match)
+{
+     int64_t match_len = strlen(match);
+     CompleteNode_t* initial_node = auto_complete->current;
+
+     do{
+          auto_complete->current = auto_complete->current->prev;
+          if(!auto_complete->current) auto_complete->current = auto_complete->tail;
+          if(strncmp(auto_complete->current->option, match, match_len) == 0) return;
+     }while(auto_complete->current != initial_node);
+
+     auto_complete_end(auto_complete);
+}
 
 bool initialize_buffer(Buffer_t* buffer){
      BufferState_t* buffer_state = calloc(1, sizeof(*buffer_state));
@@ -363,7 +412,7 @@ BufferNode_t* new_buffer_from_file(BufferNode_t* head, const char* filename)
           assert(!"unsupported LoadFileResult_t");
           return false;
      case LF_DOES_NOT_EXIST:
-          buffer->newfile = true;
+          buffer->status = BS_NEW_FILE;
           buffer->name = strdup(filename);
           break;
      case LF_IS_DIRECTORY:
@@ -444,7 +493,7 @@ void input_cancel(ConfigState_t* config_state)
 {
      if(config_state->input_key == '/' || config_state->input_key == '?'){
           pthread_mutex_lock(&view_input_save_lock);
-          config_state->tab_current->view_input_save->cursor = config_state->vim_state.start_search;
+          config_state->tab_current->view_input_save->cursor = config_state->vim_state.search.start;
           pthread_mutex_unlock(&view_input_save_lock);
           center_view(config_state->tab_current->view_input_save);
      }else if(config_state->input_key == 6){
@@ -498,20 +547,29 @@ void free_buffer_state(BufferState_t* buffer_state)
 
 Buffer_t* open_file_buffer(BufferNode_t* head, const char* filename)
 {
-     BufferNode_t* itr = head;
-     while(itr){
-          if(!strcmp(itr->buffer->name, filename)){
-               return itr->buffer; // already open
-          }
-          itr = itr->next;
-     }
+     struct stat new_file_stat;
 
-     // clang doesn't support nested functions so we need to deal with global state
-     nftw_state.search_filename = filename;
-     nftw_state.head = head;
-     nftw_state.new_node = NULL;
-     nftw(".", nftw_find_file, 20, FTW_CHDIR);
-     if(nftw_state.new_node) return nftw_state.new_node->buffer;
+     if(stat(filename, &new_file_stat) == 0){
+          struct stat open_file_stat;
+          BufferNode_t* itr = head;
+          while(itr){
+               // NOTE: should we cache inodes?
+               if(stat(itr->buffer->name, &open_file_stat) == 0){
+                    if(open_file_stat.st_ino == new_file_stat.st_ino){
+                         return itr->buffer; // already open
+                    }
+               }
+
+               itr = itr->next;
+          }
+     }else{
+          // clang doesn't support nested functions so we need to deal with global state
+          nftw_state.search_filename = filename;
+          nftw_state.head = head;
+          nftw_state.new_node = NULL;
+          nftw(".", nftw_find_file, 20, FTW_CHDIR);
+          if(nftw_state.new_node) return nftw_state.new_node->buffer;
+     }
 
      BufferNode_t* node = new_buffer_from_file(head, filename);
      if(node) return node->buffer;
@@ -551,309 +609,6 @@ bool delete_buffer_at_index(BufferNode_t** head, TabView_t* tab_head, int64_t bu
      free_buffer_state(delete_buffer->user_data);
      ce_free_buffer(delete_buffer);
 
-     return true;
-}
-
-bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, char** argv, void** user_data)
-{
-     // NOTE: need to set these in this module
-     g_terminal_dimensions = terminal_dimensions;
-
-     // setup the config's state
-     ConfigState_t* config_state = calloc(1, sizeof(*config_state));
-     if(!config_state){
-          ce_message("failed to allocate config state");
-          return false;
-     }
-
-     config_state->tab_head = calloc(1, sizeof(*config_state->tab_head));
-     if(!config_state->tab_head){
-          ce_message("failed to allocate tab");
-          return false;
-     }
-
-     config_state->tab_current = config_state->tab_head;
-
-     config_state->tab_head->view_head = calloc(1, sizeof(*config_state->tab_head->view_head));
-     if(!config_state->tab_head->view_head){
-          ce_message("failed to allocate buffer view");
-          return false;
-     }
-
-     config_state->view_input = calloc(1, sizeof(*config_state->view_input));
-     if(!config_state->view_input){
-          ce_message("failed to allocate buffer view for input");
-          return false;
-     }
-
-     // setup input buffer
-     ce_alloc_lines(&config_state->input_buffer, 1);
-     initialize_buffer(&config_state->input_buffer);
-     config_state->input_buffer.name = strdup("[input]");
-     config_state->view_input->buffer = &config_state->input_buffer;
-
-     // setup buffer list buffer
-     config_state->buffer_list_buffer.name = strdup("[buffers]");
-     initialize_buffer(&config_state->buffer_list_buffer);
-     config_state->buffer_list_buffer.readonly = true;
-
-     config_state->mark_list_buffer.name = strdup("[marks]");
-     initialize_buffer(&config_state->mark_list_buffer);
-     config_state->mark_list_buffer.readonly = true;
-
-     config_state->yank_list_buffer.name = strdup("[yanks]");
-     initialize_buffer(&config_state->yank_list_buffer);
-     config_state->yank_list_buffer.readonly = true;
-
-     config_state->macro_list_buffer.name = strdup("[macros]");
-     initialize_buffer(&config_state->macro_list_buffer);
-     config_state->macro_list_buffer.readonly = true;
-
-     // if we reload, the shell command buffer may already exist, don't recreate it
-     BufferNode_t* itr = *head;
-     while(itr){
-          if(strcmp(itr->buffer->name, "[shell_output]") == 0){
-               config_state->shell_command_buffer = itr->buffer;
-          }
-          if(strcmp(itr->buffer->name, "[completions]") == 0){
-               config_state->completion_buffer = itr->buffer;
-          }
-          itr = itr->next;
-     }
-
-     if(!config_state->shell_command_buffer){
-          config_state->shell_command_buffer = calloc(1, sizeof(*config_state->shell_command_buffer));
-          config_state->shell_command_buffer->name = strdup("[shell_output]");
-          config_state->shell_command_buffer->readonly = true;
-          ce_alloc_lines(config_state->shell_command_buffer, 1);
-          BufferNode_t* new_buffer_node = ce_append_buffer_to_list(*head, config_state->shell_command_buffer);
-          if(!new_buffer_node){
-               ce_message("failed to add shell command buffer to list");
-               return false;
-          }
-     }
-
-     if(!config_state->completion_buffer){
-          config_state->completion_buffer = calloc(1, sizeof(*config_state->shell_command_buffer));
-          config_state->completion_buffer->name = strdup("[completions]");
-          config_state->completion_buffer->readonly = true;
-          BufferNode_t* new_buffer_node = ce_append_buffer_to_list(*head, config_state->completion_buffer);
-          if(!new_buffer_node){
-               ce_message("failed to add shell command buffer to list");
-               return false;
-          }
-     }
-
-     *user_data = config_state;
-
-     // setup state for each buffer
-     itr = *head;
-     while(itr){
-          initialize_buffer(itr->buffer);
-          itr = itr->next;
-     }
-
-     config_state->tab_current->view_head->buffer = (*head)->buffer;
-     config_state->tab_current->view_current = config_state->tab_current->view_head;
-
-     for(int i = 0; i < argc; ++i){
-          BufferNode_t* node = new_buffer_from_file(*head, argv[i]);
-
-          // if we loaded a file, set the view to point at the file
-          if(node){
-               if(i == 0){
-                    config_state->tab_current->view_current->buffer = node->buffer;
-               }else{
-                    ce_split_view(config_state->tab_current->view_head, node->buffer, true);
-               }
-          }
-     }
-
-     config_state->line_number_type = LNT_RELATIVE;
-     config_state->highlight_line_type = HLT_ENTIRE_LINE;
-
-     input_history_init(&config_state->shell_command_history);
-     input_history_init(&config_state->shell_input_history);
-     input_history_init(&config_state->search_history);
-     input_history_init(&config_state->load_file_history);
-
-     // setup colors for syntax highlighting
-     init_pair(S_NORMAL, COLOR_FOREGROUND, COLOR_BACKGROUND);
-     init_pair(S_KEYWORD, COLOR_BLUE, COLOR_BACKGROUND);
-     init_pair(S_TYPE, COLOR_BRIGHT_BLUE, COLOR_BACKGROUND);
-     init_pair(S_CONTROL, COLOR_YELLOW, COLOR_BACKGROUND);
-     init_pair(S_COMMENT, COLOR_GREEN, COLOR_BACKGROUND);
-     init_pair(S_STRING, COLOR_RED, COLOR_BACKGROUND);
-     init_pair(S_CONSTANT, COLOR_MAGENTA, COLOR_BACKGROUND);
-     init_pair(S_PREPROCESSOR, COLOR_BRIGHT_MAGENTA, COLOR_BACKGROUND);
-     init_pair(S_FILEPATH, COLOR_BLUE, COLOR_BACKGROUND);
-
-     init_pair(S_NORMAL_HIGHLIGHTED, COLOR_FOREGROUND, COLOR_WHITE);
-     init_pair(S_KEYWORD_HIGHLIGHTED, COLOR_BLUE, COLOR_WHITE);
-     init_pair(S_TYPE_HIGHLIGHTED, COLOR_BRIGHT_BLUE, COLOR_WHITE);
-     init_pair(S_CONTROL_HIGHLIGHTED, COLOR_YELLOW, COLOR_WHITE);
-     init_pair(S_COMMENT_HIGHLIGHTED, COLOR_GREEN, COLOR_WHITE);
-     init_pair(S_STRING_HIGHLIGHTED, COLOR_RED, COLOR_WHITE);
-     init_pair(S_CONSTANT_HIGHLIGHTED, COLOR_MAGENTA, COLOR_WHITE);
-     init_pair(S_PREPROCESSOR_HIGHLIGHTED, COLOR_BRIGHT_MAGENTA, COLOR_WHITE);
-     init_pair(S_FILEPATH_HIGHLIGHTED, COLOR_BLUE, COLOR_WHITE);
-
-     init_pair(S_NORMAL_CURRENT_LINE, COLOR_FOREGROUND, COLOR_BRIGHT_BLACK);
-     init_pair(S_KEYWORD_CURRENT_LINE, COLOR_BLUE, COLOR_BRIGHT_BLACK);
-     init_pair(S_TYPE_CURRENT_LINE, COLOR_BRIGHT_BLUE, COLOR_BRIGHT_BLACK);
-     init_pair(S_CONTROL_CURRENT_LINE, COLOR_YELLOW, COLOR_BRIGHT_BLACK);
-     init_pair(S_COMMENT_CURRENT_LINE, COLOR_GREEN, COLOR_BRIGHT_BLACK);
-     init_pair(S_STRING_CURRENT_LINE, COLOR_RED, COLOR_BRIGHT_BLACK);
-     init_pair(S_CONSTANT_CURRENT_LINE, COLOR_MAGENTA, COLOR_BRIGHT_BLACK);
-     init_pair(S_PREPROCESSOR_CURRENT_LINE, COLOR_BRIGHT_MAGENTA, COLOR_BRIGHT_BLACK);
-     init_pair(S_FILEPATH_CURRENT_LINE, COLOR_BLUE, COLOR_BRIGHT_BLACK);
-
-     init_pair(S_NORMAL_DIFF_ADD, COLOR_FOREGROUND, COLOR_BRIGHT_GREEN);
-     init_pair(S_KEYWORD_DIFF_ADD, COLOR_BLUE, COLOR_BRIGHT_GREEN);
-     init_pair(S_TYPE_DIFF_ADD, COLOR_BRIGHT_BLUE, COLOR_BRIGHT_GREEN);
-     init_pair(S_CONTROL_DIFF_ADD, COLOR_YELLOW, COLOR_BRIGHT_GREEN);
-     init_pair(S_COMMENT_DIFF_ADD, COLOR_GREEN, COLOR_BRIGHT_GREEN);
-     init_pair(S_STRING_DIFF_ADD, COLOR_RED, COLOR_BRIGHT_GREEN);
-     init_pair(S_CONSTANT_DIFF_ADD, COLOR_MAGENTA, COLOR_BRIGHT_GREEN);
-     init_pair(S_PREPROCESSOR_DIFF_ADD, COLOR_BRIGHT_MAGENTA, COLOR_BRIGHT_GREEN);
-     init_pair(S_FILEPATH_DIFF_ADD, COLOR_BLUE, COLOR_BRIGHT_GREEN);
-
-     init_pair(S_NORMAL_DIFF_REMOVE, COLOR_FOREGROUND, COLOR_BRIGHT_RED);
-     init_pair(S_KEYWORD_DIFF_REMOVE, COLOR_BLUE, COLOR_BRIGHT_RED);
-     init_pair(S_TYPE_DIFF_REMOVE, COLOR_BRIGHT_BLUE, COLOR_BRIGHT_RED);
-     init_pair(S_CONTROL_DIFF_REMOVE, COLOR_YELLOW, COLOR_BRIGHT_RED);
-     init_pair(S_COMMENT_DIFF_REMOVE, COLOR_GREEN, COLOR_BRIGHT_RED);
-     init_pair(S_STRING_DIFF_REMOVE, COLOR_RED, COLOR_BRIGHT_RED);
-     init_pair(S_CONSTANT_DIFF_REMOVE, COLOR_MAGENTA, COLOR_BRIGHT_RED);
-     init_pair(S_PREPROCESSOR_DIFF_REMOVE, COLOR_BRIGHT_MAGENTA, COLOR_BRIGHT_RED);
-     init_pair(S_FILEPATH_DIFF_REMOVE, COLOR_BLUE, COLOR_BRIGHT_RED);
-
-     init_pair(S_NORMAL_DIFF_HEADER, COLOR_FOREGROUND, COLOR_BLACK);
-     init_pair(S_KEYWORD_DIFF_HEADER, COLOR_BLUE, COLOR_BLACK);
-     init_pair(S_TYPE_DIFF_HEADER, COLOR_BRIGHT_BLUE, COLOR_BLACK);
-     init_pair(S_CONTROL_DIFF_HEADER, COLOR_YELLOW, COLOR_BLACK);
-     init_pair(S_COMMENT_DIFF_HEADER, COLOR_GREEN, COLOR_BLACK);
-     init_pair(S_STRING_DIFF_HEADER, COLOR_RED, COLOR_BLACK);
-     init_pair(S_CONSTANT_DIFF_HEADER, COLOR_MAGENTA, COLOR_BLACK);
-     init_pair(S_PREPROCESSOR_DIFF_HEADER, COLOR_BRIGHT_MAGENTA, COLOR_BLACK);
-     init_pair(S_FILEPATH_DIFF_HEADER, COLOR_BLUE, COLOR_BLACK);
-
-     init_pair(S_LINE_NUMBERS, COLOR_WHITE, COLOR_BACKGROUND);
-
-     init_pair(S_TRAILING_WHITESPACE, COLOR_FOREGROUND, COLOR_RED);
-
-     init_pair(S_BORDERS, COLOR_WHITE, COLOR_BACKGROUND);
-
-     init_pair(S_TAB_NAME, COLOR_WHITE, COLOR_BACKGROUND);
-     init_pair(S_CURRENT_TAB_NAME, COLOR_CYAN, COLOR_BACKGROUND);
-
-     init_pair(S_VIEW_STATUS, COLOR_CYAN, COLOR_BACKGROUND);
-     init_pair(S_INPUT_STATUS, COLOR_RED, COLOR_BACKGROUND);
-     init_pair(S_AUTO_COMPLETE, COLOR_WHITE, COLOR_BACKGROUND);
-
-     // Doesn't work in insert mode :<
-     //define_key("h", KEY_LEFT);
-     //define_key("j", KEY_DOWN);
-     //define_key("k", KEY_UP);
-     //define_key("l", KEY_RIGHT);
-
-     define_key(NULL, KEY_BACKSPACE);   // Blow away backspace
-     define_key("\x7F", KEY_BACKSPACE); // Backspace  (127) (0x7F) ASCII "DEL" Delete
-     define_key("\x15", KEY_NPAGE);     // ctrl + d    (21) (0x15) ASCII "NAK" Negative Acknowledgement
-     define_key("\x04", KEY_PPAGE);     // ctrl + u     (4) (0x04) ASCII "EOT" End of Transmission
-     define_key("\x11", KEY_CLOSE);     // ctrl + q    (17) (0x11) ASCII "DC1" Device Control 1
-     define_key("\x12", KEY_REDO);      // ctrl + r    (18) (0x12) ASCII "DC2" Device Control 2
-     define_key("\x17", KEY_SAVE);      // ctrl + w    (23) (0x17) ASCII "ETB" End of Transmission Block
-     define_key(NULL, KEY_ENTER);       // Blow away enter
-     define_key("\x0D", KEY_ENTER);     // Enter       (13) (0x0D) ASCII "CR"  NL Carriage Return
-
-     pthread_mutex_init(&draw_lock, NULL);
-     pthread_mutex_init(&shell_buffer_lock, NULL);
-
-     auto_complete_end(&config_state->auto_complete);
-     config_state->vim_state.insert_start = (Point_t){-1, -1};
-     return true;
-}
-
-bool destroyer(BufferNode_t** head, void* user_data)
-{
-     BufferNode_t* itr = *head;
-     while(itr){
-          free_buffer_state(itr->buffer->user_data);
-          itr->buffer->user_data = NULL;
-          itr = itr->next;
-     }
-
-     ConfigState_t* config_state = user_data;
-     TabView_t* tab_itr = config_state->tab_head;
-     while(tab_itr){
-          if(tab_itr->view_head){
-               ce_free_views(&tab_itr->view_head);
-          }
-          tab_itr = tab_itr->next;
-     }
-
-     tab_itr = config_state->tab_head;
-     while(tab_itr){
-          TabView_t* tmp = tab_itr;
-          tab_itr = tab_itr->next;
-          free(tmp);
-     }
-
-     // input buffer
-     {
-          ce_free_buffer(&config_state->input_buffer);
-          free_buffer_state(config_state->input_buffer.user_data);
-          free(config_state->view_input);
-     }
-
-     if(config_state->shell_command_thread){
-          pthread_cancel(config_state->shell_command_thread);
-          pthread_join(config_state->shell_command_thread, NULL);
-     }
-
-     if(config_state->shell_input_thread){
-          pthread_cancel(config_state->shell_input_thread);
-          pthread_join(config_state->shell_input_thread, NULL);
-     }
-
-     free_buffer_state(config_state->buffer_list_buffer.user_data);
-     ce_free_buffer(&config_state->buffer_list_buffer);
-
-     free_buffer_state(config_state->mark_list_buffer.user_data);
-     ce_free_buffer(&config_state->mark_list_buffer);
-
-     free_buffer_state(config_state->yank_list_buffer.user_data);
-     ce_free_buffer(&config_state->yank_list_buffer);
-
-     free_buffer_state(config_state->macro_list_buffer.user_data);
-     ce_free_buffer(&config_state->macro_list_buffer);
-
-     // history
-     input_history_free(&config_state->shell_command_history);
-     input_history_free(&config_state->shell_input_history);
-     input_history_free(&config_state->search_history);
-     input_history_free(&config_state->load_file_history);
-
-     pthread_mutex_destroy(&draw_lock);
-     pthread_mutex_destroy(&shell_buffer_lock);
-
-     auto_complete_free(&config_state->auto_complete);
-
-     free(config_state->vim_state.last_insert_command);
-
-     ce_keys_free(&config_state->vim_state.command_head);
-     ce_keys_free(&config_state->vim_state.record_macro_head);
-
-     vim_yanks_free(&config_state->vim_state.yank_head);
-
-     vim_macros_free(&config_state->vim_state.macro_head);
-
-     VimMacroCommitNode_t* macro_commit_head = config_state->vim_state.macro_commit_current;
-     while(macro_commit_head && macro_commit_head->prev) macro_commit_head = macro_commit_head->prev;
-     vim_macro_commits_free(&macro_commit_head);
-
-     free(config_state);
      return true;
 }
 
@@ -1225,7 +980,7 @@ bool iterate_history_input(ConfigState_t* config_state, bool previous)
 
      if(success){
           ce_clear_lines(config_state->view_input->buffer);
-          ce_append_string(config_state->view_input->buffer, 0, history->cur->entry);
+          if(history->cur->entry) ce_append_string(config_state->view_input->buffer, 0, history->cur->entry);
           config_state->view_input->cursor = (Point_t){0, 0};
           ce_move_cursor_to_end_of_file(config_state->view_input->buffer, &config_state->view_input->cursor);
           reset_buffer_commits(&buffer_state->commit_tail);
@@ -1237,7 +992,7 @@ bool iterate_history_input(ConfigState_t* config_state, bool previous)
 void update_buffer_list_buffer(ConfigState_t* config_state, const BufferNode_t* head)
 {
      char buffer_info[BUFSIZ];
-     config_state->buffer_list_buffer.readonly = false;
+     config_state->buffer_list_buffer.status = BS_NONE;
      ce_clear_lines(&config_state->buffer_list_buffer);
 
      // calc maxes of things we care about for formatting
@@ -1276,14 +1031,14 @@ void update_buffer_list_buffer(ConfigState_t* config_state, const BufferNode_t* 
           ce_append_line(&config_state->buffer_list_buffer, buffer_info);
           itr = itr->next;
      }
-     config_state->buffer_list_buffer.modified = false;
-     config_state->buffer_list_buffer.readonly = true;
+
+     config_state->buffer_list_buffer.status = BS_READONLY;
 }
 
 void update_mark_list_buffer(ConfigState_t* config_state, const Buffer_t* buffer)
 {
      char buffer_info[BUFSIZ];
-     config_state->mark_list_buffer.readonly = false;
+     config_state->mark_list_buffer.status = BS_NONE;
      ce_clear_lines(&config_state->mark_list_buffer);
 
      snprintf(buffer_info, BUFSIZ, "// reg line");
@@ -1306,14 +1061,13 @@ void update_mark_list_buffer(ConfigState_t* config_state, const Buffer_t* buffer
           itr = itr->next;
      }
 
-     config_state->mark_list_buffer.modified = false;
-     config_state->mark_list_buffer.readonly = true;
+     config_state->mark_list_buffer.status = BS_READONLY;
 }
 
 void update_yank_list_buffer(ConfigState_t* config_state)
 {
      char buffer_info[BUFSIZ];
-     config_state->yank_list_buffer.readonly = false;
+     config_state->yank_list_buffer.status = BS_NONE;
      ce_clear_lines(&config_state->yank_list_buffer);
 
      const VimYankNode_t* itr = config_state->vim_state.yank_head;
@@ -1324,14 +1078,13 @@ void update_yank_list_buffer(ConfigState_t* config_state)
           itr = itr->next;
      }
 
-     config_state->yank_list_buffer.modified = false;
-     config_state->yank_list_buffer.readonly = true;
+     config_state->yank_list_buffer.status = BS_READONLY;
 }
 
 void update_macro_list_buffer(ConfigState_t* config_state)
 {
      char buffer_info[BUFSIZ];
-     config_state->macro_list_buffer.readonly = false;
+     config_state->macro_list_buffer.status = BS_NONE;
      ce_clear_lines(&config_state->macro_list_buffer);
 
      ce_append_line(&config_state->macro_list_buffer, "// reg actions");
@@ -1375,8 +1128,7 @@ void update_macro_list_buffer(ConfigState_t* config_state)
      ce_append_line(&config_state->macro_list_buffer, "// \\i -> KEY_RIGHT");
      ce_append_line(&config_state->macro_list_buffer, "// \\\\ -> \\"); // HAHAHAHAHA
 
-     config_state->macro_list_buffer.modified = false;
-     config_state->macro_list_buffer.readonly = true;
+     config_state->macro_list_buffer.status = BS_READONLY;
 }
 
 Point_t get_cursor_on_terminal(const Point_t* cursor, const BufferView_t* buffer_view, LineNumberType_t line_number_type)
@@ -1546,7 +1298,7 @@ void* run_shell_commands(void* user_data)
 
 void update_completion_buffer(Buffer_t* completion_buffer, AutoComplete_t* auto_complete, const char* match)
 {
-     assert(completion_buffer->readonly);
+     assert(completion_buffer->status == BS_READONLY);
      ce_clear_lines_readonly(completion_buffer);
 
      int64_t match_len = strlen(match);
@@ -1785,7 +1537,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                shell_command_data.view_current = buffer_view;
                shell_command_data.user_data = config_state;
 
-               assert(command_buffer->readonly);
+               assert(command_buffer->status == BS_READONLY);
                pthread_mutex_lock(&shell_buffer_lock);
                ce_clear_lines_readonly(command_buffer);
                pthread_mutex_unlock(&shell_buffer_lock);
@@ -1810,38 +1562,30 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                Point_t end = config_state->tab_current->view_input_save->buffer->highlight_end;
                if(end.x < 0) ce_move_cursor_to_end_of_file(config_state->tab_current->view_input_save->buffer, &end);
 
-               regex_t regex;
-               int rc = regcomp(&regex, search_str, REG_EXTENDED);
-               if(rc == 0){
-                    Point_t match = {};
-                    int64_t match_len = 0;
-                    int64_t replace_count = 0;
-                    while(ce_find_regex(buffer, begin, &regex, &match, &match_len, CE_DOWN)){
-                         if(ce_point_after(match, end)) break;
-                         Point_t end_match = match;
-                         ce_advance_cursor(buffer, &end_match, match_len - 1);
-                         char* searched_dup = ce_dupe_string(buffer, match, end_match);
-                         if(!ce_remove_string(buffer, match, match_len)) break;
-                         if(replace_len){
-                              if(!ce_insert_string(buffer, match, replace_str)) break;
-                         }
-                         ce_commit_change_string(&buffer_state->commit_tail, match, match, match, strdup(replace_str),
-                                                 searched_dup, BCC_KEEP_GOING);
-                         begin = match;
-                         replace_count++;
+               Point_t match = {};
+               int64_t match_len = 0;
+               int64_t replace_count = 0;
+               while(ce_find_regex(buffer, begin, &config_state->vim_state.search.regex, &match, &match_len, CE_DOWN)){
+                    if(ce_point_after(match, end)) break;
+                    Point_t end_match = match;
+                    ce_advance_cursor(buffer, &end_match, match_len - 1);
+                    char* searched_dup = ce_dupe_string(buffer, match, end_match);
+                    if(!ce_remove_string(buffer, match, match_len)) break;
+                    if(replace_len){
+                         if(!ce_insert_string(buffer, match, replace_str)) break;
                     }
+                    ce_commit_change_string(&buffer_state->commit_tail, match, match, match, strdup(replace_str),
+                                            searched_dup, BCC_KEEP_GOING);
+                    begin = match;
+                    replace_count++;
+               }
 
-                    if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
+               if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
 
-                    if(replace_count){
-                         ce_message("replaced %" PRId64 " matches", replace_count);
-                    }else{
-                         ce_message("no matches found to replace");
-                    }
+               if(replace_count){
+                    ce_message("replaced %" PRId64 " matches", replace_count);
                }else{
-                    char error_buffer[BUFSIZ];
-                    regerror(rc, &regex, error_buffer, BUFSIZ);
-                    ce_message("regcomp() failed: '%s'", error_buffer);
+                    ce_message("no matches found to replace");
                }
 
                *cursor = begin;
@@ -1937,7 +1681,6 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
 
           buffer_view->buffer = itr->buffer;
           buffer_view->cursor = itr->buffer->cursor;
-          *cursor = itr->buffer->cursor;
           center_view(buffer_view);
      }else if(buffer_view->buffer == config_state->shell_command_buffer){
           BufferView_t* view_to_change = buffer_view;
@@ -2005,6 +1748,481 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           vim_enter_normal_mode(&config_state->vim_state);
           ce_insert_string(config_state->view_input->buffer, (Point_t){0,0}, itr->text);
      }
+}
+
+void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferView_t* overrideable_view, VimMode_t vim_mode, int last_key,
+                        char recording_macro)
+{
+     Buffer_t* buffer = view->buffer;
+     if(view->next_horizontal) draw_view_statuses(view->next_horizontal, current_view, overrideable_view, vim_mode, last_key, recording_macro);
+     if(view->next_vertical) draw_view_statuses(view->next_vertical, current_view, overrideable_view, vim_mode, last_key, recording_macro);
+
+     // NOTE: mode names need space at the end for OCD ppl like me
+     static const char* mode_names[] = {
+          "NORMAL ",
+          "INSERT ",
+          "VISUAL ",
+          "VISUAL LINE ",
+          "VISUAL BLOCK ",
+     };
+
+     attron(COLOR_PAIR(S_BORDERS));
+     move(view->bottom_right.y, view->top_left.x);
+     for(int i = view->top_left.x; i < view->bottom_right.x; ++i) addch(ACS_HLINE);
+     int right_status_offset = 0;
+     if(view->bottom_right.x == (g_terminal_dimensions->x - 1)){
+          addch(ACS_HLINE);
+          right_status_offset = 1;
+     }
+
+     // TODO: handle case where filename is too long to fit in the status bar
+     attron(COLOR_PAIR(S_VIEW_STATUS));
+     mvprintw(view->bottom_right.y, view->top_left.x + 1, " %s%s%s ",
+              view == current_view ? mode_names[vim_mode] : "",
+              buffer_flag_string(buffer), buffer->filename);
+#if 0
+     if(view == current_view) printw("%s %d ", keyname(last_key), last_key);
+#endif
+     if(view == overrideable_view) printw("^ ");
+     if(view == current_view && recording_macro) printw("RECORDING %c ", recording_macro);
+     int64_t row = view->cursor.y + 1;
+     int64_t column = view->cursor.x + 1;
+     int64_t digits_in_line = count_digits(row);
+     digits_in_line += count_digits(column);
+     mvprintw(view->bottom_right.y, (view->bottom_right.x - (digits_in_line + 5)) + right_status_offset,
+              " %"PRId64", %"PRId64" ", column, row);
+}
+
+bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, char** argv, void** user_data)
+{
+     // NOTE: need to set these in this module
+     g_terminal_dimensions = terminal_dimensions;
+
+     // setup the config's state
+     ConfigState_t* config_state = calloc(1, sizeof(*config_state));
+     if(!config_state){
+          ce_message("failed to allocate config state");
+          return false;
+     }
+
+     config_state->tab_head = calloc(1, sizeof(*config_state->tab_head));
+     if(!config_state->tab_head){
+          ce_message("failed to allocate tab");
+          return false;
+     }
+
+     config_state->tab_current = config_state->tab_head;
+
+     config_state->tab_head->view_head = calloc(1, sizeof(*config_state->tab_head->view_head));
+     if(!config_state->tab_head->view_head){
+          ce_message("failed to allocate buffer view");
+          return false;
+     }
+
+     config_state->view_input = calloc(1, sizeof(*config_state->view_input));
+     if(!config_state->view_input){
+          ce_message("failed to allocate buffer view for input");
+          return false;
+     }
+
+     // setup input buffer
+     ce_alloc_lines(&config_state->input_buffer, 1);
+     initialize_buffer(&config_state->input_buffer);
+     config_state->input_buffer.name = strdup("[input]");
+     config_state->view_input->buffer = &config_state->input_buffer;
+
+     // setup buffer list buffer
+     config_state->buffer_list_buffer.name = strdup("[buffers]");
+     initialize_buffer(&config_state->buffer_list_buffer);
+     config_state->buffer_list_buffer.status = BS_READONLY;
+
+     config_state->mark_list_buffer.name = strdup("[marks]");
+     initialize_buffer(&config_state->mark_list_buffer);
+     config_state->mark_list_buffer.status = BS_READONLY;
+
+     config_state->yank_list_buffer.name = strdup("[yanks]");
+     initialize_buffer(&config_state->yank_list_buffer);
+     config_state->yank_list_buffer.status = BS_READONLY;
+
+     config_state->macro_list_buffer.name = strdup("[macros]");
+     initialize_buffer(&config_state->macro_list_buffer);
+     config_state->macro_list_buffer.status = BS_READONLY;
+
+     // if we reload, the shell command buffer may already exist, don't recreate it
+     BufferNode_t* itr = *head;
+     while(itr){
+          if(strcmp(itr->buffer->name, "[shell_output]") == 0){
+               config_state->shell_command_buffer = itr->buffer;
+          }
+          if(strcmp(itr->buffer->name, "[completions]") == 0){
+               config_state->completion_buffer = itr->buffer;
+          }
+          itr = itr->next;
+     }
+
+     if(!config_state->shell_command_buffer){
+          config_state->shell_command_buffer = calloc(1, sizeof(*config_state->shell_command_buffer));
+          config_state->shell_command_buffer->name = strdup("[shell_output]");
+          config_state->shell_command_buffer->status = BS_READONLY;
+          ce_alloc_lines(config_state->shell_command_buffer, 1);
+          BufferNode_t* new_buffer_node = ce_append_buffer_to_list(*head, config_state->shell_command_buffer);
+          if(!new_buffer_node){
+               ce_message("failed to add shell command buffer to list");
+               return false;
+          }
+     }
+
+     if(!config_state->completion_buffer){
+          config_state->completion_buffer = calloc(1, sizeof(*config_state->shell_command_buffer));
+          config_state->completion_buffer->name = strdup("[completions]");
+          config_state->completion_buffer->status = BS_READONLY;
+          BufferNode_t* new_buffer_node = ce_append_buffer_to_list(*head, config_state->completion_buffer);
+          if(!new_buffer_node){
+               ce_message("failed to add shell command buffer to list");
+               return false;
+          }
+     }
+
+     *user_data = config_state;
+
+     // setup state for each buffer
+     itr = *head;
+     while(itr){
+          initialize_buffer(itr->buffer);
+          itr = itr->next;
+     }
+
+     config_state->tab_current->view_head->buffer = (*head)->buffer;
+     config_state->tab_current->view_current = config_state->tab_current->view_head;
+
+     for(int i = 0; i < argc; ++i){
+          BufferNode_t* node = new_buffer_from_file(*head, argv[i]);
+
+          // if we loaded a file, set the view to point at the file
+          if(node){
+               if(i == 0){
+                    config_state->tab_current->view_current->buffer = node->buffer;
+               }else{
+                    ce_split_view(config_state->tab_current->view_head, node->buffer, true);
+               }
+          }
+     }
+
+     // update view boundaries now that we have split them
+     Point_t top_left;
+     Point_t bottom_right;
+     get_terminal_view_rect(config_state->tab_head, &top_left, &bottom_right);
+     ce_calc_views(config_state->tab_current->view_head, top_left, bottom_right);
+
+     config_state->line_number_type = LNT_NONE;
+     config_state->highlight_line_type = HLT_ENTIRE_LINE;
+
+#if 0
+     // enable mouse events
+     mousemask(~((mmask_t)0), NULL);
+     mouseinterval(0);
+#endif
+
+     input_history_init(&config_state->shell_command_history);
+     input_history_init(&config_state->shell_input_history);
+     input_history_init(&config_state->search_history);
+     input_history_init(&config_state->load_file_history);
+
+     // setup colors for syntax highlighting
+     init_pair(S_NORMAL, COLOR_FOREGROUND, COLOR_BACKGROUND);
+     init_pair(S_KEYWORD, COLOR_BLUE, COLOR_BACKGROUND);
+     init_pair(S_TYPE, COLOR_BRIGHT_BLUE, COLOR_BACKGROUND);
+     init_pair(S_CONTROL, COLOR_YELLOW, COLOR_BACKGROUND);
+     init_pair(S_COMMENT, COLOR_GREEN, COLOR_BACKGROUND);
+     init_pair(S_STRING, COLOR_RED, COLOR_BACKGROUND);
+     init_pair(S_CONSTANT, COLOR_MAGENTA, COLOR_BACKGROUND);
+     init_pair(S_CONSTANT_NUMBER, COLOR_MAGENTA, COLOR_BACKGROUND);
+     init_pair(S_MATCHING_PARENS, COLOR_BRIGHT_WHITE, COLOR_BACKGROUND);
+     init_pair(S_PREPROCESSOR, COLOR_BRIGHT_MAGENTA, COLOR_BACKGROUND);
+     init_pair(S_FILEPATH, COLOR_BLUE, COLOR_BACKGROUND);
+     init_pair(S_DIFF_ADDED, COLOR_GREEN, COLOR_BACKGROUND);
+     init_pair(S_DIFF_REMOVED, COLOR_RED, COLOR_BACKGROUND);
+     init_pair(S_DIFF_HEADER, COLOR_BRIGHT_WHITE, COLOR_BACKGROUND);
+
+     init_pair(S_NORMAL_HIGHLIGHTED, COLOR_FOREGROUND, COLOR_WHITE);
+     init_pair(S_KEYWORD_HIGHLIGHTED, COLOR_BLUE, COLOR_WHITE);
+     init_pair(S_TYPE_HIGHLIGHTED, COLOR_BRIGHT_BLUE, COLOR_WHITE);
+     init_pair(S_CONTROL_HIGHLIGHTED, COLOR_YELLOW, COLOR_WHITE);
+     init_pair(S_COMMENT_HIGHLIGHTED, COLOR_GREEN, COLOR_WHITE);
+     init_pair(S_STRING_HIGHLIGHTED, COLOR_RED, COLOR_WHITE);
+     init_pair(S_CONSTANT_HIGHLIGHTED, COLOR_MAGENTA, COLOR_WHITE);
+     init_pair(S_CONSTANT_NUMBER_HIGHLIGHTED, COLOR_MAGENTA, COLOR_WHITE);
+     init_pair(S_MATCHING_PARENS_HIGHLIGHTED, COLOR_BRIGHT_WHITE, COLOR_WHITE);
+     init_pair(S_PREPROCESSOR_HIGHLIGHTED, COLOR_BRIGHT_MAGENTA, COLOR_WHITE);
+     init_pair(S_FILEPATH_HIGHLIGHTED, COLOR_BLUE, COLOR_WHITE);
+     init_pair(S_DIFF_ADDED_HIGHLIGHTED, COLOR_GREEN, COLOR_WHITE);
+     init_pair(S_DIFF_REMOVED_HIGHLIGHTED, COLOR_RED, COLOR_WHITE);
+     init_pair(S_DIFF_HEADER_HIGHLIGHTED, COLOR_BRIGHT_WHITE, COLOR_WHITE);
+
+     init_pair(S_NORMAL_CURRENT_LINE, COLOR_FOREGROUND, COLOR_BRIGHT_BLACK);
+     init_pair(S_KEYWORD_CURRENT_LINE, COLOR_BLUE, COLOR_BRIGHT_BLACK);
+     init_pair(S_TYPE_CURRENT_LINE, COLOR_BRIGHT_BLUE, COLOR_BRIGHT_BLACK);
+     init_pair(S_CONTROL_CURRENT_LINE, COLOR_YELLOW, COLOR_BRIGHT_BLACK);
+     init_pair(S_COMMENT_CURRENT_LINE, COLOR_GREEN, COLOR_BRIGHT_BLACK);
+     init_pair(S_STRING_CURRENT_LINE, COLOR_RED, COLOR_BRIGHT_BLACK);
+     init_pair(S_CONSTANT_CURRENT_LINE, COLOR_MAGENTA, COLOR_BRIGHT_BLACK);
+     init_pair(S_CONSTANT_NUMBER_CURRENT_LINE, COLOR_MAGENTA, COLOR_BRIGHT_BLACK);
+     init_pair(S_MATCHING_PARENS_CURRENT_LINE, COLOR_BRIGHT_WHITE, COLOR_BRIGHT_BLACK);
+     init_pair(S_PREPROCESSOR_CURRENT_LINE, COLOR_BRIGHT_MAGENTA, COLOR_BRIGHT_BLACK);
+     init_pair(S_FILEPATH_CURRENT_LINE, COLOR_BLUE, COLOR_BRIGHT_BLACK);
+     init_pair(S_DIFF_ADDED_CURRENT_LINE, COLOR_GREEN, COLOR_BRIGHT_BLACK);
+     init_pair(S_DIFF_REMOVED_CURRENT_LINE, COLOR_RED, COLOR_BRIGHT_BLACK);
+     init_pair(S_DIFF_HEADER_CURRENT_LINE, COLOR_BRIGHT_WHITE, COLOR_BRIGHT_BLACK);
+
+     init_pair(S_LINE_NUMBERS, COLOR_WHITE, COLOR_BACKGROUND);
+
+     init_pair(S_TRAILING_WHITESPACE, COLOR_FOREGROUND, COLOR_RED);
+
+     init_pair(S_BORDERS, COLOR_WHITE, COLOR_BACKGROUND);
+
+     init_pair(S_TAB_NAME, COLOR_WHITE, COLOR_BACKGROUND);
+     init_pair(S_CURRENT_TAB_NAME, COLOR_CYAN, COLOR_BACKGROUND);
+
+     init_pair(S_VIEW_STATUS, COLOR_CYAN, COLOR_BACKGROUND);
+     init_pair(S_INPUT_STATUS, COLOR_RED, COLOR_BACKGROUND);
+     init_pair(S_AUTO_COMPLETE, COLOR_WHITE, COLOR_BACKGROUND);
+
+     define_key(NULL, KEY_BACKSPACE);   // Blow away backspace
+     define_key("\x7F", KEY_BACKSPACE); // Backspace  (127) (0x7F) ASCII "DEL" Delete
+     define_key("\x15", KEY_NPAGE);     // ctrl + d    (21) (0x15) ASCII "NAK" Negative Acknowledgement
+     define_key("\x04", KEY_PPAGE);     // ctrl + u     (4) (0x04) ASCII "EOT" End of Transmission
+     define_key("\x11", KEY_CLOSE);     // ctrl + q    (17) (0x11) ASCII "DC1" Device Control 1
+     define_key("\x12", KEY_REDO);      // ctrl + r    (18) (0x12) ASCII "DC2" Device Control 2
+     define_key("\x17", KEY_SAVE);      // ctrl + w    (23) (0x17) ASCII "ETB" End of Transmission Block
+     define_key(NULL, KEY_ENTER);       // Blow away enter
+     define_key("\x0D", KEY_ENTER);     // Enter       (13) (0x0D) ASCII "CR"  NL Carriage Return
+
+     pthread_mutex_init(&draw_lock, NULL);
+     pthread_mutex_init(&shell_buffer_lock, NULL);
+
+     auto_complete_end(&config_state->auto_complete);
+     config_state->vim_state.insert_start = (Point_t){-1, -1};
+
+     // read in state file if it exists
+     // TODO: load this into a buffer instead of dealing with the freakin scanf nonsense
+     {
+          char path[128];
+          snprintf(path, 128, "%s/%s", getenv("HOME"), ".ce");
+
+          Buffer_t scrap_buffer = {};
+          if(ce_load_file(&scrap_buffer, path) && scrap_buffer.line_count){
+               ce_message("restoring state from %s", path);
+
+               int yank_lines = atoi(scrap_buffer.lines[0]);
+
+               Point_t start = {0, 1};
+               Point_t end = {0, start.y + (yank_lines - 1)};
+
+               if(yank_lines){
+                    end.x = ce_last_index(scrap_buffer.lines[end.y]);
+
+                    char* search_pattern = ce_dupe_string(&scrap_buffer, start, end);
+                    vim_yank_add(&config_state->vim_state.yank_head, '/', search_pattern, YANK_NORMAL);
+                    int rc = regcomp(&config_state->vim_state.search.regex, search_pattern, REG_EXTENDED);
+                    if(rc != 0){
+                         char error_buffer[BUFSIZ];
+                         regerror(rc, &config_state->vim_state.search.regex, error_buffer, BUFSIZ);
+                         ce_message("regcomp() failed: '%s'", error_buffer);
+                    }else{
+                         config_state->vim_state.search.valid_regex = true;
+                         ce_message("  search pattern '%s'", search_pattern);
+                    }
+               }
+
+               int64_t next_line = end.y + 1;
+               if(scrap_buffer.line_count > next_line){
+                    int shell_commands = atoi(scrap_buffer.lines[next_line]);
+                    next_line++;
+
+                    if(shell_commands){
+                         ce_message("  %d shell commands", shell_commands);
+
+                         for(int i = 0; i < shell_commands; ++i){
+                              config_state->shell_command_history.cur->entry = strdup(scrap_buffer.lines[next_line + i]);
+                              input_history_commit_current(&config_state->shell_command_history);
+                         }
+
+                         next_line += shell_commands;
+                    }
+               }
+
+               if(next_line < scrap_buffer.line_count){
+                    ce_message("  file cursor positions");
+               }
+
+               for(int64_t i = next_line; i < scrap_buffer.line_count; ++i){
+                    char* space = scrap_buffer.lines[i];
+                    while(*space && *space != ' ') space++;
+                    if(*space != ' ') break;
+
+                    char* filename = scrap_buffer.lines[i];
+                    ssize_t filename_len = space - filename;
+                    int line_number = atoi(space + 1);
+
+                    BufferNode_t* itr = *head;
+                    while(itr){
+                         if(strncmp(itr->buffer->name, filename, filename_len) == 0){
+                              ce_message(" '%s' at line %d", itr->buffer->name, line_number);
+                              itr->buffer->cursor.y = line_number;
+                              ce_move_cursor_to_soft_beginning_of_line(itr->buffer, &itr->buffer->cursor);
+                              BufferView_t* view = ce_buffer_in_view(config_state->tab_current->view_head, itr->buffer);
+                              if(view){
+                                   view->cursor = view->buffer->cursor;
+                                   center_view(view);
+                              }
+                              break;
+                         }
+                         itr = itr->next;
+                    }
+               }
+
+               ce_free_buffer(&scrap_buffer);
+          }
+     }
+
+     return true;
+}
+
+bool destroyer(BufferNode_t** head, void* user_data)
+{
+     ConfigState_t* config_state = user_data;
+
+     // write out file with some state we can use to restore
+     {
+          char path[128];
+          snprintf(path, 128, "%s/%s", getenv("HOME"), ".ce");
+
+          FILE* out_file = fopen(path, "w");
+          if(out_file){
+               // write out last searched text
+               VimYankNode_t* yank = vim_yank_find(config_state->vim_state.yank_head, '/');
+               if(yank){
+                    int64_t line_count = ce_count_string_lines(yank->text);
+                    fprintf(out_file, "%"PRId64"\n", line_count);
+                    fprintf(out_file, "%s\n", yank->text);
+               }else{
+                    fprintf(out_file, "0\n");
+               }
+
+               // shell command history
+               int64_t shell_command_count = 0;
+               InputHistoryNode_t* history_itr = config_state->shell_command_history.head;
+               while(history_itr && history_itr->entry){
+                    shell_command_count++;
+                    history_itr = history_itr->next;
+               }
+
+               fprintf(out_file, "%"PRId64"\n", shell_command_count);
+
+               history_itr = config_state->shell_command_history.head;
+               for(int32_t i = 0; i < shell_command_count; ++i){
+                    fprintf(out_file, "%s\n", history_itr->entry);
+                    history_itr = history_itr->next;
+               }
+
+               // TODO: vim last command
+
+               // write out all buffers and cursor positions
+               BufferNode_t* itr = *head;
+               while(itr){
+                    if(itr->buffer->status != BS_READONLY){
+                         // TODO: handle all tabs
+                         BufferView_t* view = ce_buffer_in_view(config_state->tab_current->view_head, itr->buffer);
+                         if(view){
+                              fprintf(out_file, "%s %"PRId64"\n", itr->buffer->name, view->cursor.y);
+                         }else{
+                              fprintf(out_file, "%s %"PRId64"\n", itr->buffer->name, itr->buffer->cursor.y);
+                         }
+                    }
+                    itr = itr->next;
+               }
+
+               fclose(out_file);
+          }
+     }
+
+     BufferNode_t* itr = *head;
+     while(itr){
+          free_buffer_state(itr->buffer->user_data);
+          itr->buffer->user_data = NULL;
+          itr = itr->next;
+     }
+
+     TabView_t* tab_itr = config_state->tab_head;
+     while(tab_itr){
+          if(tab_itr->view_head){
+               ce_free_views(&tab_itr->view_head);
+          }
+          tab_itr = tab_itr->next;
+     }
+
+     tab_itr = config_state->tab_head;
+     while(tab_itr){
+          TabView_t* tmp = tab_itr;
+          tab_itr = tab_itr->next;
+          free(tmp);
+     }
+
+     // input buffer
+     {
+          ce_free_buffer(&config_state->input_buffer);
+          free_buffer_state(config_state->input_buffer.user_data);
+          free(config_state->view_input);
+     }
+
+     if(config_state->shell_command_thread){
+          pthread_cancel(config_state->shell_command_thread);
+          pthread_join(config_state->shell_command_thread, NULL);
+     }
+
+     if(config_state->shell_input_thread){
+          pthread_cancel(config_state->shell_input_thread);
+          pthread_join(config_state->shell_input_thread, NULL);
+     }
+
+     free_buffer_state(config_state->buffer_list_buffer.user_data);
+     ce_free_buffer(&config_state->buffer_list_buffer);
+
+     free_buffer_state(config_state->mark_list_buffer.user_data);
+     ce_free_buffer(&config_state->mark_list_buffer);
+
+     free_buffer_state(config_state->yank_list_buffer.user_data);
+     ce_free_buffer(&config_state->yank_list_buffer);
+
+     free_buffer_state(config_state->macro_list_buffer.user_data);
+     ce_free_buffer(&config_state->macro_list_buffer);
+
+     // history
+     input_history_free(&config_state->shell_command_history);
+     input_history_free(&config_state->shell_input_history);
+     input_history_free(&config_state->search_history);
+     input_history_free(&config_state->load_file_history);
+
+     pthread_mutex_destroy(&draw_lock);
+     pthread_mutex_destroy(&shell_buffer_lock);
+
+     auto_complete_free(&config_state->auto_complete);
+
+     free(config_state->vim_state.last_insert_command);
+
+     ce_keys_free(&config_state->vim_state.command_head);
+     ce_keys_free(&config_state->vim_state.record_macro_head);
+
+     vim_yanks_free(&config_state->vim_state.yank_head);
+
+     vim_macros_free(&config_state->vim_state.macro_head);
+
+     VimMacroCommitNode_t* macro_commit_head = config_state->vim_state.macro_commit_current;
+     while(macro_commit_head && macro_commit_head->prev) macro_commit_head = macro_commit_head->prev;
+     vim_macro_commits_free(&macro_commit_head);
+
+     free(config_state);
+     return true;
 }
 
 bool key_handler(int key, BufferNode_t** head, void* user_data)
@@ -2083,7 +2301,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     }
 
                     // reload file
-                    if(buffer->readonly){
+                    if(buffer->status == BS_READONLY){
                          // NOTE: maybe ce_clear_lines shouldn't care about readonly
                          ce_clear_lines_readonly(buffer);
                     }else{
@@ -2260,18 +2478,49 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                }
           } break;
           }
+     }else{
+          switch(key){
+          default:
+               break;
+          case KEY_TAB:
+               if(auto_completing(&config_state->auto_complete)){
+                    char* complete = auto_complete_get_completion(&config_state->auto_complete, cursor->x);
+                    int64_t complete_len = strlen(complete);
+                    if(ce_insert_string(buffer, *cursor, complete)){
+                         Point_t save_cursor = *cursor;
+                         ce_move_cursor(buffer, cursor, (Point_t){complete_len, cursor->y});
+                         cursor->x++;
+                         ce_commit_insert_string(&buffer_state->commit_tail, save_cursor, save_cursor, *cursor, complete, BCC_KEEP_GOING);
+                    }else{
+                         free(complete);
+                    }
+                    calc_auto_complete_start_and_path(&config_state->auto_complete,
+                                                      buffer->lines[cursor->y],
+                                                      *cursor,
+                                                      config_state->completion_buffer);
+                    handled_key = true;
+                    key = 0;
+               }
+               break;
+          }
      }
 
      if(!handled_key){
           VimKeyHandlerResult_t vkh_result = vim_key_handler(key, &config_state->vim_state, config_state->tab_current->view_current->buffer,
                                                              &config_state->tab_current->view_current->cursor, &buffer_state->commit_tail,
-                                                             &buffer_state->vim_buffer_state, &config_state->auto_complete, false);
+                                                             &buffer_state->vim_buffer_state, false);
           if(vkh_result.type == VKH_HANDLED_KEY){
-               if(config_state->vim_state.mode == VM_INSERT && config_state->input && config_state->input_key == 6){
-                    calc_auto_complete_start_and_path(&config_state->auto_complete,
-                                                      buffer->lines[cursor->y],
-                                                      *cursor,
-                                                      config_state->completion_buffer);
+               if(config_state->vim_state.mode == VM_INSERT && config_state->input){
+                    switch(config_state->input_key){
+                    default:
+                         break;
+                    case 6: // load file
+                         calc_auto_complete_start_and_path(&config_state->auto_complete,
+                                                           buffer->lines[cursor->y],
+                                                           *cursor,
+                                                           config_state->completion_buffer);
+                         break;
+                    }
                }
           }else if(vkh_result.type == VKH_COMPLETED_ACTION_SUCCESS){
                if(vkh_result.completed_action.change.type == VCT_DELETE &&
@@ -2296,7 +2545,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                }else if(vkh_result.completed_action.motion.type == VMT_SEARCH ||
                         vkh_result.completed_action.motion.type == VMT_SEARCH_WORD_UNDER_CURSOR ||
                         vkh_result.completed_action.motion.type == VMT_GOTO_MARK){
-                    center_view(buffer_view);
+                    center_view_when_cursor_outside_portion(buffer_view, 0.25f, 0.75f);
                }
           }else if(vkh_result.type == VKH_UNHANDLED_KEY){
                switch(key){
@@ -2360,7 +2609,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     case '.':
                     {
                          vim_action_apply(&config_state->vim_state.last_action, buffer, cursor, &config_state->vim_state,
-                                          &buffer_state->commit_tail, &buffer_state->vim_buffer_state, &config_state->auto_complete);
+                                          &buffer_state->commit_tail, &buffer_state->vim_buffer_state);
 
                          if(config_state->vim_state.mode != VM_INSERT || !config_state->vim_state.last_insert_command ||
                             config_state->vim_state.last_action.change.type == VCT_PLAY_MACRO) break;
@@ -2371,7 +2620,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          while(*cmd_itr){
                               vim_key_handler(*cmd_itr, &config_state->vim_state, config_state->tab_current->view_current->buffer,
                                               &config_state->tab_current->view_current->cursor, &buffer_state->commit_tail,
-                                              &buffer_state->vim_buffer_state, &config_state->auto_complete, true);
+                                              &buffer_state->vim_buffer_state, true);
                               cmd_itr++;
                          }
 
@@ -2417,7 +2666,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               uint64_t unsaved_buffers = 0;
                               BufferNode_t* itr = *head;
                               while(itr){
-                                   if(!itr->buffer->readonly && itr->buffer->modified) unsaved_buffers++;
+                                   if(itr->buffer->status == BS_MODIFIED) unsaved_buffers++;
                                    itr = itr->next;
                               }
 
@@ -2503,14 +2752,15 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
                               if(empty_first_line) ce_remove_line(config_state->view_input->buffer, 0);
                          }else{
+                              buffer->cursor = config_state->tab_current->view_current->cursor;
+
                               // try to find a better place to put the cursor to start
                               BufferNode_t* itr = *head;
                               int64_t buffer_index = 1;
-                              bool found_good_buffer = false;
+                              bool found_good_buffer_index = false;
                               while(itr){
-                                   if(!itr->buffer->readonly && !ce_buffer_in_view(config_state->tab_current->view_head, itr->buffer)){
-                                        config_state->tab_current->view_current->cursor.y = buffer_index;
-                                        found_good_buffer = true;
+                                   if(itr->buffer->status != BS_READONLY && !ce_buffer_in_view(config_state->tab_current->view_head, itr->buffer)){
+                                        found_good_buffer_index = true;
                                         break;
                                    }
                                    itr = itr->next;
@@ -2521,15 +2771,14 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               config_state->tab_current->view_current->buffer->cursor = *cursor;
                               config_state->tab_current->view_current->buffer = &config_state->buffer_list_buffer;
                               config_state->tab_current->view_current->top_row = 0;
-                              config_state->tab_current->view_current->cursor = (Point_t){0, found_good_buffer ? buffer_index : 1};
-
+                              config_state->tab_current->view_current->cursor = (Point_t){0, found_good_buffer_index ? buffer_index : 1};
                          }
                          break;
                     case 'u':
                          if(buffer_state->commit_tail && buffer_state->commit_tail->commit.type != BCT_NONE){
                               ce_commit_undo(buffer, &buffer_state->commit_tail, cursor);
                               if(buffer_state->commit_tail->commit.type == BCT_NONE){
-                                   buffer->modified = false;
+                                   buffer->status = BS_NONE;
                               }
                          }
 
@@ -2659,16 +2908,16 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     break;
                     case '/':
                     {
-                         input_start(config_state, "Search", key);
-                         config_state->vim_state.search_direction = CE_DOWN;
-                         config_state->vim_state.start_search = *cursor;
+                         input_start(config_state, "Regex Search", key);
+                         config_state->vim_state.search.direction = CE_DOWN;
+                         config_state->vim_state.search.start = *cursor;
                          break;
                     }
                     case '?':
                     {
-                         input_start(config_state, "Reverse Search", key);
-                         config_state->vim_state.search_direction = CE_UP;
-                         config_state->vim_state.start_search = *cursor;
+                         input_start(config_state, "Reverse Regex Search", key);
+                         config_state->vim_state.search.direction = CE_UP;
+                         config_state->vim_state.search.start = *cursor;
                          break;
                     }
                     case '=':
@@ -2840,6 +3089,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          break;
                     case 6: // Ctrl + f
                     {
+                         buffer->cursor = buffer_view->cursor;
+
                          input_start(config_state, "Load File", key);
                          calc_auto_complete_start_and_path(&config_state->auto_complete,
                                                            config_state->view_input->buffer->lines[0],
@@ -2901,36 +3152,43 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
      if(config_state->input && (config_state->input_key == '/' || config_state->input_key == '?')){
           if(config_state->view_input->buffer->lines == NULL){
                pthread_mutex_lock(&view_input_save_lock);
-               config_state->tab_current->view_input_save->cursor = config_state->vim_state.start_search;
+               config_state->tab_current->view_input_save->cursor = config_state->vim_state.search.start;
                pthread_mutex_unlock(&view_input_save_lock);
           }else{
-               regex_t regex;
-               int rc = regcomp(&regex, config_state->view_input->buffer->lines[0], REG_EXTENDED);
-               if(rc == 0){
-                    Point_t match = {};
-                    int64_t match_len = 0;
-                    if(config_state->view_input->buffer->lines[0][0] &&
-                       ce_find_regex(config_state->tab_current->view_input_save->buffer,
-                                     config_state->vim_state.start_search, &regex, &match,
-                                     &match_len, config_state->vim_state.search_direction)){
-                         pthread_mutex_lock(&view_input_save_lock);
-                         ce_set_cursor(config_state->tab_current->view_input_save->buffer,
-                                       &config_state->tab_current->view_input_save->cursor, match);
-                         pthread_mutex_unlock(&view_input_save_lock);
-                         center_view(config_state->tab_current->view_input_save);
+               size_t search_len = strlen(config_state->view_input->buffer->lines[0]);
+               if(search_len){
+                    int rc = regcomp(&config_state->vim_state.search.regex, config_state->view_input->buffer->lines[0], REG_EXTENDED);
+                    if(rc == 0){
+                         config_state->vim_state.search.valid_regex = true;
+
+                         Point_t match = {};
+                         int64_t match_len = 0;
+                         if(config_state->view_input->buffer->lines[0][0] &&
+                            ce_find_regex(config_state->tab_current->view_input_save->buffer,
+                                          config_state->vim_state.search.start, &config_state->vim_state.search.regex, &match,
+                                          &match_len, config_state->vim_state.search.direction)){
+                              pthread_mutex_lock(&view_input_save_lock);
+                              ce_set_cursor(config_state->tab_current->view_input_save->buffer,
+                                            &config_state->tab_current->view_input_save->cursor, match);
+                              pthread_mutex_unlock(&view_input_save_lock);
+                              center_view(config_state->tab_current->view_input_save);
+                         }else{
+                              pthread_mutex_lock(&view_input_save_lock);
+                              config_state->tab_current->view_input_save->cursor = config_state->vim_state.search.start;
+                              pthread_mutex_unlock(&view_input_save_lock);
+                              center_view(config_state->tab_current->view_input_save);
+                         }
                     }else{
-                         pthread_mutex_lock(&view_input_save_lock);
-                         config_state->tab_current->view_input_save->cursor = config_state->vim_state.start_search;
-                         pthread_mutex_unlock(&view_input_save_lock);
-                         center_view(config_state->tab_current->view_input_save);
+                         config_state->vim_state.search.valid_regex = false;
+     #if DEBUG
+                         // NOTE: this might be too noisy in practice
+                         char error_buffer[BUFSIZ];
+                         regerror(rc, &regex, error_buffer, BUFSIZ);
+                         ce_message("regcomp() failed: '%s'", error_buffer);
+     #endif
                     }
                }else{
-#if DEBUG
-                    // NOTE: this might be too noisy in practice
-                    char error_buffer[BUFSIZ];
-                    regerror(rc, &regex, error_buffer, BUFSIZ);
-                    ce_message("regcomp() failed: '%s'", error_buffer);
-#endif
+                    config_state->vim_state.search.valid_regex = false;
                }
           }
      }
@@ -2943,49 +3201,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
      config_state->last_key = key;
      return true;
-}
-
-void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferView_t* overrideable_view, VimMode_t vim_mode, int last_key,
-                        char recording_macro)
-{
-     Buffer_t* buffer = view->buffer;
-     if(view->next_horizontal) draw_view_statuses(view->next_horizontal, current_view, overrideable_view, vim_mode, last_key, recording_macro);
-     if(view->next_vertical) draw_view_statuses(view->next_vertical, current_view, overrideable_view, vim_mode, last_key, recording_macro);
-
-     // NOTE: mode names need space at the end for OCD ppl like me
-     static const char* mode_names[] = {
-          "NORMAL ",
-          "INSERT ",
-          "VISUAL ",
-          "VISUAL LINE ",
-          "VISUAL BLOCK ",
-     };
-
-     attron(COLOR_PAIR(S_BORDERS));
-     move(view->bottom_right.y, view->top_left.x);
-     for(int i = view->top_left.x; i < view->bottom_right.x; ++i) addch(ACS_HLINE);
-     int right_status_offset = 0;
-     if(view->bottom_right.x == (g_terminal_dimensions->x - 1)){
-          addch(ACS_HLINE);
-          right_status_offset = 1;
-     }
-
-     // TODO: handle case where filename is too long to fit in the status bar
-     attron(COLOR_PAIR(S_VIEW_STATUS));
-     mvprintw(view->bottom_right.y, view->top_left.x + 1, " %s%s%s ",
-              view == current_view ? mode_names[vim_mode] : "",
-              buffer_flag_string(buffer), buffer->filename);
-#if 0
-     if(view == current_view) printw("%s %d ", keyname(last_key), last_key);
-#endif
-     if(view == overrideable_view) printw("^ ");
-     if(view == current_view && recording_macro) printw("RECORDING %c ", recording_macro);
-     int64_t row = view->cursor.y + 1;
-     int64_t column = view->cursor.x + 1;
-     int64_t digits_in_line = count_digits(row);
-     digits_in_line += count_digits(column);
-     mvprintw(view->bottom_right.y, (view->bottom_right.x - (digits_in_line + 5)) + right_status_offset,
-              " %"PRId64", %"PRId64" ", column, row);
 }
 
 void view_drawer(const BufferNode_t* head, void* user_data)
@@ -3096,8 +3311,11 @@ void view_drawer(const BufferNode_t* head, void* user_data)
           highlight_line_type = HLT_NONE;
      }
 
+     regex_t* highlight_regex = NULL;
+     if(config_state->vim_state.search.valid_regex) highlight_regex = &config_state->vim_state.search.regex;
+
      // NOTE: always draw from the head
-     ce_draw_views(config_state->tab_current->view_head, search, config_state->line_number_type, highlight_line_type);
+     ce_draw_views(config_state->tab_current->view_head, highlight_regex, config_state->line_number_type, highlight_line_type);
 
      draw_view_statuses(config_state->tab_current->view_head, config_state->tab_current->view_current,
                         config_state->tab_current->view_overrideable, config_state->vim_state.mode, config_state->last_key,

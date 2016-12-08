@@ -2382,8 +2382,8 @@ TEST(get_line_number_column_width)
 
      EXPECT(ce_get_line_number_column_width(LNT_RELATIVE, 2500, 0, 15) == 3);
      EXPECT(ce_get_line_number_column_width(LNT_RELATIVE, 2500, 0, 150) == 4);
-     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE, 100, 0, 15) == 3);
-     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE, 100, 0, 150) == 4);
+     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE, 101, 0, 15) == 3);
+     EXPECT(ce_get_line_number_column_width(LNT_RELATIVE, 101, 0, 150) == 4);
 }
 
 TEST(point_after)

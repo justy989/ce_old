@@ -243,7 +243,7 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                          }
                     }
 
-                    if(all_whitespace){
+                    if(all_whitespace && cursor->x > 0){
                          Point_t start = {0, cursor->y};
                          Point_t end = {cursor->x - 1, cursor->y};
                          char* removed_str = ce_dupe_string(buffer, start, end);

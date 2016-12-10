@@ -2248,10 +2248,13 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           if(buffer == &config_state->terminal.buffer){
                if(key != KEY_ESCAPE){
                     buffer_view->cursor = config_state->terminal.cursor;
-                    if(buffer_view->cursor.x < (config_state->terminal.width - 1)){
-                         buffer_view->cursor.x++;
+                    if(terminal_send_key(&config_state->terminal, key)){
+                         handled_key = true;
+                         if(buffer_view->cursor.x < (config_state->terminal.width - 1)){
+                              buffer_view->cursor.x++;
+                         }
+                         view_follow_cursor(buffer_view, config_state->line_number_type);
                     }
-                    if(terminal_send_key(&config_state->terminal, key)) handled_key = true;
                }
           }else{
                switch(key){
@@ -2328,6 +2331,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
                if(config_state->vim_state.mode == VM_INSERT && buffer_view->buffer == &config_state->terminal.buffer){
                     buffer_view->cursor = config_state->terminal.cursor;
+                    view_follow_cursor(buffer_view, config_state->line_number_type);
                }
           }else if(vkh_result.type == VKH_UNHANDLED_KEY){
                switch(key){
@@ -2869,11 +2873,25 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                    ce_message("pthread_create() for terminal_check_update() failed");
                                    break;
                               }
+
+                              config_state->vim_state.mode = VM_INSERT;
+                              buffer_view->buffer = &config_state->terminal.buffer;
+                              buffer_view->cursor = config_state->terminal.cursor;
+                              buffer_view->top_row = 0;
+                              buffer_view->left_column = 0;
+                         }else{
+                              BufferView_t* view = ce_buffer_in_view(config_state->tab_current->view_head, &config_state->terminal.buffer);
+                              if(view){
+                                   config_state->tab_current->view_current = view;
+                              }else{
+                                   buffer_view->buffer = &config_state->terminal.buffer;
+                                   buffer_view->cursor = config_state->terminal.cursor;
+                                   buffer_view->top_row = 0;
+                                   buffer_view->left_column = 0;
+                                   view_follow_cursor(buffer_view, config_state->line_number_type);
+                              }
                          }
 
-                         buffer_view->buffer = &config_state->terminal.buffer;
-                         buffer_view->cursor = (Point_t){0, 0};
-                         center_view(buffer_view);
                     } break;
                     case 14: // Ctrl + n
                          if(config_state->input) break;

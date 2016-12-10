@@ -48,8 +48,7 @@ Ctrl+w|save buffer
 Ctrl+a|save buffer as new filename
 Ctrl+e|open new unnamed buffer
 Ctrl+t|create new tab
-Ctrl+x|shell command
-Ctrl+i|send shell command input
+Ctrl+x|start/resume dumb terminal
 Ctrl+u|page up
 Ctrl+d|page down
 Ctrl+y|confirm action (used to perform actions based on current buffer)

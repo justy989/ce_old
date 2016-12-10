@@ -29,6 +29,11 @@ const char* buffer_flag_string(Buffer_t* buffer)
      return "";
 }
 
+void sigint_handler(int signal)
+{
+     ce_message("recieved signal %d", signal);
+}
+
 pthread_mutex_t draw_lock;
 pthread_mutex_t view_input_save_lock;
 
@@ -636,8 +641,8 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
      assert(line < buffer->line_count);
 
      char filename[BUFSIZ];
-     char line_number[BUFSIZ];
-     char column_number[BUFSIZ];
+     char line_number_str[BUFSIZ];
+     char column_number_str[BUFSIZ];
 
      // handle git diff format
      if(buffer->lines[line][0] == '@' && buffer->lines[line][1] == '@'){
@@ -668,8 +673,8 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
 
           int64_t line_number_len = comma - (plus + 1);
           assert(line_number_len < BUFSIZ);
-          strncpy(line_number, plus + 1, line_number_len);
-          line_number[line_number_len] = 0;
+          strncpy(line_number_str, plus + 1, line_number_len);
+          line_number_str[line_number_len] = 0;
      }else{
           // handle grep and cscope formats
           char* file_end = strpbrk(buffer->lines[line], ": ");
@@ -697,11 +702,11 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
           }
 
           int64_t line_number_len = line_number_end_delim - (line_number_begin_delim + 1);
-          strncpy(line_number, line_number_begin_delim + 1, line_number_len);
-          line_number[line_number_len] = 0;
+          strncpy(line_number_str, line_number_begin_delim + 1, line_number_len);
+          line_number_str[line_number_len] = 0;
 
           bool all_digits = true;
-          for(char* c = line_number; *c; c++){
+          for(char* c = line_number_str; *c; c++){
                if(!isdigit(*c)){
                     all_digits = false;
                     break;
@@ -713,11 +718,11 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
           char* third_colon = strchr(line_number_end_delim + 1, ':');
           if(third_colon){
                line_number_len = third_colon - (line_number_end_delim + 1);
-               strncpy(column_number, line_number_end_delim + 1, line_number_len);
-               column_number[line_number_len] = 0;
+               strncpy(column_number_str, line_number_end_delim + 1, line_number_len);
+               column_number_str[line_number_len] = 0;
 
                all_digits = true;
-               for(char* c = column_number; *c; c++){
+               for(char* c = column_number_str; *c; c++){
                     if(!isdigit(*c)){
                          all_digits = false;
                          break;
@@ -725,31 +730,33 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
                }
 
                if(!all_digits){
-                    column_number[0] = 0;
+                    column_number_str[0] = 0;
                }
           }
      }
 
-     Buffer_t* new_buffer = open_file_buffer(head, filename);
-     if(new_buffer){
-          view->buffer = new_buffer;
-          Point_t dst = {0, atoi(line_number) - 1}; // line numbers are 1 indexed
-          ce_set_cursor(new_buffer, &view->cursor, dst);
-
-          // check for optional column number
-          if(column_number[0]){
-               dst.x = atoi(column_number) - 1; // column numbers are 1 indexed
-               assert(dst.x >= 0);
+     if(line_number_str[0]){
+          Buffer_t* new_buffer = open_file_buffer(head, filename);
+          if(new_buffer){
+               view->buffer = new_buffer;
+               Point_t dst = {0, atoi(line_number_str) - 1}; // line numbers are 1 indexed
                ce_set_cursor(new_buffer, &view->cursor, dst);
-          }else{
-               ce_move_cursor_to_soft_beginning_of_line(new_buffer, &view->cursor);
-          }
 
-          center_view(view);
-          BufferView_t* command_view = ce_buffer_in_view(head_view, buffer);
-          if(command_view) command_view->top_row = line;
-          *last_jump = line;
-          return true;
+               // check for optional column number
+               if(column_number_str[0]){
+                    dst.x = atoi(column_number_str) - 1; // column numbers are 1 indexed
+                    assert(dst.x >= 0);
+                    ce_set_cursor(new_buffer, &view->cursor, dst);
+               }else{
+                    ce_move_cursor_to_soft_beginning_of_line(new_buffer, &view->cursor);
+               }
+
+               center_view(view);
+               BufferView_t* command_view = ce_buffer_in_view(head_view, buffer);
+               if(command_view) command_view->top_row = line;
+               *last_jump = line;
+               return true;
+          }
      }
 
      return false;
@@ -1593,7 +1600,7 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferVi
      mvprintw(view->bottom_right.y, view->top_left.x + 1, " %s%s%s ",
               view == current_view ? mode_names[vim_mode] : "",
               buffer_flag_string(buffer), buffer->filename);
-#if 0
+#if 1
      if(view == current_view) printw("%s %d ", keyname(last_key), last_key);
 #endif
      if(view == overrideable_view) printw("^ ");
@@ -1872,6 +1879,14 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
 
                ce_free_buffer(&scrap_buffer);
           }
+     }
+
+     // register ctrl + c signal handler
+     struct sigaction sa = {};
+     sa.sa_handler = sigint_handler;
+     sigemptyset(&sa.sa_mask);
+     if(sigaction(SIGINT, &sa, NULL) == -1){
+          ce_message("failed to register ctrl+c (SIGINT) signal handler.");
      }
 
      view_drawer(*user_data);
@@ -2249,6 +2264,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     buffer_view->cursor = config_state->terminal.cursor;
                     if(terminal_send_key(&config_state->terminal, key)){
                          handled_key = true;
+                         key = 0;
                          if(buffer_view->cursor.x < (config_state->terminal.width - 1)){
                               buffer_view->cursor.x++;
                          }

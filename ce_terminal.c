@@ -17,14 +17,16 @@ void handle_sigchld(int signal)
 
      ce_message("terminal shell saw signal: %d", signal);
 
-     if((p = waitpid(pid, &stat, WNOHANG)) < 0){
-          ce_message("terminal waiting for shell pid %d failed: %s\n", pid, strerror(errno));
-     }
+     if(signal != SIGINT){
+          if((p = waitpid(pid, &stat, WNOHANG)) < 0){
+               ce_message("terminal waiting for shell pid %d failed: %s\n", pid, strerror(errno));
+          }
 
-     if (pid != p) return;
+          if (pid != p) return;
 
-     if(!WIFEXITED(stat) || WEXITSTATUS(stat)){
-          ce_message("terminal shell child finished with error '%d'\n", stat);
+          if(!WIFEXITED(stat) || WEXITSTATUS(stat)){
+               ce_message("terminal shell child finished with error '%d'\n", stat);
+          }
      }
 }
 
@@ -210,6 +212,10 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height)
 
 void terminal_free(Terminal_t* term)
 {
+     if(term->is_alive){
+          kill(pid, SIGHUP);
+     }
+
      term->is_updated = false;
      term->is_alive = false;
 
@@ -230,7 +236,10 @@ bool terminal_resize(Terminal_t* term, int64_t width, int64_t height)
 
 bool terminal_send_key(Terminal_t* term, int key)
 {
-     // conversion
+     int size = 1;
+     const char* string = NULL;
+
+     // conversion table
      switch(key){
      case 343: // enter
           key = '\r';
@@ -238,12 +247,36 @@ bool terminal_send_key(Terminal_t* term, int key)
      case 263: // backspace
           key = '\b';
           break;
+     case -1: // ctrl + c
+          key = 3; // End of Text
+          break;
+     case 259:
+          string = "\033[A"; // CSI move up
+          size = 3;
+          break;
+     case 258:
+          string = "\033[B"; // CSI move down
+          size = 3;
+          break;
+#if 0
+     // when I send left I get back a backspace which is weird?
+     case 260:
+          string = "\033[D"; // CSI move left
+          size = 3;
+          break;
+     case 261:
+          string = "\033[C"; // CSI move right
+          size = 3;
+          break;
+#endif
      }
 
      char character = (char)(key);
+     if(!string) string = &character;
+
      // TODO: get mutex
 
-     int rc = write(term->fd, &character, 1);
+     int rc = write(term->fd, string, size);
      if(rc < 0){
           ce_message("%s() write() to terminal failed: %s", __FUNCTION__, strerror(errno));
           return false;

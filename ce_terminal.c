@@ -155,7 +155,7 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height)
           setenv("USER", pw->pw_name, 1);
           setenv("SHELL", sh, 1);
           setenv("HOME", pw->pw_dir, 1);
-          setenv("TERM", "dumb", 1);
+          setenv("TERM", "dumb", 1); // we can change this to "urxvt" when we implement all VT102 commands
 
           // resetting signals
           signal(SIGCHLD, SIG_DFL);
@@ -165,8 +165,8 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height)
           signal(SIGTERM, SIG_DFL);
           signal(SIGALRM, SIG_DFL);
 
-          char** args = NULL;
-          execvp(sh, args);
+          char** arg = NULL;
+          execvp(sh, arg);
           _exit(1);
      } break;
      default:
@@ -190,6 +190,8 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height)
           return false;
      }
 
+     term->buffer.name = strdup("[terminal]");
+
      term->cursor = (Point_t){0, 0};
      term->is_alive = true;
      return true;
@@ -203,7 +205,7 @@ void terminal_free(Terminal_t* term)
      term->height = 0;
      term->fd = 0;
 
-     pthread_join(term->reader_thread, NULL);
+     pthread_kill(term->reader_thread, 0);
      ce_free_buffer(&term->buffer);
 }
 

@@ -8,7 +8,8 @@
 // ce's virtual terminal
 
 typedef struct{
-     volatile bool is_alive;
+     bool is_alive;
+     bool is_updated;
 
      Point_t cursor;
 

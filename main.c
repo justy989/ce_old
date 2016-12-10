@@ -57,7 +57,6 @@ typedef struct Config_t{
      ce_initializer* initializer;
      ce_destroyer* destroyer;
      ce_key_handler* key_handler;
-     ce_view_drawer* view_drawer;
 } Config_t;
 
 bool config_open(Config_t* config, const char* path)
@@ -82,9 +81,6 @@ bool config_open(Config_t* config, const char* path)
 
      config->key_handler = dlsym(config->so_handle, "key_handler");
      if(!config->key_handler) ce_message("no key_handler() found in '%s', using default", path);
-
-     config->view_drawer = dlsym(config->so_handle, "view_drawer");
-     if(!config->view_drawer) ce_message("no draw_view() found in '%s', using default", path);
 
      return true;
 }
@@ -335,9 +331,6 @@ int main(int argc, char** argv)
 
           // ncurses macro that gets height and width
           getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);
-
-          // user-defined or default draw_view()
-          current_config.view_drawer(buffer_list_head, user_data);
 
           int key = getch();
           if(key == KEY_F(5)){

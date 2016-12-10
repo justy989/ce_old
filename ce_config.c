@@ -43,7 +43,37 @@ int64_t count_digits(int64_t n)
      return count;
 }
 
-void view_drawer(const BufferNode_t* head, void* user_data);
+void view_drawer(void* user_data);
+
+
+void terminal_check_update_cleanup(void* data)
+{
+     (void)(data);
+
+     // release locks we could be holding
+     pthread_mutex_unlock(&draw_lock);
+}
+
+void* terminal_check_update(void* data)
+{
+     pthread_cleanup_push(terminal_check_update_cleanup, NULL);
+
+     ConfigState_t* config_state = data;
+     while(config_state->terminal.is_alive){
+          if(config_state->terminal.is_updated){
+               config_state->terminal.is_updated = false;
+               if(config_state->tab_current->view_current->buffer == &config_state->terminal.buffer){
+                    config_state->tab_current->view_current->cursor = config_state->terminal.cursor;
+               }
+               view_drawer(data);
+          }else{
+               usleep(1000);
+          }
+     }
+
+     pthread_cleanup_pop(NULL);
+     return NULL;
+}
 
 bool input_history_init(InputHistory_t* history)
 {
@@ -1180,17 +1210,6 @@ pid_t bidirectional_popen(const char* cmd, int* in_fd, int* out_fd)
      return pid;
 }
 
-void redraw_if_shell_command_buffer_in_view(BufferView_t* view_head, Buffer_t* shell_command_buffer,
-                                            BufferNode_t* head_buffer_node, void* user_data)
-{
-     BufferView_t* command_view = ce_buffer_in_view(view_head, shell_command_buffer);
-     if(command_view && shell_command_buffer->line_count > command_view->top_row &&
-         shell_command_buffer->line_count <
-        (command_view->top_row + (command_view->bottom_right.y - command_view->top_left.y))){
-          view_drawer(head_buffer_node, user_data);
-     }
-}
-
 void update_completion_buffer(Buffer_t* completion_buffer, AutoComplete_t* auto_complete, const char* match)
 {
      assert(completion_buffer->status == BS_READONLY);
@@ -1858,6 +1877,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
           }
      }
 
+     view_drawer(*user_data);
      return true;
 }
 
@@ -1903,6 +1923,7 @@ bool destroyer(BufferNode_t** head, void* user_data)
           }
      }
 
+     pthread_cancel(config_state->terminal_check_update_thread);
      terminal_free(&config_state->terminal);
      free_buffer_state(config_state->terminal.buffer.user_data);
 
@@ -2843,6 +2864,12 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               int64_t width = buffer_view->bottom_right.x - buffer_view->top_left.x;
                               int64_t height = buffer_view->bottom_right.y - buffer_view->top_left.y;
 
+                              int rc = pthread_create(&config_state->terminal_check_update_thread, NULL, terminal_check_update, config_state);
+                              if(rc != 0){
+                                   ce_message("pthread_create() for terminal_check_update() failed");
+                                   break;
+                              }
+
                               terminal_init(&config_state->terminal, width, height);
                          }
 
@@ -2973,30 +3000,9 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
      if(config_state->quit) return false;
 
      config_state->last_key = key;
-     return true;
-}
-
-void view_drawer(const BufferNode_t* head, void* user_data)
-{
-     // grab the draw lock so we can draw
-     if(pthread_mutex_trylock(&draw_lock) != 0) return;
-
-     // clear all lines in the terminal
-     erase();
-
-     (void)(head);
-     ConfigState_t* config_state = user_data;
-     Buffer_t* buffer = config_state->tab_current->view_current->buffer;
-     BufferView_t* buffer_view = config_state->tab_current->view_current;
-     Point_t* cursor = &config_state->tab_current->view_current->cursor;
-
-     Point_t top_left;
-     Point_t bottom_right;
-     get_terminal_view_rect(config_state->tab_head, &top_left, &bottom_right);
-     ce_calc_views(config_state->tab_current->view_head, top_left, bottom_right);
 
      if(ce_buffer_in_view(config_state->tab_current->view_head, &config_state->buffer_list_buffer)){
-          update_buffer_list_buffer(config_state, head);
+          update_buffer_list_buffer(config_state, *head);
      }
 
      if(config_state->tab_current->view_current->buffer != &config_state->mark_list_buffer &&
@@ -3011,6 +3017,29 @@ void view_drawer(const BufferNode_t* head, void* user_data)
      if(ce_buffer_in_view(config_state->tab_current->view_head, &config_state->macro_list_buffer)){
           update_macro_list_buffer(config_state);
      }
+
+     view_drawer(user_data);
+
+     return true;
+}
+
+void view_drawer(void* user_data)
+{
+     // grab the draw lock so we can draw
+     if(pthread_mutex_trylock(&draw_lock) != 0) return;
+
+     // clear all lines in the terminal
+     erase();
+
+     ConfigState_t* config_state = user_data;
+     Buffer_t* buffer = config_state->tab_current->view_current->buffer;
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Point_t* cursor = &config_state->tab_current->view_current->cursor;
+
+     Point_t top_left;
+     Point_t bottom_right;
+     get_terminal_view_rect(config_state->tab_head, &top_left, &bottom_right);
+     ce_calc_views(config_state->tab_current->view_head, top_left, bottom_right);
 
      int64_t input_view_height = 0;
      Point_t input_top_left = {};

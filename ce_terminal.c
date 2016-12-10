@@ -83,9 +83,9 @@ void* terminal_reader(void* data)
                          escape = true;
                          break;
                     case 8: // backspace
-                         ce_remove_char(&term->buffer, term->cursor);
                          term->cursor.x--;
                          if(term->cursor.x < 0) term->cursor.x = 0;
+                         ce_remove_char(&term->buffer, term->cursor);
                          break;
                     case NEWLINE:
                          ce_append_char(&term->buffer, NEWLINE);
@@ -96,6 +96,10 @@ void* terminal_reader(void* data)
                }
 
                byte++;
+          }
+
+          if(rc){
+               term->is_updated = true;
           }
      }
 
@@ -194,6 +198,7 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height)
 
      term->cursor = (Point_t){0, 0};
      term->is_alive = true;
+     term->is_updated = false;
      return true;
 }
 
@@ -205,7 +210,7 @@ void terminal_free(Terminal_t* term)
      term->height = 0;
      term->fd = 0;
 
-     pthread_kill(term->reader_thread, 0);
+     pthread_cancel(term->reader_thread);
      ce_free_buffer(&term->buffer);
 }
 
@@ -220,8 +225,11 @@ bool terminal_send_key(Terminal_t* term, int key)
 {
      // conversion
      switch(key){
-     case 343:
+     case 343: // enter
           key = '\r';
+          break;
+     case 263: // backspace
+          key = '\b';
           break;
      }
 

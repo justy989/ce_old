@@ -75,6 +75,7 @@ typedef struct{
      InputHistory_t load_file_history;
 
      Terminal_t terminal;
+     pthread_t terminal_check_update_thread;
 
      AutoComplete_t auto_complete;
 

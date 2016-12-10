@@ -241,7 +241,6 @@ extern Point_t* g_terminal_dimensions;
 typedef bool ce_initializer (BufferNode_t**, Point_t*, int, char**, void**);
 typedef void ce_destroyer   (BufferNode_t**, void*);
 typedef bool ce_key_handler (int, BufferNode_t**, void*);
-typedef void ce_view_drawer (const BufferNode_t*, void*);
 
 
 // BufferList Manipulation Functions

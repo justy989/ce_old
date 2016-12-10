@@ -2876,7 +2876,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     } break;
                     case 24: // Ctrl + x
                     {
-                         //input_start(config_state, "Shell Command", key);
                          if(!config_state->terminal.is_alive){
                               int64_t width = buffer_view->bottom_right.x - buffer_view->top_left.x;
                               int64_t height = buffer_view->bottom_right.y - buffer_view->top_left.y;
@@ -2889,23 +2888,22 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                    break;
                               }
 
-                              config_state->vim_state.mode = VM_INSERT;
                               buffer_view->buffer = &config_state->terminal.buffer;
-                              buffer_view->cursor = config_state->terminal.cursor;
-                              buffer_view->top_row = 0;
-                              buffer_view->left_column = 0;
                          }else{
                               BufferView_t* view = ce_buffer_in_view(config_state->tab_current->view_head, &config_state->terminal.buffer);
                               if(view){
                                    config_state->tab_current->view_current = view;
+                                   buffer_view = view;
                               }else{
                                    buffer_view->buffer = &config_state->terminal.buffer;
-                                   buffer_view->cursor = config_state->terminal.cursor;
-                                   buffer_view->top_row = 0;
-                                   buffer_view->left_column = 0;
-                                   view_follow_cursor(buffer_view, config_state->line_number_type);
                               }
                          }
+
+                         config_state->vim_state.mode = VM_INSERT;
+                         buffer_view->cursor = config_state->terminal.cursor;
+                         buffer_view->top_row = 0;
+                         buffer_view->left_column = 0;
+                         view_follow_cursor(buffer_view, config_state->line_number_type);
 
                     } break;
                     case 14: // Ctrl + n

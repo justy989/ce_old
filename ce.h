@@ -275,6 +275,7 @@ LoadFileResult_t ce_load_file   (Buffer_t* buffer, const char* filename);
 bool ce_insert_char             (Buffer_t* buffer, Point_t location, char c);
 bool ce_append_char             (Buffer_t* buffer, char c);
 bool ce_remove_char             (Buffer_t* buffer, Point_t location);
+bool ce_remove_char_readonly    (Buffer_t* buffer, Point_t location);
 bool ce_set_char                (Buffer_t* buffer, Point_t location, char c);
 bool ce_insert_char_readonly    (Buffer_t* buffer, Point_t location, char c);
 bool ce_append_char_readonly    (Buffer_t* buffer, char c);

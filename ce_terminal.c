@@ -70,10 +70,10 @@ void* terminal_reader(void* data)
 
                     escape = false;
                }else if(isprint(*byte)){
-                    ce_append_char(&term->buffer, *byte);
+                    ce_append_char_readonly(&term->buffer, *byte);
                     term->cursor.x++;
                     if(term->cursor.x >= term->width){
-                         ce_append_char(&term->buffer, NEWLINE);
+                         ce_append_char_readonly(&term->buffer, NEWLINE);
                          term->cursor.x = 0;
                          term->cursor.y++;
                     }
@@ -85,10 +85,10 @@ void* terminal_reader(void* data)
                     case 8: // backspace
                          term->cursor.x--;
                          if(term->cursor.x < 0) term->cursor.x = 0;
-                         ce_remove_char(&term->buffer, term->cursor);
+                         ce_remove_char_readonly(&term->buffer, term->cursor);
                          break;
                     case NEWLINE:
-                         ce_append_char(&term->buffer, NEWLINE);
+                         ce_append_char_readonly(&term->buffer, NEWLINE);
                          term->cursor.x = 0;
                          term->cursor.y++;
                          break;
@@ -181,11 +181,8 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height)
           break;
      }
 
-     int rc = pthread_create(&term->reader_thread, NULL, terminal_reader, term);
-     if(rc != 0){
-          ce_message("pthread_create() failed");
-          return false;
-     }
+     term->is_alive = true;
+     term->is_updated = false;
 
      term->width = width;
      term->height = height;
@@ -193,19 +190,27 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height)
      ce_free_buffer(&term->buffer);
 
      if(!ce_alloc_lines(&term->buffer, 1)){
+          term->is_alive = false;
           return false;
      }
 
+     int rc = pthread_create(&term->reader_thread, NULL, terminal_reader, term);
+     if(rc != 0){
+          term->is_alive = false;
+          ce_message("pthread_create() failed");
+          return false;
+     }
+
+     term->buffer.status = BS_READONLY;
      term->buffer.name = strdup("[terminal]");
 
      term->cursor = (Point_t){0, 0};
-     term->is_alive = true;
-     term->is_updated = false;
      return true;
 }
 
 void terminal_free(Terminal_t* term)
 {
+     term->is_updated = false;
      term->is_alive = false;
 
      term->width = 0;

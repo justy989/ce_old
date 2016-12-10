@@ -1677,7 +1677,6 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
           return false;
      }
 
-     //config_state->terminal.buffer.status = BS_READONLY;
      config_state->terminal.buffer.user_data = terminal_buffer_state;
 
      if(!config_state->completion_buffer){

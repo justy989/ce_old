@@ -190,6 +190,8 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height)
      term->width = width;
      term->height = height;
 
+     ce_free_buffer(&term->buffer);
+
      if(!ce_alloc_lines(&term->buffer, 1)){
           return false;
      }

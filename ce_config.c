@@ -45,36 +45,6 @@ int64_t count_digits(int64_t n)
 
 void view_drawer(void* user_data);
 
-
-void terminal_check_update_cleanup(void* data)
-{
-     (void)(data);
-
-     // release locks we could be holding
-     pthread_mutex_unlock(&draw_lock);
-}
-
-void* terminal_check_update(void* data)
-{
-     pthread_cleanup_push(terminal_check_update_cleanup, NULL);
-
-     ConfigState_t* config_state = data;
-     while(config_state->terminal.is_alive){
-          if(config_state->terminal.is_updated){
-               config_state->terminal.is_updated = false;
-               if(config_state->tab_current->view_current->buffer == &config_state->terminal.buffer){
-                    config_state->tab_current->view_current->cursor = config_state->terminal.cursor;
-               }
-               view_drawer(data);
-          }else{
-               usleep(1000);
-          }
-     }
-
-     pthread_cleanup_pop(NULL);
-     return NULL;
-}
-
 bool input_history_init(InputHistory_t* history)
 {
      InputHistoryNode_t* node = calloc(1, sizeof(*node));
@@ -867,6 +837,34 @@ void switch_to_view_at_point(ConfigState_t* config_state, Point_t point)
           config_state->tab_current->view_current = next_view;
           vim_enter_normal_mode(&config_state->vim_state);
      }
+}
+
+void terminal_check_update_cleanup(void* data)
+{
+     (void)(data);
+
+     // release locks we could be holding
+     pthread_mutex_unlock(&draw_lock);
+}
+
+void* terminal_check_update(void* data)
+{
+     pthread_cleanup_push(terminal_check_update_cleanup, NULL);
+
+     ConfigState_t* config_state = data;
+     while(config_state->terminal.is_alive){
+          if(config_state->terminal.is_updated){
+               config_state->terminal.is_updated = false;
+               if(config_state->tab_current->view_current->buffer == &config_state->terminal.buffer){
+                    config_state->tab_current->view_current->cursor = config_state->terminal.cursor;
+                    view_follow_cursor(config_state->tab_current->view_current, config_state->line_number_type);
+               }
+               view_drawer(data);
+          }
+     }
+
+     pthread_cleanup_pop(NULL);
+     return NULL;
 }
 
 void handle_mouse_event(ConfigState_t* config_state, Buffer_t* buffer, BufferView_t* buffer_view, Point_t* cursor)
@@ -2864,13 +2862,13 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               int64_t width = buffer_view->bottom_right.x - buffer_view->top_left.x;
                               int64_t height = buffer_view->bottom_right.y - buffer_view->top_left.y;
 
+                              terminal_init(&config_state->terminal, width, height);
+
                               int rc = pthread_create(&config_state->terminal_check_update_thread, NULL, terminal_check_update, config_state);
                               if(rc != 0){
                                    ce_message("pthread_create() for terminal_check_update() failed");
                                    break;
                               }
-
-                              terminal_init(&config_state->terminal, width, height);
                          }
 
                          buffer_view->buffer = &config_state->terminal.buffer;

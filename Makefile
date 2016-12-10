@@ -1,6 +1,6 @@
 CC?=clang
-CFLAGS+=-Wall -Werror -Wextra -std=c11 -ggdb3 -D_GNU_SOURCE $(SCROLL_FLAG)
-LINK=-lncurses
+CFLAGS+=-Wall -Werror -Wextra -std=c11 -ggdb3 -D_GNU_SOURCE -D_POSIX_C_SOURCE=200809L -D_XOPEN_SOURCE=700 $(SCROLL_FLAG)
+LINK=-lncurses -lutil
 
 all: LINK += -lpthread
 all: ce ce_config.so
@@ -34,7 +34,7 @@ ce: main.c ce.o
 %.test.o: %.c
 	$(CC) -c -fpic $(CFLAGS) $^ -o $@
 
-ce_config.so: ce_config.o ce.o ce_vim.o
+ce_config.so: ce_config.o ce.o ce_vim.o ce_terminal.o
 	$(CC) -shared $(CFLAGS) $^ -o $@ $(LINK)
 
 clean: clean_config clean_test

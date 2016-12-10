@@ -25,7 +25,7 @@ LITTLE:
 -user code can infinite loop if you call ce_advance_cursor(buffer, &a, 1) and rely on
  ce_points_equal(a, b) being false when b is at the end of a line.
 -vim's 'ci}' and 'di}' behave differently in a nice way, emulate that
--auto complete shell commands then files
+-auto complete shell commands then files(not doing if we have a terminal emulator)
 -hit an undo brace bug, unsure how to reproduce. I wrapped some code in an if statement,
  then decided I didn't want the if statement. The closing if statement brace did not get undone.
 -visual replace *sometimes* infinite loops
@@ -33,6 +33,7 @@ LITTLE:
 -shell command output sometimes doesn't come in til you send it input
 -we can still hit the drawing bug where config_state->tab_current->view_input_save is null
 -if you make a change and undo, the buffer still says modified
+-deleting buffers no longer works
 */
 
 #include <assert.h>

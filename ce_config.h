@@ -1,8 +1,11 @@
 #ifndef CE_CONFIG_H
 #define CE_CONFIG_H
 
+// configuration module to control the editor, builds into ce_config.so and can be rebuilt reloaded at runtime with F5
+
 #include "ce.h"
 #include "ce_vim.h"
+#include "ce_terminal.h"
 
 typedef struct{
      char** commands;
@@ -85,6 +88,8 @@ typedef struct{
      InputHistory_t shell_input_history;
      InputHistory_t search_history;
      InputHistory_t load_file_history;
+
+     Terminal_t term;
 
      pthread_t shell_command_thread;
      pthread_t shell_input_thread;

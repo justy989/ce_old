@@ -89,7 +89,7 @@ typedef struct{
      InputHistory_t search_history;
      InputHistory_t load_file_history;
 
-     Terminal_t term;
+     Terminal_t terminal;
 
      pthread_t shell_command_thread;
      pthread_t shell_input_thread;

@@ -1479,6 +1479,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                break;
           case 24: // Ctrl + x
           {
+               // TODO: cleanup
                if(!config_state->view_input->buffer->line_count) break;
 
                if(config_state->shell_command_thread){
@@ -1860,6 +1861,16 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
           itr = itr->next;
      }
 
+     // setup terminal buffer buffer_state
+     BufferState_t* terminal_buffer_state = calloc(1, sizeof(*terminal_buffer_state));
+     if(!terminal_buffer_state){
+          ce_message("failed to allocate buffer state.");
+          return false;
+     }
+
+     //config_state->terminal.buffer.status = BS_READONLY;
+     config_state->terminal.buffer.user_data = terminal_buffer_state;
+
      if(!config_state->shell_command_buffer){
           config_state->shell_command_buffer = calloc(1, sizeof(*config_state->shell_command_buffer));
           config_state->shell_command_buffer->name = strdup("[shell_output]");
@@ -2145,6 +2156,9 @@ bool destroyer(BufferNode_t** head, void* user_data)
                fclose(out_file);
           }
      }
+
+     terminal_free(&config_state->terminal);
+     free_buffer_state(config_state->terminal.buffer.user_data);
 
      BufferNode_t* itr = *head;
      while(itr){
@@ -2479,29 +2493,39 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           } break;
           }
      }else{
-          switch(key){
-          default:
-               break;
-          case KEY_TAB:
-               if(auto_completing(&config_state->auto_complete)){
-                    char* complete = auto_complete_get_completion(&config_state->auto_complete, cursor->x);
-                    int64_t complete_len = strlen(complete);
-                    if(ce_insert_string(buffer, *cursor, complete)){
-                         Point_t save_cursor = *cursor;
-                         ce_move_cursor(buffer, cursor, (Point_t){complete_len, cursor->y});
-                         cursor->x++;
-                         ce_commit_insert_string(&buffer_state->commit_tail, save_cursor, save_cursor, *cursor, complete, BCC_KEEP_GOING);
-                    }else{
-                         free(complete);
+          if(buffer == &config_state->terminal.buffer){
+               if(key != KEY_ESCAPE){
+                    buffer_view->cursor = config_state->terminal.cursor;
+                    if(buffer_view->cursor.x < (config_state->terminal.width - 1)){
+                         buffer_view->cursor.x++;
                     }
-                    calc_auto_complete_start_and_path(&config_state->auto_complete,
-                                                      buffer->lines[cursor->y],
-                                                      *cursor,
-                                                      config_state->completion_buffer);
-                    handled_key = true;
-                    key = 0;
+                    if(terminal_send_key(&config_state->terminal, key)) handled_key = true;
                }
-               break;
+          }else{
+               switch(key){
+               default:
+                    break;
+               case KEY_TAB:
+                    if(auto_completing(&config_state->auto_complete)){
+                         char* complete = auto_complete_get_completion(&config_state->auto_complete, cursor->x);
+                         int64_t complete_len = strlen(complete);
+                         if(ce_insert_string(buffer, *cursor, complete)){
+                              Point_t save_cursor = *cursor;
+                              ce_move_cursor(buffer, cursor, (Point_t){complete_len, cursor->y});
+                              cursor->x++;
+                              ce_commit_insert_string(&buffer_state->commit_tail, save_cursor, save_cursor, *cursor, complete, BCC_KEEP_GOING);
+                         }else{
+                              free(complete);
+                         }
+                         calc_auto_complete_start_and_path(&config_state->auto_complete,
+                                                           buffer->lines[cursor->y],
+                                                           *cursor,
+                                                           config_state->completion_buffer);
+                         handled_key = true;
+                         key = 0;
+                    }
+                    break;
+               }
           }
      }
 
@@ -2510,16 +2534,18 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                                              &config_state->tab_current->view_current->cursor, &buffer_state->commit_tail,
                                                              &buffer_state->vim_buffer_state, false);
           if(vkh_result.type == VKH_HANDLED_KEY){
-               if(config_state->vim_state.mode == VM_INSERT && config_state->input){
-                    switch(config_state->input_key){
-                    default:
-                         break;
-                    case 6: // load file
-                         calc_auto_complete_start_and_path(&config_state->auto_complete,
-                                                           buffer->lines[cursor->y],
-                                                           *cursor,
-                                                           config_state->completion_buffer);
-                         break;
+               if(config_state->vim_state.mode == VM_INSERT){
+                    if(config_state->input){
+                         switch(config_state->input_key){
+                         default:
+                              break;
+                         case 6: // load file
+                              calc_auto_complete_start_and_path(&config_state->auto_complete,
+                                                                buffer->lines[cursor->y],
+                                                                *cursor,
+                                                                config_state->completion_buffer);
+                              break;
+                         }
                     }
                }
           }else if(vkh_result.type == VKH_COMPLETED_ACTION_SUCCESS){
@@ -2546,6 +2572,10 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                         vkh_result.completed_action.motion.type == VMT_SEARCH_WORD_UNDER_CURSOR ||
                         vkh_result.completed_action.motion.type == VMT_GOTO_MARK){
                     center_view_when_cursor_outside_portion(buffer_view, 0.25f, 0.75f);
+               }
+
+               if(config_state->vim_state.mode == VM_INSERT && buffer_view->buffer == &config_state->terminal.buffer){
+                    buffer_view->cursor = config_state->terminal.cursor;
                }
           }else if(vkh_result.type == VKH_UNHANDLED_KEY){
                switch(key){
@@ -3075,7 +3105,17 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     } break;
                     case 24: // Ctrl + x
                     {
-                         input_start(config_state, "Shell Command", key);
+                         //input_start(config_state, "Shell Command", key);
+                         if(!config_state->terminal.is_alive){
+                              int64_t width = buffer_view->bottom_right.x - buffer_view->top_left.x;
+                              int64_t height = buffer_view->bottom_right.y - buffer_view->top_left.y;
+
+                              terminal_init(&config_state->terminal, width, height);
+                         }
+
+                         buffer_view->buffer = &config_state->terminal.buffer;
+                         buffer_view->cursor = (Point_t){0, 0};
+                         center_view(buffer_view);
                     } break;
                     case 14: // Ctrl + n
                          if(config_state->input) break;

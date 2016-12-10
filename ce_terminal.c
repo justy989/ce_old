@@ -28,18 +28,22 @@ void handle_sigchld(int signal)
      }
 }
 
-void* term_reader(void* data)
+void* terminal_reader(void* data)
 {
      Terminal_t* term = data;
      char bytes[BUFSIZ];
 
-     while(term->alive){
+     memset(bytes, 0, BUFSIZ);
+
+     while(term->is_alive){
           int rc = read(term->fd, bytes, BUFSIZ);
           if(rc < 0){
-               fprintf(stderr, "read() from shell failed: %s\n", strerror(errno));
-               endwin();
-               return NULL;
+               ce_message("%s() read() from shell failed: %s\n", __FUNCTION__, strerror(errno));
+               term->is_alive = false;
+               pthread_exit(NULL);
           }
+
+          bytes[rc] = 0;
 
           bool escape = false;
           bool csi = false;
@@ -85,19 +89,21 @@ void* term_reader(void* data)
                          break;
                     case NEWLINE:
                          ce_append_char(&term->buffer, NEWLINE);
+                         term->cursor.x = 0;
                          term->cursor.y++;
                          break;
                     }
                }
+
                byte++;
           }
-
      }
 
+     pthread_exit(NULL);
      return NULL;
 }
 
-bool term_init(Terminal_t* term, int64_t width, int64_t height)
+bool terminal_init(Terminal_t* term, int64_t width, int64_t height)
 {
      int master_fd;
      int slave_fd;
@@ -171,7 +177,7 @@ bool term_init(Terminal_t* term, int64_t width, int64_t height)
           break;
      }
 
-     int rc = pthread_create(&term->reader_thread, NULL, term_reader, term);
+     int rc = pthread_create(&term->reader_thread, NULL, terminal_reader, term);
      if(rc != 0){
           ce_message("pthread_create() failed");
           return false;
@@ -184,33 +190,47 @@ bool term_init(Terminal_t* term, int64_t width, int64_t height)
           return false;
      }
 
-     term->alive = true;
+     term->cursor = (Point_t){0, 0};
+     term->is_alive = true;
      return true;
 }
 
-void term_free(Terminal_t* term)
+void terminal_free(Terminal_t* term)
 {
-     pthread_join(term->reader_thread, NULL);
-
-     ce_free_buffer(&term->buffer);
-
-     term->alive = false;
+     term->is_alive = false;
 
      term->width = 0;
      term->height = 0;
      term->fd = 0;
+
+     pthread_join(term->reader_thread, NULL);
+     ce_free_buffer(&term->buffer);
 }
 
-//bool term_resize(Terminal_t* term, int64_t width, int64_t height)
-//{
-//     return true;
-//}
-
-bool term_send_key(Terminal_t* term, int key)
+#if 0
+bool terminal_resize(Terminal_t* term, int64_t width, int64_t height)
 {
-     // unused temporarily
-     (void)(term);
-     (void)(key);
+     return true;
+}
+#endif
+
+bool terminal_send_key(Terminal_t* term, int key)
+{
+     // conversion
+     switch(key){
+     case 343:
+          key = '\r';
+          break;
+     }
+
+     char character = (char)(key);
+     // TODO: get mutex
+
+     int rc = write(term->fd, &character, 1);
+     if(rc < 0){
+          ce_message("%s() write() to terminal failed: %s", __FUNCTION__, strerror(errno));
+          return false;
+     }
 
      return true;
 }

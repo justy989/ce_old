@@ -8,7 +8,7 @@
 // ce's virtual terminal
 
 typedef struct{
-     bool alive;
+     volatile bool is_alive;
 
      Point_t cursor;
 
@@ -22,10 +22,10 @@ typedef struct{
      Buffer_t buffer;
 }Terminal_t;
 
-bool term_init(Terminal_t* term, int64_t width, int64_t height);
-void term_free(Terminal_t* term);
+bool terminal_init(Terminal_t* term, int64_t width, int64_t height);
+void terminal_free(Terminal_t* term);
 
-//bool term_resize(Terminal_t* term, int64_t width, int64_t height);
-bool term_send_key(Terminal_t* term, int key);
+//bool terminal_resize(Terminal_t* term, int64_t width, int64_t height);
+bool terminal_send_key(Terminal_t* term, int key);
 
 #endif

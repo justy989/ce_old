@@ -642,8 +642,9 @@ bool find_matching_string_forward(const Buffer_t* buffer, Point_t* location, cha
 
           itr.x++;
           if(itr.x > last_index){
-               itr.y++;
                itr.x = 0;
+               itr.y++;
+               if(itr.y >= buffer->line_count) break;
                last_index = ce_last_index(buffer->lines[itr.y]);
           }
 

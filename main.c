@@ -13,6 +13,7 @@ BIG:
 -incremental replace (although already doable with 'n.')
 -support tabs in addition to spaces
 -multiline regex search/replace
+-allow customized syntax
 
 LITTLE:
 -r<enter>

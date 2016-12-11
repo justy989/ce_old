@@ -144,7 +144,7 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height)
           close(slave_fd);
           close(master_fd);
 
-          // exec shell
+          // query env
           const struct passwd *pw = getpwuid(getuid());
           if(pw == NULL){
                fprintf(stderr, "getpwuid() failed %s\n", strerror(errno));
@@ -153,7 +153,7 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height)
 
           char* sh = (pw->pw_shell[0]) ? pw->pw_shell : "/bin/bash";
 
-          // resetting env
+          // reset env
           unsetenv("COLUMNS");
           unsetenv("LINES");
           unsetenv("TERMCAP");
@@ -163,7 +163,7 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height)
           setenv("HOME", pw->pw_dir, 1);
           setenv("TERM", "dumb", 1); // we can change this to "urxvt" when we implement all VT102 commands
 
-          // resetting signals
+          // reset signal handlers
           signal(SIGCHLD, SIG_DFL);
           signal(SIGHUP, SIG_DFL);
           signal(SIGINT, SIG_DFL);
@@ -171,8 +171,10 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height)
           signal(SIGTERM, SIG_DFL);
           signal(SIGALRM, SIG_DFL);
 
+          // exec shell
           char** arg = NULL;
           execvp(sh, arg);
+
           _exit(1);
      } break;
      default:

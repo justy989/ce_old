@@ -32,7 +32,6 @@ LITTLE:
 -shell command output sometimes doesn't come in til you send it input
 -we can still hit the drawing bug where config_state->tab_current->view_input_save is null
 -if you make a change and undo, the buffer still says modified
--deleting buffers no longer works
 */
 
 #include <assert.h>

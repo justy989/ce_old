@@ -2,6 +2,7 @@
 #define CE_TERM_H
 
 #include <pthread.h>
+#include <semaphore.h>
 
 #include "ce.h"
 
@@ -9,7 +10,7 @@
 
 typedef struct{
      bool is_alive;
-     bool is_updated;
+     sem_t updated;
 
      Point_t cursor;
 

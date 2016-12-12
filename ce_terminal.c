@@ -7,6 +7,7 @@
 #include <signal.h>
 #include <sys/wait.h>
 #include <ctype.h>
+#include <assert.h>
 
 pid_t pid;
 
@@ -101,7 +102,7 @@ void* terminal_reader(void* data)
           }
 
           if(rc){
-               term->is_updated = true;
+               sem_post(&term->updated);
           }
      }
 
@@ -186,7 +187,6 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height)
      }
 
      term->is_alive = true;
-     term->is_updated = false;
 
      term->width = width;
      term->height = height;
@@ -205,6 +205,8 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height)
           return false;
      }
 
+     sem_init(&term->updated, 0, 1);
+
      term->buffer.status = BS_READONLY;
      term->buffer.name = strdup("[terminal]");
 
@@ -218,7 +220,6 @@ void terminal_free(Terminal_t* term)
           kill(pid, SIGHUP);
      }
 
-     term->is_updated = false;
      term->is_alive = false;
 
      term->width = 0;
@@ -238,43 +239,32 @@ bool terminal_resize(Terminal_t* term, int64_t width, int64_t height)
 
 bool terminal_send_key(Terminal_t* term, int key)
 {
-     int size = 1;
-     const char* string = NULL;
+     char character;
+     int size;
+     const char* string;
 
-     // conversion table
-     switch(key){
-     case 343: // enter
-          key = '\r';
-          break;
-     case 263: // backspace
-          key = '\b';
-          break;
-     case -1: // ctrl + c
-          key = 3; // End of Text
-          break;
-     case 259:
-          string = "\033[A"; // CSI move up
-          size = 3;
-          break;
-     case 258:
-          string = "\033[B"; // CSI move down
-          size = 3;
-          break;
-#if 0
-     // when I send left I get back a backspace which is weird?
-     case 260:
-          string = "\033[D"; // CSI move left
-          size = 3;
-          break;
-     case 261:
-          string = "\033[C"; // CSI move right
-          size = 3;
-          break;
-#endif
+     if(key >= 0 && key < 256){
+          character = (char)(key);
+          size = 1;
+          string = &character;
+     }else{
+          switch(key){
+          case -1:
+               character = 3;
+               size = 1;
+               string = &character;
+               break;
+          case 339:
+               character = 4;
+               size = 1;
+               string = &character;
+               break;
+          default:
+               string = keybound(key, 0);
+               size = strlen(string);
+               break;
+          }
      }
-
-     char character = (char)(key);
-     if(!string) string = &character;
 
      // TODO: get mutex
 

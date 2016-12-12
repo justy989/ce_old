@@ -860,14 +860,14 @@ void* terminal_check_update(void* data)
 
      ConfigState_t* config_state = data;
      while(config_state->terminal.is_alive){
-          if(config_state->terminal.is_updated){
-               config_state->terminal.is_updated = false;
-               if(config_state->tab_current->view_current->buffer == &config_state->terminal.buffer){
-                    config_state->tab_current->view_current->cursor = config_state->terminal.cursor;
-                    view_follow_cursor(config_state->tab_current->view_current, config_state->line_number_type);
-               }
-               view_drawer(data);
+          sem_wait(&config_state->terminal.updated);
+
+          if(config_state->tab_current->view_current->buffer == &config_state->terminal.buffer){
+               config_state->tab_current->view_current->cursor = config_state->terminal.cursor;
+               view_follow_cursor(config_state->tab_current->view_current, config_state->line_number_type);
           }
+
+          view_drawer(data);
      }
 
      if(config_state->vim_state.mode == VM_INSERT){

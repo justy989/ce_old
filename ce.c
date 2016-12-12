@@ -1750,7 +1750,7 @@ int64_t ce_is_constant_number(const char* line, int64_t start_offset)
      }
 
      if(count == 1 && (start[0] == '-' || start[0] == '.')) return 0;
-     if((seen_l || seen_u) && !seen_digit) return 0;
+     if(!seen_digit) return 0;
 
      // check if the previous character is not a delimiter
      int64_t prev_index = start_offset - 1;

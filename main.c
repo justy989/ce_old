@@ -4,16 +4,16 @@ TODOS:
 BIG:
 -unicode support
 -network editing
--autocomplete for: code, shell commands, etc.
+-autocomplete for code
 -parse c to do real syntax highlighting/autocomplete?
--tail file
--support python and other mode syntax highlighting so I don't go insane at work
+-tail file mode
 -async file saving/loading
 -async autocomplete building
 -incremental replace (although already doable with 'n.')
--support tabs in addition to spaces
+-support tab character
 -multiline regex search/replace
--allow customized syntax
+-allow customizing syntax in ce_draw_buffer()
+ -support python and other mode syntax highlighting so I don't go insane at work
 
 LITTLE:
 -r<enter>
@@ -332,6 +332,11 @@ int main(int argc, char** argv)
           getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);
 
           int key = getch();
+
+          if(key == KEY_RESIZE){
+               getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);
+          }
+
           if(key == KEY_F(5)){
                // NOTE: maybe at startup we should do this, so when we crash we revert back to before we did the bad thing?
                if(access(current_config.path, F_OK) != -1){
@@ -353,9 +358,8 @@ int main(int argc, char** argv)
                }else{
                     ce_message("%s: %s", current_config.path, strerror(errno));
                }
-          }
           // user-defined or default key_handler()
-          else if(!current_config.key_handler(key, &buffer_list_head, user_data)){
+          }else if(!current_config.key_handler(key, &buffer_list_head, user_data)){
                done = true;
           }
      }

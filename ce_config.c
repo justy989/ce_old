@@ -870,6 +870,10 @@ void* terminal_check_update(void* data)
           }
      }
 
+     if(config_state->vim_state.mode == VM_INSERT){
+          vim_enter_normal_mode(&config_state->vim_state);
+     }
+
      pthread_cleanup_pop(NULL);
      return NULL;
 }
@@ -2015,307 +2019,287 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
      bool handled_key = false;
 
-     switch(key){
-     default:
-          break;
-     case 8: // Ctrl + h
-     {
-          Point_t point = {config_state->tab_current->view_current->top_left.x - 2, // account for window separator
-                          cursor->y - config_state->tab_current->view_current->top_row + config_state->tab_current->view_current->top_left.y};
-          switch_to_view_at_point(config_state, point);
-          handled_key = true;
-          config_state->vim_state.mode = VM_NORMAL;
-     } break;
-     case 10: // Ctrl + j
-     {
-          Point_t point = {cursor->x - config_state->tab_current->view_current->left_column + config_state->tab_current->view_current->top_left.x,
-                           config_state->tab_current->view_current->bottom_right.y + 2}; // account for window separator
-          switch_to_view_at_point(config_state, point);
-          handled_key = true;
-          config_state->vim_state.mode = VM_NORMAL;
-     } break;
-     case 11: // Ctrl + k
-     {
-          Point_t point = {cursor->x - config_state->tab_current->view_current->left_column + config_state->tab_current->view_current->top_left.x,
-                           config_state->tab_current->view_current->top_left.y - 2};
-          switch_to_view_at_point(config_state, point);
-          handled_key = true;
-          config_state->vim_state.mode = VM_NORMAL;
-     } break;
-     case 12: // Ctrl + l
-     {
-          Point_t point = {config_state->tab_current->view_current->bottom_right.x + 2, // account for window separator
-                           cursor->y - config_state->tab_current->view_current->top_row + config_state->tab_current->view_current->top_left.y};
-          switch_to_view_at_point(config_state, point);
-          handled_key = true;
-          config_state->vim_state.mode = VM_NORMAL;
-     } break;
-     }
+     if(config_state->vim_state.mode != VM_INSERT){
+          switch(config_state->last_key){
+          default:
+               break;
+          case 'z':
+          {
+               Point_t location;
+               handled_key = true;
+               switch(key){
+               default:
+                    handled_key = false;
+                    break;
+               case 't':
+                    location = (Point_t){0, cursor->y};
+                    scroll_view_to_location(buffer_view, &location);
+                    break;
+               case 'z': {
+                    center_view(buffer_view);
+                    // reset key so we don't come in here on the very next iteration
+                    key = 0;
+               } break;
+               case 'b': {
+                    // move current line to bottom of view
+                    location = (Point_t){0, cursor->y - buffer_view->bottom_right.y};
+                    scroll_view_to_location(buffer_view, &location);
+               } break;
+               }
+          } break;
+          case 'g':
+          {
+               handled_key = true;
+               switch(key){
+               default:
+                    handled_key = false;
+                    break;
+               case 't':
+                    if(config_state->tab_current->next){
+                         config_state->tab_current = config_state->tab_current->next;
+                    }else{
+                         config_state->tab_current = config_state->tab_head;
+                    }
+                    break;
+               case 'T':
+                    if(config_state->tab_current == config_state->tab_head){
+                         // find tail
+                         TabView_t* itr = config_state->tab_head;
+                         while(itr->next) itr = itr->next;
+                         config_state->tab_current = itr;
+                    }else{
+                         TabView_t* itr = config_state->tab_head;
+                         while(itr && itr->next != config_state->tab_current) itr = itr->next;
 
-     if(!handled_key){
-          if(config_state->vim_state.mode != VM_INSERT){
+                         // what if we don't find our current tab and hit the end of the list?!
+                         assert(itr);
+                         config_state->tab_current = itr;
+                    }
+                    break;
+               case 'r': // reload file
+               {
+                    ce_message("reloading %s", buffer->filename);
+                    if(access(buffer->filename, R_OK) != 0){
+                         ce_message("failed to read %s: %s", buffer->filename, strerror(errno));
+                         break;
+                    }
+
+                    // reload file
+                    if(buffer->status == BS_READONLY){
+                         // NOTE: maybe ce_clear_lines shouldn't care about readonly
+                         ce_clear_lines_readonly(buffer);
+                    }else{
+                         ce_clear_lines(buffer);
+                    }
+
+                    ce_load_file(buffer, buffer->filename);
+                    ce_clamp_cursor(buffer, &buffer_view->cursor);
+               } break;
+               case 'f':
+               {
+                    if(!buffer->lines[cursor->y]) break;
+                    // TODO: get word under the cursor and unify with '*' impl
+                    Point_t word_end = *cursor;
+                    ce_move_cursor_to_end_of_word(buffer, &word_end, true);
+                    int64_t word_len = (word_end.x - cursor->x) + 1;
+                    if(buffer->lines[word_end.y][word_end.x] == '.'){
+                         Point_t ext_end = {cursor->x + word_len, cursor->y};
+                         ce_move_cursor_to_end_of_word(buffer, &ext_end, true);
+                         word_len += ext_end.x - word_end.x;
+                    }
+                    char* filename = alloca(word_len+1);
+                    strncpy(filename, &buffer->lines[cursor->y][cursor->x], word_len);
+                    filename[word_len] = '\0';
+
+                    Buffer_t* file_buffer = open_file_buffer(*head, filename);
+                    if(file_buffer) buffer_view->buffer = file_buffer;
+               } break;
+               case 'v':
+                    config_state->tab_current->view_overrideable = config_state->tab_current->view_current;
+                    config_state->tab_current->overriden_buffer = NULL;
+                    break;
+               case 'l':
+                    config_state->line_number_type++;
+                    config_state->line_number_type %= (LNT_RELATIVE_AND_ABSOLUTE + 1);
+                    break;
+               case 'q':
+               {
+                    uint64_t unsaved_buffers = 0;
+                    BufferNode_t* itr = *head;
+                    while(itr){
+                         if(itr->buffer->status == BS_MODIFIED) unsaved_buffers++;
+                         itr = itr->next;
+                    }
+
+                    if(unsaved_buffers){
+                         input_start(config_state, "Unsaved buffers... Quit anyway? (y/n)", key);
+                         break;
+                    }
+
+                    // quit !
+                    return false;
+               }
+               }
+
+               if(handled_key) ce_keys_free(&config_state->vim_state.command_head);
+          } break;
+          case 'm':
+          {
+               if(!isprint(key)) break;
+
+               if(key == '?'){
+                    update_mark_list_buffer(config_state, buffer);
+
+                    if(config_state->tab_current->view_overrideable){
+                         tab_view_save_overrideable(config_state->tab_current);
+                         config_state->tab_current->view_overrideable->buffer = &config_state->mark_list_buffer;
+                         config_state->tab_current->view_overrideable->top_row = 0;
+                         config_state->tab_current->view_overrideable->cursor = (Point_t){0, 1};
+                    }else{
+                         config_state->buffer_before_query = config_state->tab_current->view_current->buffer;
+                         config_state->tab_current->view_current->buffer->cursor = *cursor;
+                         config_state->tab_current->view_current->buffer = &config_state->mark_list_buffer;
+                         config_state->tab_current->view_current->top_row = 0;
+                         config_state->tab_current->view_current->cursor = (Point_t){0, 1};
+                    }
+
+                    handled_key = true;
+                    key = 0;
+               }
+          } break;
+          case '"':
+               if(!isprint(key)) break;
+
+               if(key == '?'){
+                    update_yank_list_buffer(config_state);
+
+                    if(config_state->tab_current->view_overrideable){
+                         tab_view_save_overrideable(config_state->tab_current);
+                         config_state->tab_current->view_overrideable->buffer = &config_state->yank_list_buffer;
+                         config_state->tab_current->view_overrideable->top_row = 0;
+                         config_state->tab_current->view_overrideable->cursor = (Point_t){0, 1};
+                    }else{
+                         config_state->buffer_before_query = config_state->tab_current->view_current->buffer;
+                         config_state->tab_current->view_current->buffer->cursor = *cursor;
+                         config_state->tab_current->view_current->buffer = &config_state->yank_list_buffer;
+                         config_state->tab_current->view_current->top_row = 0;
+                         config_state->tab_current->view_current->cursor = (Point_t){0, 1};
+                    }
+
+                    handled_key = true;
+                    key = 0;
+               }
+               break;
+          case 'y':
+               if(!isprint(key)) break;
+
+               if(key == '?'){
+                    update_yank_list_buffer(config_state);
+
+                    if(config_state->tab_current->view_overrideable){
+                         tab_view_save_overrideable(config_state->tab_current);
+                         config_state->tab_current->view_overrideable->buffer = &config_state->yank_list_buffer;
+                         config_state->tab_current->view_overrideable->top_row = 0;
+                         config_state->tab_current->view_overrideable->cursor = (Point_t){0, 1};
+                    }else{
+                         config_state->buffer_before_query = config_state->tab_current->view_current->buffer;
+                         config_state->tab_current->view_current->buffer->cursor = *cursor;
+                         config_state->tab_current->view_current->buffer = &config_state->yank_list_buffer;
+                         config_state->tab_current->view_current->top_row = 0;
+                         config_state->tab_current->view_current->cursor = (Point_t){0, 1};
+                    }
+
+                    handled_key = true;
+                    key = 0;
+               }
+               break;
+          case 'Z':
                switch(config_state->last_key){
                default:
                     break;
-               case 'z':
-               {
-                    Point_t location;
-                    handled_key = true;
-                    switch(key){
-                    default:
-                         handled_key = false;
-                         break;
-                    case 't':
-                         location = (Point_t){0, cursor->y};
-                         scroll_view_to_location(buffer_view, &location);
-                         break;
-                    case 'z': {
-                         center_view(buffer_view);
-                         // reset key so we don't come in here on the very next iteration
-                         key = 0;
-                    } break;
-                    case 'b': {
-                         // move current line to bottom of view
-                         location = (Point_t){0, cursor->y - buffer_view->bottom_right.y};
-                         scroll_view_to_location(buffer_view, &location);
-                    } break;
-                    }
-               } break;
-               case 'g':
-               {
-                    handled_key = true;
-                    switch(key){
-                    default:
-                         handled_key = false;
-                         break;
-                    case 't':
-                         if(config_state->tab_current->next){
-                              config_state->tab_current = config_state->tab_current->next;
-                         }else{
-                              config_state->tab_current = config_state->tab_head;
-                         }
-                         break;
-                    case 'T':
-                         if(config_state->tab_current == config_state->tab_head){
-                              // find tail
-                              TabView_t* itr = config_state->tab_head;
-                              while(itr->next) itr = itr->next;
-                              config_state->tab_current = itr;
-                         }else{
-                              TabView_t* itr = config_state->tab_head;
-                              while(itr && itr->next != config_state->tab_current) itr = itr->next;
-
-                              // what if we don't find our current tab and hit the end of the list?!
-                              assert(itr);
-                              config_state->tab_current = itr;
-                         }
-                         break;
-                    case 'r': // reload file
-                    {
-                         ce_message("reloading %s", buffer->filename);
-                         if(access(buffer->filename, R_OK) != 0){
-                              ce_message("failed to read %s: %s", buffer->filename, strerror(errno));
-                              break;
-                         }
-
-                         // reload file
-                         if(buffer->status == BS_READONLY){
-                              // NOTE: maybe ce_clear_lines shouldn't care about readonly
-                              ce_clear_lines_readonly(buffer);
-                         }else{
-                              ce_clear_lines(buffer);
-                         }
-
-                         ce_load_file(buffer, buffer->filename);
-                         ce_clamp_cursor(buffer, &buffer_view->cursor);
-                    } break;
-                    case 'f':
-                    {
-                         if(!buffer->lines[cursor->y]) break;
-                         // TODO: get word under the cursor and unify with '*' impl
-                         Point_t word_end = *cursor;
-                         ce_move_cursor_to_end_of_word(buffer, &word_end, true);
-                         int64_t word_len = (word_end.x - cursor->x) + 1;
-                         if(buffer->lines[word_end.y][word_end.x] == '.'){
-                              Point_t ext_end = {cursor->x + word_len, cursor->y};
-                              ce_move_cursor_to_end_of_word(buffer, &ext_end, true);
-                              word_len += ext_end.x - word_end.x;
-                         }
-                         char* filename = alloca(word_len+1);
-                         strncpy(filename, &buffer->lines[cursor->y][cursor->x], word_len);
-                         filename[word_len] = '\0';
-
-                         Buffer_t* file_buffer = open_file_buffer(*head, filename);
-                         if(file_buffer) buffer_view->buffer = file_buffer;
-                    } break;
-                    case 'v':
-                         config_state->tab_current->view_overrideable = config_state->tab_current->view_current;
-                         config_state->tab_current->overriden_buffer = NULL;
-                         break;
-                    case 'l':
-                         config_state->line_number_type++;
-                         config_state->line_number_type %= (LNT_RELATIVE_AND_ABSOLUTE + 1);
-                         break;
-                    }
-
-                    if(handled_key) ce_keys_free(&config_state->vim_state.command_head);
-               } break;
-               case 'm':
-               {
-                    if(!isprint(key)) break;
-
-                    if(key == '?'){
-                         update_mark_list_buffer(config_state, buffer);
-
-                         if(config_state->tab_current->view_overrideable){
-                              tab_view_save_overrideable(config_state->tab_current);
-                              config_state->tab_current->view_overrideable->buffer = &config_state->mark_list_buffer;
-                              config_state->tab_current->view_overrideable->top_row = 0;
-                              config_state->tab_current->view_overrideable->cursor = (Point_t){0, 1};
-                         }else{
-                              config_state->buffer_before_query = config_state->tab_current->view_current->buffer;
-                              config_state->tab_current->view_current->buffer->cursor = *cursor;
-                              config_state->tab_current->view_current->buffer = &config_state->mark_list_buffer;
-                              config_state->tab_current->view_current->top_row = 0;
-                              config_state->tab_current->view_current->cursor = (Point_t){0, 1};
-                         }
-
-                         handled_key = true;
-                         key = 0;
-                    }
-               } break;
-               case '"':
-                    if(!isprint(key)) break;
-
-                    if(key == '?'){
-                         update_yank_list_buffer(config_state);
-
-                         if(config_state->tab_current->view_overrideable){
-                              tab_view_save_overrideable(config_state->tab_current);
-                              config_state->tab_current->view_overrideable->buffer = &config_state->yank_list_buffer;
-                              config_state->tab_current->view_overrideable->top_row = 0;
-                              config_state->tab_current->view_overrideable->cursor = (Point_t){0, 1};
-                         }else{
-                              config_state->buffer_before_query = config_state->tab_current->view_current->buffer;
-                              config_state->tab_current->view_current->buffer->cursor = *cursor;
-                              config_state->tab_current->view_current->buffer = &config_state->yank_list_buffer;
-                              config_state->tab_current->view_current->top_row = 0;
-                              config_state->tab_current->view_current->cursor = (Point_t){0, 1};
-                         }
-
-                         handled_key = true;
-                         key = 0;
-                    }
-                    break;
-               case 'y':
-                    if(!isprint(key)) break;
-
-                    if(key == '?'){
-                         update_yank_list_buffer(config_state);
-
-                         if(config_state->tab_current->view_overrideable){
-                              tab_view_save_overrideable(config_state->tab_current);
-                              config_state->tab_current->view_overrideable->buffer = &config_state->yank_list_buffer;
-                              config_state->tab_current->view_overrideable->top_row = 0;
-                              config_state->tab_current->view_overrideable->cursor = (Point_t){0, 1};
-                         }else{
-                              config_state->buffer_before_query = config_state->tab_current->view_current->buffer;
-                              config_state->tab_current->view_current->buffer->cursor = *cursor;
-                              config_state->tab_current->view_current->buffer = &config_state->yank_list_buffer;
-                              config_state->tab_current->view_current->top_row = 0;
-                              config_state->tab_current->view_current->cursor = (Point_t){0, 1};
-                         }
-
-                         handled_key = true;
-                         key = 0;
-                    }
-                    break;
                case 'Z':
-                    switch(config_state->last_key){
-                    default:
-                         break;
-                    case 'Z':
-                         ce_save_buffer(buffer, buffer->filename);
-                         return false; // quit
+                    ce_save_buffer(buffer, buffer->filename);
+                    return false; // quit
+               }
+               break;
+          case 'q':
+          case '@':
+               if(key == '?'){
+                    update_macro_list_buffer(config_state);
+
+                    if(config_state->tab_current->view_overrideable){
+                         tab_view_save_overrideable(config_state->tab_current);
+                         config_state->tab_current->view_overrideable->buffer = &config_state->macro_list_buffer;
+                         config_state->tab_current->view_overrideable->top_row = 0;
+                         config_state->tab_current->view_overrideable->cursor = (Point_t){0, 1};
+                    }else{
+                         config_state->buffer_before_query = config_state->tab_current->view_current->buffer;
+                         config_state->tab_current->view_current->buffer->cursor = *cursor;
+                         config_state->tab_current->view_current->buffer = &config_state->macro_list_buffer;
+                         config_state->tab_current->view_current->top_row = 0;
+                         config_state->tab_current->view_current->cursor = (Point_t){0, 1};
                     }
-                    break;
-               case 'q':
-               case '@':
-                    if(key == '?'){
-                         update_macro_list_buffer(config_state);
 
-                         if(config_state->tab_current->view_overrideable){
-                              tab_view_save_overrideable(config_state->tab_current);
-                              config_state->tab_current->view_overrideable->buffer = &config_state->macro_list_buffer;
-                              config_state->tab_current->view_overrideable->top_row = 0;
-                              config_state->tab_current->view_overrideable->cursor = (Point_t){0, 1};
-                         }else{
-                              config_state->buffer_before_query = config_state->tab_current->view_current->buffer;
-                              config_state->tab_current->view_current->buffer->cursor = *cursor;
-                              config_state->tab_current->view_current->buffer = &config_state->macro_list_buffer;
-                              config_state->tab_current->view_current->top_row = 0;
-                              config_state->tab_current->view_current->cursor = (Point_t){0, 1};
-                         }
-
+                    handled_key = true;
+                    key = 0;
+               }
+               break;
+#if 0 // useful for debugging commit history
+          case '!':
+               ce_commits_dump(buffer_state->commit_tail);
+               break;
+#endif
+#if 0 // useful for debugging macro commit history
+          case '!':
+          {
+               MacroCommitNode_t* head = config_state->vim_state.macro_commit_current;
+               while(head->prev) head = head->prev;
+               macro_commits_dump(head);
+          } break;
+#endif
+          }
+     }else{
+          if(buffer == &config_state->terminal.buffer){
+               if(key != KEY_ESCAPE){
+                    buffer_view->cursor = config_state->terminal.cursor;
+                    if(terminal_send_key(&config_state->terminal, key)){
                          handled_key = true;
                          key = 0;
+                         if(buffer_view->cursor.x < (config_state->terminal.width - 1)){
+                              buffer_view->cursor.x++;
+                         }
+                         view_follow_cursor(buffer_view, config_state->line_number_type);
                     }
-                    break;
-     #if 0 // useful for debugging commit history
-               case '!':
-                    ce_commits_dump(buffer_state->commit_tail);
-                    break;
-     #endif
-     #if 0 // useful for debugging macro commit history
-               case '!':
-               {
-                    MacroCommitNode_t* head = config_state->vim_state.macro_commit_current;
-                    while(head->prev) head = head->prev;
-                    macro_commits_dump(head);
-               } break;
-     #endif
                }
           }else{
-               if(buffer == &config_state->terminal.buffer){
-                    if(key != KEY_ESCAPE){
-                         buffer_view->cursor = config_state->terminal.cursor;
-                         if(terminal_send_key(&config_state->terminal, key)){
-                              handled_key = true;
-                              key = 0;
-                              if(buffer_view->cursor.x < (config_state->terminal.width - 1)){
-                                   buffer_view->cursor.x++;
-                              }
-                              view_follow_cursor(buffer_view, config_state->line_number_type);
+               switch(key){
+               default:
+                    break;
+               case KEY_TAB:
+                    if(auto_completing(&config_state->auto_complete)){
+                         char* complete = auto_complete_get_completion(&config_state->auto_complete, cursor->x);
+                         int64_t complete_len = strlen(complete);
+                         if(ce_insert_string(buffer, *cursor, complete)){
+                              Point_t save_cursor = *cursor;
+                              ce_move_cursor(buffer, cursor, (Point_t){complete_len, cursor->y});
+                              cursor->x++;
+                              ce_commit_insert_string(&buffer_state->commit_tail, save_cursor, save_cursor, *cursor, complete, BCC_KEEP_GOING);
+                         }else{
+                              free(complete);
                          }
+                         calc_auto_complete_start_and_path(&config_state->auto_complete,
+                                                           buffer->lines[cursor->y],
+                                                           *cursor,
+                                                           config_state->completion_buffer);
+                         handled_key = true;
+                         key = 0;
                     }
-               }else{
-                    switch(key){
-                    default:
-                         break;
-                    case KEY_TAB:
-                         if(auto_completing(&config_state->auto_complete)){
-                              char* complete = auto_complete_get_completion(&config_state->auto_complete, cursor->x);
-                              int64_t complete_len = strlen(complete);
-                              if(ce_insert_string(buffer, *cursor, complete)){
-                                   Point_t save_cursor = *cursor;
-                                   ce_move_cursor(buffer, cursor, (Point_t){complete_len, cursor->y});
-                                   cursor->x++;
-                                   ce_commit_insert_string(&buffer_state->commit_tail, save_cursor, save_cursor, *cursor, complete, BCC_KEEP_GOING);
-                              }else{
-                                   free(complete);
-                              }
-                              calc_auto_complete_start_and_path(&config_state->auto_complete,
-                                                                buffer->lines[cursor->y],
-                                                                *cursor,
-                                                                config_state->completion_buffer);
-                              handled_key = true;
-                              key = 0;
-                         }
-                         break;
-                    }
+                    break;
                }
           }
+     }
 
+     if(!handled_key){
           VimKeyHandlerResult_t vkh_result = vim_key_handler(key, &config_state->vim_state, config_state->tab_current->view_current->buffer,
                                                              &config_state->tab_current->view_current->cursor, &buffer_state->commit_tail,
                                                              &buffer_state->vim_buffer_state, false);
@@ -2454,14 +2438,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     case KEY_SAVE:
                          ce_save_buffer(buffer, buffer->filename);
                          break;
-                    case 7: // Ctrl + g
-                    {
-                         split_view(config_state->tab_current->view_head, config_state->tab_current->view_current, false, config_state->line_number_type);
-                    } break;
-                    case 22: // Ctrl + v
-                    {
-                         split_view(config_state->tab_current->view_head, config_state->tab_current->view_current, true, config_state->line_number_type);
-                    } break;
                     case KEY_CLOSE: // Ctrl + q
                     {
                          if(config_state->input){
@@ -2474,25 +2450,12 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               break;
                          }
 
-                         // try to quit if there is nothing left to do!
                          if(config_state->tab_current == config_state->tab_head &&
                             config_state->tab_current->next == NULL &&
                             config_state->tab_current->view_current == config_state->tab_current->view_head &&
                             config_state->tab_current->view_current->next_horizontal == NULL &&
                             config_state->tab_current->view_current->next_vertical == NULL ){
-                              uint64_t unsaved_buffers = 0;
-                              BufferNode_t* itr = *head;
-                              while(itr){
-                                   if(itr->buffer->status == BS_MODIFIED) unsaved_buffers++;
-                                   itr = itr->next;
-                              }
-
-                              if(unsaved_buffers){
-                                   input_start(config_state, "Unsaved buffers... Quit anyway? (y/n)", key);
-                                   break;
-                              }
-
-                              return false;
+                                 break;
                          }
 
                          Point_t save_cursor_on_terminal = get_cursor_on_terminal(cursor, buffer_view, config_state->line_number_type);
@@ -2906,7 +2869,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          buffer_view->top_row = 0;
                          buffer_view->left_column = 0;
                          view_follow_cursor(buffer_view, config_state->line_number_type);
-
                     } break;
                     case 14: // Ctrl + n
                          if(config_state->input) break;
@@ -2974,6 +2936,38 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     case 9: // Ctrl + i
                          input_start(config_state, "Shell Command Input", key);
                     break;
+                    case 8: // Ctrl + h
+                    {
+                         Point_t point = {config_state->tab_current->view_current->top_left.x - 2, // account for window separator
+                                         cursor->y - config_state->tab_current->view_current->top_row + config_state->tab_current->view_current->top_left.y};
+                         switch_to_view_at_point(config_state, point);
+                    } break;
+                    case 10: // Ctrl + j
+                    {
+                         Point_t point = {cursor->x - config_state->tab_current->view_current->left_column + config_state->tab_current->view_current->top_left.x,
+                                          config_state->tab_current->view_current->bottom_right.y + 2}; // account for window separator
+                         switch_to_view_at_point(config_state, point);
+                    } break;
+                    case 11: // Ctrl + k
+                    {
+                         Point_t point = {cursor->x - config_state->tab_current->view_current->left_column + config_state->tab_current->view_current->top_left.x,
+                                          config_state->tab_current->view_current->top_left.y - 2};
+                         switch_to_view_at_point(config_state, point);
+                    } break;
+                    case 12: // Ctrl + l
+                    {
+                         Point_t point = {config_state->tab_current->view_current->bottom_right.x + 2, // account for window separator
+                                          cursor->y - config_state->tab_current->view_current->top_row + config_state->tab_current->view_current->top_left.y};
+                         switch_to_view_at_point(config_state, point);
+                    } break;
+                    case 7: // Ctrl + g
+                    {
+                         split_view(config_state->tab_current->view_head, config_state->tab_current->view_current, false, config_state->line_number_type);
+                    } break;
+                    case 22: // Ctrl + v
+                    {
+                         split_view(config_state->tab_current->view_head, config_state->tab_current->view_current, true, config_state->line_number_type);
+                    } break;
                     }
                }
           }

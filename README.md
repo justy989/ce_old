@@ -43,7 +43,7 @@
 Key Sequence|Action
 ------------|------
 Ctrl+f|load file
-Ctrl+q|kill current window, if there is only 1 window, then quit, or stop recording macro
+Ctrl+q|kill current window or stop recording macro
 Ctrl+w|save buffer
 Ctrl+a|save buffer as new filename
 Ctrl+e|open new unnamed buffer
@@ -102,6 +102,7 @@ y?|view yank registers (confirm on register you want to edit)
 zt|scroll view so cursor is at the top
 zz|scroll view so cursor is in the middle
 zb|scroll view so cursor is at the bottom
+gq|quit editor
 gf|goto file under cursor
 gt|goto next tab
 gT|goto previous tab

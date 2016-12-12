@@ -1348,7 +1348,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           switch(config_state->input_key) {
           default:
                break;
-          case KEY_CLOSE: // Ctrl + q
+          case 'q':
                if(!config_state->view_input->buffer->line_count) break;
 
                if(tolower(config_state->view_input->buffer->lines[0][0]) == 'y'){

@@ -1,5 +1,5 @@
 CC?=clang
-CFLAGS+=-Wall -Werror -Wextra -std=c11 -ggdb3 -D_GNU_SOURCE -D_POSIX_C_SOURCE=200809L -D_XOPEN_SOURCE=700 $(SCROLL_FLAG)
+CFLAGS+=-Wall -Werror -Wextra -std=c11 -ggdb3 -D_GNU_SOURCE $(SCROLL_FLAG)
 LINK=-lncurses -lutil
 
 all: LINK += -lpthread

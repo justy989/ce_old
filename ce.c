@@ -1175,17 +1175,35 @@ char ce_get_char_raw(const Buffer_t* buffer, Point_t location)
      return buffer->lines[location.y][location.x];
 }
 
-bool ce_set_char(Buffer_t* buffer, Point_t location, char c)
+bool set_char_impl(Buffer_t* buffer, Point_t location, char c)
 {
-     if(buffer->status == BS_READONLY) return false;
-
      if(!ce_point_on_buffer(buffer, location)) return false;
 
-     if(c == NEWLINE) return ce_insert_string(buffer, location, "\n");
+     if(c == NEWLINE){
+          if(buffer->status == BS_READONLY){
+               return ce_insert_string_readonly(buffer, location, "\n");
+          }else{
+               return ce_insert_string(buffer, location, "\n");
+          }
+     }
 
      buffer->lines[location.y][location.x] = c;
      mark_buffer_as_modified(buffer);
      return true;
+}
+
+bool ce_set_char(Buffer_t* buffer, Point_t location, char c)
+{
+     if(buffer->status == BS_READONLY) return false;
+
+     return set_char_impl(buffer, location, c);
+}
+
+bool ce_set_char_readonly(Buffer_t* buffer, Point_t location, char c)
+{
+     if(buffer->status != BS_READONLY) return false;
+
+     return set_char_impl(buffer, location, c);
 }
 
 bool insert_line_impl(Buffer_t* buffer, int64_t line, const char* string)

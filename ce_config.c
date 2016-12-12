@@ -2343,7 +2343,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                         vkh_result.completed_action.motion.type == VMT_GOTO_MARK){
                     center_view_when_cursor_outside_portion(buffer_view, 0.25f, 0.75f);
                }
-
+          }else if(vkh_result.type == VKH_COMPLETED_ACTION_SUCCESS){
                if(config_state->vim_state.mode == VM_INSERT && buffer_view->buffer == &config_state->terminal.buffer){
                     buffer_view->cursor = config_state->terminal.cursor;
                     view_follow_cursor(buffer_view, config_state->line_number_type);

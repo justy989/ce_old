@@ -73,10 +73,22 @@ void* terminal_reader(void* data)
 
                     escape = false;
                }else if(isprint(*byte)){
-                    ce_append_char_readonly(&term->buffer, *byte);
+                    if(ce_point_on_buffer(&term->buffer, term->cursor)){
+                         int line_last_index = ce_last_index(term->buffer.lines[term->cursor.y]);
+
+                         if(line_last_index && term->cursor.x <= line_last_index){
+                              ce_set_char_readonly(&term->buffer, term->cursor, *byte);
+                         }else{
+                              ce_insert_char_readonly(&term->buffer, term->cursor, *byte);
+                         }
+                    }else{
+                         ce_insert_char_readonly(&term->buffer, term->cursor, *byte);
+                    }
+
                     term->cursor.x++;
+
                     if(term->cursor.x >= term->width){
-                         ce_append_char_readonly(&term->buffer, NEWLINE);
+                         ce_append_char_readonly(&term->buffer, NEWLINE); // ignore where the cursor is
                          term->cursor.x = 0;
                          term->cursor.y++;
                     }
@@ -85,15 +97,17 @@ void* terminal_reader(void* data)
                     case 27: // escape
                          escape = true;
                          break;
-                    case 8: // backspace
+                    case '\b': // backspace
                          term->cursor.x--;
                          if(term->cursor.x < 0) term->cursor.x = 0;
-                         ce_remove_char_readonly(&term->buffer, term->cursor);
                          break;
                     case NEWLINE:
-                         ce_append_char_readonly(&term->buffer, NEWLINE);
+                         ce_append_char_readonly(&term->buffer, NEWLINE); // ignore where the cursor is
                          term->cursor.x = 0;
                          term->cursor.y++;
+                         break;
+                    case '\r': // Carriage return
+                         term->cursor.x = 0;
                          break;
                     }
                }
@@ -220,14 +234,16 @@ void terminal_free(Terminal_t* term)
           kill(pid, SIGHUP);
      }
 
-     term->is_alive = false;
+     if(term->fd){
+          sem_destroy(&term->updated);
+          pthread_cancel(term->reader_thread);
+          ce_free_buffer(&term->buffer);
+     }
 
+     term->is_alive = false;
      term->width = 0;
      term->height = 0;
      term->fd = 0;
-
-     pthread_cancel(term->reader_thread);
-     ce_free_buffer(&term->buffer);
 }
 
 #if 0

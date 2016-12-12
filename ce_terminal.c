@@ -43,6 +43,7 @@ void* terminal_reader(void* data)
           if(rc < 0){
                ce_message("%s() read() from shell failed: %s\n", __FUNCTION__, strerror(errno));
                term->is_alive = false;
+               sem_post(&term->updated);
                pthread_exit(NULL);
           }
 
@@ -204,8 +205,6 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height)
 
      term->width = width;
      term->height = height;
-
-     ce_free_buffer(&term->buffer);
 
      if(!ce_alloc_lines(&term->buffer, 1)){
           term->is_alive = false;

@@ -867,12 +867,13 @@ void* terminal_check_update(void* data)
                view_follow_cursor(config_state->tab_current->view_current, config_state->line_number_type);
           }
 
+          if(config_state->vim_state.mode == VM_INSERT && !config_state->terminal.is_alive){
+               vim_enter_normal_mode(&config_state->vim_state);
+          }
+
           view_drawer(data);
      }
 
-     if(config_state->vim_state.mode == VM_INSERT){
-          vim_enter_normal_mode(&config_state->vim_state);
-     }
 
      pthread_cleanup_pop(NULL);
      return NULL;
@@ -2833,6 +2834,11 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          if(!config_state->terminal.is_alive){
                               int64_t width = buffer_view->bottom_right.x - buffer_view->top_left.x;
                               int64_t height = buffer_view->bottom_right.y - buffer_view->top_left.y;
+
+                              if(config_state->terminal.fd){
+                                   terminal_free(&config_state->terminal);
+                                   pthread_cancel(config_state->terminal_check_update_thread);
+                              }
 
                               terminal_init(&config_state->terminal, width, height);
 

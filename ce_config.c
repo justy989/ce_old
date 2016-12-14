@@ -1618,6 +1618,16 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferVi
               " %"PRId64", %"PRId64" ", column, row);
 }
 
+void if_terminal_in_view_then_resize(BufferView_t* view_head, Terminal_t* terminal)
+{
+     BufferView_t* term_view = ce_buffer_in_view(view_head, &terminal->buffer);
+     if(term_view){
+          int64_t new_width = term_view->bottom_right.x - term_view->top_left.x;
+          int64_t new_height = term_view->bottom_right.y - term_view->top_left.y;
+          terminal_resize(terminal, new_width, new_height);
+     }
+}
+
 bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, char** argv, void** user_data)
 {
      // NOTE: need to set these in this module
@@ -2502,6 +2512,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               }else{
                                    config_state->tab_current->view_current = config_state->tab_current->view_head;
                               }
+                              if_terminal_in_view_then_resize(config_state->tab_current->view_head, &config_state->terminal);
                          }
                     } break;
                     case 2: // Ctrl + b
@@ -2969,10 +2980,12 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     case 7: // Ctrl + g
                     {
                          split_view(config_state->tab_current->view_head, config_state->tab_current->view_current, false, config_state->line_number_type);
+                         if_terminal_in_view_then_resize(config_state->tab_current->view_head, &config_state->terminal);
                     } break;
                     case 22: // Ctrl + v
                     {
                          split_view(config_state->tab_current->view_head, config_state->tab_current->view_current, true, config_state->line_number_type);
+                         if_terminal_in_view_then_resize(config_state->tab_current->view_head, &config_state->terminal);
                     } break;
                     }
                }

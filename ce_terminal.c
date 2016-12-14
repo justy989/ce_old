@@ -245,12 +245,17 @@ void terminal_free(Terminal_t* term)
      term->fd = 0;
 }
 
-#if 0
 bool terminal_resize(Terminal_t* term, int64_t width, int64_t height)
 {
+     struct winsize window_size = {width, height, 0, 0};
+
+     if(ioctl(term->fd, TIOCSWINSZ, &window_size) < 0){
+          ce_message("%s() ioctl() failed %s", __FUNCTION__, strerror(errno));
+          return false;
+     }
+
      return true;
 }
-#endif
 
 bool terminal_send_key(Terminal_t* term, int key)
 {

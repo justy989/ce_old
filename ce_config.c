@@ -10,6 +10,7 @@
 #include <sys/ioctl.h>
 
 #include "ce_config.h"
+#include "ce_syntax.h"
 
 #define SCROLL_LINES 1
 

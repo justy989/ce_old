@@ -28,6 +28,13 @@ int64_t ce_count_string_lines(const char* string)
      return line_count;
 }
 
+void mark_buffer_as_modified(Buffer_t* buffer)
+{
+     if(buffer->status != BS_READONLY){
+          buffer->status = BS_MODIFIED;
+     }
+}
+
 bool ce_alloc_lines(Buffer_t* buffer, int64_t line_count)
 {
      if(buffer->status == BS_READONLY) return false;
@@ -57,7 +64,7 @@ bool ce_alloc_lines(Buffer_t* buffer, int64_t line_count)
           }
      }
 
-     buffer->status = BS_MODIFIED;
+     mark_buffer_as_modified(buffer);
      return true;
 }
 
@@ -145,7 +152,7 @@ void clear_lines_impl(Buffer_t* buffer)
           buffer->line_count = 0;
      }
 
-     buffer->status = BS_MODIFIED;
+     mark_buffer_as_modified(buffer);
 }
 
 void ce_clear_lines(Buffer_t* buffer)
@@ -160,8 +167,6 @@ void ce_clear_lines_readonly(Buffer_t* buffer)
      if(buffer->status != BS_READONLY) return;
 
      clear_lines_impl(buffer);
-
-     buffer->status = BS_READONLY;
 }
 
 bool ce_point_on_buffer(const Buffer_t* buffer, Point_t location)
@@ -212,7 +217,7 @@ bool insert_char_impl(Buffer_t* buffer, Point_t location, char c)
           }
           new_line[location.x] = 0;
           buffer->lines[location.y] = new_line;
-          buffer->status = BS_MODIFIED;
+          mark_buffer_as_modified(buffer);
           return true;
      }
 
@@ -234,7 +239,7 @@ bool insert_char_impl(Buffer_t* buffer, Point_t location, char c)
      // NULL terminate the newline, and free the old line
      new_line[new_len - 1] = 0;
      buffer->lines[location.y] = new_line;
-     buffer->status = BS_MODIFIED;
+     mark_buffer_as_modified(buffer);
      return true;
 }
 
@@ -249,11 +254,7 @@ bool ce_insert_char_readonly(Buffer_t* buffer, Point_t location, char c)
 {
      if(buffer->status != BS_READONLY) return false;
 
-     bool success = insert_char_impl(buffer, location, c);
-
-     buffer->status = BS_READONLY;
-
-     return success;
+     return insert_char_impl(buffer, location, c);
 }
 
 bool ce_append_char(Buffer_t* buffer, char c)
@@ -326,7 +327,7 @@ bool insert_string_impl(Buffer_t* buffer, Point_t location, const char* new_stri
                line++;
           }
 
-          buffer->status = BS_MODIFIED;
+          mark_buffer_as_modified(buffer);
           return true;
      }
 
@@ -406,7 +407,7 @@ bool insert_string_impl(Buffer_t* buffer, Point_t location, const char* new_stri
           free(current_line);
      }
 
-     buffer->status = BS_MODIFIED;
+     mark_buffer_as_modified(buffer);
      return true;
 }
 
@@ -421,11 +422,7 @@ bool ce_insert_string_readonly(Buffer_t* buffer, Point_t location, const char* n
 {
      if(buffer->status != BS_READONLY) return false;
 
-     bool success = insert_string_impl(buffer, location, new_string);
-
-     buffer->status = BS_READONLY;
-
-     return success;
+     return insert_string_impl(buffer, location, new_string);
 }
 
 bool ce_prepend_string(Buffer_t* buffer, int64_t line, const char* new_string)
@@ -448,10 +445,8 @@ bool ce_append_string_readonly(Buffer_t* buffer, int64_t line, const char* new_s
      return ce_insert_string_readonly(buffer, end_of_line, new_string);
 }
 
-bool ce_remove_char(Buffer_t* buffer, Point_t location)
+bool remove_char_impl(Buffer_t* buffer, Point_t location)
 {
-     if(buffer->status == BS_READONLY) return false;
-
      if(!ce_point_on_buffer(buffer, location)) return false;
 
      char* line = buffer->lines[location.y];
@@ -479,8 +474,22 @@ bool ce_remove_char(Buffer_t* buffer, Point_t location)
      free(line);
      buffer->lines[location.y] = new_line;
 
-     buffer->status = BS_MODIFIED;
+     mark_buffer_as_modified(buffer);
      return true;
+}
+
+bool ce_remove_char(Buffer_t* buffer, Point_t location)
+{
+     if(buffer->status == BS_READONLY) return false;
+
+     return remove_char_impl(buffer, location);
+}
+
+bool ce_remove_char_readonly(Buffer_t* buffer, Point_t location)
+{
+     if(buffer->status != BS_READONLY) return false;
+
+     return remove_char_impl(buffer, location);
 }
 
 char* ce_dupe_string(const Buffer_t* buffer, Point_t start, Point_t end)
@@ -633,8 +642,9 @@ bool find_matching_string_forward(const Buffer_t* buffer, Point_t* location, cha
 
           itr.x++;
           if(itr.x > last_index){
-               itr.y++;
                itr.x = 0;
+               itr.y++;
+               if(itr.y >= buffer->line_count) break;
                last_index = ce_last_index(buffer->lines[itr.y]);
           }
 
@@ -1165,17 +1175,35 @@ char ce_get_char_raw(const Buffer_t* buffer, Point_t location)
      return buffer->lines[location.y][location.x];
 }
 
+bool set_char_impl(Buffer_t* buffer, Point_t location, char c)
+{
+     if(!ce_point_on_buffer(buffer, location)) return false;
+
+     if(c == NEWLINE){
+          if(buffer->status == BS_READONLY){
+               return ce_insert_string_readonly(buffer, location, "\n");
+          }else{
+               return ce_insert_string(buffer, location, "\n");
+          }
+     }
+
+     buffer->lines[location.y][location.x] = c;
+     mark_buffer_as_modified(buffer);
+     return true;
+}
+
 bool ce_set_char(Buffer_t* buffer, Point_t location, char c)
 {
      if(buffer->status == BS_READONLY) return false;
 
-     if(!ce_point_on_buffer(buffer, location)) return false;
+     return set_char_impl(buffer, location, c);
+}
 
-     if(c == NEWLINE) return ce_insert_string(buffer, location, "\n");
+bool ce_set_char_readonly(Buffer_t* buffer, Point_t location, char c)
+{
+     if(buffer->status != BS_READONLY) return false;
 
-     buffer->lines[location.y][location.x] = c;
-     buffer->status = BS_MODIFIED;
-     return true;
+     return set_char_impl(buffer, location, c);
 }
 
 bool insert_line_impl(Buffer_t* buffer, int64_t line, const char* string)
@@ -1217,7 +1245,7 @@ bool insert_line_impl(Buffer_t* buffer, int64_t line, const char* string)
 
      buffer->lines = new_lines;
      buffer->line_count = new_line_count;
-     buffer->status = BS_MODIFIED;
+     mark_buffer_as_modified(buffer);
 
      return true;
 }
@@ -1235,11 +1263,7 @@ bool ce_insert_line_readonly(Buffer_t* buffer, int64_t line, const char* string)
 {
      if(buffer->status != BS_READONLY) return false;
 
-     bool success = insert_line_impl(buffer, line, string);
-
-     buffer->status = BS_READONLY;
-
-     return success;
+     return insert_line_impl(buffer, line, string);
 }
 
 bool ce_append_line(Buffer_t* buffer, const char* string)
@@ -1275,7 +1299,7 @@ bool ce_join_line(Buffer_t* buffer, int64_t line){
      if(!buffer->lines[line]) return false; // TODO: ENOMEM
      l1 = buffer->lines[line];
      memcpy(&l1[l1_len], l2, l2_len+1);
-     buffer->status = BS_MODIFIED;
+     mark_buffer_as_modified(buffer);
      return ce_remove_line(buffer, line+1);
 }
 
@@ -1305,7 +1329,7 @@ bool ce_remove_line(Buffer_t* buffer, int64_t line)
      }
 
      buffer->line_count = new_line_count;
-     buffer->status = BS_MODIFIED;
+     mark_buffer_as_modified(buffer);
      return true;
 }
 
@@ -1338,7 +1362,7 @@ bool ce_remove_string(Buffer_t* buffer, Point_t location, int64_t length)
           }
           buffer->lines[location.y][new_line_len] = 0;
 
-          buffer->status = BS_MODIFIED;
+          mark_buffer_as_modified(buffer);
           return true;
      }
 
@@ -1347,7 +1371,7 @@ bool ce_remove_string(Buffer_t* buffer, Point_t location, int64_t length)
      buffer->lines[location.y][location.x] = '\0';
      if(location.x == 0 && length == 0){
           ce_remove_line(buffer, location.y);
-          buffer->status = BS_MODIFIED;
+          mark_buffer_as_modified(buffer);
           return true;
      }
 
@@ -1382,7 +1406,7 @@ bool ce_remove_string(Buffer_t* buffer, Point_t location, int64_t length)
           }
      }
 
-     buffer->status = BS_MODIFIED;
+     mark_buffer_as_modified(buffer);
      return true;
 }
 
@@ -1744,7 +1768,7 @@ int64_t ce_is_constant_number(const char* line, int64_t start_offset)
      }
 
      if(count == 1 && (start[0] == '-' || start[0] == '.')) return 0;
-     if((seen_l || seen_u) && !seen_digit) return 0;
+     if(!seen_digit) return 0;
 
      // check if the previous character is not a delimiter
      int64_t prev_index = start_offset - 1;

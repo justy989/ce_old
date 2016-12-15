@@ -1,6 +1,8 @@
 #ifndef CE_VIM_H
 #define CE_VIM_H
 
+// ce's vimplementation: obviously only a subset of vim's features + some customization
+
 #include "ce.h"
 
 #define VIM_COMMENT_STRING "//"

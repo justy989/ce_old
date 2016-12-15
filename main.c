@@ -4,16 +4,16 @@ TODOS:
 BIG:
 -unicode support
 -network editing
--autocomplete for: code, shell commands, etc.
+-autocomplete for code
 -parse c to do real syntax highlighting/autocomplete?
--tail file
--support python and other mode syntax highlighting so I don't go insane at work
+-tail file mode
 -async file saving/loading
 -async autocomplete building
 -incremental replace (although already doable with 'n.')
--support tabs in addition to spaces
+-support tab character
 -multiline regex search/replace
--terminal emulator
+-allow customizing syntax in ce_draw_buffer()
+ -support python and other mode syntax highlighting so I don't go insane at work
 
 LITTLE:
 -r<enter>
@@ -25,12 +25,10 @@ LITTLE:
 -user code can infinite loop if you call ce_advance_cursor(buffer, &a, 1) and rely on
  ce_points_equal(a, b) being false when b is at the end of a line.
 -vim's 'ci}' and 'di}' behave differently in a nice way, emulate that
--auto complete shell commands then files
 -hit an undo brace bug, unsure how to reproduce. I wrapped some code in an if statement,
  then decided I didn't want the if statement. The closing if statement brace did not get undone.
 -visual replace *sometimes* infinite loops
 -syntax highlight printf formatters: '%s'
--shell command output sometimes doesn't come in til you send it input
 -we can still hit the drawing bug where config_state->tab_current->view_input_save is null
 -if you make a change and undo, the buffer still says modified
 */
@@ -56,7 +54,6 @@ typedef struct Config_t{
      ce_initializer* initializer;
      ce_destroyer* destroyer;
      ce_key_handler* key_handler;
-     ce_view_drawer* view_drawer;
 } Config_t;
 
 bool config_open(Config_t* config, const char* path)
@@ -81,9 +78,6 @@ bool config_open(Config_t* config, const char* path)
 
      config->key_handler = dlsym(config->so_handle, "key_handler");
      if(!config->key_handler) ce_message("no key_handler() found in '%s', using default", path);
-
-     config->view_drawer = dlsym(config->so_handle, "view_drawer");
-     if(!config->view_drawer) ce_message("no draw_view() found in '%s', using default", path);
 
      return true;
 }
@@ -335,10 +329,12 @@ int main(int argc, char** argv)
           // ncurses macro that gets height and width
           getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);
 
-          // user-defined or default draw_view()
-          current_config.view_drawer(buffer_list_head, user_data);
-
           int key = getch();
+
+          if(key == KEY_RESIZE){
+               getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);
+          }
+
           if(key == KEY_F(5)){
                // NOTE: maybe at startup we should do this, so when we crash we revert back to before we did the bad thing?
                if(access(current_config.path, F_OK) != -1){
@@ -360,9 +356,8 @@ int main(int argc, char** argv)
                }else{
                     ce_message("%s: %s", current_config.path, strerror(errno));
                }
-          }
           // user-defined or default key_handler()
-          else if(!current_config.key_handler(key, &buffer_list_head, user_data)){
+          }else if(!current_config.key_handler(key, &buffer_list_head, user_data)){
                done = true;
           }
      }

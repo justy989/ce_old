@@ -1,20 +1,11 @@
 #ifndef CE_CONFIG_H
 #define CE_CONFIG_H
 
+// configuration module to control the editor, builds into ce_config.so and can be rebuilt reloaded at runtime with F5
+
 #include "ce.h"
 #include "ce_vim.h"
-
-typedef struct{
-     char** commands;
-     int64_t command_count;
-     Buffer_t* output_buffer;
-     BufferNode_t* buffer_node_head;
-     BufferView_t* view_head;
-     BufferView_t* view_current;
-     int shell_command_input_fd;
-     int shell_command_output_fd;
-     void* user_data;
-} ShellCommandData_t;
+#include "ce_terminal.h"
 
 typedef struct InputHistoryNode_t {
      char* entry;
@@ -61,7 +52,6 @@ typedef struct{
      const char* input_message;
      int input_key;
 
-     Buffer_t* shell_command_buffer; // Allocate so it can be part of the buffer list and get free'd at the end
      Buffer_t* completion_buffer;    // same as shell_command_buffer
 
      Buffer_t input_buffer;
@@ -81,13 +71,11 @@ typedef struct{
 
      BufferView_t* view_input;
 
-     InputHistory_t shell_command_history;
-     InputHistory_t shell_input_history;
      InputHistory_t search_history;
      InputHistory_t load_file_history;
 
-     pthread_t shell_command_thread;
-     pthread_t shell_input_thread;
+     Terminal_t terminal;
+     pthread_t terminal_check_update_thread;
 
      AutoComplete_t auto_complete;
 

@@ -117,6 +117,11 @@ typedef struct {
      int64_t y;
 } Point_t;
 
+struct Buffer_t;
+
+typedef void syntax_highlighter(const struct Buffer_t*, Point_t, Point_t, Point_t, Point_t, const regex_t*,
+                                LineNumberType_t line_number_type, HighlightLineType_t, void*, bool);
+
 typedef enum{
      CE_UP = -1,
      CE_DOWN = 1
@@ -131,7 +136,7 @@ typedef enum {
      BS_NEW_FILE,
 } BufferStatus_t;
 
-typedef struct {
+typedef struct Buffer_t{
      char** lines; // '\0' terminated, does not contain newlines, NULL if empty
      int64_t line_count;
 
@@ -147,6 +152,9 @@ typedef struct {
      };
 
      void* user_data;
+
+     syntax_highlighter* syntax_fn;
+     void* syntax_user_data;
 } Buffer_t;
 
 typedef struct BufferNode_t {
@@ -241,8 +249,6 @@ extern Point_t* g_terminal_dimensions;
 typedef bool ce_initializer (BufferNode_t**, Point_t*, int, char**, void**);
 typedef void ce_destroyer   (BufferNode_t**, void*);
 typedef bool ce_key_handler (int, BufferNode_t**, void*);
-
-typedef void syntax_highlight_fn(const Buffer_t*, Point_t, Point_t, Point_t, Point_t, regex_t*, HighlightLineType_t, void*);
 
 
 // BufferList Manipulation Functions

@@ -1826,35 +1826,6 @@ int64_t ce_is_fullpath(const char* line, int64_t start_offset)
      return 0;
 }
 
-typedef enum {
-     HL_OFF,
-     HL_ON,
-     HL_CURRENT_LINE,
-} HighlightType_t;
-
-static int set_color(Syntax_t syntax, HighlightType_t highlight_type)
-{
-     standend();
-
-     if(syntax < S_NORMAL_HIGHLIGHTED){
-          switch(highlight_type){
-          default:
-               attron(COLOR_PAIR(syntax));
-               break;
-          case HL_ON:
-               attron(COLOR_PAIR(syntax + S_NORMAL_HIGHLIGHTED - 1));
-               break;
-          case HL_CURRENT_LINE:
-               attron(COLOR_PAIR(syntax + S_NORMAL_CURRENT_LINE - 1));
-               break;
-          }
-     } else {
-          attron(COLOR_PAIR(syntax));
-     }
-
-     return syntax;
-}
-
 static int64_t count_digits(int64_t n)
 {
      if(n == 0) return 1;
@@ -1916,33 +1887,9 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
      }
 
      int64_t max_width = (term_bottom_right->x - term_top_left->x) + 1;
+     int64_t max_height = (term_bottom_right->y - term_top_left->y) + 1;
      int64_t last_line = buffer_top_left->y + (term_bottom_right->y - term_top_left->y);
      if(last_line >= buffer->line_count) last_line = buffer->line_count - 1;
-
-     bool inside_multiline_comment = false;
-
-     // do a pass looking for only an ending multiline comment
-     for(int64_t i = buffer_top_left->y; i <= last_line; ++i) {
-          if(!buffer->lines[i][0]) continue;
-          const char* buffer_line = buffer->lines[i];
-          int64_t len = strlen(buffer_line);
-          bool found_open_multiline_comment = false;
-
-          for(int64_t c = 0; c < len; ++c){
-               if(buffer_line[c] == '/' && buffer_line[c + 1] == '*'){
-                    found_open_multiline_comment = true;
-                    break;
-               }
-
-               if(buffer_line[c] == '*' && buffer_line[c + 1] == '/'){
-                    inside_multiline_comment = true;
-               }
-          }
-
-          if(found_open_multiline_comment) break;
-     }
-
-     // TODO: if we found a closing multiline comment, make sure there is a matching opening multiline comment
 
      standend();
 
@@ -1953,61 +1900,26 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
           line_number_size--;
      }
 
-     bool seen_diff_header = false;
+     Point_t buffer_bottom_right = *buffer_top_left;
+     buffer_bottom_right.x += max_width;
+     buffer_bottom_right.y += max_height;
 
-     // look for any diff headers earlier in the file
-     for(int64_t i = buffer_top_left->y - 1; i >= 0; --i){
-          if(buffer->lines[i][0] == '@' && buffer->lines[i][1] == '@'){
-               seen_diff_header = true;
-               break;
-          }
-     }
-
-     // is our cursor on something we can match?
-     Point_t matched_pair = {-1, -1};
-     if(ce_point_on_buffer(buffer, *cursor)){
-          char ch = 0;
-          ch = ce_get_char_raw(buffer, *cursor);
-          switch(ch){
-          default:
-               break;
-          case '{':
-          case '}':
-          case '(':
-          case ')':
-          case '[':
-          case ']':
-          case '<':
-          case '>':
-               matched_pair = *cursor;
-               ce_move_cursor_to_matching_pair(buffer, &matched_pair, ch);
-               break;
-          }
-     }
+     if(buffer->syntax_fn) buffer->syntax_fn(buffer, *buffer_top_left, buffer_bottom_right, *cursor, (Point_t){0, 0},
+                                             highlight_regex, line_number_type, highlight_line_type,
+                                             buffer->syntax_user_data, true);
 
      for(int64_t i = buffer_top_left->y; i <= last_line; ++i) {
           move(term_top_left->y + (i - buffer_top_left->y), term_top_left->x);
 
           if(line_number_type){
-               set_color(S_LINE_NUMBERS, HL_OFF);
                long value = i + 1;
                if(line_number_type == LNT_RELATIVE || (line_number_type == LNT_RELATIVE_AND_ABSOLUTE && cursor->y != i)){
                     value = abs((int)(cursor->y - i));
                }
                printw("%*d ", line_number_size, value);
-               standend();
           }
 
-          if(!buffer->lines[i][0]){
-               if(i == cursor->y && highlight_line_type == HLT_ENTIRE_LINE){
-                    set_color(S_NORMAL, HL_CURRENT_LINE);
-                    for(int64_t c = 0; c < max_width; ++c){
-                         addch(' ');
-                    }
-               }
-
-               continue;
-          }
+          standend();
 
           const char* buffer_line = buffer->lines[i];
           int64_t line_length = strlen(buffer_line);
@@ -2019,365 +1931,27 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
 
           // NOTE: we probably want to move this check outside the loop
           if(has_colors() == TRUE){
-               bool inside_string = false;
-               char last_quote_char = 0;
-               bool inside_comment = false;
-               int64_t color_left = 0;
-               int highlight_color = 0;
-               bool diff_header = buffer->lines[i][0] == '@' && buffer->lines[i][1] == '@';
-               if(diff_header) seen_diff_header = true;
-               bool diff_add = seen_diff_header && buffer->lines[i][0] == '+';
-               bool diff_remove = seen_diff_header && buffer->lines[i][0] == '-';
-               HighlightType_t highlight_type = HL_OFF;
-               int64_t chars_til_highlighted_word = -1;
-               int64_t highlighting_left = 0;
-               int fg_color = 0;
+               if(line_length >= buffer_top_left->x){
+                    for(int64_t c = 0; c < min; ++c){
+                         Point_t loc = {buffer_top_left->x + c, i};
+                         if(buffer->syntax_fn) buffer->syntax_fn(buffer, *buffer_top_left, buffer_bottom_right, *cursor, loc,
+                                                                 highlight_regex, line_number_type, highlight_line_type,
+                                                                 buffer->syntax_user_data, false);
 
-               regmatch_t regex_matches[1];
-               if(highlight_regex){
-                    int regex_rc = regexec(highlight_regex, buffer->lines[i], 1, regex_matches, 0);
-                    if(regex_rc == 0) chars_til_highlighted_word = regex_matches[0].rm_so;
-               }
-
-               int64_t begin_trailing_whitespace = line_length;
-
-               // NOTE: pre-pass to find trailing whitespace if it exists
-               if(cursor->y != i){
-                    for(int64_t c = line_length - 1; c >= 0; --c){
-                         if(isblank(buffer_line[c])){
-                              begin_trailing_whitespace--;
+                         // print each character
+                         if(isprint(line_to_print[c])){
+                              addch(line_to_print[c]);
                          }else{
-                              break;
+                              addch(non_printable_repr);
                          }
                     }
                }
 
-               // NOTE: pre-pass check for comments and strings out of view
-               for(int64_t c = 0; c < buffer_top_left->x; ++c){
-                    CommentType_t comment_type = ce_is_comment(buffer_line, c, inside_string);
-                    switch(comment_type){
-                    default:
-                         break;
-                    case CT_SINGLE_LINE:
-                         inside_comment = true;
-                         break;
-                    case CT_BEGIN_MULTILINE:
-                         if(!inside_comment) inside_multiline_comment = true;
-                         break;
-                    case CT_END_MULTILINE:
-                         inside_multiline_comment = false;
-                         break;
-                    }
-
-                    if(highlight_regex && chars_til_highlighted_word == 0){
-                         highlighting_left = regex_matches[0].rm_eo - regex_matches[0].rm_so;
-                         highlight_type = HL_ON;
-                    }else if(highlight_type){
-                         highlighting_left--;
-
-                         if(!highlighting_left){
-                              if(highlight_regex){
-                                   int regex_rc = regexec(highlight_regex, buffer->lines[i], 1, regex_matches, 0);
-                                   if(regex_rc == 0) chars_til_highlighted_word = regex_matches[0].rm_so;
-                              }
-
-                              if(chars_til_highlighted_word == 0){
-                                   highlighting_left = regex_matches[0].rm_eo - regex_matches[0].rm_so;
-                                   highlight_type = HL_ON;
-                              }else{
-                                   highlight_type = HL_OFF;
-                              }
-                         }
-                    }
-
-                    ce_is_string_literal(buffer_line, c, line_length, &inside_string, &last_quote_char);
-
-                    // subtract from what is left of the keyword if we found a keyword earlier
-                    if(color_left){
-                         color_left--;
-                    }else{
-                         if(!inside_string){
-                              int64_t keyword_left = 0;
-
-                              if(!keyword_left){
-                                   keyword_left = ce_is_constant_number(buffer_line, c);
-                                   if(keyword_left){
-                                        color_left = keyword_left;
-                                        highlight_color = S_CONSTANT_NUMBER;
-                                   }
-                              }
-
-                              if(!keyword_left){
-                                   keyword_left = ce_is_caps_var(buffer_line, c);
-                                   if(keyword_left){
-                                        color_left = keyword_left;
-                                        highlight_color = S_CONSTANT;
-                                   }
-                              }
-
-                              if(!inside_comment && !inside_multiline_comment){
-                                   if(!keyword_left){
-                                        keyword_left = ce_is_c_control(buffer_line, c);
-                                        if(keyword_left){
-                                             color_left = keyword_left;
-                                             highlight_color = S_CONTROL;
-                                        }
-                                   }
-
-                                   if(!keyword_left){
-                                        keyword_left = ce_is_c_typename(buffer_line, c);
-                                        if(keyword_left){
-                                             color_left = keyword_left;
-                                             highlight_color = S_TYPE;
-                                        }
-                                   }
-
-                                   if(!keyword_left){
-                                        keyword_left = ce_is_c_keyword(buffer_line, c);
-                                        if(keyword_left){
-                                             color_left = keyword_left;
-                                             highlight_color = S_KEYWORD;
-                                        }
-                                   }
-
-                                   if(!keyword_left){
-                                        keyword_left = ce_is_preprocessor(buffer_line, c);
-                                        if(keyword_left){
-                                             color_left = keyword_left;
-                                             highlight_color = S_PREPROCESSOR;
-                                        }
-                                   }
-                              }
-
-                              if(!keyword_left){
-                                   keyword_left = ce_is_fullpath(buffer_line, c);
-                                   if(keyword_left){
-                                        color_left = keyword_left;
-                                        highlight_color = S_FILEPATH;
-                                   }
-                              }
-                         }
-                    }
-
-                    chars_til_highlighted_word--;
-               }
-
-               // skip line if we are offset by too much and can't show the line
-               if(line_length <= buffer_top_left->x) continue;
-
-               fg_color = set_color(S_NORMAL, highlight_type);
-
-               if(inside_comment || inside_multiline_comment){
-                    fg_color = set_color(S_COMMENT, highlight_type);
-               }else if(inside_string){
-                    fg_color = set_color(S_STRING, highlight_type);
-               }else if(diff_add){
-                    fg_color = set_color(S_DIFF_ADDED, highlight_type);
-               }else if(diff_remove){
-                    fg_color = set_color(S_DIFF_REMOVED, highlight_type);
-               }else if(diff_header){
-                    fg_color = set_color(S_DIFF_HEADER, highlight_type);
-               }else if(color_left){
-                    fg_color = set_color(highlight_color, highlight_type);
-               }
-
-               for(int64_t c = 0; c < min; ++c){
-                    // check for the highlight
-                    Point_t point = {c + buffer_top_left->x, i};
-                    if(ce_point_in_range(point, buffer->highlight_start, buffer->highlight_end)){
-                         highlight_type = HL_ON;
-                         set_color(fg_color, highlight_type);
-                    }else{
-                         if(highlight_regex && chars_til_highlighted_word == 0){
-                              highlighting_left = regex_matches[0].rm_eo - regex_matches[0].rm_so;
-                              highlight_type = HL_ON;
-                              set_color(fg_color, highlight_type);
-                         }else if(highlight_type){
-                              if(highlighting_left){
-                                   highlighting_left--;
-
-                                   if(!highlighting_left){
-
-                                        if(highlight_regex){
-                                             int regex_rc = regexec(highlight_regex, buffer->lines[i] + c, 1, regex_matches, 0);
-                                             if(regex_rc == 0){
-                                                  chars_til_highlighted_word = regex_matches[0].rm_so;
-                                             }
-                                        }
-
-                                        if(chars_til_highlighted_word == 0){
-                                             highlighting_left = regex_matches[0].rm_eo - regex_matches[0].rm_so;
-                                             highlight_type = HL_ON;
-                                        }else if(cursor->y == i && highlight_line_type != HLT_NONE){
-                                             highlight_type = HL_CURRENT_LINE;
-                                        }else{
-                                             highlight_type = HL_OFF;
-                                        }
-                                        set_color(fg_color, highlight_type);
-                                   }
-                              }else if(cursor->y == i && highlight_line_type != HLT_NONE){
-                                   highlight_type = HL_CURRENT_LINE;
-                                   set_color(fg_color, highlight_type);
-                              }else{
-                                   highlight_type = HL_OFF;
-                                   set_color(fg_color, highlight_type);
-                              }
-                         }else if(cursor->y == i && highlight_line_type != HLT_NONE){
-                              highlight_type = HL_CURRENT_LINE;
-                              set_color(fg_color, highlight_type);
-                         }
-                    }
-
-                    // syntax highlighting
-                    if(color_left == 0){
-                         if(!inside_string){
-                              color_left = ce_is_constant_number(line_to_print, c);
-                              if(color_left){
-                                   fg_color = set_color(S_CONSTANT_NUMBER, highlight_type);
-                              }
-
-                              if(!color_left){
-                                   color_left = ce_is_caps_var(line_to_print, c);
-                                   if(color_left){
-                                        fg_color = set_color(S_CONSTANT, highlight_type);
-                                   }
-                              }
-
-                              if(!inside_comment && !inside_multiline_comment){
-                                   if(!color_left){
-                                        color_left = ce_is_c_control(line_to_print, c);
-                                        if(color_left){
-                                             fg_color = set_color(S_CONTROL, highlight_type);
-                                        }
-                                   }
-
-                                   if(!color_left){
-                                        color_left = ce_is_c_typename(line_to_print, c);
-                                        if(color_left){
-                                             fg_color = set_color(S_TYPE, highlight_type);
-                                        }
-                                   }
-
-                                   if(!color_left){
-                                        color_left = ce_is_c_keyword(line_to_print, c);
-                                        if(color_left){
-                                             fg_color = set_color(S_KEYWORD, highlight_type);
-                                        }
-                                   }
-
-                                   if(!color_left){
-                                        color_left = ce_is_preprocessor(line_to_print, c);
-                                        if(color_left){
-                                             fg_color = set_color(S_PREPROCESSOR, highlight_type);
-                                        }
-                                   }
-
-                                   if(!color_left && matched_pair.x >= 0){
-                                        Point_t cur = {buffer_top_left->x + c, i};
-                                        if(ce_points_equal(cur, *cursor) || ce_points_equal(cur, matched_pair)){
-                                             fg_color = set_color(S_MATCHING_PARENS, highlight_type);
-                                        }else if(fg_color == S_MATCHING_PARENS){
-                                             fg_color = set_color(S_NORMAL, highlight_type);
-                                        }
-                                   }
-                              }
-
-                              if(!color_left){
-                                   color_left = ce_is_fullpath(line_to_print, c);
-                                   if(color_left){
-                                        fg_color = set_color(S_FILEPATH, highlight_type);
-                                   }
-                              }
-                         }
-
-                         CommentType_t comment_type = ce_is_comment(line_to_print, c, inside_string);
-                         switch(comment_type){
-                         default:
-                              break;
-                         case CT_SINGLE_LINE:
-                              inside_comment = true;
-                              fg_color = set_color(S_COMMENT, highlight_type);
-                              break;
-                         case CT_BEGIN_MULTILINE:
-                              if(!inside_comment){
-                                   inside_multiline_comment = true;
-                                   fg_color = set_color(S_COMMENT, highlight_type);
-                              }
-                              break;
-                         case CT_END_MULTILINE:
-                              inside_multiline_comment = false;
-                              color_left = 1;
-                              break;
-                         }
-
-                         bool pre_quote_check = inside_string;
-                         ce_is_string_literal(line_to_print, c, print_line_length, &inside_string, &last_quote_char);
-
-                         // if inside_string has changed, update the color
-                         if(pre_quote_check != inside_string){
-                              if(inside_string) fg_color = set_color(S_STRING, highlight_type);
-                              else color_left = 1;
-                         }
-                    }else{
-                         color_left--;
-                         if(color_left == 0){
-                              fg_color = set_color(S_NORMAL, highlight_type);
-
-                              if(inside_comment || inside_multiline_comment){
-                                   fg_color = set_color(S_COMMENT, highlight_type);
-                              }else if(inside_string){
-                                   fg_color = set_color(S_STRING, highlight_type);
-                              }else if(diff_add){
-                                   fg_color = set_color(S_DIFF_ADDED, highlight_type);
-                              }else if(diff_remove){
-                                   fg_color = set_color(S_DIFF_REMOVED, highlight_type);
-                              }else if(diff_header){
-                                   fg_color = set_color(S_DIFF_HEADER, highlight_type);
-                              }else if(matched_pair.x >= 0){
-                                   Point_t cur = {buffer_top_left->x + c, i};
-                                   if(ce_points_equal(cur, *cursor) || ce_points_equal(cur, matched_pair)){
-                                        fg_color = set_color(S_MATCHING_PARENS, highlight_type);
-                                   }
-                              }
-                         }
-                    }
-
-                    if(c >= begin_trailing_whitespace){
-                         fg_color = set_color(S_TRAILING_WHITESPACE, highlight_type);
-                    }
-
-                    // print each character
-                    if(isprint(line_to_print[c])){
-                         addch(line_to_print[c]);
-                    }else{
-                         addch(non_printable_repr);
-                    }
-
-                    chars_til_highlighted_word--;
-               }
-
-               // highlight the rest of the line, if configured
-               if(cursor->y == i && highlight_line_type == HLT_ENTIRE_LINE){
-                    fg_color = set_color(fg_color, HL_CURRENT_LINE);
-                    for(int64_t c = min; c < max_width; ++c){
-                         addch(' ');
-                    }
-               }
-
-               // NOTE: post pass after the line to see if multiline comments begin or end
-               for(int64_t c = min; c < line_length; ++c){
-                    CommentType_t comment_type = ce_is_comment(buffer_line, c, inside_string);
-                    switch(comment_type){
-                    default:
-                         break;
-                    case CT_BEGIN_MULTILINE:
-                         if(!inside_comment) inside_multiline_comment = true;
-                         break;
-                    case CT_END_MULTILINE:
-                         inside_multiline_comment = false;
-                         break;
-                    }
-               }
+               // call syntax function at the end of the line as well
+               Point_t loc = {buffer_top_left->x + min, i};
+               if(buffer->syntax_fn) buffer->syntax_fn(buffer, *buffer_top_left, buffer_bottom_right, *cursor, loc,
+                                                       highlight_regex, line_number_type, highlight_line_type,
+                                                       buffer->syntax_user_data, false);
           }else{
                for(int64_t c = 0; c < min; ++c){
                     // print each character
@@ -2388,8 +1962,6 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                     }
                }
           }
-
-          standend();
      }
 
      return true;

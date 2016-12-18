@@ -352,6 +352,15 @@ bool initialize_buffer(Buffer_t* buffer){
      buffer_state->commit_tail = tail;
 
      buffer->user_data = buffer_state;
+
+     buffer->syntax_fn = syntax_highlight_c;
+     buffer->syntax_user_data = malloc(sizeof(SyntaxC_t));
+     if(!buffer->syntax_user_data){
+          ce_message("failed to allocate syntax user data for buffer");
+          free(buffer_state);
+          return false;
+     }
+
      return true;
 }
 

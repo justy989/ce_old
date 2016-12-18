@@ -10,8 +10,6 @@ typedef enum {
 } HighlightType_t;
 
 typedef struct{
-     bool started;
-
      bool inside_multiline_comment;
      bool inside_comment;
      bool inside_string;
@@ -33,6 +31,7 @@ typedef struct{
 } SyntaxC_t;
 
 void syntax_highlight_c(const Buffer_t* buffer, Point_t top_left, Point_t bottom_right, Point_t cursor, Point_t loc,
-                        regex_t* highlight_regex, HighlightLineType_t highlight_line_type, void* user_data);
+                        const regex_t* highlight_regex, LineNumberType_t line_number_type, HighlightLineType_t highlight_line_type,
+                        void* user_data, bool first_call);
 
 #endif

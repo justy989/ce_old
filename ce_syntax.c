@@ -691,7 +691,7 @@ void syntax_highlight_c(const Buffer_t* buffer, Point_t top_left, Point_t bottom
      }
 
      char* line_to_print = buffer->lines[loc.y] + top_left.x;
-     int64_t print_line_length = strlen(line_to_print); // TODO: clamp by view width
+     int64_t print_line_length = strlen(line_to_print);
 
      // syntax highlighting
      if(syntax->current_color_left == 0){

@@ -242,6 +242,8 @@ typedef bool ce_initializer (BufferNode_t**, Point_t*, int, char**, void**);
 typedef void ce_destroyer   (BufferNode_t**, void*);
 typedef bool ce_key_handler (int, BufferNode_t**, void*);
 
+typedef void syntax_highlight_fn(const Buffer_t*, Point_t, Point_t, Point_t, Point_t, regex_t*, HighlightLineType_t, void*);
+
 
 // BufferList Manipulation Functions
 BufferNode_t* ce_append_buffer_to_list (BufferNode_t* head, Buffer_t* buffer); // NOTE: we may want to consider taking tail rather than head

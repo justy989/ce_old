@@ -2951,9 +2951,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     case 1: // Ctrl + a
                          input_start(config_state, "Save Buffer As", key);
                     break;
-                    case 9: // Ctrl + i
-                         input_start(config_state, "Shell Command Input", key);
-                    break;
                     case 8: // Ctrl + h
                     {
                          Point_t point = {config_state->tab_current->view_current->top_left.x - 2, // account for window separator

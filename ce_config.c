@@ -1710,6 +1710,11 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      }
 
      config_state->terminal.buffer.user_data = terminal_buffer_state;
+     config_state->terminal.buffer.syntax_fn = terminal_highlight;
+     TerminalHighlight_t* terminal_highlight = malloc(sizeof(TerminalHighlight_t));
+     terminal_highlight->unique_color_id = S_AUTO_COMPLETE + 1; // TODO: get unique id!
+     terminal_highlight->terminal = &config_state->terminal;
+     config_state->terminal.buffer.syntax_user_data = terminal_highlight;
 
      if(!config_state->completion_buffer){
           config_state->completion_buffer = calloc(1, sizeof(*config_state->completion_buffer));
@@ -1914,6 +1919,8 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
           ce_message("failed to register ctrl+c (SIGINT) signal handler.");
      }
 
+     ce_message("COLOR_PAIRS: %d\n", COLOR_PAIRS);
+
      view_drawer(*user_data);
      return true;
 }
@@ -1967,6 +1974,7 @@ bool destroyer(BufferNode_t** head, void* user_data)
      BufferNode_t* itr = *head;
      while(itr){
           free_buffer_state(itr->buffer->user_data);
+          free(itr->buffer->syntax_user_data);
           itr->buffer->user_data = NULL;
           itr = itr->next;
      }

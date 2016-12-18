@@ -12,7 +12,7 @@ BIG:
 -incremental replace (although already doable with 'n.')
 -support tab character
 -multiline regex search/replace
--allow customizing syntax in ce_draw_buffer()
++allow customizing syntax in ce_draw_buffer()
  -support python and other mode syntax highlighting so I don't go insane at work
 
 LITTLE:

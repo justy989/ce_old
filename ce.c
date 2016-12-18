@@ -1,4 +1,6 @@
 #include "ce.h"
+#include "ce_syntax.h"
+
 #include <ctype.h>
 #include <string.h>
 #include <inttypes.h>

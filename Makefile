@@ -1,6 +1,6 @@
 CC?=clang
 CFLAGS+=-Wall -Werror -Wextra -std=c11 -ggdb3 -D_GNU_SOURCE $(SCROLL_FLAG)
-LINK=-lncurses -lutil
+LINK=-lncurses -lutil -lm
 
 all: LINK += -lpthread
 all: ce ce_config.so

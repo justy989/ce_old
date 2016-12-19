@@ -393,6 +393,9 @@ bool terminal_resize(Terminal_t* term, int64_t width, int64_t height)
           return false;
      }
 
+     term->width = width;
+     term->height = height;
+
      return true;
 }
 

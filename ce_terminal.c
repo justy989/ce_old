@@ -85,72 +85,76 @@ void* terminal_reader(void* data)
                                    new_last_node->index = strlen(term->buffer.lines[term->buffer.line_count - 1]);
                                    new_last_node->next = NULL;
 
-                                   switch(csi_arguments[0]){
-                                   default:
-                                        break;
-                                   case 0:
-                                        new_last_node->fg = COLOR_FOREGROUND;
-                                        new_last_node->bg = COLOR_BACKGROUND;
-                                        break;
-                                   case 30:
-                                        new_last_node->fg = COLOR_BLACK;
-                                        break;
-                                   case 31:
-                                        new_last_node->fg = COLOR_RED;
-                                        break;
-                                   case 32:
-                                        new_last_node->fg = COLOR_GREEN;
-                                        break;
-                                   case 33:
-                                        new_last_node->fg = COLOR_YELLOW;
-                                        break;
-                                   case 34:
-                                        new_last_node->fg = COLOR_BLUE;
-                                        break;
-                                   case 35:
-                                        new_last_node->fg = COLOR_MAGENTA;
-                                        break;
-                                   case 36:
-                                        new_last_node->fg = COLOR_CYAN;
-                                        break;
-                                   case 37:
-                                        new_last_node->fg = COLOR_WHITE;
-                                        break;
-                                   case 38: // underscore on
-                                        new_last_node->fg = COLOR_FOREGROUND;
-                                        break;
-                                   case 39: // underscore off
-                                        new_last_node->fg = COLOR_FOREGROUND;
-                                        break;
-                                   case 40:
-                                        new_last_node->bg = COLOR_BLACK;
-                                        break;
-                                   case 41:
-                                        new_last_node->bg = COLOR_RED;
-                                        break;
-                                   case 42:
-                                        new_last_node->bg = COLOR_GREEN;
-                                        break;
-                                   case 43:
-                                        new_last_node->bg = COLOR_YELLOW;
-                                        break;
-                                   case 44:
-                                        new_last_node->bg = COLOR_BLUE;
-                                        break;
-                                   case 45:
-                                        new_last_node->bg = COLOR_MAGENTA;
-                                        break;
-                                   case 46:
-                                        new_last_node->bg = COLOR_CYAN;
-                                        break;
-                                   case 47:
-                                        new_last_node->bg = COLOR_WHITE;
-                                        break;
-                                   case 48:
-                                        break;
-                                   case 49:
-                                        new_last_node->bg = COLOR_BACKGROUND;
-                                        break;
+                                   for(int a = 0; a <= csi_argument_index; ++a){
+                                        switch(csi_arguments[a]){
+                                        default:
+                                             break;
+                                        case 1: // bold
+                                             break;
+                                        case 0:
+                                             new_last_node->fg = COLOR_FOREGROUND;
+                                             new_last_node->bg = COLOR_BACKGROUND;
+                                             break;
+                                        case 30:
+                                             new_last_node->fg = COLOR_BLACK;
+                                             break;
+                                        case 31:
+                                             new_last_node->fg = COLOR_RED;
+                                             break;
+                                        case 32:
+                                             new_last_node->fg = COLOR_GREEN;
+                                             break;
+                                        case 33:
+                                             new_last_node->fg = COLOR_YELLOW;
+                                             break;
+                                        case 34:
+                                             new_last_node->fg = COLOR_BLUE;
+                                             break;
+                                        case 35:
+                                             new_last_node->fg = COLOR_MAGENTA;
+                                             break;
+                                        case 36:
+                                             new_last_node->fg = COLOR_CYAN;
+                                             break;
+                                        case 37:
+                                             new_last_node->fg = COLOR_WHITE;
+                                             break;
+                                        case 38: // underscore on
+                                             new_last_node->fg = COLOR_FOREGROUND;
+                                             break;
+                                        case 39: // underscore off
+                                             new_last_node->fg = COLOR_FOREGROUND;
+                                             break;
+                                        case 40:
+                                             new_last_node->bg = COLOR_BLACK;
+                                             break;
+                                        case 41:
+                                             new_last_node->bg = COLOR_RED;
+                                             break;
+                                        case 42:
+                                             new_last_node->bg = COLOR_GREEN;
+                                             break;
+                                        case 43:
+                                             new_last_node->bg = COLOR_YELLOW;
+                                             break;
+                                        case 44:
+                                             new_last_node->bg = COLOR_BLUE;
+                                             break;
+                                        case 45:
+                                             new_last_node->bg = COLOR_MAGENTA;
+                                             break;
+                                        case 46:
+                                             new_last_node->bg = COLOR_CYAN;
+                                             break;
+                                        case 47:
+                                             new_last_node->bg = COLOR_WHITE;
+                                             break;
+                                        case 48:
+                                             break;
+                                        case 49:
+                                             new_last_node->bg = COLOR_BACKGROUND;
+                                             break;
+                                        }
                                    }
 
                               } break;
@@ -160,9 +164,9 @@ void* terminal_reader(void* data)
 
                               // clear arguments
                               for(int c = 0; c < 16; ++c) csi_arguments[c] = 0;
-                         }
 
-                         csi = false;
+                              csi = false;
+                         }
                     }
                }else if(escape){
                     switch(*byte){
@@ -425,54 +429,68 @@ bool terminal_send_key(Terminal_t* term, int key)
      return true;
 }
 
-void terminal_highlight(const Buffer_t* buffer, Point_t top_left, Point_t bottom_right, Point_t cursor, Point_t loc,
-                        const regex_t* highlight_regex, LineNumberType_t line_number_type, HighlightLineType_t highlight_line_type,
-                        void* user_data, bool first_call)
+void terminal_highlight(SyntaxHighlighterData_t* data, void* user_data)
 {
-     (void)(buffer);
-     (void)(top_left);
-     (void)(bottom_right);
-     (void)(cursor);
-     (void)(loc);
-     (void)(highlight_regex);
-     (void)(line_number_type);
-     (void)(highlight_line_type);
-
      if(!user_data) return;
 
      TerminalHighlight_t* terminal_highlight = user_data;
-     TerminalColorNode_t* color_node = terminal_highlight->terminal->color_lines + loc.y;
+     TerminalColorNode_t* color_node = terminal_highlight->terminal->color_lines + data->loc.y;
 
-     if(first_call){
+     switch(data->state){
+     default:
+     case SS_BEGINNING_OF_LINE:
+          break;
+     case SS_INITIALIZING:
           terminal_highlight->unique_color_id = S_AUTO_COMPLETE + 1;
           terminal_highlight->last_fg = -1;
           terminal_highlight->last_bg = -1;
           return;
-     }
+     case SS_CHARACTER:
+     {
+          while(color_node){
+               if(!color_node->next) break;
+               if(color_node->next->index > data->loc.x) break;
 
-     while(color_node){
-          if(!color_node->next) break;
-          if(color_node->next->index > loc.x) break;
+               color_node = color_node->next;
+          }
 
-          color_node = color_node->next;
-     }
+          if(!color_node) return;
 
-     if(!color_node) return;
+          if(terminal_highlight->last_fg == color_node->fg && terminal_highlight->last_bg == color_node->bg){
+               return;
+          }
 
-     if(terminal_highlight->last_fg == color_node->fg && terminal_highlight->last_bg == color_node->bg){
-          return;
-     }
+          standend();
 
-     standend();
-
-     if(color_node->fg >= 0 || color_node->bg >= 0){
-          init_pair(terminal_highlight->unique_color_id, color_node->fg, color_node->bg);
-
-          attron(COLOR_PAIR(terminal_highlight->unique_color_id));
+          if(color_node->fg >= 0 || color_node->bg >= 0){
+               init_pair(terminal_highlight->unique_color_id, color_node->fg, color_node->bg);
+               attron(COLOR_PAIR(terminal_highlight->unique_color_id));
+               terminal_highlight->unique_color_id++;
+          }
 
           terminal_highlight->last_fg = color_node->fg;
           terminal_highlight->last_bg = color_node->bg;
+     } break;
+     case SS_END_OF_LINE:
+     {
+          while(color_node->next) color_node = color_node->next;
 
-          terminal_highlight->unique_color_id++;
+          if(!color_node) return;
+
+          if(terminal_highlight->last_fg == color_node->fg && terminal_highlight->last_bg == color_node->bg){
+               return;
+          }
+
+          standend();
+
+          if(color_node->fg >= 0 || color_node->bg >= 0){
+               init_pair(terminal_highlight->unique_color_id, color_node->fg, color_node->bg);
+               attron(COLOR_PAIR(terminal_highlight->unique_color_id));
+               terminal_highlight->unique_color_id++;
+          }
+
+          terminal_highlight->last_fg = color_node->fg;
+          terminal_highlight->last_bg = color_node->bg;
+     } break;
      }
 }

@@ -33,6 +33,7 @@ LITTLE:
 -if you make a change and undo, the buffer still says modified
 -allow pasting into shell
 -highlight regex is in the wrong spot when view is scrolled horizontally
+-no line numbers for terminal buffer
 */
 
 #include <assert.h>

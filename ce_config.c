@@ -1711,8 +1711,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
 
      config_state->terminal.buffer.user_data = terminal_buffer_state;
      config_state->terminal.buffer.syntax_fn = terminal_highlight;
-     TerminalHighlight_t* terminal_highlight = malloc(sizeof(TerminalHighlight_t));
-     terminal_highlight->unique_color_id = S_AUTO_COMPLETE + 1; // TODO: get unique id!
+     TerminalHighlight_t* terminal_highlight = calloc(1, sizeof(TerminalHighlight_t));
      terminal_highlight->terminal = &config_state->terminal;
      config_state->terminal.buffer.syntax_user_data = terminal_highlight;
 

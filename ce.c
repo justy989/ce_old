@@ -1513,9 +1513,19 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
      buffer_bottom_right.x += max_width;
      buffer_bottom_right.y += max_height;
 
-     if(buffer->syntax_fn) buffer->syntax_fn(buffer, *buffer_top_left, buffer_bottom_right, *cursor, (Point_t){0, 0},
-                                             highlight_regex, line_number_type, highlight_line_type,
-                                             buffer->syntax_user_data, true);
+     SyntaxHighlighterData_t syntax_data;
+
+     syntax_data.buffer = buffer;
+     syntax_data.top_left = *buffer_top_left;
+     syntax_data.bottom_right = buffer_bottom_right;
+     syntax_data.cursor = *cursor;
+     syntax_data.highlight_regex = highlight_regex;
+     syntax_data.line_number_type = line_number_type;
+     syntax_data.highlight_line_type = highlight_line_type;
+     syntax_data.state = SS_INITIALIZING;
+     syntax_data.loc = (Point_t){0, 0};
+
+     if(buffer->syntax_fn) buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
 
      for(int64_t i = buffer_top_left->y; i <= last_line; ++i) {
           move(term_top_left->y + (i - buffer_top_left->y), term_top_left->x);
@@ -1528,8 +1538,6 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                printw("%*d ", line_number_size, value);
           }
 
-          standend();
-
           const char* buffer_line = buffer->lines[i];
           int64_t line_length = strlen(buffer_line);
 
@@ -1540,12 +1548,20 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
 
           // NOTE: we probably want to move this check outside the loop
           if(has_colors() == TRUE){
+               if(buffer->syntax_fn){
+                    syntax_data.loc = (Point_t){buffer_top_left->x, i};
+                    syntax_data.state = SS_BEGINNING_OF_LINE;
+                    buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
+               }
+
                if(line_length >= buffer_top_left->x){
                     for(int64_t c = 0; c < min; ++c){
-                         Point_t loc = {buffer_top_left->x + c, i};
-                         if(buffer->syntax_fn) buffer->syntax_fn(buffer, *buffer_top_left, buffer_bottom_right, *cursor, loc,
-                                                                 highlight_regex, line_number_type, highlight_line_type,
-                                                                 buffer->syntax_user_data, false);
+                         if(buffer->syntax_fn){
+                              syntax_data.loc = (Point_t){buffer_top_left->x + c, i};
+                              syntax_data.state = SS_CHARACTER;
+
+                              buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
+                         }
 
                          // print each character
                          if(isprint(line_to_print[c])){
@@ -1557,10 +1573,11 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                }
 
                // call syntax function at the end of the line as well
-               Point_t loc = {buffer_top_left->x + min, i};
-               if(buffer->syntax_fn) buffer->syntax_fn(buffer, *buffer_top_left, buffer_bottom_right, *cursor, loc,
-                                                       highlight_regex, line_number_type, highlight_line_type,
-                                                       buffer->syntax_user_data, false);
+               if(buffer->syntax_fn){
+                    syntax_data.loc = (Point_t){buffer_top_left->x + min, i};
+                    syntax_data.state = SS_END_OF_LINE;
+                    buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
+               }
           }else{
                for(int64_t c = 0; c < min; ++c){
                     // print each character

@@ -45,8 +45,6 @@ typedef struct{
      int last_bg;
 } TerminalHighlight_t;
 
-void terminal_highlight(const Buffer_t* buffer, Point_t top_left, Point_t bottom_right, Point_t cursor, Point_t loc,
-                        const regex_t* highlight_regex, LineNumberType_t line_number_type, HighlightLineType_t highlight_line_type,
-                        void* user_data, bool first_call);
+void terminal_highlight(SyntaxHighlighterData_t* data, void* user_data);
 
 #endif

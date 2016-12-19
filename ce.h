@@ -50,15 +50,33 @@ typedef enum {
         __typeof__ (b) _b = (b); \
         _a < _b? _a : _b; })
 
-typedef struct {
+typedef struct{
      int64_t x;
      int64_t y;
-} Point_t;
+}Point_t;
 
 struct Buffer_t;
 
-typedef void syntax_highlighter(const struct Buffer_t*, Point_t, Point_t, Point_t, Point_t, const regex_t*,
-                                LineNumberType_t line_number_type, HighlightLineType_t, void*, bool);
+typedef enum{
+     SS_INITIALIZING,
+     SS_BEGINNING_OF_LINE,
+     SS_CHARACTER,
+     SS_END_OF_LINE,
+}SyntaxState_t;
+
+typedef struct{
+     const struct Buffer_t* buffer;
+     Point_t top_left;
+     Point_t bottom_right;
+     Point_t cursor;
+     Point_t loc;
+     const regex_t* highlight_regex;
+     LineNumberType_t line_number_type;
+     HighlightLineType_t highlight_line_type;
+     SyntaxState_t state;
+}SyntaxHighlighterData_t;
+
+typedef void syntax_highlighter(SyntaxHighlighterData_t*, void*);
 
 typedef enum{
      CE_UP = -1,

@@ -93,8 +93,6 @@ typedef struct{
      regmatch_t regex_matches[1];
 }SyntaxC_t;
 
-void syntax_highlight_c(const Buffer_t* buffer, Point_t top_left, Point_t bottom_right, Point_t cursor, Point_t loc,
-                        const regex_t* highlight_regex, LineNumberType_t line_number_type, HighlightLineType_t highlight_line_type,
-                        void* user_data, bool first_call);
+void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data);
 
 #endif

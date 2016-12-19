@@ -1002,13 +1002,28 @@ void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data)
                syntax->highlight_type = HL_VISUAL;
                syntax_set_color(syntax->current_color, syntax->highlight_type);
           }else{
-               if(data->highlight_line_type && data->loc.y == data->cursor.y){
-                    syntax->highlight_type = HL_CURRENT_LINE;
-                    syntax_set_color(syntax->current_color, syntax->highlight_type);
-               }else{
-                    syntax->highlight_type = HL_OFF;
-                    syntax_set_color(syntax->current_color, syntax->highlight_type);
+               syntax->highlighting_left--;
+               if(syntax->highlighting_left <= 0){
+                    if(data->highlight_line_type && data->loc.y == data->cursor.y){
+                         syntax->highlight_type = HL_CURRENT_LINE;
+                    }else{
+                         syntax->highlight_type = HL_OFF;
+                    }
                }
+
+               if(data->highlight_regex){
+                    if(syntax->chars_til_highlighted_word < 0){
+                         int regex_rc = regexec(data->highlight_regex, buffer_line + data->loc.x, 1, syntax->regex_matches, 0);
+                         if(regex_rc == 0) syntax->chars_til_highlighted_word = syntax->regex_matches[0].rm_so;
+                    }else if(syntax->chars_til_highlighted_word == 0){
+                         syntax->highlight_type = HL_VISUAL;
+                         syntax->highlighting_left = syntax->regex_matches[0].rm_eo - syntax->regex_matches[0].rm_so;
+                    }
+
+                    syntax->chars_til_highlighted_word--;
+               }
+
+               syntax_set_color(syntax->current_color, syntax->highlight_type);
           }
 
           if(!syntax->inside_string && !syntax->inside_docstring){

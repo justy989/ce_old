@@ -213,10 +213,9 @@ void* terminal_reader(void* data)
                          escape = true;
                          break;
                     case '\b': // backspace
+                         ce_remove_char_readonly(&term->buffer, term->cursor);
                          term->cursor.x--;
                          if(term->cursor.x < 0) term->cursor.x = 0;
-
-                         // TODO: did we delete far enough passed a color node?
                          break;
                     case NEWLINE:
                     {
@@ -302,7 +301,7 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height)
           setenv("USER", pw->pw_name, 1);
           setenv("SHELL", sh, 1);
           setenv("HOME", pw->pw_dir, 1);
-          setenv("TERM", "dumb", 1); // we can change this to "urxvt" when we implement all VT102 commands
+          setenv("TERM", "urxvt", 1); // we can change this to "urxvt" when we implement all VT102 commands
 
           // reset signal handlers
           signal(SIGCHLD, SIG_DFL);

@@ -881,6 +881,9 @@ void* terminal_check_update(void* data)
                vim_enter_normal_mode(&config_state->vim_state);
           }
 
+          // make sure the other view drawer is done before drawing
+          pthread_mutex_lock(&draw_lock);
+          pthread_mutex_unlock(&draw_lock);
           view_drawer(data);
      }
 

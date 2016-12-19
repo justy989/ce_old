@@ -1523,7 +1523,7 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
      syntax_data.line_number_type = line_number_type;
      syntax_data.highlight_line_type = highlight_line_type;
      syntax_data.state = SS_INITIALIZING;
-     syntax_data.loc = (Point_t){0, 0};
+     syntax_data.loc = (Point_t){0, buffer_top_left->y};
 
      if(buffer->syntax_fn) buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
 

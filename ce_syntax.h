@@ -65,7 +65,6 @@ typedef enum {
      S_AUTO_COMPLETE,
 } Syntax_t;
 
-
 typedef enum{
      HL_OFF,
      HL_VISUAL,
@@ -93,6 +92,26 @@ typedef struct{
      regmatch_t regex_matches[1];
 }SyntaxC_t;
 
+typedef struct{
+     char inside_docstring;
+     char inside_string;
+
+     int current_color;
+     int64_t current_color_left;
+
+     HighlightType_t highlight_type;
+#if 0
+     int64_t chars_til_highlighted_word;
+     int64_t highlighting_left;
+
+     int64_t begin_trailing_whitespace;
+
+     Point_t matched_pair;
+     regmatch_t regex_matches[1];
+#endif
+}SyntaxPython_t;
+
 void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data);
+void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data);
 
 #endif

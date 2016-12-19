@@ -672,7 +672,6 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
                               syntax->highlighting_left--;
 
                               if(!syntax->highlighting_left){
-
                                    if(data->highlight_regex){
                                         int regex_rc = regexec(data->highlight_regex, data->buffer->lines[data->loc.y] + data->loc.x,
                                                                1, syntax->regex_matches, 0);
@@ -854,5 +853,207 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
                     break;
                }
           }
+     }
+}
+
+int64_t syntax_is_python_keyword(const char* line, int64_t start_offset)
+{
+     static const char* keywords [] = {
+          "and",
+          "del",
+          "from",
+          "not",
+          "while",
+          "as",
+          "elif",
+          "global",
+          "or",
+          "with",
+          "assert",
+          "else",
+          "if",
+          "pass",
+          "import",
+          "print",
+          "class",
+          "exec",
+          "in",
+          "finally",
+          "is",
+          "def",
+          "for",
+          "lambda",
+          "self",
+     };
+
+     static const int keyword_count = sizeof(keywords) / sizeof(keywords[0]);
+
+     return match_keyword(line, start_offset, keywords, keyword_count);
+}
+
+int64_t syntax_is_python_control(const char* line, int64_t start_offset)
+{
+     static const char* keywords [] = {
+          "yield",
+          "break",
+          "except",
+          "raise",
+          "continue",
+          "finally",
+          "return",
+          "try",
+     };
+
+     static const int keyword_count = sizeof(keywords) / sizeof(keywords[0]);
+
+     return match_keyword(line, start_offset, keywords, keyword_count);
+}
+
+int64_t syntax_is_python_comment(const char* line, int64_t start_offset)
+{
+     if(line[start_offset] == '#'){
+          int64_t line_len = strlen(line);
+          return line_len - start_offset;
+     }
+
+     return 0;
+}
+
+void syntax_is_python_string(const char* line, int64_t start_offset, char* is_string)
+{
+     if(*is_string){
+          if(line[start_offset] == *is_string){
+               *is_string = 0;
+          }
+     }else{
+          if(line[start_offset] == '\'' || line[start_offset] == '"'){
+               *is_string = line[start_offset];
+          }
+     }
+}
+
+void syntax_is_python_docstring(const char* line, int64_t start_offset, char* is_docstring)
+{
+     int64_t line_len = strlen(line);
+
+     if((line_len > start_offset + 2) &&
+        (line[start_offset] == '\'' || line[start_offset] == '"') &&
+        line[start_offset] == line[start_offset + 1] && line[start_offset] == line[start_offset + 2]){
+          if(*is_docstring){
+               *is_docstring = 0;
+          }else{
+               *is_docstring = line[start_offset];
+          }
+     }
+}
+
+void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data)
+{
+     SyntaxPython_t* syntax = user_data;
+
+     switch(data->state){
+     default:
+          break;
+     case SS_INITIALIZING:
+     {
+          syntax->inside_docstring = 0;
+          syntax->inside_string = 0;
+          syntax->current_color = 0;
+          syntax->current_color_left = 0;
+          syntax->highlight_type = HL_OFF;
+
+          for(int64_t y = 0; y < data->loc.y; ++y){
+               const char* buffer_line = data->buffer->lines[y];
+               int64_t line_len = strlen(buffer_line);
+
+               for(int64_t x = 0; x < line_len; ++x){
+                    syntax_is_python_docstring(buffer_line, x, &syntax->inside_docstring);
+               }
+          }
+     } break;
+     case SS_BEGINNING_OF_LINE:
+     {
+          syntax->inside_string = 0;
+          syntax->current_color = 0;
+          syntax->current_color_left = 0;
+
+          // lie to me !
+          SyntaxHighlighterData_t data_copy = *data;
+          data_copy.state = SS_CHARACTER;
+
+          for(int64_t x = 0; x < data->loc.x; ++x){
+               data_copy.loc = (Point_t){x, data->loc.y};
+               syntax_highlight_python(&data_copy, user_data);
+          }
+
+          if(data->loc.y == data->cursor.y){
+               syntax->highlight_type = HL_CURRENT_LINE;
+          }else{
+               syntax->highlight_type = HL_OFF;
+          }
+
+          syntax->current_color = syntax_set_color(syntax->current_color, syntax->highlight_type);
+     } break;
+     case SS_CHARACTER:
+     {
+          const char* buffer_line = data->buffer->lines[data->loc.y];
+
+          if(ce_point_in_range(data->loc, data->buffer->highlight_start, data->buffer->highlight_end)){
+               syntax->highlight_type = HL_VISUAL;
+               syntax_set_color(syntax->current_color, syntax->highlight_type);
+          }else{
+               if(data->highlight_line_type && data->loc.y == data->cursor.y){
+                    syntax->highlight_type = HL_CURRENT_LINE;
+                    syntax_set_color(syntax->current_color, syntax->highlight_type);
+               }else{
+                    syntax->highlight_type = HL_OFF;
+                    syntax_set_color(syntax->current_color, syntax->highlight_type);
+               }
+          }
+
+          if(!syntax->inside_string && !syntax->inside_docstring){
+               if(syntax->current_color_left){
+                    syntax->current_color_left--;
+               }else{
+                    if((syntax->current_color_left = syntax_is_python_keyword(buffer_line, data->loc.x))){
+                         syntax->current_color = syntax_set_color(S_KEYWORD, syntax->highlight_type);
+                    }else if((syntax->current_color_left = syntax_is_python_control(buffer_line, data->loc.x))){
+                         syntax->current_color = syntax_set_color(S_CONTROL, syntax->highlight_type);
+                    }else if((syntax->current_color_left = syntax_is_c_caps_var(buffer_line, data->loc.x))){
+                         syntax->current_color = syntax_set_color(S_CONSTANT, syntax->highlight_type);
+                    }else if((syntax->current_color_left = syntax_is_c_constant_number(buffer_line, data->loc.x))){
+                         syntax->current_color = syntax_set_color(S_CONSTANT, syntax->highlight_type);
+                    }else if((syntax->current_color_left = syntax_is_python_comment(buffer_line, data->loc.x))){
+                         syntax->current_color = syntax_set_color(S_COMMENT, syntax->highlight_type);
+                    }
+               }
+          }
+
+          if(syntax->current_color_left <= 0){
+               bool inside_docstring = syntax->inside_docstring;
+               syntax_is_python_docstring(buffer_line, data->loc.x, &syntax->inside_docstring);
+
+               if(inside_docstring || syntax->inside_docstring){
+                    syntax->current_color = syntax_set_color(S_STRING, syntax->highlight_type);
+               }else{
+                    bool inside_string = syntax->inside_string;
+                    syntax_is_python_string(buffer_line, data->loc.x, &syntax->inside_string);
+
+                    if(inside_string || syntax->inside_string){
+                         syntax->current_color = syntax_set_color(S_STRING, syntax->highlight_type);
+                    }else{
+                         syntax->current_color = syntax_set_color(S_NORMAL, syntax->highlight_type);
+                    }
+               }
+          }
+     } break;
+     case SS_END_OF_LINE:
+          if(data->cursor.y == data->loc.y && data->highlight_line_type == HLT_ENTIRE_LINE){
+               syntax->current_color = syntax_set_color(S_NORMAL, HL_CURRENT_LINE);
+               for(int64_t c = data->loc.x; c < data->bottom_right.x; ++c){
+                    addch(' ');
+               }
+          }
+          break;
      }
 }

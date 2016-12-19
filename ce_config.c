@@ -353,12 +353,27 @@ bool initialize_buffer(Buffer_t* buffer){
 
      buffer->user_data = buffer_state;
 
-     buffer->syntax_fn = syntax_highlight_c;
-     buffer->syntax_user_data = malloc(sizeof(SyntaxC_t));
-     if(!buffer->syntax_user_data){
-          ce_message("failed to allocate syntax user data for buffer");
-          free(buffer_state);
-          return false;
+     if(buffer->name){
+          int64_t name_len = strlen(buffer->name);
+          if(name_len > 3 && strcmp(buffer->name + (name_len - 3), ".py") == 0){
+               buffer->syntax_fn = syntax_highlight_python;
+               buffer->syntax_user_data = malloc(sizeof(SyntaxPython_t));
+               if(!buffer->syntax_user_data){
+                    ce_message("failed to allocate syntax user data for buffer");
+                    free(buffer_state);
+                    return false;
+               }
+          }
+     }
+
+     if(!buffer->syntax_fn){
+          buffer->syntax_fn = syntax_highlight_c;
+          buffer->syntax_user_data = malloc(sizeof(SyntaxC_t));
+          if(!buffer->syntax_user_data){
+               ce_message("failed to allocate syntax user data for buffer");
+               free(buffer_state);
+               return false;
+          }
      }
 
      return true;

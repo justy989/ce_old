@@ -1921,8 +1921,6 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
           ce_message("failed to register ctrl+c (SIGINT) signal handler.");
      }
 
-     ce_message("COLOR_PAIRS: %d\n", COLOR_PAIRS);
-
      view_drawer(*user_data);
      return true;
 }

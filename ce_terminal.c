@@ -254,7 +254,10 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height)
      int master_fd;
      int slave_fd;
 
-     struct winsize window_size = {width, height, 0, 0};
+     struct winsize window_size = {};
+
+     window_size.ws_row = height;
+     window_size.ws_col = width;
 
      // init tty
      if(openpty(&master_fd, &slave_fd, NULL, NULL, &window_size)){
@@ -378,7 +381,12 @@ void terminal_free(Terminal_t* term)
 
 bool terminal_resize(Terminal_t* term, int64_t width, int64_t height)
 {
-     struct winsize window_size = {width, height, 0, 0};
+     struct winsize window_size = {};
+
+     window_size.ws_row = height;
+     window_size.ws_col = width;
+
+     ce_message("resizing terminal %ld, %ld", width, height);
 
      if(ioctl(term->fd, TIOCSWINSZ, &window_size) < 0){
           ce_message("%s() ioctl() failed %s", __FUNCTION__, strerror(errno));

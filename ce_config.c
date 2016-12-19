@@ -2369,6 +2369,17 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          vim_enter_normal_mode(&config_state->vim_state);
                          ce_keys_free(&config_state->vim_state.command_head);
                     }
+               }else if((vkh_result.completed_action.change.type == VCT_PASTE_BEFORE ||
+                         vkh_result.completed_action.change.type == VCT_PASTE_AFTER) && config_state->tab_current->view_current->buffer == &config_state->terminal.buffer){
+                    VimYankNode_t* yank = vim_yank_find(config_state->vim_state.yank_head,
+                                                        vkh_result.completed_action.change.reg ? vkh_result.completed_action.change.reg : '"');
+                    if(yank){
+                         const char* itr = yank->text;
+                         while(*itr){
+                              terminal_send_key(&config_state->terminal, *itr);
+                              itr++;
+                         }
+                    }
                }
           }else if(vkh_result.type == VKH_COMPLETED_ACTION_SUCCESS){
                if(config_state->vim_state.mode == VM_INSERT && buffer_view->buffer == &config_state->terminal.buffer){

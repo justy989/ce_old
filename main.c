@@ -200,6 +200,7 @@ int main(int argc, char** argv)
      message_buffer->user_data = NULL;
      ce_alloc_lines(message_buffer, 1);
      message_buffer->status = BS_READONLY;
+     message_buffer->absolutely_no_line_numbers_under_any_circumstances = true;
 
      // init buffer list
      BufferNode_t* buffer_list_head = calloc(1, sizeof(*buffer_list_head));

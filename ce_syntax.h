@@ -89,11 +89,6 @@ typedef struct{
      bool inside_string;
      char last_quote_char;
 
-     bool diff_seen_header;
-     bool diff_header;
-     bool diff_add;
-     bool diff_remove;
-
      int current_color;
      int64_t current_color_left;
 
@@ -131,9 +126,15 @@ typedef struct{
      SyntaxHighlight_t highlight;
 }SyntaxConfig_t;
 
+typedef struct{
+     int current_color;
+     SyntaxHighlight_t highlight;
+}SyntaxDiff_t;
+
 void syntax_highlight_plain(SyntaxHighlighterData_t* data, void* user_data);
 void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data);
 void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data);
 void syntax_highlight_config(SyntaxHighlighterData_t* data, void* user_data);
+void syntax_highlight_diff(SyntaxHighlighterData_t* data, void* user_data);
 
 #endif

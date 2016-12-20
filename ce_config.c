@@ -381,6 +381,16 @@ bool initialize_buffer(Buffer_t* buffer){
                     free(buffer_state);
                     return false;
                }
+          }else if((name_len > 14 && strcmp(buffer->name + (name_len - 14), "COMMIT_EDITMSG") == 0) ||
+                   (name_len > 6 && strcmp(buffer->name + (name_len - 6), ".patch") == 0) ||
+                   (name_len > 5 && strcmp(buffer->name + (name_len - 5), ".diff") == 0)){
+               buffer->syntax_fn = syntax_highlight_diff;
+               buffer->syntax_user_data = malloc(sizeof(SyntaxDiff_t));
+               if(!buffer->syntax_user_data){
+                    ce_message("failed to allocate syntax user data for buffer");
+                    free(buffer_state);
+                    return false;
+               }
           }
      }
 
@@ -2226,6 +2236,11 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          free(buffer->syntax_user_data);
                          buffer->syntax_user_data = malloc(sizeof(SyntaxConfig_t));
                     }else if(buffer->syntax_fn == syntax_highlight_config){
+                         ce_message("syntax 'diff' now on %s", buffer->filename);
+                         buffer->syntax_fn = syntax_highlight_diff;
+                         free(buffer->syntax_user_data);
+                         buffer->syntax_user_data = malloc(sizeof(SyntaxDiff_t));
+                    }else if(buffer->syntax_fn == syntax_highlight_diff){
                          ce_message("syntax 'plain' now on %s", buffer->filename);
                          buffer->syntax_fn = syntax_highlight_plain;
                          free(buffer->syntax_user_data);

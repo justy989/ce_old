@@ -78,6 +78,9 @@ typedef struct{
      char last_quote_char;
 
      bool diff_seen_header;
+     bool diff_header;
+     bool diff_add;
+     bool diff_remove;
 
      HighlightType_t highlight_type;
      int64_t chars_til_highlighted_word;
@@ -102,10 +105,6 @@ typedef struct{
      HighlightType_t highlight_type;
      int64_t chars_til_highlighted_word;
      int64_t highlighting_left;
-
-#if 0
-     int64_t begin_trailing_whitespace;
-#endif
 
      Point_t matched_pair;
      regmatch_t regex_matches[1];

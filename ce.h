@@ -29,68 +29,6 @@
 #define KEY_TAB '\t'
 
 typedef enum {
-     S_NORMAL = 1,
-     S_KEYWORD,
-     S_TYPE,
-     S_CONTROL,
-     S_COMMENT,
-     S_STRING,
-     S_CONSTANT,
-     S_CONSTANT_NUMBER,
-     S_MATCHING_PARENS,
-     S_PREPROCESSOR,
-     S_FILEPATH,
-     S_DIFF_ADDED,
-     S_DIFF_REMOVED,
-     S_DIFF_HEADER,
-
-     // NOTE: highlighted and current line groups must be in the same order as base syntax enums
-     S_NORMAL_HIGHLIGHTED,
-     S_KEYWORD_HIGHLIGHTED,
-     S_TYPE_HIGHLIGHTED,
-     S_CONTROL_HIGHLIGHTED,
-     S_COMMENT_HIGHLIGHTED,
-     S_STRING_HIGHLIGHTED,
-     S_CONSTANT_HIGHLIGHTED,
-     S_CONSTANT_NUMBER_HIGHLIGHTED,
-     S_MATCHING_PARENS_HIGHLIGHTED,
-     S_PREPROCESSOR_HIGHLIGHTED,
-     S_FILEPATH_HIGHLIGHTED,
-     S_DIFF_ADDED_HIGHLIGHTED,
-     S_DIFF_REMOVED_HIGHLIGHTED,
-     S_DIFF_HEADER_HIGHLIGHTED,
-
-     S_NORMAL_CURRENT_LINE,
-     S_KEYWORD_CURRENT_LINE,
-     S_TYPE_CURRENT_LINE,
-     S_CONTROL_CURRENT_LINE,
-     S_COMMENT_CURRENT_LINE,
-     S_STRING_CURRENT_LINE,
-     S_CONSTANT_CURRENT_LINE,
-     S_CONSTANT_NUMBER_CURRENT_LINE,
-     S_MATCHING_PARENS_CURRENT_LINE,
-     S_PREPROCESSOR_CURRENT_LINE,
-     S_FILEPATH_CURRENT_LINE,
-     S_DIFF_ADDED_CURRENT_LINE,
-     S_DIFF_REMOVED_CURRENT_LINE,
-     S_DIFF_HEADER_CURRENT_LINE,
-
-     S_LINE_NUMBERS,
-
-     S_TRAILING_WHITESPACE,
-
-     S_BORDERS,
-
-     S_TAB_NAME,
-     S_CURRENT_TAB_NAME,
-
-     S_VIEW_STATUS,
-     S_INPUT_STATUS,
-
-     S_AUTO_COMPLETE,
-} Syntax_t;
-
-typedef enum {
      LNT_NONE,
      LNT_ABSOLUTE,
      LNT_RELATIVE,
@@ -112,10 +50,33 @@ typedef enum {
         __typeof__ (b) _b = (b); \
         _a < _b? _a : _b; })
 
-typedef struct {
+typedef struct{
      int64_t x;
      int64_t y;
-} Point_t;
+}Point_t;
+
+struct Buffer_t;
+
+typedef enum{
+     SS_INITIALIZING,
+     SS_BEGINNING_OF_LINE,
+     SS_CHARACTER,
+     SS_END_OF_LINE,
+}SyntaxState_t;
+
+typedef struct{
+     const struct Buffer_t* buffer;
+     Point_t top_left;
+     Point_t bottom_right;
+     Point_t cursor;
+     Point_t loc;
+     const regex_t* highlight_regex;
+     LineNumberType_t line_number_type;
+     HighlightLineType_t highlight_line_type;
+     SyntaxState_t state;
+}SyntaxHighlighterData_t;
+
+typedef void syntax_highlighter(SyntaxHighlighterData_t*, void*);
 
 typedef enum{
      CE_UP = -1,
@@ -131,7 +92,7 @@ typedef enum {
      BS_NEW_FILE,
 } BufferStatus_t;
 
-typedef struct {
+typedef struct Buffer_t{
      char** lines; // '\0' terminated, does not contain newlines, NULL if empty
      int64_t line_count;
 
@@ -147,6 +108,11 @@ typedef struct {
      };
 
      void* user_data;
+
+     syntax_highlighter* syntax_fn;
+     void* syntax_user_data;
+
+     bool absolutely_no_line_numbers_under_any_circumstances; // NOTE: I can't stop laughing
 } Buffer_t;
 
 typedef struct BufferNode_t {
@@ -358,15 +324,6 @@ bool ce_commit_change        (BufferCommitNode_t** tail, const BufferCommit_t* c
 
 bool ce_commits_free         (BufferCommitNode_t* tail);
 bool ce_commits_dump         (BufferCommitNode_t* tail);
-
-// Syntax
-int64_t ce_is_c_keyword     (const char* line, int64_t start_offset);
-int64_t ce_is_c_contrl      (const char* line, int64_t start_offset);
-int64_t ce_is_preprocessor  (const char* line, int64_t start_offset);
-int64_t ce_is_c_typename    (const char* line, int64_t start_offset);
-CommentType_t ce_is_comment (const char* line, int64_t start_offset, bool inside_string);
-void ce_is_string_literal   (const char* line, int64_t start_offset, int64_t line_len, bool* inside_string, char* last_quote_char);
-int64_t ce_is_caps_var      (const char* line, int64_t start_offset);
 
 // Line Numbers
 int64_t ce_get_line_number_column_width(LineNumberType_t line_number_type, int64_t buffer_line_count, int64_t buffer_view_top, int64_t buffer_view_bottom);

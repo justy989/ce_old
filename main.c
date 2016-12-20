@@ -12,8 +12,6 @@ BIG:
 -incremental replace (although already doable with 'n.')
 -support tab character
 -multiline regex search/replace
--allow customizing syntax in ce_draw_buffer()
- -support python and other mode syntax highlighting so I don't go insane at work
 
 LITTLE:
 -r<enter>
@@ -145,6 +143,7 @@ const char* random_greeting()
           "They see me slurpin' They hatin'",
           "'Days of pain are worth the years of upcoming prosperity' -confucius",
           "ce, aka, 'the cache miss king'",
+          "", // TODO: terminal illness jokey joke?
      };
 
      srand(time(NULL));

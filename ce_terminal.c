@@ -1,4 +1,5 @@
 #include "ce_terminal.h"
+#include "ce_syntax.h"
 
 #include <pty.h>
 #include <unistd.h>
@@ -49,19 +50,123 @@ void* terminal_reader(void* data)
 
           bytes[rc] = 0;
 
+          int csi_arguments[16]; // NPAR, does it exist?
+          int csi_argument_index = 0;
+
+          for(int c = 0; c < 16; ++c) csi_arguments[c] = 0;
+
           bool escape = false;
           bool csi = false;
           char* byte = bytes;
           while(*byte){
                if(csi){
                     if(isdigit(*byte)){
-
+                         csi_arguments[csi_argument_index] *= 10;
+                         csi_arguments[csi_argument_index] += (*byte - '0');
                     }else{
-                         switch(*byte){
-                         default:
-                              break;
+                         if(*byte == ';'){
+                              csi_argument_index++;
+                         }else{
+                              switch(*byte){
+                              default:
+                                   break;
+                              case 'm':
+                              {
+                                   // get last node in row
+                                   TerminalColorNode_t* last_node = term->color_lines + (term->buffer.line_count - 1);
+                                   while(last_node->next) last_node = last_node->next;
+
+                                   TerminalColorNode_t* new_last_node = malloc(sizeof(*new_last_node));
+                                   if(!new_last_node) break;
+
+                                   last_node->next = new_last_node;
+                                   new_last_node->fg = last_node->fg;
+                                   new_last_node->bg = last_node->bg;
+                                   new_last_node->index = strlen(term->buffer.lines[term->buffer.line_count - 1]);
+                                   new_last_node->next = NULL;
+
+                                   for(int a = 0; a <= csi_argument_index; ++a){
+                                        switch(csi_arguments[a]){
+                                        default:
+                                             break;
+                                        case 1: // bold
+                                             break;
+                                        case 0:
+                                             new_last_node->fg = COLOR_FOREGROUND;
+                                             new_last_node->bg = COLOR_BACKGROUND;
+                                             break;
+                                        case 30:
+                                             new_last_node->fg = COLOR_BLACK;
+                                             break;
+                                        case 31:
+                                             new_last_node->fg = COLOR_RED;
+                                             break;
+                                        case 32:
+                                             new_last_node->fg = COLOR_GREEN;
+                                             break;
+                                        case 33:
+                                             new_last_node->fg = COLOR_YELLOW;
+                                             break;
+                                        case 34:
+                                             new_last_node->fg = COLOR_BLUE;
+                                             break;
+                                        case 35:
+                                             new_last_node->fg = COLOR_MAGENTA;
+                                             break;
+                                        case 36:
+                                             new_last_node->fg = COLOR_CYAN;
+                                             break;
+                                        case 37:
+                                             new_last_node->fg = COLOR_WHITE;
+                                             break;
+                                        case 38: // underscore on
+                                             new_last_node->fg = COLOR_FOREGROUND;
+                                             break;
+                                        case 39: // underscore off
+                                             new_last_node->fg = COLOR_FOREGROUND;
+                                             break;
+                                        case 40:
+                                             new_last_node->bg = COLOR_BLACK;
+                                             break;
+                                        case 41:
+                                             new_last_node->bg = COLOR_RED;
+                                             break;
+                                        case 42:
+                                             new_last_node->bg = COLOR_GREEN;
+                                             break;
+                                        case 43:
+                                             new_last_node->bg = COLOR_YELLOW;
+                                             break;
+                                        case 44:
+                                             new_last_node->bg = COLOR_BLUE;
+                                             break;
+                                        case 45:
+                                             new_last_node->bg = COLOR_MAGENTA;
+                                             break;
+                                        case 46:
+                                             new_last_node->bg = COLOR_CYAN;
+                                             break;
+                                        case 47:
+                                             new_last_node->bg = COLOR_WHITE;
+                                             break;
+                                        case 48:
+                                             break;
+                                        case 49:
+                                             new_last_node->bg = COLOR_BACKGROUND;
+                                             break;
+                                        }
+                                   }
+
+                              } break;
+                              }
+
+                              csi_argument_index = 0;
+
+                              // clear arguments
+                              for(int c = 0; c < 16; ++c) csi_arguments[c] = 0;
+
+                              csi = false;
                          }
-                         csi = false;
                     }
                }else if(escape){
                     switch(*byte){
@@ -92,6 +197,15 @@ void* terminal_reader(void* data)
                          ce_append_char_readonly(&term->buffer, NEWLINE); // ignore where the cursor is
                          term->cursor.x = 0;
                          term->cursor.y++;
+
+                         // TODO: consolidate with code below
+                         term->color_lines = realloc(term->color_lines, term->buffer.line_count * sizeof(*term->color_lines));
+
+                         TerminalColorNode_t* itr = term->color_lines + (term->buffer.line_count - 2);
+                         while(itr->next) itr = itr->next;
+
+                         // NOTE: copy the color profile from the end of the previous line
+                         term->color_lines[term->buffer.line_count - 1] = *itr;
                     }
                }else{
                     switch(*byte){
@@ -99,14 +213,24 @@ void* terminal_reader(void* data)
                          escape = true;
                          break;
                     case '\b': // backspace
+                         ce_remove_char_readonly(&term->buffer, term->cursor);
                          term->cursor.x--;
                          if(term->cursor.x < 0) term->cursor.x = 0;
                          break;
                     case NEWLINE:
+                    {
                          ce_append_char_readonly(&term->buffer, NEWLINE); // ignore where the cursor is
                          term->cursor.x = 0;
                          term->cursor.y++;
-                         break;
+
+                         term->color_lines = realloc(term->color_lines, term->buffer.line_count * sizeof(*term->color_lines));
+
+                         TerminalColorNode_t* itr = term->color_lines + (term->buffer.line_count - 2);
+                         while(itr->next) itr = itr->next;
+
+                         // NOTE: copy the color profile from the end of the previous line
+                         term->color_lines[term->buffer.line_count - 1] = *itr;
+                    } break;
                     case '\r': // Carriage return
                          term->cursor.x = 0;
                          break;
@@ -130,7 +254,10 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height)
      int master_fd;
      int slave_fd;
 
-     struct winsize window_size = {width, height, 0, 0};
+     struct winsize window_size = {};
+
+     window_size.ws_row = height;
+     window_size.ws_col = width;
 
      // init tty
      if(openpty(&master_fd, &slave_fd, NULL, NULL, &window_size)){
@@ -177,7 +304,7 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height)
           setenv("USER", pw->pw_name, 1);
           setenv("SHELL", sh, 1);
           setenv("HOME", pw->pw_dir, 1);
-          setenv("TERM", "dumb", 1); // we can change this to "urxvt" when we implement all VT102 commands
+          setenv("TERM", "urxvt", 1); // we can change this to "urxvt" when we implement all VT102 commands
 
           // reset signal handlers
           signal(SIGCHLD, SIG_DFL);
@@ -224,6 +351,11 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height)
      term->buffer.name = strdup("[terminal]");
 
      term->cursor = (Point_t){0, 0};
+
+     term->color_lines = calloc(1, sizeof(*term->color_lines));
+     term->color_lines->fg = COLOR_FOREGROUND;
+     term->color_lines->bg = COLOR_BACKGROUND;
+
      return true;
 }
 
@@ -243,16 +375,26 @@ void terminal_free(Terminal_t* term)
      term->width = 0;
      term->height = 0;
      term->fd = 0;
+
+     free(term->color_lines);
 }
 
 bool terminal_resize(Terminal_t* term, int64_t width, int64_t height)
 {
-     struct winsize window_size = {width, height, 0, 0};
+     struct winsize window_size = {};
+
+     window_size.ws_row = height;
+     window_size.ws_col = width;
+
+     ce_message("resizing terminal %ld, %ld", width, height);
 
      if(ioctl(term->fd, TIOCSWINSZ, &window_size) < 0){
           ce_message("%s() ioctl() failed %s", __FUNCTION__, strerror(errno));
           return false;
      }
+
+     term->width = width;
+     term->height = height;
 
      return true;
 }
@@ -286,8 +428,6 @@ bool terminal_send_key(Terminal_t* term, int key)
           }
      }
 
-     // TODO: get mutex
-
      int rc = write(term->fd, string, size);
      if(rc < 0){
           ce_message("%s() write() to terminal failed: %s", __FUNCTION__, strerror(errno));
@@ -295,4 +435,94 @@ bool terminal_send_key(Terminal_t* term, int key)
      }
 
      return true;
+}
+
+void terminal_highlight(SyntaxHighlighterData_t* data, void* user_data)
+{
+     if(!user_data) return;
+
+     TerminalHighlight_t* terminal_highlight = user_data;
+     TerminalColorNode_t* color_node = terminal_highlight->terminal->color_lines + data->loc.y;
+
+     switch(data->state){
+     default:
+     case SS_BEGINNING_OF_LINE:
+          terminal_highlight->highlight_type = HL_OFF;
+          break;
+     case SS_INITIALIZING:
+          terminal_highlight->unique_color_id = S_AUTO_COMPLETE + 1;
+          terminal_highlight->last_fg = -1;
+          terminal_highlight->last_bg = -1;
+          terminal_highlight->highlight_type = HL_OFF;
+          return;
+     case SS_CHARACTER:
+     {
+          if(ce_point_in_range(data->loc, data->buffer->highlight_start, data->buffer->highlight_end)){
+               terminal_highlight->highlight_type = HL_VISUAL;
+          }else if(data->loc.y == data->cursor.y){
+               terminal_highlight->highlight_type = HL_CURRENT_LINE;
+          }else{
+               terminal_highlight->highlight_type = HL_OFF;
+          }
+
+          while(color_node){
+               if(!color_node->next) break;
+               if(color_node->next->index > data->loc.x) break;
+
+               color_node = color_node->next;
+          }
+
+          if(!color_node) return;
+
+          int bg_color = color_node->bg;
+
+          if(terminal_highlight->highlight_type == HL_VISUAL){
+               short fg = 0;
+               short bg = 0;
+               pair_content(S_NORMAL_HIGHLIGHTED, &fg, &bg);
+               bg_color = bg;
+          }else if(terminal_highlight->highlight_type == HL_CURRENT_LINE){
+               short fg = 0;
+               short bg = 0;
+               pair_content(S_NORMAL_CURRENT_LINE, &fg, &bg);
+               bg_color = bg;
+          }
+
+          if(terminal_highlight->last_fg == color_node->fg && terminal_highlight->last_bg == bg_color){
+               return;
+          }
+
+          standend();
+
+          if(color_node->fg >= 0 || color_node->bg >= 0 || bg_color >= 0){
+               init_pair(terminal_highlight->unique_color_id, color_node->fg, bg_color);
+               attron(COLOR_PAIR(terminal_highlight->unique_color_id));
+               terminal_highlight->unique_color_id++;
+          }
+
+          terminal_highlight->last_fg = color_node->fg;
+          terminal_highlight->last_bg = bg_color;
+     } break;
+     case SS_END_OF_LINE:
+     {
+          while(color_node->next) color_node = color_node->next;
+
+          if(!color_node) return;
+
+          if(terminal_highlight->last_fg == color_node->fg && terminal_highlight->last_bg == color_node->bg){
+               return;
+          }
+
+          standend();
+
+          if(color_node->fg >= 0 || color_node->bg >= 0){
+               init_pair(terminal_highlight->unique_color_id, color_node->fg, color_node->bg);
+               attron(COLOR_PAIR(terminal_highlight->unique_color_id));
+               terminal_highlight->unique_color_id++;
+          }
+
+          terminal_highlight->last_fg = color_node->fg;
+          terminal_highlight->last_bg = color_node->bg;
+     } break;
+     }
 }

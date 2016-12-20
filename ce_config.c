@@ -10,6 +10,7 @@
 #include <sys/ioctl.h>
 
 #include "ce_config.h"
+#include "ce_syntax.h"
 
 #define SCROLL_LINES 1
 
@@ -351,6 +352,30 @@ bool initialize_buffer(Buffer_t* buffer){
      buffer_state->commit_tail = tail;
 
      buffer->user_data = buffer_state;
+
+     if(buffer->name){
+          int64_t name_len = strlen(buffer->name);
+          if(name_len > 3 && strcmp(buffer->name + (name_len - 3), ".py") == 0){
+               buffer->syntax_fn = syntax_highlight_python;
+               buffer->syntax_user_data = malloc(sizeof(SyntaxPython_t));
+               if(!buffer->syntax_user_data){
+                    ce_message("failed to allocate syntax user data for buffer");
+                    free(buffer_state);
+                    return false;
+               }
+          }
+     }
+
+     if(!buffer->syntax_fn){
+          buffer->syntax_fn = syntax_highlight_c;
+          buffer->syntax_user_data = malloc(sizeof(SyntaxC_t));
+          if(!buffer->syntax_user_data){
+               ce_message("failed to allocate syntax user data for buffer");
+               free(buffer_state);
+               return false;
+          }
+     }
+
      return true;
 }
 
@@ -864,13 +889,16 @@ void* terminal_check_update(void* data)
 
           if(config_state->tab_current->view_current->buffer == &config_state->terminal.buffer){
                config_state->tab_current->view_current->cursor = config_state->terminal.cursor;
-               view_follow_cursor(config_state->tab_current->view_current, config_state->line_number_type);
+               view_follow_cursor(config_state->tab_current->view_current, LNT_NONE);
           }
 
           if(config_state->vim_state.mode == VM_INSERT && !config_state->terminal.is_alive){
                vim_enter_normal_mode(&config_state->vim_state);
           }
 
+          // make sure the other view drawer is done before drawing
+          pthread_mutex_lock(&draw_lock);
+          pthread_mutex_unlock(&draw_lock);
           view_drawer(data);
      }
 
@@ -1700,6 +1728,11 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      }
 
      config_state->terminal.buffer.user_data = terminal_buffer_state;
+     config_state->terminal.buffer.syntax_fn = terminal_highlight;
+     config_state->terminal.buffer.absolutely_no_line_numbers_under_any_circumstances = true;
+     TerminalHighlight_t* terminal_highlight = calloc(1, sizeof(TerminalHighlight_t));
+     terminal_highlight->terminal = &config_state->terminal;
+     config_state->terminal.buffer.syntax_user_data = terminal_highlight;
 
      if(!config_state->completion_buffer){
           config_state->completion_buffer = calloc(1, sizeof(*config_state->completion_buffer));
@@ -1957,6 +1990,7 @@ bool destroyer(BufferNode_t** head, void* user_data)
      BufferNode_t* itr = *head;
      while(itr){
           free_buffer_state(itr->buffer->user_data);
+          free(itr->buffer->syntax_user_data);
           itr->buffer->user_data = NULL;
           itr = itr->next;
      }
@@ -2279,7 +2313,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          if(buffer_view->cursor.x < (config_state->terminal.width - 1)){
                               buffer_view->cursor.x++;
                          }
-                         view_follow_cursor(buffer_view, config_state->line_number_type);
+                         view_follow_cursor(buffer_view, LNT_NONE);
                     }
                }
           }else{
@@ -2348,6 +2382,17 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          if(cursor->y >= config_state->buffer_list_buffer.line_count) cursor->y = config_state->buffer_list_buffer.line_count - 1;
                          vim_enter_normal_mode(&config_state->vim_state);
                          ce_keys_free(&config_state->vim_state.command_head);
+                    }
+               }else if((vkh_result.completed_action.change.type == VCT_PASTE_BEFORE ||
+                         vkh_result.completed_action.change.type == VCT_PASTE_AFTER) && config_state->tab_current->view_current->buffer == &config_state->terminal.buffer){
+                    VimYankNode_t* yank = vim_yank_find(config_state->vim_state.yank_head,
+                                                        vkh_result.completed_action.change.reg ? vkh_result.completed_action.change.reg : '"');
+                    if(yank){
+                         const char* itr = yank->text;
+                         while(*itr){
+                              terminal_send_key(&config_state->terminal, *itr);
+                              itr++;
+                         }
                     }
                }
           }else if(vkh_result.type == VKH_COMPLETED_ACTION_SUCCESS){
@@ -2950,9 +2995,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     case 1: // Ctrl + a
                          input_start(config_state, "Save Buffer As", key);
                     break;
-                    case 9: // Ctrl + i
-                         input_start(config_state, "Shell Command Input", key);
-                    break;
                     case 8: // Ctrl + h
                     {
                          Point_t point = {config_state->tab_current->view_current->top_left.x - 2, // account for window separator
@@ -3192,9 +3234,13 @@ void view_drawer(void* user_data)
 
      // draw auto complete
      // TODO: don't draw over borders!
-     Point_t terminal_cursor = get_cursor_on_terminal(cursor, buffer_view,
-                                                      buffer_view == config_state->view_input ? LNT_NONE :
-                                                                                                config_state->line_number_type);
+     LineNumberType_t line_number_type = config_state->line_number_type;
+     if(buffer_view == config_state->view_input ||
+        buffer == &config_state->terminal.buffer){
+          line_number_type = LNT_NONE;
+     }
+
+     Point_t terminal_cursor = get_cursor_on_terminal(cursor, buffer_view, line_number_type);
      if(auto_completing(&config_state->auto_complete)){
           move(terminal_cursor.y, terminal_cursor.x);
           int64_t offset = cursor->x - config_state->auto_complete.start.x;

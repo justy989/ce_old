@@ -28,7 +28,7 @@ LITTLE:
 -visual replace *sometimes* infinite loops
 -syntax highlight printf formatters: '%s'
 -we can still hit the drawing bug where config_state->tab_current->view_input_save is null
--if you make a change and undo, the buffer still says modified
+-if you make a change and undo, the buffer *sometimes* still says modified
 */
 
 #include <assert.h>

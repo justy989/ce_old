@@ -25,6 +25,8 @@
     you can select any macro to edit it
   - If you accidently 'undo' while creating a macro, it won't replay correctly. In ce, undo clears the part of the
     macro associated with change you want to undo. You can also redo while creating a macro.
+- Syntax Highlighting in emacs and vim are done and extended using regexes, which are not great to read. In ce,
+  a c interface is provided for custom syntax highlighting. See ce_syntax.h for examples.
 - The authors need to work remotely, so the editor needs to be able to run in a terminal.
 - It is fun learning how to make a text editor.
 - Using something on a daily basis that we created gives us the warm and fuzzies.

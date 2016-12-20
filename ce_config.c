@@ -1701,6 +1701,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      initialize_buffer(&config_state->input_buffer);
      config_state->input_buffer.name = strdup("[input]");
      config_state->view_input->buffer = &config_state->input_buffer;
+     config_state->view_input->buffer.absolutely_no_line_numbers_under_any_circumstances = true;
 
      // setup buffer list buffer
      config_state->buffer_list_buffer.name = strdup("[buffers]");

@@ -325,15 +325,6 @@ bool ce_commit_change        (BufferCommitNode_t** tail, const BufferCommit_t* c
 bool ce_commits_free         (BufferCommitNode_t* tail);
 bool ce_commits_dump         (BufferCommitNode_t* tail);
 
-// Syntax
-int64_t ce_is_c_keyword     (const char* line, int64_t start_offset);
-int64_t ce_is_c_contrl      (const char* line, int64_t start_offset);
-int64_t ce_is_preprocessor  (const char* line, int64_t start_offset);
-int64_t ce_is_c_typename    (const char* line, int64_t start_offset);
-CommentType_t ce_is_comment (const char* line, int64_t start_offset, bool inside_string);
-void ce_is_string_literal   (const char* line, int64_t start_offset, int64_t line_len, bool* inside_string, char* last_quote_char);
-int64_t ce_is_caps_var      (const char* line, int64_t start_offset);
-
 // Line Numbers
 int64_t ce_get_line_number_column_width(LineNumberType_t line_number_type, int64_t buffer_line_count, int64_t buffer_view_top, int64_t buffer_view_bottom);
 

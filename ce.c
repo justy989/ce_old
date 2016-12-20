@@ -1503,10 +1503,13 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
      standend();
 
      // figure out how wide the line number margin needs to be
-     int line_number_size = ce_get_line_number_column_width(line_number_type, buffer->line_count, buffer_top_left->y, last_line);
-     if(line_number_size){
-          max_width -= line_number_size;
-          line_number_size--;
+     int line_number_size = 0;
+     if(!buffer->absolutely_no_line_numbers_under_any_circumstances){
+          line_number_size = ce_get_line_number_column_width(line_number_type, buffer->line_count, buffer_top_left->y, last_line);
+          if(line_number_size){
+               max_width -= line_number_size;
+               line_number_size--;
+          }
      }
 
      Point_t buffer_bottom_right = *buffer_top_left;
@@ -1530,7 +1533,7 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
      for(int64_t i = buffer_top_left->y; i <= last_line; ++i) {
           move(term_top_left->y + (i - buffer_top_left->y), term_top_left->x);
 
-          if(line_number_type){
+          if(!buffer->absolutely_no_line_numbers_under_any_circumstances && line_number_type){
                long value = i + 1;
                if(line_number_type == LNT_RELATIVE || (line_number_type == LNT_RELATIVE_AND_ABSOLUTE && cursor->y != i)){
                     value = abs((int)(cursor->y - i));

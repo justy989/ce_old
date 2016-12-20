@@ -537,6 +537,10 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
                syntax->highlight_type = HL_OFF;
           }
 
+          if(syntax->inside_multiline_comment){
+               syntax->current_color = S_COMMENT;
+          }
+
           syntax->current_color = syntax_set_color(syntax->current_color, syntax->highlight_type);
      } break;
      case SS_CHARACTER:

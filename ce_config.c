@@ -889,7 +889,7 @@ void* terminal_check_update(void* data)
 
           if(config_state->tab_current->view_current->buffer == &config_state->terminal.buffer){
                config_state->tab_current->view_current->cursor = config_state->terminal.cursor;
-               view_follow_cursor(config_state->tab_current->view_current, config_state->line_number_type);
+               view_follow_cursor(config_state->tab_current->view_current, LNT_NONE);
           }
 
           if(config_state->vim_state.mode == VM_INSERT && !config_state->terminal.is_alive){
@@ -1729,6 +1729,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
 
      config_state->terminal.buffer.user_data = terminal_buffer_state;
      config_state->terminal.buffer.syntax_fn = terminal_highlight;
+     config_state->terminal.buffer.absolutely_no_line_numbers_under_any_circumstances = true;
      TerminalHighlight_t* terminal_highlight = calloc(1, sizeof(TerminalHighlight_t));
      terminal_highlight->terminal = &config_state->terminal;
      config_state->terminal.buffer.syntax_user_data = terminal_highlight;
@@ -2312,7 +2313,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          if(buffer_view->cursor.x < (config_state->terminal.width - 1)){
                               buffer_view->cursor.x++;
                          }
-                         view_follow_cursor(buffer_view, config_state->line_number_type);
+                         view_follow_cursor(buffer_view, LNT_NONE);
                     }
                }
           }else{
@@ -3233,9 +3234,13 @@ void view_drawer(void* user_data)
 
      // draw auto complete
      // TODO: don't draw over borders!
-     Point_t terminal_cursor = get_cursor_on_terminal(cursor, buffer_view,
-                                                      buffer_view == config_state->view_input ? LNT_NONE :
-                                                                                                config_state->line_number_type);
+     LineNumberType_t line_number_type = config_state->line_number_type;
+     if(buffer_view == config_state->view_input ||
+        buffer == &config_state->terminal.buffer){
+          line_number_type = LNT_NONE;
+     }
+
+     Point_t terminal_cursor = get_cursor_on_terminal(cursor, buffer_view, line_number_type);
      if(auto_completing(&config_state->auto_complete)){
           move(terminal_cursor.y, terminal_cursor.x);
           int64_t offset = cursor->x - config_state->auto_complete.start.x;

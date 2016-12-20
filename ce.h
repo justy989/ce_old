@@ -111,6 +111,8 @@ typedef struct Buffer_t{
 
      syntax_highlighter* syntax_fn;
      void* syntax_user_data;
+
+     bool absolutely_no_line_numbers_under_any_circumstances; // NOTE: I can't stop laughing
 } Buffer_t;
 
 typedef struct BufferNode_t {

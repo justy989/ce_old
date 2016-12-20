@@ -428,8 +428,6 @@ bool terminal_send_key(Terminal_t* term, int key)
           }
      }
 
-     // TODO: get mutex
-
      int rc = write(term->fd, string, size);
      if(rc < 0){
           ce_message("%s() write() to terminal failed: %s", __FUNCTION__, strerror(errno));

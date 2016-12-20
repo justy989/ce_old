@@ -45,7 +45,7 @@ typedef struct{
      int last_fg;
      int last_bg;
      HighlightType_t highlight_type;
-} TerminalHighlight_t;
+}TerminalHighlight_t;
 
 void terminal_highlight(SyntaxHighlighterData_t* data, void* user_data);
 

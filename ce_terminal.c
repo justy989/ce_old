@@ -70,6 +70,22 @@ void* terminal_reader(void* data)
                               switch(*byte){
                               default:
                                    break;
+                              case 'K':
+                                   switch(csi_arguments[0]){
+                                   default:
+                                   {
+                                        int64_t len = (strlen(term->buffer.lines[term->cursor.y]) - term->cursor.x);
+                                        for(int64_t r = 0; r < len; ++r){
+                                             Point_t loc = {term->cursor.x + r, term->cursor.y};
+                                             ce_remove_char_readonly(&term->buffer, loc);
+                                        }
+                                   } break;
+                                   case 1:
+                                        break;
+                                   case 2:
+                                        break;
+                                   }
+                                   break;
                               case 'm':
                               {
                                    // get last node in row
@@ -213,9 +229,9 @@ void* terminal_reader(void* data)
                          escape = true;
                          break;
                     case '\b': // backspace
-                         ce_remove_char_readonly(&term->buffer, term->cursor);
                          term->cursor.x--;
                          if(term->cursor.x < 0) term->cursor.x = 0;
+                         //ce_remove_char_readonly(&term->buffer, term->cursor);
                          break;
                     case NEWLINE:
                     {
@@ -304,7 +320,7 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height)
           setenv("USER", pw->pw_name, 1);
           setenv("SHELL", sh, 1);
           setenv("HOME", pw->pw_dir, 1);
-          setenv("TERM", "urxvt", 1); // we can change this to "urxvt" when we implement all VT102 commands
+          setenv("TERM", "dumb", 1); // we can change this to "urxvt" when we implement all VT102 commands
 
           // reset signal handlers
           signal(SIGCHLD, SIG_DFL);

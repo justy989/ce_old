@@ -424,11 +424,6 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
 
      SyntaxC_t* syntax = user_data;
 
-     bool diff_header = data->buffer->lines[data->loc.y][0] == '@' && data->buffer->lines[data->loc.y][1] == '@';
-     if(diff_header) syntax->diff_seen_header = true;
-     bool diff_add = syntax->diff_seen_header && data->buffer->lines[data->loc.y][0] == '+';
-     bool diff_remove = syntax->diff_seen_header && data->buffer->lines[data->loc.y][0] == '-';
-
      // init if we haven't initted already
      switch(data->state){
      default:
@@ -518,6 +513,11 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
           const char* buffer_line = data->buffer->lines[data->loc.y];
           int64_t line_length = strlen(buffer_line);
 
+          syntax->diff_header = buffer_line[0] == '@' && buffer_line[1] == '@';
+          if(syntax->diff_header) syntax->diff_seen_header = true;
+          syntax->diff_add = syntax->diff_seen_header && data->buffer->lines[data->loc.y][0] == '+';
+          syntax->diff_remove = syntax->diff_seen_header && data->buffer->lines[data->loc.y][0] == '-';
+
           syntax->begin_trailing_whitespace = line_length;
 
           // NOTE: pre-pass to find trailing whitespace if it exists
@@ -539,6 +539,12 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
 
           if(syntax->inside_multiline_comment){
                syntax->current_color = S_COMMENT;
+          }else if(syntax->diff_add){
+               syntax->current_color = S_DIFF_ADDED;
+          }else if(syntax->diff_remove){
+               syntax->current_color = S_DIFF_REMOVED;
+          }else if(syntax->diff_header){
+               syntax->current_color = S_DIFF_HEADER;
           }
 
           syntax->current_color = syntax_set_color(syntax->current_color, syntax->highlight_type);
@@ -654,11 +660,11 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
                          syntax->current_color = syntax_set_color(S_COMMENT, syntax->highlight_type);
                     }else if(syntax->inside_string){
                          syntax->current_color = syntax_set_color(S_STRING, syntax->highlight_type);
-                    }else if(diff_add){
+                    }else if(syntax->diff_add){
                          syntax->current_color = syntax_set_color(S_DIFF_ADDED, syntax->highlight_type);
-                    }else if(diff_remove){
+                    }else if(syntax->diff_remove){
                          syntax->current_color = syntax_set_color(S_DIFF_REMOVED, syntax->highlight_type);
-                    }else if(diff_header){
+                    }else if(syntax->diff_header){
                          syntax->current_color = syntax_set_color(S_DIFF_HEADER, syntax->highlight_type);
                     }else if(syntax->matched_pair.x >= 0){
                          if(ce_points_equal(data->loc, data->cursor) || ce_points_equal(data->loc, syntax->matched_pair)){

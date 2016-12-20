@@ -449,14 +449,24 @@ void terminal_highlight(SyntaxHighlighterData_t* data, void* user_data)
      switch(data->state){
      default:
      case SS_BEGINNING_OF_LINE:
+          terminal_highlight->highlight_type = HL_OFF;
           break;
      case SS_INITIALIZING:
           terminal_highlight->unique_color_id = S_AUTO_COMPLETE + 1;
           terminal_highlight->last_fg = -1;
           terminal_highlight->last_bg = -1;
+          terminal_highlight->highlight_type = HL_OFF;
           return;
      case SS_CHARACTER:
      {
+          if(ce_point_in_range(data->loc, data->buffer->highlight_start, data->buffer->highlight_end)){
+               terminal_highlight->highlight_type = HL_VISUAL;
+          }else if(data->loc.y == data->cursor.y){
+               terminal_highlight->highlight_type = HL_CURRENT_LINE;
+          }else{
+               terminal_highlight->highlight_type = HL_OFF;
+          }
+
           while(color_node){
                if(!color_node->next) break;
                if(color_node->next->index > data->loc.x) break;
@@ -466,20 +476,34 @@ void terminal_highlight(SyntaxHighlighterData_t* data, void* user_data)
 
           if(!color_node) return;
 
-          if(terminal_highlight->last_fg == color_node->fg && terminal_highlight->last_bg == color_node->bg){
+          int bg_color = color_node->bg;
+
+          if(terminal_highlight->highlight_type == HL_VISUAL){
+               short fg = 0;
+               short bg = 0;
+               pair_content(S_NORMAL_HIGHLIGHTED, &fg, &bg);
+               bg_color = bg;
+          }else if(terminal_highlight->highlight_type == HL_CURRENT_LINE){
+               short fg = 0;
+               short bg = 0;
+               pair_content(S_NORMAL_CURRENT_LINE, &fg, &bg);
+               bg_color = bg;
+          }
+
+          if(terminal_highlight->last_fg == color_node->fg && terminal_highlight->last_bg == bg_color){
                return;
           }
 
           standend();
 
-          if(color_node->fg >= 0 || color_node->bg >= 0){
-               init_pair(terminal_highlight->unique_color_id, color_node->fg, color_node->bg);
+          if(color_node->fg >= 0 || color_node->bg >= 0 || bg_color >= 0){
+               init_pair(terminal_highlight->unique_color_id, color_node->fg, bg_color);
                attron(COLOR_PAIR(terminal_highlight->unique_color_id));
                terminal_highlight->unique_color_id++;
           }
 
           terminal_highlight->last_fg = color_node->fg;
-          terminal_highlight->last_bg = color_node->bg;
+          terminal_highlight->last_bg = bg_color;
      } break;
      case SS_END_OF_LINE:
      {

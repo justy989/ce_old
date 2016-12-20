@@ -5,6 +5,7 @@
 #include <semaphore.h>
 
 #include "ce.h"
+#include "ce_syntax.h"
 
 typedef struct TerminalColorNode_t{
      int index;
@@ -43,6 +44,7 @@ typedef struct{
      int unique_color_id;
      int last_fg;
      int last_bg;
+     HighlightType_t highlight_type;
 } TerminalHighlight_t;
 
 void terminal_highlight(SyntaxHighlighterData_t* data, void* user_data);

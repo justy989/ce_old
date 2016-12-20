@@ -468,6 +468,31 @@ static void syntax_calc_trailing_whitespace(SyntaxHighlighterData_t* data, int64
      }
 }
 
+static void syntax_calc_matching_pair(SyntaxHighlighterData_t* data, Point_t* matched_pair)
+{
+     // is our cursor on something we can match?
+     *matched_pair = (Point_t){-1, -1};
+     if(ce_point_on_buffer(data->buffer, data->cursor)){
+          char ch = 0;
+          ch = ce_get_char_raw(data->buffer, data->cursor);
+          switch(ch){
+          default:
+               break;
+          case '{':
+          case '}':
+          case '(':
+          case ')':
+          case '[':
+          case ']':
+          case '<':
+          case '>':
+               *matched_pair = data->cursor;
+               ce_move_cursor_to_matching_pair(data->buffer, matched_pair, ch);
+               break;
+          }
+     }
+}
+
 void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
 {
      if(!user_data) return;
@@ -491,26 +516,7 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
           }
 
           // is our cursor on something we can match?
-          syntax->matched_pair = (Point_t){-1, -1};
-          if(ce_point_on_buffer(data->buffer, data->cursor)){
-               char ch = 0;
-               ch = ce_get_char_raw(data->buffer, data->cursor);
-               switch(ch){
-               default:
-                    break;
-               case '{':
-               case '}':
-               case '(':
-               case ')':
-               case '[':
-               case ']':
-               case '<':
-               case '>':
-                    syntax->matched_pair = data->cursor;
-                    ce_move_cursor_to_matching_pair(data->buffer, &syntax->matched_pair, ch);
-                    break;
-               }
-          }
+          syntax_calc_matching_pair(data, &syntax->matched_pair);
 
           // figure out of any multiline comments are earlier in the file offscreen
           syntax->inside_multiline_comment = false;
@@ -835,6 +841,9 @@ void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data)
                     syntax_is_python_docstring(buffer_line, x, &syntax->inside_docstring);
                }
           }
+
+          // is our cursor on something we can match?
+          syntax_calc_matching_pair(data, &syntax->matched_pair);
      } break;
      case SS_BEGINNING_OF_LINE:
      {
@@ -882,6 +891,10 @@ void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data)
                          syntax->current_color = syntax_set_color(S_CONSTANT, syntax->highlight.type);
                     }else if((syntax->current_color_left = syntax_is_python_comment(buffer_line, data->loc.x))){
                          syntax->current_color = syntax_set_color(S_COMMENT, syntax->highlight.type);
+                    }else if(syntax->matched_pair.x >= 0){
+                         if(ce_points_equal(data->loc, data->cursor) || ce_points_equal(data->loc, syntax->matched_pair)){
+                              syntax->current_color = syntax_set_color(S_MATCHING_PARENS, syntax->highlight.type);
+                         }
                     }
                }
           }
@@ -898,6 +911,12 @@ void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data)
 
                     if(inside_string || syntax->inside_string){
                          syntax->current_color = syntax_set_color(S_STRING, syntax->highlight.type);
+                    }else if(syntax->matched_pair.x >= 0){
+                         if(ce_points_equal(data->loc, data->cursor) || ce_points_equal(data->loc, syntax->matched_pair)){
+                              syntax->current_color = syntax_set_color(S_MATCHING_PARENS, syntax->highlight.type);
+                         }else{
+                              syntax->current_color = syntax_set_color(S_NORMAL, syntax->highlight.type);
+                         }
                     }else{
                          syntax->current_color = syntax_set_color(S_NORMAL, syntax->highlight.type);
                     }
@@ -946,6 +965,9 @@ void syntax_highlight_config(SyntaxHighlighterData_t* data, void* user_data)
           syntax->current_color = 0;
           syntax->current_color_left = 0;
           syntax->highlight.type = HL_OFF;
+
+          // is our cursor on something we can match?
+          syntax_calc_matching_pair(data, &syntax->matched_pair);
      } break;
      case SS_BEGINNING_OF_LINE:
      {
@@ -991,6 +1013,10 @@ void syntax_highlight_config(SyntaxHighlighterData_t* data, void* user_data)
                          syntax->current_color = syntax_set_color(S_CONSTANT, syntax->highlight.type);
                     }else if((syntax->current_color_left = syntax_is_python_comment(buffer_line, data->loc.x))){
                          syntax->current_color = syntax_set_color(S_COMMENT, syntax->highlight.type);
+                    }else if(syntax->matched_pair.x >= 0){
+                         if(ce_points_equal(data->loc, data->cursor) || ce_points_equal(data->loc, syntax->matched_pair)){
+                              syntax->current_color = syntax_set_color(S_MATCHING_PARENS, syntax->highlight.type);
+                         }
                     }
                }
           }
@@ -1001,6 +1027,12 @@ void syntax_highlight_config(SyntaxHighlighterData_t* data, void* user_data)
 
                if(inside_string || syntax->inside_string){
                     syntax->current_color = syntax_set_color(S_STRING, syntax->highlight.type);
+               }else if(syntax->matched_pair.x >= 0){
+                    if(ce_points_equal(data->loc, data->cursor) || ce_points_equal(data->loc, syntax->matched_pair)){
+                         syntax->current_color = syntax_set_color(S_MATCHING_PARENS, syntax->highlight.type);
+                    }else{
+                         syntax->current_color = syntax_set_color(S_NORMAL, syntax->highlight.type);
+                    }
                }else{
                     syntax->current_color = syntax_set_color(S_NORMAL, syntax->highlight.type);
                }

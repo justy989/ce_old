@@ -80,6 +80,10 @@ typedef struct{
 }SyntaxHighlight_t;
 
 typedef struct{
+     SyntaxHighlight_t highlight;
+}SyntaxPlain_t;
+
+typedef struct{
      bool inside_multiline_comment;
      bool inside_comment;
      bool inside_string;
@@ -127,6 +131,7 @@ typedef struct{
      SyntaxHighlight_t highlight;
 }SyntaxConfig_t;
 
+void syntax_highlight_plain(SyntaxHighlighterData_t* data, void* user_data);
 void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data);
 void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data);
 void syntax_highlight_config(SyntaxHighlighterData_t* data, void* user_data);

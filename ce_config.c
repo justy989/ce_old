@@ -355,7 +355,17 @@ bool initialize_buffer(Buffer_t* buffer){
 
      if(buffer->name){
           int64_t name_len = strlen(buffer->name);
-          if(name_len > 3 && strcmp(buffer->name + (name_len - 3), ".py") == 0){
+          if(name_len > 2 &&
+             (strcmp(buffer->name + (name_len - 2), ".c") == 0 ||
+              strcmp(buffer->name + (name_len - 2), ".h") == 0)){
+               buffer->syntax_fn = syntax_highlight_c;
+               buffer->syntax_user_data = malloc(sizeof(SyntaxC_t));
+               if(!buffer->syntax_user_data){
+                    ce_message("failed to allocate syntax user data for buffer");
+                    free(buffer_state);
+                    return false;
+               }
+          }else if(name_len > 3 && strcmp(buffer->name + (name_len - 3), ".py") == 0){
                buffer->syntax_fn = syntax_highlight_python;
                buffer->syntax_user_data = malloc(sizeof(SyntaxPython_t));
                if(!buffer->syntax_user_data){
@@ -375,8 +385,8 @@ bool initialize_buffer(Buffer_t* buffer){
      }
 
      if(!buffer->syntax_fn){
-          buffer->syntax_fn = syntax_highlight_c;
-          buffer->syntax_user_data = malloc(sizeof(SyntaxC_t));
+          buffer->syntax_fn = syntax_highlight_plain;
+          buffer->syntax_user_data = malloc(sizeof(SyntaxPlain_t));
           if(!buffer->syntax_user_data){
                ce_message("failed to allocate syntax user data for buffer");
                free(buffer_state);
@@ -2198,6 +2208,30 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     // quit !
                     return false;
                }
+               case 's':
+               {
+                    if(buffer->syntax_fn == syntax_highlight_plain){
+                         ce_message("syntax 'c' now on %s", buffer->filename);
+                         buffer->syntax_fn = syntax_highlight_c;
+                         free(buffer->syntax_user_data);
+                         buffer->syntax_user_data = malloc(sizeof(SyntaxC_t));
+                    }else if(buffer->syntax_fn == syntax_highlight_c){
+                         ce_message("syntax 'python' now on %s", buffer->filename);
+                         buffer->syntax_fn = syntax_highlight_python;
+                         free(buffer->syntax_user_data);
+                         buffer->syntax_user_data = malloc(sizeof(SyntaxPython_t));
+                    }else if(buffer->syntax_fn == syntax_highlight_python){
+                         ce_message("syntax 'config' now on %s", buffer->filename);
+                         buffer->syntax_fn = syntax_highlight_config;
+                         free(buffer->syntax_user_data);
+                         buffer->syntax_user_data = malloc(sizeof(SyntaxConfig_t));
+                    }else if(buffer->syntax_fn == syntax_highlight_config){
+                         ce_message("syntax 'plain' now on %s", buffer->filename);
+                         buffer->syntax_fn = syntax_highlight_plain;
+                         free(buffer->syntax_user_data);
+                         buffer->syntax_user_data = malloc(sizeof(SyntaxPlain_t));
+                    }
+               } break;
                }
 
                if(handled_key) ce_keys_free(&config_state->vim_state.command_head);

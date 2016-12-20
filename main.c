@@ -179,7 +179,7 @@ int main(int argc, char** argv)
                printf("usage: %s [options]\n", argv[0]);
                printf(" -c [config] shared object config\n");
                printf(" -s save message buffer to file\n");
-               printf(" -h see this message for help");
+               printf(" -h see this message for help\n");
                return 0;
           default:
                parsed_args--;

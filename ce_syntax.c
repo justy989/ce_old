@@ -951,7 +951,6 @@ int64_t syntax_is_config_keyword(const char* line, int64_t start_offset)
      return match_keyword(line, start_offset, keywords, keyword_count);
 }
 
-
 void syntax_highlight_config(SyntaxHighlighterData_t* data, void* user_data)
 {
      SyntaxConfig_t* syntax = user_data;
@@ -1043,6 +1042,46 @@ void syntax_highlight_config(SyntaxHighlighterData_t* data, void* user_data)
      case SS_END_OF_LINE:
           if(data->cursor.y == data->loc.y && data->highlight_line_type == HLT_ENTIRE_LINE){
                syntax->current_color = syntax_set_color(S_NORMAL, HL_CURRENT_LINE);
+               for(int64_t c = data->loc.x; c < data->bottom_right.x; ++c){
+                    addch(' ');
+               }
+          }
+
+          // highlight line numbers!
+          if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
+          break;
+     }
+}
+
+void syntax_highlight_plain(SyntaxHighlighterData_t* data, void* user_data)
+{
+     SyntaxPlain_t* syntax = user_data;
+
+     switch(data->state){
+     default:
+          break;
+     case SS_INITIALIZING:
+     {
+          syntax->highlight.type = HL_OFF;
+     } break;
+     case SS_BEGINNING_OF_LINE:
+     {
+          if(data->loc.y == data->cursor.y){
+               syntax->highlight.type = HL_CURRENT_LINE;
+          }else{
+               syntax->highlight.type = HL_OFF;
+          }
+
+          syntax_set_color(S_NORMAL, syntax->highlight.type);
+     } break;
+     case SS_CHARACTER:
+     {
+          syntax_determine_highlight(data, &syntax->highlight);
+          syntax_set_color(S_NORMAL, syntax->highlight.type);
+     } break;
+     case SS_END_OF_LINE:
+          if(data->cursor.y == data->loc.y && data->highlight_line_type == HLT_ENTIRE_LINE){
+               syntax_set_color(S_NORMAL, HL_CURRENT_LINE);
                for(int64_t c = data->loc.x; c < data->bottom_right.x; ++c){
                     addch(' ');
                }

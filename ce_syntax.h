@@ -95,7 +95,7 @@ typedef struct{
 
      Point_t matched_pair;
 
-     int64_t begin_trailing_whitespace;
+     int64_t trailing_whitespace_begin;
 
      SyntaxHighlight_t highlight;
 }SyntaxC_t;
@@ -109,7 +109,7 @@ typedef struct{
 
      Point_t matched_pair;
 
-     int64_t begin_trailing_whitespace;
+     int64_t trailing_whitespace_begin;
 
      SyntaxHighlight_t highlight;
 }SyntaxPython_t;
@@ -122,7 +122,7 @@ typedef struct{
 
      Point_t matched_pair;
 
-     int64_t begin_trailing_whitespace;
+     int64_t trailing_whitespace_begin;
 
      SyntaxHighlight_t highlight;
 }SyntaxConfig_t;

@@ -1559,7 +1559,6 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                          if(buffer->syntax_fn){
                               syntax_data.loc = (Point_t){buffer_top_left->x + c, i};
                               syntax_data.state = SS_CHARACTER;
-
                               buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
                          }
 

@@ -355,9 +355,37 @@ bool initialize_buffer(Buffer_t* buffer){
 
      if(buffer->name){
           int64_t name_len = strlen(buffer->name);
-          if(name_len > 3 && strcmp(buffer->name + (name_len - 3), ".py") == 0){
+          if(name_len > 2 &&
+             (strcmp(buffer->name + (name_len - 2), ".c") == 0 ||
+              strcmp(buffer->name + (name_len - 2), ".h") == 0)){
+               buffer->syntax_fn = syntax_highlight_c;
+               buffer->syntax_user_data = malloc(sizeof(SyntaxC_t));
+               if(!buffer->syntax_user_data){
+                    ce_message("failed to allocate syntax user data for buffer");
+                    free(buffer_state);
+                    return false;
+               }
+          }else if(name_len > 3 && strcmp(buffer->name + (name_len - 3), ".py") == 0){
                buffer->syntax_fn = syntax_highlight_python;
                buffer->syntax_user_data = malloc(sizeof(SyntaxPython_t));
+               if(!buffer->syntax_user_data){
+                    ce_message("failed to allocate syntax user data for buffer");
+                    free(buffer_state);
+                    return false;
+               }
+          }else if(name_len > 4 && strcmp(buffer->name + (name_len - 4), ".cfg") == 0){
+               buffer->syntax_fn = syntax_highlight_config;
+               buffer->syntax_user_data = malloc(sizeof(SyntaxConfig_t));
+               if(!buffer->syntax_user_data){
+                    ce_message("failed to allocate syntax user data for buffer");
+                    free(buffer_state);
+                    return false;
+               }
+          }else if((name_len > 14 && strcmp(buffer->name + (name_len - 14), "COMMIT_EDITMSG") == 0) ||
+                   (name_len > 6 && strcmp(buffer->name + (name_len - 6), ".patch") == 0) ||
+                   (name_len > 5 && strcmp(buffer->name + (name_len - 5), ".diff") == 0)){
+               buffer->syntax_fn = syntax_highlight_diff;
+               buffer->syntax_user_data = malloc(sizeof(SyntaxDiff_t));
                if(!buffer->syntax_user_data){
                     ce_message("failed to allocate syntax user data for buffer");
                     free(buffer_state);
@@ -367,8 +395,8 @@ bool initialize_buffer(Buffer_t* buffer){
      }
 
      if(!buffer->syntax_fn){
-          buffer->syntax_fn = syntax_highlight_c;
-          buffer->syntax_user_data = malloc(sizeof(SyntaxC_t));
+          buffer->syntax_fn = syntax_highlight_plain;
+          buffer->syntax_user_data = malloc(sizeof(SyntaxPlain_t));
           if(!buffer->syntax_user_data){
                ce_message("failed to allocate syntax user data for buffer");
                free(buffer_state);
@@ -1692,24 +1720,29 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      ce_alloc_lines(&config_state->input_buffer, 1);
      initialize_buffer(&config_state->input_buffer);
      config_state->input_buffer.name = strdup("[input]");
+     config_state->input_buffer.absolutely_no_line_numbers_under_any_circumstances = true;
      config_state->view_input->buffer = &config_state->input_buffer;
 
      // setup buffer list buffer
      config_state->buffer_list_buffer.name = strdup("[buffers]");
      initialize_buffer(&config_state->buffer_list_buffer);
      config_state->buffer_list_buffer.status = BS_READONLY;
+     config_state->buffer_list_buffer.absolutely_no_line_numbers_under_any_circumstances = true;
 
      config_state->mark_list_buffer.name = strdup("[marks]");
      initialize_buffer(&config_state->mark_list_buffer);
      config_state->mark_list_buffer.status = BS_READONLY;
+     config_state->mark_list_buffer.absolutely_no_line_numbers_under_any_circumstances = true;
 
      config_state->yank_list_buffer.name = strdup("[yanks]");
      initialize_buffer(&config_state->yank_list_buffer);
      config_state->yank_list_buffer.status = BS_READONLY;
+     config_state->yank_list_buffer.absolutely_no_line_numbers_under_any_circumstances = true;
 
      config_state->macro_list_buffer.name = strdup("[macros]");
      initialize_buffer(&config_state->macro_list_buffer);
      config_state->macro_list_buffer.status = BS_READONLY;
+     config_state->macro_list_buffer.absolutely_no_line_numbers_under_any_circumstances = true;
 
      // if we reload, the shell command buffer may already exist, don't recreate it
      BufferNode_t* itr = *head;
@@ -1738,6 +1771,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
           config_state->completion_buffer = calloc(1, sizeof(*config_state->completion_buffer));
           config_state->completion_buffer->name = strdup("[completions]");
           config_state->completion_buffer->status = BS_READONLY;
+          config_state->completion_buffer->absolutely_no_line_numbers_under_any_circumstances = true;
           BufferNode_t* new_buffer_node = ce_append_buffer_to_list(*head, config_state->completion_buffer);
           if(!new_buffer_node){
                ce_message("failed to add shell command buffer to list");
@@ -2184,6 +2218,35 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     // quit !
                     return false;
                }
+               case 's':
+               {
+                    if(buffer->syntax_fn == syntax_highlight_plain){
+                         ce_message("syntax 'c' now on %s", buffer->filename);
+                         buffer->syntax_fn = syntax_highlight_c;
+                         free(buffer->syntax_user_data);
+                         buffer->syntax_user_data = malloc(sizeof(SyntaxC_t));
+                    }else if(buffer->syntax_fn == syntax_highlight_c){
+                         ce_message("syntax 'python' now on %s", buffer->filename);
+                         buffer->syntax_fn = syntax_highlight_python;
+                         free(buffer->syntax_user_data);
+                         buffer->syntax_user_data = malloc(sizeof(SyntaxPython_t));
+                    }else if(buffer->syntax_fn == syntax_highlight_python){
+                         ce_message("syntax 'config' now on %s", buffer->filename);
+                         buffer->syntax_fn = syntax_highlight_config;
+                         free(buffer->syntax_user_data);
+                         buffer->syntax_user_data = malloc(sizeof(SyntaxConfig_t));
+                    }else if(buffer->syntax_fn == syntax_highlight_config){
+                         ce_message("syntax 'diff' now on %s", buffer->filename);
+                         buffer->syntax_fn = syntax_highlight_diff;
+                         free(buffer->syntax_user_data);
+                         buffer->syntax_user_data = malloc(sizeof(SyntaxDiff_t));
+                    }else if(buffer->syntax_fn == syntax_highlight_diff){
+                         ce_message("syntax 'plain' now on %s", buffer->filename);
+                         buffer->syntax_fn = syntax_highlight_plain;
+                         free(buffer->syntax_user_data);
+                         buffer->syntax_user_data = malloc(sizeof(SyntaxPlain_t));
+                    }
+               } break;
                }
 
                if(handled_key) ce_keys_free(&config_state->vim_state.command_head);
@@ -3235,8 +3298,7 @@ void view_drawer(void* user_data)
      // draw auto complete
      // TODO: don't draw over borders!
      LineNumberType_t line_number_type = config_state->line_number_type;
-     if(buffer_view == config_state->view_input ||
-        buffer == &config_state->terminal.buffer){
+     if(buffer->absolutely_no_line_numbers_under_any_circumstances){
           line_number_type = LNT_NONE;
      }
 

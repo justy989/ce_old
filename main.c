@@ -28,7 +28,7 @@ LITTLE:
 -visual replace *sometimes* infinite loops
 -syntax highlight printf formatters: '%s'
 -we can still hit the drawing bug where config_state->tab_current->view_input_save is null
--if you make a change and undo, the buffer still says modified
+-if you make a change and undo, the buffer *sometimes* still says modified
 */
 
 #include <assert.h>
@@ -179,7 +179,7 @@ int main(int argc, char** argv)
                printf("usage: %s [options]\n", argv[0]);
                printf(" -c [config] shared object config\n");
                printf(" -s save message buffer to file\n");
-               printf(" -h see this message for help");
+               printf(" -h see this message for help\n");
                return 0;
           default:
                parsed_args--;
@@ -200,6 +200,7 @@ int main(int argc, char** argv)
      message_buffer->user_data = NULL;
      ce_alloc_lines(message_buffer, 1);
      message_buffer->status = BS_READONLY;
+     message_buffer->absolutely_no_line_numbers_under_any_circumstances = true;
 
      // init buffer list
      BufferNode_t* buffer_list_head = calloc(1, sizeof(*buffer_list_head));

@@ -72,27 +72,31 @@ typedef enum{
 }HighlightType_t;
 
 typedef struct{
+     HighlightType_t type;
+     int64_t chars_til_highlight;
+     int64_t highlight_left;
+
+     regmatch_t regex_matches[1];
+}SyntaxHighlight_t;
+
+typedef struct{
+     SyntaxHighlight_t highlight;
+}SyntaxPlain_t;
+
+typedef struct{
      bool inside_multiline_comment;
      bool inside_comment;
      bool inside_string;
      char last_quote_char;
 
-     bool diff_seen_header;
-     bool diff_header;
-     bool diff_add;
-     bool diff_remove;
-
-     HighlightType_t highlight_type;
-     int64_t chars_til_highlighted_word;
-     int64_t highlighting_left;
-
      int current_color;
      int64_t current_color_left;
 
-     int64_t begin_trailing_whitespace;
-
      Point_t matched_pair;
-     regmatch_t regex_matches[1];
+
+     int64_t trailing_whitespace_begin;
+
+     SyntaxHighlight_t highlight;
 }SyntaxC_t;
 
 typedef struct{
@@ -102,15 +106,35 @@ typedef struct{
      int current_color;
      int64_t current_color_left;
 
-     HighlightType_t highlight_type;
-     int64_t chars_til_highlighted_word;
-     int64_t highlighting_left;
-
      Point_t matched_pair;
-     regmatch_t regex_matches[1];
+
+     int64_t trailing_whitespace_begin;
+
+     SyntaxHighlight_t highlight;
 }SyntaxPython_t;
 
+typedef struct{
+     char inside_string;
+
+     int current_color;
+     int64_t current_color_left;
+
+     Point_t matched_pair;
+
+     int64_t trailing_whitespace_begin;
+
+     SyntaxHighlight_t highlight;
+}SyntaxConfig_t;
+
+typedef struct{
+     int current_color;
+     SyntaxHighlight_t highlight;
+}SyntaxDiff_t;
+
+void syntax_highlight_plain(SyntaxHighlighterData_t* data, void* user_data);
 void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data);
 void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data);
+void syntax_highlight_config(SyntaxHighlighterData_t* data, void* user_data);
+void syntax_highlight_diff(SyntaxHighlighterData_t* data, void* user_data);
 
 #endif

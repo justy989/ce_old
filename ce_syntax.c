@@ -7,7 +7,7 @@ static int iscapsvarchar(int c)
      return isupper(c) || c == '_' || isdigit(c);
 }
 
-int64_t syntax_is_c_constant_number(const char* line, int64_t start_offset)
+static int64_t syntax_is_c_constant_number(const char* line, int64_t start_offset)
 {
      const char* start = line + start_offset;
      const char* itr = start;
@@ -112,7 +112,7 @@ static bool likely_a_path(char c)
      return (isalnum(c) || c == '/' || c == '_' || c == '-' || c == '.' );
 }
 
-int64_t syntax_is_c_fullpath(const char* line, int64_t start_offset)
+static int64_t syntax_is_c_fullpath(const char* line, int64_t start_offset)
 {
      const char* itr = line + start_offset;
      int64_t count = 0;
@@ -159,7 +159,7 @@ static int syntax_set_color(Syntax_t syntax, HighlightType_t highlight_type)
      return syntax;
 }
 
-CommentType_t syntax_is_c_comment(const char* line, int64_t start_offset, bool inside_string)
+static CommentType_t syntax_is_c_comment(const char* line, int64_t start_offset, bool inside_string)
 {
      if(inside_string) return CT_NONE;
 
@@ -182,9 +182,10 @@ CommentType_t syntax_is_c_comment(const char* line, int64_t start_offset, bool i
      return CT_NONE;
 }
 
-void syntax_is_c_string_literal(const char* line, int64_t start_offset, int64_t line_len, bool* inside_string, char* last_quote_char)
+static void syntax_is_c_string_literal(const char* line, int64_t start_offset, int64_t line_len, bool* inside_string, char* last_quote_char)
 {
      char ch = line[start_offset];
+
      if(ch == '"'){
           // ignore single quotes inside double quotes
           if(*inside_string){
@@ -276,7 +277,7 @@ static int64_t match_keyword(const char* line, int64_t start_offset, const char*
      return highlighting_left;
 }
 
-int64_t syntax_is_c_keyword(const char* line, int64_t start_offset)
+static int64_t syntax_is_c_keyword(const char* line, int64_t start_offset)
 {
      static const char* keywords [] = {
           "__thread",
@@ -309,7 +310,7 @@ int64_t syntax_is_c_keyword(const char* line, int64_t start_offset)
      return match_keyword(line, start_offset, keywords, keyword_count);
 }
 
-int64_t syntax_is_c_control(const char* line, int64_t start_offset)
+static int64_t syntax_is_c_control(const char* line, int64_t start_offset)
 {
      static const char* keywords [] = {
           "break",
@@ -329,7 +330,7 @@ static int iscidentifier(int c)
      return isalnum(c) || c == '_';
 }
 
-int64_t syntax_is_c_typename(const char* line, int64_t start_offset)
+static int64_t syntax_is_c_typename(const char* line, int64_t start_offset)
 {
      // NOTE: simple rules for now:
      //       -if it is one of the c standard type names
@@ -382,7 +383,7 @@ int64_t syntax_is_c_typename(const char* line, int64_t start_offset)
      return 0;
 }
 
-int64_t syntax_is_c_preprocessor(const char* line, int64_t start_offset)
+static int64_t syntax_is_c_preprocessor(const char* line, int64_t start_offset)
 {
      static const char* keywords [] = {
           "define",
@@ -418,6 +419,80 @@ int64_t syntax_is_c_preprocessor(const char* line, int64_t start_offset)
      return highlighting_left;
 }
 
+static void syntax_determine_highlight(SyntaxHighlighterData_t* data, SyntaxHighlight_t* highlight)
+{
+     const char* buffer_line = data->buffer->lines[data->loc.y];
+
+     if(ce_point_in_range(data->loc, data->buffer->highlight_start, data->buffer->highlight_end)){
+          highlight->type = HL_VISUAL;
+     }else{
+          highlight->highlight_left--;
+
+          if(highlight->highlight_left <= 0){
+               if(data->highlight_line_type && data->loc.y == data->cursor.y){
+                    highlight->type = HL_CURRENT_LINE;
+               }else{
+                    highlight->type = HL_OFF;
+               }
+          }
+
+          if(data->highlight_regex){
+               if(highlight->chars_til_highlight < 0){
+                    int regex_rc = regexec(data->highlight_regex, buffer_line + data->loc.x, 1, highlight->regex_matches, 0);
+                    if(regex_rc == 0) highlight->chars_til_highlight = highlight->regex_matches[0].rm_so;
+               }else if(highlight->chars_til_highlight == 0){
+                    highlight->type = HL_VISUAL;
+                    highlight->highlight_left = highlight->regex_matches[0].rm_eo - highlight->regex_matches[0].rm_so;
+               }
+
+               highlight->chars_til_highlight--;
+          }
+     }
+}
+
+static void syntax_calc_trailing_whitespace(SyntaxHighlighterData_t* data, int64_t* trailing_white_space_begin)
+{
+     const char* buffer_line = data->buffer->lines[data->loc.y];
+     int64_t line_length = strlen(buffer_line);
+     *trailing_white_space_begin = line_length;
+
+     // NOTE: pre-pass to find trailing whitespace if it exists
+     if(data->cursor.y != data->loc.y){
+          for(int64_t c = line_length - 1; c >= 0; --c){
+               if(isblank(buffer_line[c])){
+                    (*trailing_white_space_begin)--;
+               }else{
+                    break;
+               }
+          }
+     }
+}
+
+static void syntax_calc_matching_pair(SyntaxHighlighterData_t* data, Point_t* matched_pair)
+{
+     // is our cursor on something we can match?
+     *matched_pair = (Point_t){-1, -1};
+     if(ce_point_on_buffer(data->buffer, data->cursor)){
+          char ch = 0;
+          ch = ce_get_char_raw(data->buffer, data->cursor);
+          switch(ch){
+          default:
+               break;
+          case '{':
+          case '}':
+          case '(':
+          case ')':
+          case '[':
+          case ']':
+          case '<':
+          case '>':
+               *matched_pair = data->cursor;
+               ce_move_cursor_to_matching_pair(data->buffer, matched_pair, ch);
+               break;
+          }
+     }
+}
+
 void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
 {
      if(!user_data) return;
@@ -432,35 +507,8 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
      {
           memset(syntax, 0, sizeof(*syntax));
 
-          // look for any diff headers earlier in the file
-          for(int64_t i = data->loc.y - 1; i >= 0; --i){
-               if(data->buffer->lines[i][0] == '@' && data->buffer->lines[i][1] == '@'){
-                    syntax->diff_seen_header = true;
-                    break;
-               }
-          }
-
           // is our cursor on something we can match?
-          syntax->matched_pair = (Point_t){-1, -1};
-          if(ce_point_on_buffer(data->buffer, data->cursor)){
-               char ch = 0;
-               ch = ce_get_char_raw(data->buffer, data->cursor);
-               switch(ch){
-               default:
-                    break;
-               case '{':
-               case '}':
-               case '(':
-               case ')':
-               case '[':
-               case ']':
-               case '<':
-               case '>':
-                    syntax->matched_pair = data->cursor;
-                    ce_move_cursor_to_matching_pair(data->buffer, &syntax->matched_pair, ch);
-                    break;
-               }
-          }
+          syntax_calc_matching_pair(data, &syntax->matched_pair);
 
           // figure out of any multiline comments are earlier in the file offscreen
           syntax->inside_multiline_comment = false;
@@ -487,7 +535,7 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
                if(found_open_multiline_comment) break;
           }
 
-          syntax->chars_til_highlighted_word = -1;
+          syntax->highlight.chars_til_highlight = -1;
 
           if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
      } break;
@@ -500,7 +548,7 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
           syntax->current_color = S_NORMAL;
           syntax->current_color_left = 0;
 
-          syntax->highlight_type = HL_OFF;
+          syntax->highlight.type = HL_OFF;
 
           SyntaxHighlighterData_t data_copy = *data;
           data_copy.state = SS_CHARACTER;
@@ -510,111 +558,58 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
                syntax_highlight_c(&data_copy, user_data);
           }
 
-          const char* buffer_line = data->buffer->lines[data->loc.y];
-          int64_t line_length = strlen(buffer_line);
-
-          syntax->diff_header = buffer_line[0] == '@' && buffer_line[1] == '@';
-          if(syntax->diff_header) syntax->diff_seen_header = true;
-          syntax->diff_add = syntax->diff_seen_header && data->buffer->lines[data->loc.y][0] == '+';
-          syntax->diff_remove = syntax->diff_seen_header && data->buffer->lines[data->loc.y][0] == '-';
-
-          syntax->begin_trailing_whitespace = line_length;
-
-          // NOTE: pre-pass to find trailing whitespace if it exists
-          if(data->cursor.y != data->loc.y){
-               for(int64_t c = line_length - 1; c >= 0; --c){
-                    if(isblank(buffer_line[c])){
-                         syntax->begin_trailing_whitespace--;
-                    }else{
-                         break;
-                    }
-               }
-          }
+          syntax_calc_trailing_whitespace(data, &syntax->trailing_whitespace_begin);
 
           if(data->loc.y == data->cursor.y){
-               syntax->highlight_type = HL_CURRENT_LINE;
+               syntax->highlight.type = HL_CURRENT_LINE;
           }else{
-               syntax->highlight_type = HL_OFF;
+               syntax->highlight.type = HL_OFF;
           }
 
           if(syntax->inside_multiline_comment){
                syntax->current_color = S_COMMENT;
-          }else if(syntax->diff_add){
-               syntax->current_color = S_DIFF_ADDED;
-          }else if(syntax->diff_remove){
-               syntax->current_color = S_DIFF_REMOVED;
-          }else if(syntax->diff_header){
-               syntax->current_color = S_DIFF_HEADER;
           }
 
-          syntax->current_color = syntax_set_color(syntax->current_color, syntax->highlight_type);
+          syntax->current_color = syntax_set_color(syntax->current_color, syntax->highlight.type);
      } break;
      case SS_CHARACTER:
      {
-          const char* buffer_line = data->buffer->lines[data->loc.y];
+          syntax_determine_highlight(data, &syntax->highlight);
+          syntax->current_color = syntax_set_color(syntax->current_color, syntax->highlight.type);
 
-          // figure out background highlights
-          if(ce_point_in_range(data->loc, data->buffer->highlight_start, data->buffer->highlight_end)){
-               syntax->highlight_type = HL_VISUAL;
-               syntax->current_color = syntax_set_color(syntax->current_color, syntax->highlight_type);
-          }else{
-               syntax->highlighting_left--;
-               if(syntax->highlighting_left <= 0){
-                    if(data->highlight_line_type && data->loc.y == data->cursor.y){
-                         syntax->highlight_type = HL_CURRENT_LINE;
-                    }else{
-                         syntax->highlight_type = HL_OFF;
-                    }
-               }
-
-               if(data->highlight_regex){
-                    if(syntax->chars_til_highlighted_word < 0){
-                         int regex_rc = regexec(data->highlight_regex, buffer_line + data->loc.x, 1, syntax->regex_matches, 0);
-                         if(regex_rc == 0) syntax->chars_til_highlighted_word = syntax->regex_matches[0].rm_so;
-                    }else if(syntax->chars_til_highlighted_word == 0){
-                         syntax->highlight_type = HL_VISUAL;
-                         syntax->highlighting_left = syntax->regex_matches[0].rm_eo - syntax->regex_matches[0].rm_so;
-                    }
-
-                    syntax->chars_til_highlighted_word--;
-               }
-
-               syntax->current_color = syntax_set_color(syntax->current_color, syntax->highlight_type);
-          }
-
-          char* line_to_print = data->buffer->lines[data->loc.y];
+          const char* line_to_print = data->buffer->lines[data->loc.y];
           int64_t print_line_length = strlen(line_to_print);
 
           // syntax highligh c things we recognize
           if(syntax->current_color_left == 0){
                if(!syntax->inside_string){
                     if((syntax->current_color_left = syntax_is_c_constant_number(line_to_print, data->loc.x))){
-                         syntax->current_color = syntax_set_color(S_CONSTANT_NUMBER, syntax->highlight_type);
+                         syntax->current_color = syntax_set_color(S_CONSTANT_NUMBER, syntax->highlight.type);
                     }else if((syntax->current_color_left = syntax_is_c_caps_var(line_to_print, data->loc.x))){
-                         syntax->current_color = syntax_set_color(S_CONSTANT, syntax->highlight_type);
+                         syntax->current_color = syntax_set_color(S_CONSTANT, syntax->highlight.type);
                     }
 
                     if(!syntax->current_color_left && !syntax->inside_comment && !syntax->inside_multiline_comment){
                          if((syntax->current_color_left = syntax_is_c_control(line_to_print, data->loc.x))){
-                              syntax->current_color = syntax_set_color(S_CONTROL, syntax->highlight_type);
+                              syntax->current_color = syntax_set_color(S_CONTROL, syntax->highlight.type);
                          }else if((syntax->current_color_left = syntax_is_c_typename(line_to_print, data->loc.x))){
-                              syntax->current_color = syntax_set_color(S_TYPE, syntax->highlight_type);
+                              syntax->current_color = syntax_set_color(S_TYPE, syntax->highlight.type);
                          }else if((syntax->current_color_left = syntax_is_c_keyword(line_to_print, data->loc.x))){
-                              syntax->current_color = syntax_set_color(S_KEYWORD, syntax->highlight_type);
+                              syntax->current_color = syntax_set_color(S_KEYWORD, syntax->highlight.type);
                          }else if((syntax->current_color_left = syntax_is_c_preprocessor(line_to_print, data->loc.x))){
-                              syntax->current_color = syntax_set_color(S_PREPROCESSOR, syntax->highlight_type);
+                              syntax->current_color = syntax_set_color(S_PREPROCESSOR, syntax->highlight.type);
                          }else if(syntax->matched_pair.x >= 0){
                               if(ce_points_equal(data->loc, data->cursor) || ce_points_equal(data->loc, syntax->matched_pair)){
-                                   syntax->current_color = syntax_set_color(S_MATCHING_PARENS, syntax->highlight_type);
+                                   syntax->current_color = syntax_set_color(S_MATCHING_PARENS, syntax->highlight.type);
                               }else if(syntax->current_color == S_MATCHING_PARENS){
-                                   syntax->current_color = syntax_set_color(S_NORMAL, syntax->highlight_type);
+                                   syntax->current_color = syntax_set_color(S_NORMAL, syntax->highlight.type);
                               }
                          }
                     }
 
                     if(!syntax->current_color_left){
                          if((syntax->current_color_left = syntax_is_c_fullpath(line_to_print, data->loc.x))){
-                              syntax->current_color = syntax_set_color(S_FILEPATH, syntax->highlight_type);
+                              syntax->current_color = syntax_set_color(S_FILEPATH, syntax->highlight.type);
                          }
                     }
                }
@@ -626,12 +621,12 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
                     break;
                case CT_SINGLE_LINE:
                     syntax->inside_comment = true;
-                    syntax->current_color = syntax_set_color(S_COMMENT, syntax->highlight_type);
+                    syntax->current_color = syntax_set_color(S_COMMENT, syntax->highlight.type);
                     break;
                case CT_BEGIN_MULTILINE:
                     if(!syntax->inside_comment){
                          syntax->inside_multiline_comment = true;
-                         syntax->current_color = syntax_set_color(S_COMMENT, syntax->highlight_type);
+                         syntax->current_color = syntax_set_color(S_COMMENT, syntax->highlight.type);
                     }
                     break;
                case CT_END_MULTILINE:
@@ -646,7 +641,7 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
 
                // if inside_string has changed, update the color
                if(pre_quote_check != syntax->inside_string){
-                    if(syntax->inside_string) syntax->current_color = syntax_set_color(S_STRING, syntax->highlight_type);
+                    if(syntax->inside_string) syntax->current_color = syntax_set_color(S_STRING, syntax->highlight.type);
                     else syntax->current_color_left = 1;
                }
           }else{
@@ -654,30 +649,22 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
 
                // if no color is left, go back to what the color should be based on state
                if(syntax->current_color_left == 0){
-                    syntax->current_color = syntax_set_color(S_NORMAL, syntax->highlight_type);
+                    syntax->current_color = syntax_set_color(S_NORMAL, syntax->highlight.type);
 
                     if(syntax->inside_comment || syntax->inside_multiline_comment){
-                         syntax->current_color = syntax_set_color(S_COMMENT, syntax->highlight_type);
+                         syntax->current_color = syntax_set_color(S_COMMENT, syntax->highlight.type);
                     }else if(syntax->inside_string){
-                         syntax->current_color = syntax_set_color(S_STRING, syntax->highlight_type);
-                    }else if(syntax->diff_add){
-                         syntax->current_color = syntax_set_color(S_DIFF_ADDED, syntax->highlight_type);
-                    }else if(syntax->diff_remove){
-                         syntax->current_color = syntax_set_color(S_DIFF_REMOVED, syntax->highlight_type);
-                    }else if(syntax->diff_header){
-                         syntax->current_color = syntax_set_color(S_DIFF_HEADER, syntax->highlight_type);
+                         syntax->current_color = syntax_set_color(S_STRING, syntax->highlight.type);
                     }else if(syntax->matched_pair.x >= 0){
                          if(ce_points_equal(data->loc, data->cursor) || ce_points_equal(data->loc, syntax->matched_pair)){
-                              syntax->current_color = syntax_set_color(S_MATCHING_PARENS, syntax->highlight_type);
+                              syntax->current_color = syntax_set_color(S_MATCHING_PARENS, syntax->highlight.type);
                          }
                     }
                }
           }
 
           // highlight trailing whitespace
-          if(data->loc.x >= syntax->begin_trailing_whitespace){
-               syntax_set_color(S_TRAILING_WHITESPACE, syntax->highlight_type);
-          }
+          if(data->loc.x >= syntax->trailing_whitespace_begin) syntax_set_color(S_TRAILING_WHITESPACE, syntax->highlight.type);
      } break;
      case SS_END_OF_LINE:
      {
@@ -817,7 +804,7 @@ void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data)
           syntax->inside_string = 0;
           syntax->current_color = 0;
           syntax->current_color_left = 0;
-          syntax->highlight_type = HL_OFF;
+          syntax->highlight.type = HL_OFF;
 
           for(int64_t y = 0; y < data->loc.y; ++y){
                const char* buffer_line = data->buffer->lines[y];
@@ -827,6 +814,9 @@ void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data)
                     syntax_is_python_docstring(buffer_line, x, &syntax->inside_docstring);
                }
           }
+
+          // is our cursor on something we can match?
+          syntax_calc_matching_pair(data, &syntax->matched_pair);
      } break;
      case SS_BEGINNING_OF_LINE:
      {
@@ -843,60 +833,41 @@ void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data)
                syntax_highlight_python(&data_copy, user_data);
           }
 
+          syntax_calc_trailing_whitespace(data, &syntax->trailing_whitespace_begin);
+
           if(data->loc.y == data->cursor.y){
-               syntax->highlight_type = HL_CURRENT_LINE;
+               syntax->highlight.type = HL_CURRENT_LINE;
           }else{
-               syntax->highlight_type = HL_OFF;
+               syntax->highlight.type = HL_OFF;
           }
 
-          syntax->current_color = syntax_set_color(syntax->current_color, syntax->highlight_type);
+          syntax->current_color = syntax_set_color(syntax->current_color, syntax->highlight.type);
      } break;
      case SS_CHARACTER:
      {
+          syntax_determine_highlight(data, &syntax->highlight);
+          syntax->current_color = syntax_set_color(syntax->current_color, syntax->highlight.type);
+
           const char* buffer_line = data->buffer->lines[data->loc.y];
-
-          if(ce_point_in_range(data->loc, data->buffer->highlight_start, data->buffer->highlight_end)){
-               syntax->highlight_type = HL_VISUAL;
-               syntax->current_color = syntax_set_color(syntax->current_color, syntax->highlight_type);
-          }else{
-               syntax->highlighting_left--;
-               if(syntax->highlighting_left <= 0){
-                    if(data->highlight_line_type && data->loc.y == data->cursor.y){
-                         syntax->highlight_type = HL_CURRENT_LINE;
-                    }else{
-                         syntax->highlight_type = HL_OFF;
-                    }
-               }
-
-               if(data->highlight_regex){
-                    if(syntax->chars_til_highlighted_word < 0){
-                         int regex_rc = regexec(data->highlight_regex, buffer_line + data->loc.x, 1, syntax->regex_matches, 0);
-                         if(regex_rc == 0) syntax->chars_til_highlighted_word = syntax->regex_matches[0].rm_so;
-                    }else if(syntax->chars_til_highlighted_word == 0){
-                         syntax->highlight_type = HL_VISUAL;
-                         syntax->highlighting_left = syntax->regex_matches[0].rm_eo - syntax->regex_matches[0].rm_so;
-                    }
-
-                    syntax->chars_til_highlighted_word--;
-               }
-
-               syntax->current_color = syntax_set_color(syntax->current_color, syntax->highlight_type);
-          }
 
           if(!syntax->inside_string && !syntax->inside_docstring){
                if(syntax->current_color_left){
                     syntax->current_color_left--;
                }else{
                     if((syntax->current_color_left = syntax_is_python_keyword(buffer_line, data->loc.x))){
-                         syntax->current_color = syntax_set_color(S_KEYWORD, syntax->highlight_type);
+                         syntax->current_color = syntax_set_color(S_KEYWORD, syntax->highlight.type);
                     }else if((syntax->current_color_left = syntax_is_python_control(buffer_line, data->loc.x))){
-                         syntax->current_color = syntax_set_color(S_CONTROL, syntax->highlight_type);
+                         syntax->current_color = syntax_set_color(S_CONTROL, syntax->highlight.type);
                     }else if((syntax->current_color_left = syntax_is_c_caps_var(buffer_line, data->loc.x))){
-                         syntax->current_color = syntax_set_color(S_CONSTANT, syntax->highlight_type);
+                         syntax->current_color = syntax_set_color(S_CONSTANT, syntax->highlight.type);
                     }else if((syntax->current_color_left = syntax_is_c_constant_number(buffer_line, data->loc.x))){
-                         syntax->current_color = syntax_set_color(S_CONSTANT, syntax->highlight_type);
+                         syntax->current_color = syntax_set_color(S_CONSTANT, syntax->highlight.type);
                     }else if((syntax->current_color_left = syntax_is_python_comment(buffer_line, data->loc.x))){
-                         syntax->current_color = syntax_set_color(S_COMMENT, syntax->highlight_type);
+                         syntax->current_color = syntax_set_color(S_COMMENT, syntax->highlight.type);
+                    }else if(syntax->matched_pair.x >= 0){
+                         if(ce_points_equal(data->loc, data->cursor) || ce_points_equal(data->loc, syntax->matched_pair)){
+                              syntax->current_color = syntax_set_color(S_MATCHING_PARENS, syntax->highlight.type);
+                         }
                     }
                }
           }
@@ -906,22 +877,234 @@ void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data)
                syntax_is_python_docstring(buffer_line, data->loc.x, &syntax->inside_docstring);
 
                if(inside_docstring || syntax->inside_docstring){
-                    syntax->current_color = syntax_set_color(S_STRING, syntax->highlight_type);
+                    syntax->current_color = syntax_set_color(S_STRING, syntax->highlight.type);
                }else{
                     bool inside_string = syntax->inside_string;
                     syntax_is_python_string(buffer_line, data->loc.x, &syntax->inside_string);
 
                     if(inside_string || syntax->inside_string){
-                         syntax->current_color = syntax_set_color(S_STRING, syntax->highlight_type);
+                         syntax->current_color = syntax_set_color(S_STRING, syntax->highlight.type);
+                    }else if(syntax->matched_pair.x >= 0){
+                         if(ce_points_equal(data->loc, data->cursor) || ce_points_equal(data->loc, syntax->matched_pair)){
+                              syntax->current_color = syntax_set_color(S_MATCHING_PARENS, syntax->highlight.type);
+                         }else{
+                              syntax->current_color = syntax_set_color(S_NORMAL, syntax->highlight.type);
+                         }
                     }else{
-                         syntax->current_color = syntax_set_color(S_NORMAL, syntax->highlight_type);
+                         syntax->current_color = syntax_set_color(S_NORMAL, syntax->highlight.type);
                     }
                }
           }
+
+          if(data->loc.x >= syntax->trailing_whitespace_begin) syntax_set_color(S_TRAILING_WHITESPACE, syntax->highlight.type);
      } break;
      case SS_END_OF_LINE:
           if(data->cursor.y == data->loc.y && data->highlight_line_type == HLT_ENTIRE_LINE){
                syntax->current_color = syntax_set_color(S_NORMAL, HL_CURRENT_LINE);
+               for(int64_t c = data->loc.x; c < data->bottom_right.x; ++c){
+                    addch(' ');
+               }
+          }
+
+          // highlight line numbers!
+          if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
+          break;
+     }
+}
+
+int64_t syntax_is_config_keyword(const char* line, int64_t start_offset)
+{
+     static const char* keywords [] = {
+          "true",
+          "false",
+     };
+
+     static const int keyword_count = sizeof(keywords) / sizeof(keywords[0]);
+
+     return match_keyword(line, start_offset, keywords, keyword_count);
+}
+
+void syntax_highlight_config(SyntaxHighlighterData_t* data, void* user_data)
+{
+     SyntaxConfig_t* syntax = user_data;
+
+     switch(data->state){
+     default:
+          break;
+     case SS_INITIALIZING:
+     {
+          syntax->inside_string = 0;
+          syntax->current_color = 0;
+          syntax->current_color_left = 0;
+          syntax->highlight.type = HL_OFF;
+
+          // is our cursor on something we can match?
+          syntax_calc_matching_pair(data, &syntax->matched_pair);
+     } break;
+     case SS_BEGINNING_OF_LINE:
+     {
+          syntax->inside_string = 0;
+          syntax->current_color = S_NORMAL;
+          syntax->current_color_left = 0;
+
+          // lie to me !
+          SyntaxHighlighterData_t data_copy = *data;
+          data_copy.state = SS_CHARACTER;
+
+          for(int64_t x = 0; x < data->loc.x; ++x){
+               data_copy.loc = (Point_t){x, data->loc.y};
+               syntax_highlight_config(&data_copy, user_data);
+          }
+
+          if(data->loc.y == data->cursor.y){
+               syntax->highlight.type = HL_CURRENT_LINE;
+          }else{
+               syntax->highlight.type = HL_OFF;
+          }
+
+          syntax_calc_trailing_whitespace(data, &syntax->trailing_whitespace_begin);
+
+          syntax->current_color = syntax_set_color(syntax->current_color, syntax->highlight.type);
+     } break;
+     case SS_CHARACTER:
+     {
+          syntax_determine_highlight(data, &syntax->highlight);
+          syntax->current_color = syntax_set_color(syntax->current_color, syntax->highlight.type);
+
+          const char* buffer_line = data->buffer->lines[data->loc.y];
+
+          if(!syntax->inside_string){
+               if(syntax->current_color_left){
+                    syntax->current_color_left--;
+               }else{
+                    if((syntax->current_color_left = syntax_is_config_keyword(buffer_line, data->loc.x))){
+                         syntax->current_color = syntax_set_color(S_KEYWORD, syntax->highlight.type);
+                    }else if((syntax->current_color_left = syntax_is_c_caps_var(buffer_line, data->loc.x))){
+                         syntax->current_color = syntax_set_color(S_CONSTANT, syntax->highlight.type);
+                    }else if((syntax->current_color_left = syntax_is_c_constant_number(buffer_line, data->loc.x))){
+                         syntax->current_color = syntax_set_color(S_CONSTANT, syntax->highlight.type);
+                    }else if((syntax->current_color_left = syntax_is_python_comment(buffer_line, data->loc.x))){
+                         syntax->current_color = syntax_set_color(S_COMMENT, syntax->highlight.type);
+                    }else if(syntax->matched_pair.x >= 0){
+                         if(ce_points_equal(data->loc, data->cursor) || ce_points_equal(data->loc, syntax->matched_pair)){
+                              syntax->current_color = syntax_set_color(S_MATCHING_PARENS, syntax->highlight.type);
+                         }
+                    }
+               }
+          }
+
+          if(syntax->current_color_left <= 0){
+               bool inside_string = syntax->inside_string;
+               syntax_is_python_string(buffer_line, data->loc.x, &syntax->inside_string);
+
+               if(inside_string || syntax->inside_string){
+                    syntax->current_color = syntax_set_color(S_STRING, syntax->highlight.type);
+               }else if(syntax->matched_pair.x >= 0){
+                    if(ce_points_equal(data->loc, data->cursor) || ce_points_equal(data->loc, syntax->matched_pair)){
+                         syntax->current_color = syntax_set_color(S_MATCHING_PARENS, syntax->highlight.type);
+                    }else{
+                         syntax->current_color = syntax_set_color(S_NORMAL, syntax->highlight.type);
+                    }
+               }else{
+                    syntax->current_color = syntax_set_color(S_NORMAL, syntax->highlight.type);
+               }
+          }
+
+          if(data->loc.x >= syntax->trailing_whitespace_begin) syntax_set_color(S_TRAILING_WHITESPACE, syntax->highlight.type);
+     } break;
+     case SS_END_OF_LINE:
+          if(data->cursor.y == data->loc.y && data->highlight_line_type == HLT_ENTIRE_LINE){
+               syntax->current_color = syntax_set_color(S_NORMAL, HL_CURRENT_LINE);
+               for(int64_t c = data->loc.x; c < data->bottom_right.x; ++c){
+                    addch(' ');
+               }
+          }
+
+          // highlight line numbers!
+          if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
+          break;
+     }
+}
+
+void syntax_highlight_plain(SyntaxHighlighterData_t* data, void* user_data)
+{
+     SyntaxPlain_t* syntax = user_data;
+
+     switch(data->state){
+     default:
+          break;
+     case SS_INITIALIZING:
+     {
+          syntax->highlight.type = HL_OFF;
+     } break;
+     case SS_BEGINNING_OF_LINE:
+     {
+          if(data->loc.y == data->cursor.y){
+               syntax->highlight.type = HL_CURRENT_LINE;
+          }else{
+               syntax->highlight.type = HL_OFF;
+          }
+
+          syntax_set_color(S_NORMAL, syntax->highlight.type);
+     } break;
+     case SS_CHARACTER:
+     {
+          syntax_determine_highlight(data, &syntax->highlight);
+          syntax_set_color(S_NORMAL, syntax->highlight.type);
+     } break;
+     case SS_END_OF_LINE:
+          if(data->cursor.y == data->loc.y && data->highlight_line_type == HLT_ENTIRE_LINE){
+               syntax_set_color(S_NORMAL, HL_CURRENT_LINE);
+               for(int64_t c = data->loc.x; c < data->bottom_right.x; ++c){
+                    addch(' ');
+               }
+          }
+
+          // highlight line numbers!
+          if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
+          break;
+     }
+}
+
+void syntax_highlight_diff(SyntaxHighlighterData_t* data, void* user_data)
+{
+     SyntaxDiff_t* syntax = user_data;
+
+     switch(data->state){
+     default:
+          break;
+     case SS_INITIALIZING:
+     {
+          syntax->highlight.type = HL_OFF;
+     } break;
+     case SS_BEGINNING_OF_LINE:
+     {
+          if(data->loc.y == data->cursor.y){
+               syntax->highlight.type = HL_CURRENT_LINE;
+          }else{
+               syntax->highlight.type = HL_OFF;
+          }
+
+          const char* buffer_line = data->buffer->lines[data->loc.y];
+
+          if(buffer_line[0] == '-'){
+               syntax->current_color = syntax_set_color(S_DIFF_REMOVED, syntax->highlight.type);
+          }else if(buffer_line[0] == '+'){
+               syntax->current_color = syntax_set_color(S_DIFF_ADDED, syntax->highlight.type);
+          }else if(buffer_line[0] == '@' && buffer_line[1] == '@'){
+               syntax->current_color = syntax_set_color(S_DIFF_HEADER, syntax->highlight.type);
+          }else{
+               syntax->current_color = syntax_set_color(S_NORMAL, syntax->highlight.type);
+          }
+     } break;
+     case SS_CHARACTER:
+     {
+          syntax_determine_highlight(data, &syntax->highlight);
+          syntax_set_color(syntax->current_color, syntax->highlight.type);
+     } break;
+     case SS_END_OF_LINE:
+          if(data->cursor.y == data->loc.y && data->highlight_line_type == HLT_ENTIRE_LINE){
+               syntax_set_color(S_NORMAL, HL_CURRENT_LINE);
                for(int64_t c = data->loc.x; c < data->bottom_right.x; ++c){
                     addch(' ');
                }

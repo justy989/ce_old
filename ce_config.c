@@ -363,6 +363,14 @@ bool initialize_buffer(Buffer_t* buffer){
                     free(buffer_state);
                     return false;
                }
+          }else if(name_len > 4 && strcmp(buffer->name + (name_len - 4), ".cfg") == 0){
+               buffer->syntax_fn = syntax_highlight_config;
+               buffer->syntax_user_data = malloc(sizeof(SyntaxConfig_t));
+               if(!buffer->syntax_user_data){
+                    ce_message("failed to allocate syntax user data for buffer");
+                    free(buffer_state);
+                    return false;
+               }
           }
      }
 
@@ -1698,18 +1706,22 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      config_state->buffer_list_buffer.name = strdup("[buffers]");
      initialize_buffer(&config_state->buffer_list_buffer);
      config_state->buffer_list_buffer.status = BS_READONLY;
+     config_state->buffer_list_buffer.absolutely_no_line_numbers_under_any_circumstances = true;
 
      config_state->mark_list_buffer.name = strdup("[marks]");
      initialize_buffer(&config_state->mark_list_buffer);
      config_state->mark_list_buffer.status = BS_READONLY;
+     config_state->mark_list_buffer.absolutely_no_line_numbers_under_any_circumstances = true;
 
      config_state->yank_list_buffer.name = strdup("[yanks]");
      initialize_buffer(&config_state->yank_list_buffer);
      config_state->yank_list_buffer.status = BS_READONLY;
+     config_state->yank_list_buffer.absolutely_no_line_numbers_under_any_circumstances = true;
 
      config_state->macro_list_buffer.name = strdup("[macros]");
      initialize_buffer(&config_state->macro_list_buffer);
      config_state->macro_list_buffer.status = BS_READONLY;
+     config_state->macro_list_buffer.absolutely_no_line_numbers_under_any_circumstances = true;
 
      // if we reload, the shell command buffer may already exist, don't recreate it
      BufferNode_t* itr = *head;
@@ -1738,6 +1750,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
           config_state->completion_buffer = calloc(1, sizeof(*config_state->completion_buffer));
           config_state->completion_buffer->name = strdup("[completions]");
           config_state->completion_buffer->status = BS_READONLY;
+          config_state->completion_buffer->absolutely_no_line_numbers_under_any_circumstances = true;
           BufferNode_t* new_buffer_node = ce_append_buffer_to_list(*head, config_state->completion_buffer);
           if(!new_buffer_node){
                ce_message("failed to add shell command buffer to list");
@@ -3235,8 +3248,7 @@ void view_drawer(void* user_data)
      // draw auto complete
      // TODO: don't draw over borders!
      LineNumberType_t line_number_type = config_state->line_number_type;
-     if(buffer_view == config_state->view_input ||
-        buffer == &config_state->terminal.buffer){
+     if(buffer->absolutely_no_line_numbers_under_any_circumstances){
           line_number_type = LNT_NONE;
      }
 

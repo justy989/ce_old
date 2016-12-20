@@ -185,6 +185,7 @@ CommentType_t syntax_is_c_comment(const char* line, int64_t start_offset, bool i
 void syntax_is_c_string_literal(const char* line, int64_t start_offset, int64_t line_len, bool* inside_string, char* last_quote_char)
 {
      char ch = line[start_offset];
+
      if(ch == '"'){
           // ignore single quotes inside double quotes
           if(*inside_string){
@@ -916,6 +917,129 @@ void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data)
                     }else{
                          syntax->current_color = syntax_set_color(S_NORMAL, syntax->highlight_type);
                     }
+               }
+          }
+     } break;
+     case SS_END_OF_LINE:
+          if(data->cursor.y == data->loc.y && data->highlight_line_type == HLT_ENTIRE_LINE){
+               syntax->current_color = syntax_set_color(S_NORMAL, HL_CURRENT_LINE);
+               for(int64_t c = data->loc.x; c < data->bottom_right.x; ++c){
+                    addch(' ');
+               }
+          }
+
+          // highlight line numbers!
+          if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
+          break;
+     }
+}
+
+int64_t syntax_is_config_keyword(const char* line, int64_t start_offset)
+{
+     static const char* keywords [] = {
+          "true",
+          "false",
+     };
+
+     static const int keyword_count = sizeof(keywords) / sizeof(keywords[0]);
+
+     return match_keyword(line, start_offset, keywords, keyword_count);
+}
+
+
+void syntax_highlight_config(SyntaxHighlighterData_t* data, void* user_data)
+{
+     SyntaxConfig_t* syntax = user_data;
+
+     switch(data->state){
+     default:
+          break;
+     case SS_INITIALIZING:
+     {
+          syntax->inside_string = 0;
+          syntax->current_color = 0;
+          syntax->current_color_left = 0;
+          syntax->highlight_type = HL_OFF;
+     } break;
+     case SS_BEGINNING_OF_LINE:
+     {
+          syntax->inside_string = 0;
+          syntax->current_color = S_NORMAL;
+          syntax->current_color_left = 0;
+
+          // lie to me !
+          SyntaxHighlighterData_t data_copy = *data;
+          data_copy.state = SS_CHARACTER;
+
+          for(int64_t x = 0; x < data->loc.x; ++x){
+               data_copy.loc = (Point_t){x, data->loc.y};
+               syntax_highlight_config(&data_copy, user_data);
+          }
+
+          if(data->loc.y == data->cursor.y){
+               syntax->highlight_type = HL_CURRENT_LINE;
+          }else{
+               syntax->highlight_type = HL_OFF;
+          }
+
+          syntax->current_color = syntax_set_color(syntax->current_color, syntax->highlight_type);
+     } break;
+     case SS_CHARACTER:
+     {
+          const char* buffer_line = data->buffer->lines[data->loc.y];
+
+          if(ce_point_in_range(data->loc, data->buffer->highlight_start, data->buffer->highlight_end)){
+               syntax->highlight_type = HL_VISUAL;
+               syntax->current_color = syntax_set_color(syntax->current_color, syntax->highlight_type);
+          }else{
+               syntax->highlighting_left--;
+               if(syntax->highlighting_left <= 0){
+                    if(data->highlight_line_type && data->loc.y == data->cursor.y){
+                         syntax->highlight_type = HL_CURRENT_LINE;
+                    }else{
+                         syntax->highlight_type = HL_OFF;
+                    }
+               }
+
+               if(data->highlight_regex){
+                    if(syntax->chars_til_highlighted_word < 0){
+                         int regex_rc = regexec(data->highlight_regex, buffer_line + data->loc.x, 1, syntax->regex_matches, 0);
+                         if(regex_rc == 0) syntax->chars_til_highlighted_word = syntax->regex_matches[0].rm_so;
+                    }else if(syntax->chars_til_highlighted_word == 0){
+                         syntax->highlight_type = HL_VISUAL;
+                         syntax->highlighting_left = syntax->regex_matches[0].rm_eo - syntax->regex_matches[0].rm_so;
+                    }
+
+                    syntax->chars_til_highlighted_word--;
+               }
+
+               syntax->current_color = syntax_set_color(syntax->current_color, syntax->highlight_type);
+          }
+
+          if(!syntax->inside_string){
+               if(syntax->current_color_left){
+                    syntax->current_color_left--;
+               }else{
+                    if((syntax->current_color_left = syntax_is_config_keyword(buffer_line, data->loc.x))){
+                         syntax->current_color = syntax_set_color(S_KEYWORD, syntax->highlight_type);
+                    }else if((syntax->current_color_left = syntax_is_c_caps_var(buffer_line, data->loc.x))){
+                         syntax->current_color = syntax_set_color(S_CONSTANT, syntax->highlight_type);
+                    }else if((syntax->current_color_left = syntax_is_c_constant_number(buffer_line, data->loc.x))){
+                         syntax->current_color = syntax_set_color(S_CONSTANT, syntax->highlight_type);
+                    }else if((syntax->current_color_left = syntax_is_python_comment(buffer_line, data->loc.x))){
+                         syntax->current_color = syntax_set_color(S_COMMENT, syntax->highlight_type);
+                    }
+               }
+          }
+
+          if(syntax->current_color_left <= 0){
+               bool inside_string = syntax->inside_string;
+               syntax_is_python_string(buffer_line, data->loc.x, &syntax->inside_string);
+
+               if(inside_string || syntax->inside_string){
+                    syntax->current_color = syntax_set_color(S_STRING, syntax->highlight_type);
+               }else{
+                    syntax->current_color = syntax_set_color(S_NORMAL, syntax->highlight_type);
                }
           }
      } break;

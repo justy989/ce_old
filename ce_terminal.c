@@ -74,10 +74,10 @@ void* terminal_reader(void* data)
                                    switch(csi_arguments[0]){
                                    default:
                                    {
-                                        int64_t len = (strlen(term->buffer.lines[term->cursor.y]) - term->cursor.x);
+                                        int64_t len = (strlen(term->buffer->lines[term->cursor.y]) - term->cursor.x);
                                         for(int64_t r = 0; r < len; ++r){
                                              Point_t loc = {term->cursor.x + r, term->cursor.y};
-                                             ce_remove_char_readonly(&term->buffer, loc);
+                                             ce_remove_char_readonly(term->buffer, loc);
                                         }
                                    } break;
                                    case 1:
@@ -89,7 +89,7 @@ void* terminal_reader(void* data)
                               case 'm':
                               {
                                    // get last node in row
-                                   TerminalColorNode_t* last_node = term->color_lines + (term->buffer.line_count - 1);
+                                   TerminalColorNode_t* last_node = term->color_lines + (term->buffer->line_count - 1);
                                    while(last_node->next) last_node = last_node->next;
 
                                    TerminalColorNode_t* new_last_node = malloc(sizeof(*new_last_node));
@@ -98,7 +98,7 @@ void* terminal_reader(void* data)
                                    last_node->next = new_last_node;
                                    new_last_node->fg = last_node->fg;
                                    new_last_node->bg = last_node->bg;
-                                   new_last_node->index = strlen(term->buffer.lines[term->buffer.line_count - 1]);
+                                   new_last_node->index = strlen(term->buffer->lines[term->buffer->line_count - 1]);
                                    new_last_node->next = NULL;
 
                                    for(int a = 0; a <= csi_argument_index; ++a){
@@ -195,33 +195,33 @@ void* terminal_reader(void* data)
 
                     escape = false;
                }else if(isprint(*byte)){
-                    if(ce_point_on_buffer(&term->buffer, term->cursor)){
-                         int line_last_index = ce_last_index(term->buffer.lines[term->cursor.y]);
+                    if(ce_point_on_buffer(term->buffer, term->cursor)){
+                         int line_last_index = ce_last_index(term->buffer->lines[term->cursor.y]);
 
                          if(line_last_index && term->cursor.x <= line_last_index){
-                              ce_set_char_readonly(&term->buffer, term->cursor, *byte);
+                              ce_set_char_readonly(term->buffer, term->cursor, *byte);
                          }else{
-                              ce_insert_char_readonly(&term->buffer, term->cursor, *byte);
+                              ce_insert_char_readonly(term->buffer, term->cursor, *byte);
                          }
                     }else{
-                         ce_insert_char_readonly(&term->buffer, term->cursor, *byte);
+                         ce_insert_char_readonly(term->buffer, term->cursor, *byte);
                     }
 
                     term->cursor.x++;
 
                     if(term->cursor.x >= term->width){
-                         ce_append_char_readonly(&term->buffer, NEWLINE); // ignore where the cursor is
+                         ce_append_char_readonly(term->buffer, NEWLINE); // ignore where the cursor is
                          term->cursor.x = 0;
                          term->cursor.y++;
 
                          // TODO: consolidate with code below
-                         term->color_lines = realloc(term->color_lines, term->buffer.line_count * sizeof(*term->color_lines));
+                         term->color_lines = realloc(term->color_lines, term->buffer->line_count * sizeof(*term->color_lines));
 
-                         TerminalColorNode_t* itr = term->color_lines + (term->buffer.line_count - 2);
+                         TerminalColorNode_t* itr = term->color_lines + (term->buffer->line_count - 2);
                          while(itr->next) itr = itr->next;
 
                          // NOTE: copy the color profile from the end of the previous line
-                         term->color_lines[term->buffer.line_count - 1] = *itr;
+                         term->color_lines[term->buffer->line_count - 1] = *itr;
                     }
                }else{
                     switch(*byte){
@@ -235,17 +235,17 @@ void* terminal_reader(void* data)
                          break;
                     case NEWLINE:
                     {
-                         ce_append_char_readonly(&term->buffer, NEWLINE); // ignore where the cursor is
+                         ce_append_char_readonly(term->buffer, NEWLINE); // ignore where the cursor is
                          term->cursor.x = 0;
                          term->cursor.y++;
 
-                         term->color_lines = realloc(term->color_lines, term->buffer.line_count * sizeof(*term->color_lines));
+                         term->color_lines = realloc(term->color_lines, term->buffer->line_count * sizeof(*term->color_lines));
 
-                         TerminalColorNode_t* itr = term->color_lines + (term->buffer.line_count - 2);
+                         TerminalColorNode_t* itr = term->color_lines + (term->buffer->line_count - 2);
                          while(itr->next) itr = itr->next;
 
                          // NOTE: copy the color profile from the end of the previous line
-                         term->color_lines[term->buffer.line_count - 1] = *itr;
+                         term->color_lines[term->buffer->line_count - 1] = *itr;
                     } break;
                     case '\r': // Carriage return
                          term->cursor.x = 0;
@@ -265,7 +265,7 @@ void* terminal_reader(void* data)
      return NULL;
 }
 
-bool terminal_init(Terminal_t* term, int64_t width, int64_t height)
+bool terminal_init(Terminal_t* term, int64_t width, int64_t height, Buffer_t* buffer)
 {
      int master_fd;
      int slave_fd;
@@ -349,10 +349,14 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height)
      term->width = width;
      term->height = height;
 
-     if(!ce_alloc_lines(&term->buffer, 1)){
+     term->buffer = buffer;
+
+     if(!ce_alloc_lines(term->buffer, 1)){
           term->is_alive = false;
           return false;
      }
+
+     term->buffer->status = BS_READONLY;
 
      int rc = pthread_create(&term->reader_thread, NULL, terminal_reader, term);
      if(rc != 0){
@@ -362,9 +366,6 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height)
      }
 
      sem_init(&term->updated, 0, 1);
-
-     term->buffer.status = BS_READONLY;
-     term->buffer.name = strdup("[terminal]");
 
      term->cursor = (Point_t){0, 0};
 
@@ -382,7 +383,7 @@ void terminal_free(Terminal_t* term)
      }
 
      if(term->fd){
-          for(int64_t i = 0; i < term->buffer.line_count; ++i){
+          for(int64_t i = 0; i < term->buffer->line_count; ++i){
                TerminalColorNode_t* itr = term->color_lines + i;
                if(!itr->next) continue; // ignore the first node, skip if it's the only one
 
@@ -400,7 +401,7 @@ void terminal_free(Terminal_t* term)
           sem_destroy(&term->updated);
           pthread_cancel(term->reader_thread);
           pthread_join(term->reader_thread, NULL);
-          ce_free_buffer(&term->buffer);
+          ce_free_buffer(term->buffer);
      }
 
      term->is_alive = false;

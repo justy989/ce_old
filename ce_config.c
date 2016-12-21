@@ -589,8 +589,11 @@ int nftw_find_file(const char* fpath, const struct stat *sb, int typeflag, struc
 void free_buffer_state(BufferState_t* buffer_state)
 {
      BufferCommitNode_t* itr = buffer_state->commit_tail;
-     while(itr->prev) itr = itr->prev;
-     ce_commits_free(itr);
+     if(itr){
+          while(itr->prev) itr = itr->prev;
+          ce_commits_free(itr);
+     }
+
      vim_marks_free(&buffer_state->vim_buffer_state.mark_head);
      free(buffer_state);
 }
@@ -2017,9 +2020,13 @@ bool destroyer(BufferNode_t** head, void* user_data)
           }
      }
 
-     pthread_cancel(config_state->terminal_check_update_thread);
-     terminal_free(&config_state->terminal);
-     free_buffer_state(config_state->terminal.buffer.user_data);
+     if(config_state->terminal_check_update_thread){
+          pthread_cancel(config_state->terminal_check_update_thread);
+          pthread_join(config_state->terminal_check_update_thread, NULL);
+          free(config_state->terminal.buffer.syntax_user_data);
+          terminal_free(&config_state->terminal);
+          free_buffer_state(config_state->terminal.buffer.user_data);
+     }
 
      BufferNode_t* itr = *head;
      while(itr){
@@ -2046,21 +2053,26 @@ bool destroyer(BufferNode_t** head, void* user_data)
 
      // input buffer
      {
-          ce_free_buffer(&config_state->input_buffer);
           free_buffer_state(config_state->input_buffer.user_data);
+          free(config_state->input_buffer.syntax_user_data);
+          ce_free_buffer(&config_state->input_buffer);
           free(config_state->view_input);
      }
 
      free_buffer_state(config_state->buffer_list_buffer.user_data);
+     free(config_state->buffer_list_buffer.syntax_user_data);
      ce_free_buffer(&config_state->buffer_list_buffer);
 
      free_buffer_state(config_state->mark_list_buffer.user_data);
+     free(config_state->mark_list_buffer.syntax_user_data);
      ce_free_buffer(&config_state->mark_list_buffer);
 
      free_buffer_state(config_state->yank_list_buffer.user_data);
+     free(config_state->yank_list_buffer.syntax_user_data);
      ce_free_buffer(&config_state->yank_list_buffer);
 
      free_buffer_state(config_state->macro_list_buffer.user_data);
+     free(config_state->macro_list_buffer.syntax_user_data);
      ce_free_buffer(&config_state->macro_list_buffer);
 
      // history
@@ -2075,6 +2087,10 @@ bool destroyer(BufferNode_t** head, void* user_data)
 
      ce_keys_free(&config_state->vim_state.command_head);
      ce_keys_free(&config_state->vim_state.record_macro_head);
+
+     if(config_state->vim_state.search.valid_regex){
+          regfree(&config_state->vim_state.search.regex);
+     }
 
      vim_yanks_free(&config_state->vim_state.yank_head);
 
@@ -2957,6 +2973,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               if(config_state->terminal.fd){
                                    terminal_free(&config_state->terminal);
                                    pthread_cancel(config_state->terminal_check_update_thread);
+                                   pthread_join(config_state->terminal_check_update_thread, NULL);
                               }
 
                               terminal_init(&config_state->terminal, width, height);

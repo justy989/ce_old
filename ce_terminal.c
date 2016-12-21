@@ -382,8 +382,24 @@ void terminal_free(Terminal_t* term)
      }
 
      if(term->fd){
+          for(int64_t i = 0; i < term->buffer.line_count; ++i){
+               TerminalColorNode_t* itr = term->color_lines + i;
+               if(!itr->next) continue; // ignore the first node, skip if it's the only one
+
+               itr = itr->next;
+
+               while(itr){
+                    TerminalColorNode_t* tmp = itr;
+                    itr = itr->next;
+                    free(tmp);
+               }
+          }
+
+          free(term->color_lines);
+
           sem_destroy(&term->updated);
           pthread_cancel(term->reader_thread);
+          pthread_join(term->reader_thread, NULL);
           ce_free_buffer(&term->buffer);
      }
 
@@ -391,8 +407,6 @@ void terminal_free(Terminal_t* term)
      term->width = 0;
      term->height = 0;
      term->fd = 0;
-
-     free(term->color_lines);
 }
 
 bool terminal_resize(Terminal_t* term, int64_t width, int64_t height)
@@ -420,6 +434,7 @@ bool terminal_send_key(Terminal_t* term, int key)
      char character;
      int size;
      const char* string;
+     bool free_string = false;
 
      if(key >= 0 && key < 256){
           character = (char)(key);
@@ -440,6 +455,7 @@ bool terminal_send_key(Terminal_t* term, int key)
           default:
                string = keybound(key, 0);
                size = strlen(string);
+               free_string = true;
                break;
           }
      }
@@ -449,6 +465,8 @@ bool terminal_send_key(Terminal_t* term, int key)
           ce_message("%s() write() to terminal failed: %s", __FUNCTION__, strerror(errno));
           return false;
      }
+
+     if(free_string) free((char*)string);
 
      return true;
 }

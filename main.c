@@ -29,6 +29,9 @@ LITTLE:
 -syntax highlight printf formatters: '%s'
 -we can still hit the drawing bug where config_state->tab_current->view_input_save is null
 -if you make a change and undo, the buffer *sometimes* still says modified
+-make terminal buffer part of the buffer list
+-regex search backwards can be wrong, for instance when searching for word boundaries
+-I think we core every time we exit!
 */
 
 #include <assert.h>
@@ -85,7 +88,7 @@ void config_close(Config_t* config)
      if(!config->so_handle) return;
      free(config->path);
      // NOTE: comment out dlclose() so valgrind can get a helpful stack frame
-     if(dlclose(config->so_handle)) ce_message("dlclose() failed with error %s", dlerror());
+     //if(dlclose(config->so_handle)) ce_message("dlclose() failed with error %s", dlerror());
 }
 
 bool config_revert(Config_t* config, const char* filepath, const char* stable_config_contents, size_t stable_config_size)

@@ -136,6 +136,7 @@ void ce_free_buffer(Buffer_t* buffer)
      }
 
      free(buffer->filename);
+     buffer->filename = NULL;
 
      buffer->status = BS_NONE;
 

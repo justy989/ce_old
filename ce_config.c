@@ -2024,8 +2024,8 @@ bool destroyer(BufferNode_t** head, void* user_data)
           pthread_cancel(config_state->terminal_check_update_thread);
           pthread_join(config_state->terminal_check_update_thread, NULL);
           free(config_state->terminal.buffer.syntax_user_data);
-          terminal_free(&config_state->terminal);
           free_buffer_state(config_state->terminal.buffer.user_data);
+          terminal_free(&config_state->terminal);
      }
 
      BufferNode_t* itr = *head;

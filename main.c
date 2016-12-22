@@ -18,7 +18,6 @@ LITTLE:
 -do searching inside macro
 -step through macro one change at a time
 -separate dot for input buffer
--valgrind run clean
 -when there are 3 lines in a file and you do 'dj', you still have 2 lines...
 -user code can infinite loop if you call ce_advance_cursor(buffer, &a, 1) and rely on
  ce_points_equal(a, b) being false when b is at the end of a line.
@@ -85,7 +84,7 @@ void config_close(Config_t* config)
      if(!config->so_handle) return;
      free(config->path);
      // NOTE: comment out dlclose() so valgrind can get a helpful stack frame
-     if(dlclose(config->so_handle)) ce_message("dlclose() failed with error %s", dlerror());
+     //if(dlclose(config->so_handle)) ce_message("dlclose() failed with error %s", dlerror());
 }
 
 bool config_revert(Config_t* config, const char* filepath, const char* stable_config_contents, size_t stable_config_size)

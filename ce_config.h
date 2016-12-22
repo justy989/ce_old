@@ -52,7 +52,8 @@ typedef struct{
      const char* input_message;
      int input_key;
 
-     Buffer_t* completion_buffer;    // same as shell_command_buffer
+     Buffer_t* terminal_buffer;
+     Buffer_t* completion_buffer;
 
      Buffer_t input_buffer;
      Buffer_t buffer_list_buffer;
@@ -83,6 +84,8 @@ typedef struct{
      HighlightLineType_t highlight_line_type;
 
      char editting_register;
+
+     bool do_not_highlight_search;
 
      bool quit;
 } ConfigState_t;

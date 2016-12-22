@@ -18,7 +18,6 @@ LITTLE:
 -do searching inside macro
 -step through macro one change at a time
 -separate dot for input buffer
--valgrind run clean
 -when there are 3 lines in a file and you do 'dj', you still have 2 lines...
 -user code can infinite loop if you call ce_advance_cursor(buffer, &a, 1) and rely on
  ce_points_equal(a, b) being false when b is at the end of a line.
@@ -29,7 +28,6 @@ LITTLE:
 -syntax highlight printf formatters: '%s'
 -we can still hit the drawing bug where config_state->tab_current->view_input_save is null
 -if you make a change and undo, the buffer *sometimes* still says modified
--regex search backwards can be wrong, for instance when searching for word boundaries
 */
 
 #include <assert.h>

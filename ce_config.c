@@ -2463,11 +2463,15 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                             &buffer_state->vim_buffer_state, &action_range)){
                          int64_t delete_index = action_range.sorted_start->y - 1;
                          int64_t buffers_to_delete = (action_range.sorted_end->y - action_range.sorted_start->y) + 1;
+
+                         // TODO: what if you delete the terminal buffer!
+
                          for(int64_t b = 0; b < buffers_to_delete; ++b){
                               if(!delete_buffer_at_index(head, config_state->tab_head, delete_index)){
                                    return false; // quit !
                               }
                          }
+
 
                          update_buffer_list_buffer(config_state, *head);
 

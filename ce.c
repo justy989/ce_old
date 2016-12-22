@@ -940,47 +940,62 @@ bool ce_find_regex(const Buffer_t* buffer, Point_t location, const regex_t* rege
                location.x = 0;
           }
      }else{
-          Point_t start_point = location;
+          Point_t start = location;
 
           // loop over each line, backwards
           while(true){
+               Point_t last_valid_match = {-1, location.y};
+               int64_t last_valid_match_len = 0;
 
-               // execute more and more of the string until you execute the whole line
-               while(location.x >= 0){
+               location.x = 0;
+
+               if(buffer->lines[location.y][0]){
                     // dupe the line up to the current index
-                    char* search_str = strdup(buffer->lines[location.y] + location.x);
+                    char* search_str = strdup(buffer->lines[location.y]);
+                    int64_t search_str_len = strlen(search_str);
 
-                    // truncate search_str on the current line so we don't find a forward match
-                    if(start_point.y == location.y) search_str[(start_point.x - location.x)] = 0;
+                    // start at the beginning of the line, find all matches up to the cursor and take that one
+                    while(location.x < search_str_len){
+                         int rc = regexec(regex, search_str + location.x, match_count, matches, 0);
 
-                    int rc = regexec(regex, search_str, match_count, matches, 0);
+                         if(rc == 0){
+                              int64_t match_x = location.x + matches[0].rm_so;
+
+                              // if the match is after the start, then stop looking in this line
+                              if(match_x >= start.x && location.y == start.y) break;
+
+                              // save the match if we find one
+                              last_valid_match.x = match_x;
+                              last_valid_match_len = matches[0].rm_eo - matches[0].rm_so;
+                         }else{
+                              // error out if regexec() fails for some reason other than no match
+                              if(rc != REG_NOMATCH){
+                                   char error_buffer[BUFSIZ];
+                                   regerror(rc, regex, error_buffer, BUFSIZ);
+                                   ce_message("regexec() failed: '%s'", error_buffer);
+                                   return false;
+                              }
+
+                              // if there was no match, stop looking in this line
+                              break;
+                         }
+
+                         // update the next location to start after the match
+                         location.x = last_valid_match.x + last_valid_match_len;
+                    }
+
                     free(search_str);
+               }
 
-                    // did we find a match?
-                    if(rc == 0){
-                         *match = location;
-                         match->x += matches[0].rm_so;
-                         *match_len = matches[0].rm_eo - matches[0].rm_so;
-                         return true;
-                    }
-
-                    // keep going on 'no match' error, but error out if we hit some other error
-                    if(rc != REG_NOMATCH){
-                         char error_buffer[BUFSIZ];
-                         regerror(rc, regex, error_buffer, BUFSIZ);
-                         ce_message("regexec() failed: '%s'", error_buffer);
-                         return false;
-                    }
-
-                    location.x--;
+               if(last_valid_match.x >= 0){
+                    *match = last_valid_match;
+                    *match_len = last_valid_match_len;
+                    return true;
                }
 
                location.y--;
-               if(location.y >= 0){
-                    location.x = ce_last_index(buffer->lines[location.y]);
-               }else{
-                    break;
-               }
+
+               if(location.y < 0) break;
           }
      }
 

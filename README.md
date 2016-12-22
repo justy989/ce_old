@@ -47,10 +47,10 @@ Key Sequence|Action
 Ctrl+f|load file
 Ctrl+q|kill current window or stop recording macro
 Ctrl+w|save buffer
-Ctrl+a|save buffer as new filename
 Ctrl+e|open new unnamed buffer
 Ctrl+t|create new tab
-Ctrl+x|start/resume dumb terminal
+Ctrl+a|start a new dumb terminal
+Ctrl+x|goto last terminal
 Ctrl+u|page up
 Ctrl+d|page down
 Ctrl+y|confirm action (used to perform actions based on current buffer)
@@ -104,6 +104,7 @@ y?|view yank registers (confirm on register you want to edit)
 zt|scroll view so cursor is at the top
 zz|scroll view so cursor is in the middle
 zb|scroll view so cursor is at the bottom
+ga|save buffer as new filename
 gq|quit editor
 gf|goto file under cursor
 gt|goto next tab

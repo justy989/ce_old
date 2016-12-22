@@ -1529,7 +1529,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                center_view(buffer_view);
                free(replace_str);
           } break;
-          case 1: // Ctrl + a
+          case 'a':
           {
                if(!config_state->view_input->buffer->lines) break;
 
@@ -2288,6 +2288,9 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                case 'h':
                     config_state->do_not_highlight_search = true;
                     break;
+               case 'a':
+                    input_start(config_state, "Save Buffer As", key);
+                    break;
                }
 
                if(handled_key) ce_keys_free(&config_state->vim_state.command_head);
@@ -3012,66 +3015,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 #endif
                     } break;
                     case 24: // Ctrl + x
-                    {
-                         if(!config_state->terminal_head){
-                              int64_t width = buffer_view->bottom_right.x - buffer_view->top_left.x;
-                              int64_t height = buffer_view->bottom_right.y - buffer_view->top_left.y;
-
-#if 0
-                              if(config_state->terminal.fd){
-                                   terminal_free(&config_state->terminal);
-                                   pthread_cancel(config_state->terminal_check_update_thread);
-                                   pthread_join(config_state->terminal_check_update_thread, NULL);
-                              }
-#endif
-
-                              TerminalNode_t* node = calloc(1, sizeof(*node));
-                              if(!node) break;
-
-                              // setup terminal buffer buffer_state
-                              BufferState_t* terminal_buffer_state = calloc(1, sizeof(*terminal_buffer_state));
-                              if(!terminal_buffer_state){
-                                   ce_message("failed to allocate buffer state.");
-                                   return false;
-                              }
-
-                              node->buffer = calloc(1, sizeof(*node->buffer));
-                              node->buffer->name = strdup("[terminal]");
-                              node->buffer->absolutely_no_line_numbers_under_any_circumstances = true;
-                              node->buffer->user_data = terminal_buffer_state;
-
-                              TerminalHighlight_t* terminal_highlight_data = calloc(1, sizeof(TerminalHighlight_t));
-                              terminal_highlight_data->terminal = &node->terminal;
-                              node->buffer->syntax_fn = terminal_highlight;
-                              node->buffer->syntax_user_data = terminal_highlight_data;
-
-                              BufferNode_t* new_buffer_node = ce_append_buffer_to_list(*head, node->buffer);
-                              if(!new_buffer_node){
-                                   ce_message("failed to add shell command buffer to list");
-                                   return false;
-                              }
-
-                              terminal_init(&node->terminal, width, height, node->buffer);
-
-                              TerminalCheckUpdateData_t* check_update_data = calloc(1, sizeof(*check_update_data));
-                              check_update_data->config_state = config_state;
-                              check_update_data->terminal_node = node;
-
-                              int rc = pthread_create(&node->check_update_thread, NULL, terminal_check_update, check_update_data);
-                              if(rc != 0){
-                                   ce_message("pthread_create() for terminal_check_update() failed");
-                                   break;
-                              }
-
-                              if(config_state->tab_current->view_overrideable){
-                                   tab_view_save_overrideable(config_state->tab_current);
-                                   config_state->tab_current->view_current = config_state->tab_current->view_overrideable;
-                                   buffer_view = config_state->tab_current->view_current;
-                              }
-
-                              buffer_view->buffer = node->buffer;
-                              config_state->terminal_head = node;
-                         }else{
+                         if(config_state->terminal_head){
                               BufferView_t* view = ce_buffer_in_view(config_state->tab_current->view_head, config_state->terminal_head->buffer);
                               if(view){
                                    config_state->tab_current->view_current = view;
@@ -3084,13 +3028,83 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               }else{
                                    buffer_view->buffer = config_state->terminal_head->buffer;
                               }
+
+                              config_state->vim_state.mode = VM_INSERT;
+                              buffer_view->cursor = config_state->terminal_head->terminal.cursor;
+                              buffer_view->top_row = 0;
+                              buffer_view->left_column = 0;
+                              view_follow_cursor(buffer_view, config_state->line_number_type);
+                              break;
                          }
 
-                         config_state->vim_state.mode = VM_INSERT;
-                         buffer_view->cursor = config_state->terminal_head->terminal.cursor;
-                         buffer_view->top_row = 0;
-                         buffer_view->left_column = 0;
-                         view_follow_cursor(buffer_view, config_state->line_number_type);
+                         // intentionally fall through
+                    case 1: // Ctrl + a
+                    {
+                         int64_t width = buffer_view->bottom_right.x - buffer_view->top_left.x;
+                         int64_t height = buffer_view->bottom_right.y - buffer_view->top_left.y;
+
+#if 0
+                         if(config_state->terminal.fd){
+                              terminal_free(&config_state->terminal);
+                              pthread_cancel(config_state->terminal_check_update_thread);
+                              pthread_join(config_state->terminal_check_update_thread, NULL);
+                         }
+#endif
+
+                         TerminalNode_t* node = calloc(1, sizeof(*node));
+                         if(!node) break;
+
+                         // setup terminal buffer buffer_state
+                         BufferState_t* terminal_buffer_state = calloc(1, sizeof(*terminal_buffer_state));
+                         if(!terminal_buffer_state){
+                              ce_message("failed to allocate buffer state.");
+                              return false;
+                         }
+
+                         node->buffer = calloc(1, sizeof(*node->buffer));
+                         node->buffer->name = strdup("[terminal]");
+                         node->buffer->absolutely_no_line_numbers_under_any_circumstances = true;
+                         node->buffer->user_data = terminal_buffer_state;
+
+                         TerminalHighlight_t* terminal_highlight_data = calloc(1, sizeof(TerminalHighlight_t));
+                         terminal_highlight_data->terminal = &node->terminal;
+                         node->buffer->syntax_fn = terminal_highlight;
+                         node->buffer->syntax_user_data = terminal_highlight_data;
+
+                         BufferNode_t* new_buffer_node = ce_append_buffer_to_list(*head, node->buffer);
+                         if(!new_buffer_node){
+                              ce_message("failed to add shell command buffer to list");
+                              return false;
+                         }
+
+                         terminal_init(&node->terminal, width, height, node->buffer);
+
+                         TerminalCheckUpdateData_t* check_update_data = calloc(1, sizeof(*check_update_data));
+                         check_update_data->config_state = config_state;
+                         check_update_data->terminal_node = node;
+
+                         int rc = pthread_create(&node->check_update_thread, NULL, terminal_check_update, check_update_data);
+                         if(rc != 0){
+                              ce_message("pthread_create() for terminal_check_update() failed");
+                              break;
+                         }
+
+                         if(config_state->tab_current->view_overrideable){
+                              tab_view_save_overrideable(config_state->tab_current);
+                              config_state->tab_current->view_current = config_state->tab_current->view_overrideable;
+                              buffer_view = config_state->tab_current->view_current;
+                         }
+
+                         buffer_view->buffer = node->buffer;
+
+                         // append the node to the list
+                         if(config_state->terminal_head){
+                              TerminalNode_t* itr = config_state->terminal_head;
+                              while(itr->next) itr = itr->next;
+                              itr->next = node;
+                         }else{
+                              config_state->terminal_head = node;
+                         }
                     } break;
                     case 14: // Ctrl + n
                          if(config_state->input) break;
@@ -3152,9 +3166,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          config_state->tab_current->view_current->buffer = new_buffer;
                          *cursor = (Point_t){0, 0};
                     } break;
-                    case 1: // Ctrl + a
-                         input_start(config_state, "Save Buffer As", key);
-                    break;
                     case 8: // Ctrl + h
                     {
                          Point_t point = {config_state->tab_current->view_current->top_left.x - 2, // account for window separator

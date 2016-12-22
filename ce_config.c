@@ -644,7 +644,6 @@ bool delete_buffer_at_index(BufferNode_t** head, TabView_t* tab_head, int64_t bu
           itr = itr->next;
      }
 
-     // remove buffer
      ce_remove_buffer_from_list(head, delete_buffer);
 
      // change views that are showing this buffer for all tabs
@@ -821,7 +820,9 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
 // TODO: rather than taking in config_state, I'd like to take in only the parts it needs, if it's too much, config_state is fine
 void jump_to_next_shell_command_file_destination(BufferNode_t* head, ConfigState_t* config_state, bool forwards)
 {
-     Buffer_t* command_buffer = config_state->terminal.buffer;
+     if(!config_state->terminal_head) return;
+
+     Buffer_t* command_buffer = config_state->terminal_head->buffer;
      int64_t lines_checked = 0;
      int64_t delta = forwards ? 1 : -1;
      for(int64_t i = config_state->last_command_buffer_jump + delta; lines_checked < command_buffer->line_count;
@@ -902,39 +903,47 @@ void switch_to_view_at_point(ConfigState_t* config_state, Point_t point)
      }
 }
 
+typedef struct{
+     ConfigState_t* config_state;
+     TerminalNode_t* terminal_node;
+}TerminalCheckUpdateData_t;
+
 void terminal_check_update_cleanup(void* data)
 {
-     (void)(data);
-
      // release locks we could be holding
      pthread_mutex_unlock(&draw_lock);
+
+     free(data);
 }
 
 void* terminal_check_update(void* data)
 {
-     pthread_cleanup_push(terminal_check_update_cleanup, NULL);
+     pthread_cleanup_push(terminal_check_update_cleanup, data);
 
-     ConfigState_t* config_state = data;
-     while(config_state->terminal.is_alive){
-          sem_wait(&config_state->terminal.updated);
+     TerminalCheckUpdateData_t* check_update_data = data;
+     ConfigState_t* config_state = check_update_data->config_state;
+     Terminal_t* terminal = &check_update_data->terminal_node->terminal;
 
-          if(config_state->tab_current->view_current->buffer == config_state->terminal.buffer){
-               config_state->tab_current->view_current->cursor = config_state->terminal.cursor;
+     while(terminal->is_alive){
+          sem_wait(&terminal->updated);
+
+          if(config_state->tab_current->view_current->buffer == terminal->buffer){
+               config_state->tab_current->view_current->cursor = terminal->cursor;
                view_follow_cursor(config_state->tab_current->view_current, LNT_NONE);
           }
 
-          if(config_state->vim_state.mode == VM_INSERT && !config_state->terminal.is_alive){
+          if(config_state->vim_state.mode == VM_INSERT && !terminal->is_alive){
                vim_enter_normal_mode(&config_state->vim_state);
           }
 
           // make sure the other view drawer is done before drawing
           pthread_mutex_lock(&draw_lock);
           pthread_mutex_unlock(&draw_lock);
-          view_drawer(data);
+          view_drawer(config_state);
      }
 
 
-     pthread_cleanup_pop(NULL);
+     pthread_cleanup_pop(data);
      return NULL;
 }
 
@@ -1389,6 +1398,17 @@ bool calc_auto_complete_start_and_path(AutoComplete_t* auto_complete, const char
      return rc;
 }
 
+Terminal_t* is_terminal_buffer(TerminalNode_t* terminal_head, Buffer_t* buffer)
+{
+     while(terminal_head){
+          if(terminal_head->buffer == buffer) return &terminal_head->terminal;
+
+          terminal_head = terminal_head->next;
+     }
+
+     return NULL;
+}
+
 void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
 {
      BufferView_t* buffer_view = config_state->tab_current->view_current;
@@ -1567,11 +1587,11 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           buffer_view->buffer = itr->buffer;
           buffer_view->cursor = itr->buffer->cursor;
           center_view(buffer_view);
-     }else if(buffer_view->buffer == config_state->terminal.buffer){
+     }else if(is_terminal_buffer(config_state->terminal_head, buffer_view->buffer)){
           BufferView_t* view_to_change = buffer_view;
           if(config_state->tab_current->view_previous) view_to_change = config_state->tab_current->view_previous;
 
-          if(goto_file_destination_in_buffer(head, config_state->terminal.buffer, cursor->y,
+          if(goto_file_destination_in_buffer(head, buffer_view->buffer, cursor->y,
                                              config_state->tab_current->view_head, view_to_change,
                                              &config_state->last_command_buffer_jump)){
                config_state->tab_current->view_current = view_to_change;
@@ -1678,13 +1698,17 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferVi
               " %"PRId64", %"PRId64" ", column, row);
 }
 
-void if_terminal_in_view_then_resize(BufferView_t* view_head, Terminal_t* terminal)
+void resize_terminal_if_in_view(BufferView_t* view_head, TerminalNode_t* terminal_head)
 {
-     BufferView_t* term_view = ce_buffer_in_view(view_head, terminal->buffer);
-     if(term_view){
-          int64_t new_width = term_view->bottom_right.x - term_view->top_left.x;
-          int64_t new_height = term_view->bottom_right.y - term_view->top_left.y;
-          terminal_resize(terminal, new_width, new_height);
+     while(terminal_head){
+          BufferView_t* term_view = ce_buffer_in_view(view_head, terminal_head->buffer);
+          if(term_view){
+               int64_t new_width = term_view->bottom_right.x - term_view->top_left.x;
+               int64_t new_height = term_view->bottom_right.y - term_view->top_left.y;
+               terminal_resize(&terminal_head->terminal, new_width, new_height);
+          }
+
+          terminal_head = terminal_head->next;
      }
 }
 
@@ -1757,13 +1781,6 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
           itr = itr->next;
      }
 
-     // setup terminal buffer buffer_state
-     BufferState_t* terminal_buffer_state = calloc(1, sizeof(*terminal_buffer_state));
-     if(!terminal_buffer_state){
-          ce_message("failed to allocate buffer state.");
-          return false;
-     }
-
      if(!config_state->completion_buffer){
           config_state->completion_buffer = calloc(1, sizeof(*config_state->completion_buffer));
           config_state->completion_buffer->name = strdup("[completions]");
@@ -1774,20 +1791,6 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
                ce_message("failed to add shell command buffer to list");
                return false;
           }
-     }
-
-     config_state->terminal_buffer = calloc(1, sizeof(*config_state->terminal_buffer));
-     config_state->terminal_buffer->name = strdup("[terminal]");
-     config_state->terminal_buffer->absolutely_no_line_numbers_under_any_circumstances = true;
-     config_state->terminal_buffer->user_data = terminal_buffer_state;
-     config_state->terminal_buffer->syntax_fn = terminal_highlight;
-     TerminalHighlight_t* terminal_highlight = calloc(1, sizeof(TerminalHighlight_t));
-     terminal_highlight->terminal = &config_state->terminal;
-     config_state->terminal_buffer->syntax_user_data = terminal_highlight;
-     BufferNode_t* new_buffer_node = ce_append_buffer_to_list(*head, config_state->terminal_buffer);
-     if(!new_buffer_node){
-          ce_message("failed to add shell command buffer to list");
-          return false;
      }
 
      *user_data = config_state;
@@ -2028,11 +2031,20 @@ bool destroyer(BufferNode_t** head, void* user_data)
           }
      }
 
-     if(config_state->terminal_check_update_thread){
-          pthread_cancel(config_state->terminal_check_update_thread);
-          pthread_join(config_state->terminal_check_update_thread, NULL);
-          terminal_free(&config_state->terminal);
+     TerminalNode_t* term_itr = config_state->terminal_head;
+     while(term_itr){
+          if(term_itr->check_update_thread){
+               pthread_cancel(term_itr->check_update_thread);
+               pthread_join(term_itr->check_update_thread, NULL);
+               terminal_free(&term_itr->terminal);
+          }
+
+          TerminalNode_t* tmp = term_itr;
+          term_itr = term_itr->next;
+          free(tmp);
      }
+
+     config_state->terminal_head = NULL;
 
      BufferNode_t* itr = *head;
      while(itr){
@@ -2396,13 +2408,14 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 #endif
           }
      }else{
-          if(buffer == config_state->terminal.buffer){
+          Terminal_t* terminal = is_terminal_buffer(config_state->terminal_head, buffer);
+          if(terminal){
                if(key != KEY_ESCAPE){
-                    buffer_view->cursor = config_state->terminal.cursor;
-                    if(terminal_send_key(&config_state->terminal, key)){
+                    buffer_view->cursor = terminal->cursor;
+                    if(terminal_send_key(terminal, key)){
                          handled_key = true;
                          key = 0;
-                         if(buffer_view->cursor.x < (config_state->terminal.width - 1)){
+                         if(buffer_view->cursor.x < (terminal->width - 1)){
                               buffer_view->cursor.x++;
                          }
                          view_follow_cursor(buffer_view, LNT_NONE);
@@ -2440,7 +2453,10 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           VimKeyHandlerResult_t vkh_result = vim_key_handler(key, &config_state->vim_state, config_state->tab_current->view_current->buffer,
                                                              &config_state->tab_current->view_current->cursor, &buffer_state->commit_tail,
                                                              &buffer_state->vim_buffer_state, false);
-          if(vkh_result.type == VKH_HANDLED_KEY){
+          switch(vkh_result.type){
+          default:
+               break;
+          case VKH_HANDLED_KEY:
                if(config_state->vim_state.mode == VM_INSERT){
                     if(config_state->input){
                          switch(config_state->input_key){
@@ -2455,7 +2471,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          }
                     }
                }
-          }else if(vkh_result.type == VKH_COMPLETED_ACTION_FAILURE){
+               break;
+          case VKH_COMPLETED_ACTION_FAILURE:
                if(vkh_result.completed_action.change.type == VCT_DELETE &&
                   config_state->tab_current->view_current->buffer == &config_state->buffer_list_buffer){
                     VimActionRange_t action_range;
@@ -2472,7 +2489,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               }
                          }
 
-
                          update_buffer_list_buffer(config_state, *head);
 
                          if(cursor->y >= config_state->buffer_list_buffer.line_count){
@@ -2482,30 +2498,38 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          vim_enter_normal_mode(&config_state->vim_state);
                          ce_keys_free(&config_state->vim_state.command_head);
                     }
-               }else if((vkh_result.completed_action.change.type == VCT_PASTE_BEFORE ||
-                         vkh_result.completed_action.change.type == VCT_PASTE_AFTER) &&
-                        config_state->tab_current->view_current->buffer == config_state->terminal.buffer){
-                    VimYankNode_t* yank = vim_yank_find(config_state->vim_state.yank_head,
-                                                        vkh_result.completed_action.change.reg ? vkh_result.completed_action.change.reg : '"');
-                    if(yank){
-                         const char* itr = yank->text;
-                         while(*itr){
-                              terminal_send_key(&config_state->terminal, *itr);
-                              itr++;
+               }else if(vkh_result.completed_action.change.type == VCT_PASTE_BEFORE ||
+                        vkh_result.completed_action.change.type == VCT_PASTE_AFTER){
+                    Terminal_t* terminal = is_terminal_buffer(config_state->terminal_head, config_state->tab_current->view_current->buffer);
+                    if(terminal){
+                         char reg = vkh_result.completed_action.change.reg ? vkh_result.completed_action.change.reg : '"';
+                         VimYankNode_t* yank = vim_yank_find(config_state->vim_state.yank_head, reg);
+                         if(yank){
+                              const char* itr = yank->text;
+                              while(*itr){
+                                   terminal_send_key(terminal, *itr);
+                                   itr++;
+                              }
                          }
                     }
                }
-          }else if(vkh_result.type == VKH_COMPLETED_ACTION_SUCCESS){
-               if(config_state->vim_state.mode == VM_INSERT && buffer_view->buffer == config_state->terminal.buffer){
-                    buffer_view->cursor = config_state->terminal.cursor;
-                    view_follow_cursor(buffer_view, config_state->line_number_type);
+               break;
+          case VKH_COMPLETED_ACTION_SUCCESS:
+          {
+               if(config_state->vim_state.mode == VM_INSERT){
+                    Terminal_t* terminal = is_terminal_buffer(config_state->terminal_head, buffer_view->buffer);
+                    if(terminal){
+                         buffer_view->cursor = terminal->cursor;
+                         view_follow_cursor(buffer_view, config_state->line_number_type);
+                    }
                }else if(vkh_result.completed_action.motion.type == VMT_SEARCH ||
                         vkh_result.completed_action.motion.type == VMT_SEARCH_WORD_UNDER_CURSOR ||
                         vkh_result.completed_action.motion.type == VMT_GOTO_MARK){
                     config_state->do_not_highlight_search = false;
                     center_view_when_cursor_outside_portion(buffer_view, 0.25f, 0.75f);
                }
-          }else if(vkh_result.type == VKH_UNHANDLED_KEY){
+          } break;
+          case VKH_UNHANDLED_KEY:
                switch(key){
                case KEY_MOUSE:
                     handle_mouse_event(config_state, buffer, buffer_view, cursor);
@@ -2658,7 +2682,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               }else{
                                    config_state->tab_current->view_current = config_state->tab_current->view_head;
                               }
-                              if_terminal_in_view_then_resize(config_state->tab_current->view_head, &config_state->terminal);
+
+                              resize_terminal_if_in_view(config_state->tab_current->view_head, config_state->terminal_head);
                          }
                     } break;
                     case 2: // Ctrl + b
@@ -2988,19 +3013,51 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     } break;
                     case 24: // Ctrl + x
                     {
-                         if(!config_state->terminal.is_alive){
+                         if(!config_state->terminal_head){
                               int64_t width = buffer_view->bottom_right.x - buffer_view->top_left.x;
                               int64_t height = buffer_view->bottom_right.y - buffer_view->top_left.y;
 
+#if 0
                               if(config_state->terminal.fd){
                                    terminal_free(&config_state->terminal);
                                    pthread_cancel(config_state->terminal_check_update_thread);
                                    pthread_join(config_state->terminal_check_update_thread, NULL);
                               }
+#endif
 
-                              terminal_init(&config_state->terminal, width, height, config_state->terminal_buffer);
+                              TerminalNode_t* node = calloc(1, sizeof(*node));
+                              if(!node) break;
 
-                              int rc = pthread_create(&config_state->terminal_check_update_thread, NULL, terminal_check_update, config_state);
+                              // setup terminal buffer buffer_state
+                              BufferState_t* terminal_buffer_state = calloc(1, sizeof(*terminal_buffer_state));
+                              if(!terminal_buffer_state){
+                                   ce_message("failed to allocate buffer state.");
+                                   return false;
+                              }
+
+                              node->buffer = calloc(1, sizeof(*node->buffer));
+                              node->buffer->name = strdup("[terminal]");
+                              node->buffer->absolutely_no_line_numbers_under_any_circumstances = true;
+                              node->buffer->user_data = terminal_buffer_state;
+
+                              TerminalHighlight_t* terminal_highlight_data = calloc(1, sizeof(TerminalHighlight_t));
+                              terminal_highlight_data->terminal = &node->terminal;
+                              node->buffer->syntax_fn = terminal_highlight;
+                              node->buffer->syntax_user_data = terminal_highlight_data;
+
+                              BufferNode_t* new_buffer_node = ce_append_buffer_to_list(*head, node->buffer);
+                              if(!new_buffer_node){
+                                   ce_message("failed to add shell command buffer to list");
+                                   return false;
+                              }
+
+                              terminal_init(&node->terminal, width, height, node->buffer);
+
+                              TerminalCheckUpdateData_t* check_update_data = calloc(1, sizeof(*check_update_data));
+                              check_update_data->config_state = config_state;
+                              check_update_data->terminal_node = node;
+
+                              int rc = pthread_create(&node->check_update_thread, NULL, terminal_check_update, check_update_data);
                               if(rc != 0){
                                    ce_message("pthread_create() for terminal_check_update() failed");
                                    break;
@@ -3012,9 +3069,10 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                    buffer_view = config_state->tab_current->view_current;
                               }
 
-                              buffer_view->buffer = config_state->terminal.buffer;
+                              buffer_view->buffer = node->buffer;
+                              config_state->terminal_head = node;
                          }else{
-                              BufferView_t* view = ce_buffer_in_view(config_state->tab_current->view_head, config_state->terminal.buffer);
+                              BufferView_t* view = ce_buffer_in_view(config_state->tab_current->view_head, config_state->terminal_head->buffer);
                               if(view){
                                    config_state->tab_current->view_current = view;
                                    buffer_view = view;
@@ -3022,14 +3080,14 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                    tab_view_save_overrideable(config_state->tab_current);
                                    config_state->tab_current->view_current = config_state->tab_current->view_overrideable;
                                    buffer_view = config_state->tab_current->view_current;
-                                   buffer_view->buffer = config_state->terminal.buffer;
+                                   buffer_view->buffer = config_state->terminal_head->buffer;
                               }else{
-                                   buffer_view->buffer = config_state->terminal.buffer;
+                                   buffer_view->buffer = config_state->terminal_head->buffer;
                               }
                          }
 
                          config_state->vim_state.mode = VM_INSERT;
-                         buffer_view->cursor = config_state->terminal.cursor;
+                         buffer_view->cursor = config_state->terminal_head->terminal.cursor;
                          buffer_view->top_row = 0;
                          buffer_view->left_column = 0;
                          view_follow_cursor(buffer_view, config_state->line_number_type);
@@ -3124,15 +3182,16 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     case 7: // Ctrl + g
                     {
                          split_view(config_state->tab_current->view_head, config_state->tab_current->view_current, false, config_state->line_number_type);
-                         if_terminal_in_view_then_resize(config_state->tab_current->view_head, &config_state->terminal);
+                         resize_terminal_if_in_view(config_state->tab_current->view_head, config_state->terminal_head);
                     } break;
                     case 22: // Ctrl + v
                     {
                          split_view(config_state->tab_current->view_head, config_state->tab_current->view_current, true, config_state->line_number_type);
-                         if_terminal_in_view_then_resize(config_state->tab_current->view_head, &config_state->terminal);
+                         resize_terminal_if_in_view(config_state->tab_current->view_head, config_state->terminal_head);
                     } break;
                     }
                }
+               break;
           }
      }
 

@@ -47,12 +47,18 @@ typedef struct{
      Point_t start;
 } AutoComplete_t;
 
+typedef struct TerminalNode_t{
+     Terminal_t terminal;
+     Buffer_t* buffer;
+     pthread_t check_update_thread;
+     struct TerminalNode_t* next;
+}TerminalNode_t;
+
 typedef struct{
      bool input;
      const char* input_message;
      int input_key;
 
-     Buffer_t* terminal_buffer;
      Buffer_t* completion_buffer;
 
      Buffer_t input_buffer;
@@ -75,8 +81,7 @@ typedef struct{
      InputHistory_t search_history;
      InputHistory_t load_file_history;
 
-     Terminal_t terminal;
-     pthread_t terminal_check_update_thread;
+     TerminalNode_t* terminal_head;
 
      AutoComplete_t auto_complete;
 

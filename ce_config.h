@@ -85,6 +85,8 @@ typedef struct{
 
      char editting_register;
 
+     bool do_not_highlight_search;
+
      bool quit;
 } ConfigState_t;
 

@@ -1423,6 +1423,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                if(line > 0){
                     *cursor = (Point_t){0, line - 1};
                     ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
+                    center_view(buffer_view);
                }
           } break;
           case 6: // Ctrl + f
@@ -2153,6 +2154,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           case 'g':
           {
                handled_key = true;
+
                switch(key){
                default:
                     handled_key = false;
@@ -2271,6 +2273,9 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          buffer->syntax_user_data = malloc(sizeof(SyntaxPlain_t));
                     }
                } break;
+               case 'h':
+                    config_state->do_not_highlight_search = true;
+                    break;
                }
 
                if(handled_key) ce_keys_free(&config_state->vim_state.command_head);
@@ -2493,6 +2498,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                }else if(vkh_result.completed_action.motion.type == VMT_SEARCH ||
                         vkh_result.completed_action.motion.type == VMT_SEARCH_WORD_UNDER_CURSOR ||
                         vkh_result.completed_action.motion.type == VMT_GOTO_MARK){
+                    config_state->do_not_highlight_search = false;
                     center_view_when_cursor_outside_portion(buffer_view, 0.25f, 0.75f);
                }
           }else if(vkh_result.type == VKH_UNHANDLED_KEY){
@@ -3137,6 +3143,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                if(search_len){
                     int rc = regcomp(&config_state->vim_state.search.regex, config_state->view_input->buffer->lines[0], REG_EXTENDED);
                     if(rc == 0){
+                         config_state->do_not_highlight_search = false;
                          config_state->vim_state.search.valid_regex = true;
 
                          Point_t match = {};
@@ -3286,7 +3293,9 @@ void view_drawer(void* user_data)
      }
 
      regex_t* highlight_regex = NULL;
-     if(config_state->vim_state.search.valid_regex) highlight_regex = &config_state->vim_state.search.regex;
+     if(!config_state->do_not_highlight_search && config_state->vim_state.search.valid_regex){
+          highlight_regex = &config_state->vim_state.search.regex;
+     }
 
      // NOTE: always draw from the head
      ce_draw_views(config_state->tab_current->view_head, highlight_regex, config_state->line_number_type, highlight_line_type);

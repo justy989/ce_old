@@ -3049,6 +3049,9 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          if(config_state->terminal_current){
                               // revive terminal if it is dead !
                               if(!config_state->terminal_current->terminal.is_alive){
+                                   pthread_cancel(config_state->terminal_current->terminal.reader_thread);
+                                   pthread_join(config_state->terminal_current->terminal.reader_thread, NULL);
+
                                    if(!start_terminal_in_view(buffer_view, config_state->terminal_current, config_state)){
                                         break;
                                    }

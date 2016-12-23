@@ -412,7 +412,6 @@ void terminal_free(Terminal_t* term)
           sem_destroy(&term->updated);
           pthread_cancel(term->reader_thread);
           pthread_join(term->reader_thread, NULL);
-          ce_free_buffer(term->buffer);
      }
 
      term->is_alive = false;

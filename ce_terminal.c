@@ -368,7 +368,7 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height, Buffer_t* bu
           return false;
      }
 
-     sem_init(&term->updated, 0, 1);
+     sem_init(&term->updated, 0, 0);
 
      int64_t last_line = term->buffer->line_count - 1;
 

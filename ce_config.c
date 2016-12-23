@@ -1554,13 +1554,14 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                center_view(buffer_view);
                free(replace_str);
           } break;
-          case 'a':
+          case 'n':
           {
                if(!config_state->view_input->buffer->lines) break;
 
-               if(ce_save_buffer(buffer, config_state->view_input->buffer->lines[0])){
-                    buffer->filename = strdup(config_state->view_input->buffer->lines[0]);
-               }
+               free(buffer->filename);
+               buffer->filename = strdup(config_state->view_input->buffer->lines[0]);
+
+               if(buffer->status != BS_READONLY) buffer->status = BS_MODIFIED;
           } break;
           case '@':
           {
@@ -2316,8 +2317,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                case 'h':
                     config_state->do_not_highlight_search = true;
                     break;
-               case 'a':
-                    input_start(config_state, "Save Buffer As", key);
+               case 'n':
+                    input_start(config_state, "Rename Buffer", key);
                     break;
                }
 
@@ -3088,7 +3089,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          }
 
                          node->buffer = calloc(1, sizeof(*node->buffer));
-                         node->buffer->name = strdup("[terminal]");
                          node->buffer->absolutely_no_line_numbers_under_any_circumstances = true;
                          node->buffer->user_data = terminal_buffer_state;
 
@@ -3116,13 +3116,23 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          buffer_view->buffer = node->buffer;
 
                          // append the node to the list
+                         int64_t id = 1;
                          if(config_state->terminal_head){
                               TerminalNode_t* itr = config_state->terminal_head;
-                              while(itr->next) itr = itr->next;
+                              while(itr->next){
+                                   itr = itr->next;
+                                   id++;
+                              }
+                              id++;
                               itr->next = node;
                          }else{
                               config_state->terminal_head = node;
                          }
+
+                         // name terminal
+                         char buffer_name[64];
+                         snprintf(buffer_name, 64, "[terminal %ld]", id);
+                         node->buffer->name = strdup(buffer_name);
 
                          config_state->terminal_current = node;
                          config_state->vim_state.mode = VM_INSERT;

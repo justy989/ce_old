@@ -633,14 +633,17 @@ bool find_matching_string_forward(const Buffer_t* buffer, Point_t* location, cha
      Point_t itr = (Point_t){location->x + 1, location->y};
      char curr = 0;
      char prev = 0;
+     char prev_prev = 0;
      int64_t last_index = ce_last_index(buffer->lines[itr.y]);
 
      while(ce_point_on_buffer(buffer, itr)){
           ce_get_char(buffer, itr, &curr);
 
-          if(curr == matchee && prev != '\\'){
-               *location = itr;
-               return true;
+          if(curr == matchee){
+               if(prev != '\\' || (prev == '\\' && prev_prev == '\\')){
+                    *location = itr;
+                    return true;
+               }
           }
 
           itr.x++;
@@ -651,6 +654,7 @@ bool find_matching_string_forward(const Buffer_t* buffer, Point_t* location, cha
                last_index = ce_last_index(buffer->lines[itr.y]);
           }
 
+          prev_prev = prev;
           prev = curr;
      }
 
@@ -758,9 +762,22 @@ bool find_matching_string_backward(const Buffer_t* buffer, Point_t* location, ch
      while(ce_point_on_buffer(buffer, itr)){
           ce_get_char(buffer, itr, &curr);
 
-          if(prev == matchee && curr != '\\'){
-               *location = prev_itr;
-               return true;
+          if(prev == matchee){
+               if(curr != '\\'){
+                    *location = prev_itr;
+                    return true;
+               }
+
+               // if the backslashes are adjacent, then they aren't applied to the quote
+               Point_t next_point = {itr.x - 1, itr.y};
+               if(next_point.x >= 0){
+                    char next;
+                    ce_get_char(buffer, next_point, &next);
+                    if(curr == '\\' && next == '\\'){
+                         *location = prev_itr;
+                         return true;
+                    }
+               }
           }
 
           prev = curr;

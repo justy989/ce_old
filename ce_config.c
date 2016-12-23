@@ -20,7 +20,7 @@ const char* buffer_flag_string(Buffer_t* buffer)
      default:
           break;
      case BS_READONLY:
-           return "[RO] ";
+          return "[RO] ";
      case BS_NEW_FILE:
           return "[NEW] ";
      case BS_MODIFIED:

@@ -820,12 +820,12 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
 // TODO: rather than taking in config_state, I'd like to take in only the parts it needs, if it's too much, config_state is fine
 void jump_to_next_shell_command_file_destination(BufferNode_t* head, ConfigState_t* config_state, bool forwards)
 {
-     if(!config_state->terminal_head) return;
+     if(!config_state->terminal_current) return;
 
-     Buffer_t* command_buffer = config_state->terminal_head->buffer;
+     Buffer_t* command_buffer = config_state->terminal_current->buffer;
      int64_t lines_checked = 0;
      int64_t delta = forwards ? 1 : -1;
-     for(int64_t i = config_state->last_command_buffer_jump + delta; lines_checked < command_buffer->line_count;
+     for(int64_t i = config_state->terminal_current->last_jump_location + delta; lines_checked < command_buffer->line_count;
          i += delta, lines_checked++){
           if(i == command_buffer->line_count && forwards){
                i = 0;
@@ -834,7 +834,7 @@ void jump_to_next_shell_command_file_destination(BufferNode_t* head, ConfigState
           }
 
           if(goto_file_destination_in_buffer(head, command_buffer, i, config_state->tab_current->view_head,
-                                             config_state->tab_current->view_current, &config_state->last_command_buffer_jump)){
+                                             config_state->tab_current->view_current, &config_state->terminal_current->last_jump_location)){
                // NOTE: change the cursor, so when you go back to that buffer, your cursor is on the line we last jumped to
                command_buffer->cursor.x = 0;
                command_buffer->cursor.y = i;
@@ -865,42 +865,6 @@ void view_follow_cursor(BufferView_t* current_view, LineNumberType_t line_number
                       current_view->bottom_right.x == (g_terminal_dimensions->x - 1),
                       current_view->bottom_right.y == (g_terminal_dimensions->y - 2),
                       line_number_type, current_view->buffer->line_count);
-}
-
-void split_view(BufferView_t* head_view, BufferView_t* current_view, bool horizontal, LineNumberType_t line_number_type)
-{
-     BufferView_t* new_view = ce_split_view(current_view, current_view->buffer, horizontal);
-     if(new_view){
-          Point_t top_left = {0, 0};
-          Point_t bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 1};
-          ce_calc_views(head_view, top_left, bottom_right);
-          view_follow_cursor(current_view, line_number_type);
-          new_view->cursor = current_view->cursor;
-          new_view->top_row = current_view->top_row;
-          new_view->left_column = current_view->left_column;
-     }
-}
-
-void switch_to_view_at_point(ConfigState_t* config_state, Point_t point)
-{
-     BufferView_t* next_view = NULL;
-
-     if(point.x < 0) point.x = g_terminal_dimensions->x - 1;
-     if(point.y < 0) point.y = g_terminal_dimensions->y - 1;
-     if(point.x >= g_terminal_dimensions->x) point.x = 0;
-     if(point.y >= g_terminal_dimensions->y) point.y = 0;
-
-     if(config_state->input) next_view = ce_find_view_at_point(config_state->view_input, point);
-     vim_stop_recording_macro(&config_state->vim_state);
-     if(!next_view) next_view = ce_find_view_at_point(config_state->tab_current->view_head, point);
-
-     if(next_view){
-          // save view and cursor
-          config_state->tab_current->view_previous = config_state->tab_current->view_current;
-          config_state->tab_current->view_current->buffer->cursor = config_state->tab_current->view_current->cursor;
-          config_state->tab_current->view_current = next_view;
-          vim_enter_normal_mode(&config_state->vim_state);
-     }
 }
 
 typedef struct{
@@ -942,7 +906,6 @@ void* terminal_check_update(void* data)
           view_drawer(config_state);
      }
 
-
      pthread_cleanup_pop(data);
      return NULL;
 }
@@ -968,6 +931,56 @@ bool start_terminal_in_view(BufferView_t* buffer_view, TerminalNode_t* node, Con
      }
 
      return true;
+}
+
+TerminalNode_t* is_terminal_buffer(TerminalNode_t* terminal_head, Buffer_t* buffer)
+{
+     while(terminal_head){
+          if(terminal_head->buffer == buffer) return terminal_head;
+
+          terminal_head = terminal_head->next;
+     }
+
+     return NULL;
+}
+
+void split_view(BufferView_t* head_view, BufferView_t* current_view, bool horizontal, LineNumberType_t line_number_type)
+{
+     BufferView_t* new_view = ce_split_view(current_view, current_view->buffer, horizontal);
+     if(new_view){
+          Point_t top_left = {0, 0};
+          Point_t bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 1};
+          ce_calc_views(head_view, top_left, bottom_right);
+          view_follow_cursor(current_view, line_number_type);
+          new_view->cursor = current_view->cursor;
+          new_view->top_row = current_view->top_row;
+          new_view->left_column = current_view->left_column;
+     }
+}
+
+void switch_to_view_at_point(ConfigState_t* config_state, Point_t point)
+{
+     BufferView_t* next_view = NULL;
+
+     if(point.x < 0) point.x = g_terminal_dimensions->x - 1;
+     if(point.y < 0) point.y = g_terminal_dimensions->y - 1;
+     if(point.x >= g_terminal_dimensions->x) point.x = 0;
+     if(point.y >= g_terminal_dimensions->y) point.y = 0;
+
+     if(config_state->input) next_view = ce_find_view_at_point(config_state->view_input, point);
+     vim_stop_recording_macro(&config_state->vim_state);
+     if(!next_view) next_view = ce_find_view_at_point(config_state->tab_current->view_head, point);
+
+     if(next_view){
+          // save view and cursor
+          config_state->tab_current->view_previous = config_state->tab_current->view_current;
+          config_state->tab_current->view_current->buffer->cursor = config_state->tab_current->view_current->cursor;
+          config_state->tab_current->view_current = next_view;
+          vim_enter_normal_mode(&config_state->vim_state);
+
+          TerminalNode_t* terminal_node = is_terminal_buffer(config_state->terminal_head, next_view->buffer);
+          if(terminal_node) config_state->terminal_current = terminal_node;
+     }
 }
 
 void handle_mouse_event(ConfigState_t* config_state, Buffer_t* buffer, BufferView_t* buffer_view, Point_t* cursor)
@@ -1421,17 +1434,6 @@ bool calc_auto_complete_start_and_path(AutoComplete_t* auto_complete, const char
      return rc;
 }
 
-Terminal_t* is_terminal_buffer(TerminalNode_t* terminal_head, Buffer_t* buffer)
-{
-     while(terminal_head){
-          if(terminal_head->buffer == buffer) return &terminal_head->terminal;
-
-          terminal_head = terminal_head->next;
-     }
-
-     return NULL;
-}
-
 void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
 {
      BufferView_t* buffer_view = config_state->tab_current->view_current;
@@ -1610,13 +1612,16 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           buffer_view->buffer = itr->buffer;
           buffer_view->cursor = itr->buffer->cursor;
           center_view(buffer_view);
+
+          TerminalNode_t* terminal_node = is_terminal_buffer(config_state->terminal_head, itr->buffer);
+          if(terminal_node) config_state->terminal_current = terminal_node;
      }else if(is_terminal_buffer(config_state->terminal_head, buffer_view->buffer)){
           BufferView_t* view_to_change = buffer_view;
           if(config_state->tab_current->view_previous) view_to_change = config_state->tab_current->view_previous;
 
           if(goto_file_destination_in_buffer(head, buffer_view->buffer, cursor->y,
                                              config_state->tab_current->view_head, view_to_change,
-                                             &config_state->last_command_buffer_jump)){
+                                             &config_state->terminal_current->last_jump_location)){
                config_state->tab_current->view_current = view_to_change;
           }
      }else if(buffer_view->buffer == &config_state->mark_list_buffer){
@@ -2434,9 +2439,10 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 #endif
           }
      }else{
-          Terminal_t* terminal = is_terminal_buffer(config_state->terminal_head, buffer);
-          if(terminal){
+          TerminalNode_t* terminal_node = is_terminal_buffer(config_state->terminal_head, buffer);
+          if(terminal_node){
                if(key != KEY_ESCAPE){
+                    Terminal_t* terminal = &terminal_node->terminal;
                     buffer_view->cursor = terminal->cursor;
                     if(terminal_send_key(terminal, key)){
                          handled_key = true;
@@ -2526,8 +2532,9 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     }
                }else if(vkh_result.completed_action.change.type == VCT_PASTE_BEFORE ||
                         vkh_result.completed_action.change.type == VCT_PASTE_AFTER){
-                    Terminal_t* terminal = is_terminal_buffer(config_state->terminal_head, config_state->tab_current->view_current->buffer);
-                    if(terminal){
+                    TerminalNode_t* terminal_node = is_terminal_buffer(config_state->terminal_head, config_state->tab_current->view_current->buffer);
+                    if(terminal_node){
+                         Terminal_t* terminal = &terminal_node->terminal;
                          char reg = vkh_result.completed_action.change.reg ? vkh_result.completed_action.change.reg : '"';
                          VimYankNode_t* yank = vim_yank_find(config_state->vim_state.yank_head, reg);
                          if(yank){
@@ -2543,9 +2550,9 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           case VKH_COMPLETED_ACTION_SUCCESS:
           {
                if(config_state->vim_state.mode == VM_INSERT){
-                    Terminal_t* terminal = is_terminal_buffer(config_state->terminal_head, buffer_view->buffer);
-                    if(terminal){
-                         buffer_view->cursor = terminal->cursor;
+                    TerminalNode_t* terminal_node = is_terminal_buffer(config_state->terminal_head, buffer_view->buffer);
+                    if(terminal_node){
+                         buffer_view->cursor = terminal_node->terminal.cursor;
                          view_follow_cursor(buffer_view, config_state->line_number_type);
                     }
                }else if(vkh_result.completed_action.motion.type == VMT_SEARCH ||

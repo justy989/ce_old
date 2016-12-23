@@ -51,6 +51,7 @@ typedef struct TerminalNode_t{
      Terminal_t terminal;
      Buffer_t* buffer;
      pthread_t check_update_thread;
+     int64_t last_jump_location;
      struct TerminalNode_t* next;
 }TerminalNode_t;
 
@@ -70,7 +71,6 @@ typedef struct{
 
      VimState_t vim_state;
 
-     int64_t last_command_buffer_jump;
      int last_key;
 
      TabView_t* tab_head;

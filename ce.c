@@ -1514,6 +1514,7 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
      int64_t max_width = (term_bottom_right->x - term_top_left->x) + 1;
      int64_t max_height = (term_bottom_right->y - term_top_left->y) + 1;
      int64_t last_line = buffer_top_left->y + (term_bottom_right->y - term_top_left->y);
+     int64_t last_line_in_view = last_line;
      if(last_line >= buffer->line_count) last_line = buffer->line_count - 1;
 
      standend();
@@ -1565,39 +1566,20 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
           int64_t min = max_width < print_line_length ? max_width : print_line_length;
           const char* line_to_print = buffer_line + buffer_top_left->x;
 
-          // NOTE: we probably want to move this check outside the loop
-          if(has_colors() == TRUE){
-               if(buffer->syntax_fn){
-                    syntax_data.loc = (Point_t){buffer_top_left->x, i};
-                    syntax_data.state = SS_BEGINNING_OF_LINE;
-                    buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
-               }
+          if(buffer->syntax_fn){
+               syntax_data.loc = (Point_t){buffer_top_left->x, i};
+               syntax_data.state = SS_BEGINNING_OF_LINE;
+               buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
+          }
 
-               if(line_length >= buffer_top_left->x){
-                    for(int64_t c = 0; c < min; ++c){
-                         if(buffer->syntax_fn){
-                              syntax_data.loc = (Point_t){buffer_top_left->x + c, i};
-                              syntax_data.state = SS_CHARACTER;
-                              buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
-                         }
-
-                         // print each character
-                         if(isprint(line_to_print[c])){
-                              addch(line_to_print[c]);
-                         }else{
-                              addch(non_printable_repr);
-                         }
-                    }
-               }
-
-               // call syntax function at the end of the line as well
-               if(buffer->syntax_fn){
-                    syntax_data.loc = (Point_t){buffer_top_left->x + min, i};
-                    syntax_data.state = SS_END_OF_LINE;
-                    buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
-               }
-          }else{
+          if(line_length >= buffer_top_left->x){
                for(int64_t c = 0; c < min; ++c){
+                    if(buffer->syntax_fn){
+                         syntax_data.loc = (Point_t){buffer_top_left->x + c, i};
+                         syntax_data.state = SS_CHARACTER;
+                         buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
+                    }
+
                     // print each character
                     if(isprint(line_to_print[c])){
                          addch(line_to_print[c]);
@@ -1605,6 +1587,20 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                          addch(non_printable_repr);
                     }
                }
+          }
+
+          // call syntax function at the end of the line as well
+          if(buffer->syntax_fn){
+               syntax_data.loc = (Point_t){buffer_top_left->x + min, i};
+               syntax_data.state = SS_END_OF_LINE;
+               buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
+          }
+     }
+
+     if(!buffer->absolutely_no_line_numbers_under_any_circumstances && line_number_type){
+          for(int64_t i = last_line + 1; i <= last_line_in_view; ++i) {
+               move(term_top_left->y + (i - buffer_top_left->y), term_top_left->x);
+               addch('~');
           }
      }
 

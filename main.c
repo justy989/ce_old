@@ -228,10 +228,13 @@ int main(int argc, char** argv)
      cbreak();
      noecho();
 
-     if(has_colors() == TRUE){
-          start_color();
-          use_default_colors();
+     if(has_colors() == FALSE){
+          printf("Your terminal doesn't support colors. what year do you live in?\n");
+          return -1;
      }
+
+     start_color();
+     use_default_colors();
 
      Point_t terminal_dimensions = {};
      getmaxyx(stdscr, terminal_dimensions.y, terminal_dimensions.x);

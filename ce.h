@@ -85,18 +85,28 @@ typedef enum{
 
 Direction_t ce_reverse_direction(Direction_t to_reverse);
 
-typedef enum {
+typedef enum{
      BS_NONE,
      BS_MODIFIED,
      BS_READONLY,
      BS_NEW_FILE,
 } BufferStatus_t;
 
+typedef enum{
+     BFT_PLAIN,
+     BFT_C,
+     BFT_PYTHON,
+     BFT_CONFIG,
+     BFT_DIFF,
+     BFT_TERMINAL,
+} BufferFileType_t;
+
 typedef struct Buffer_t{
      char** lines; // '\0' terminated, does not contain newlines, NULL if empty
      int64_t line_count;
 
      BufferStatus_t status;
+     BufferFileType_t type;
 
      Point_t cursor;
      Point_t highlight_start;

@@ -360,6 +360,7 @@ bool initialize_buffer(Buffer_t* buffer){
               strcmp(buffer->name + (name_len - 2), ".h") == 0)){
                buffer->syntax_fn = syntax_highlight_c;
                buffer->syntax_user_data = malloc(sizeof(SyntaxC_t));
+               buffer->type = BFT_C;
                if(!buffer->syntax_user_data){
                     ce_message("failed to allocate syntax user data for buffer");
                     free(buffer_state);
@@ -368,6 +369,7 @@ bool initialize_buffer(Buffer_t* buffer){
           }else if(name_len > 3 && strcmp(buffer->name + (name_len - 3), ".py") == 0){
                buffer->syntax_fn = syntax_highlight_python;
                buffer->syntax_user_data = malloc(sizeof(SyntaxPython_t));
+               buffer->type = BFT_PYTHON;
                if(!buffer->syntax_user_data){
                     ce_message("failed to allocate syntax user data for buffer");
                     free(buffer_state);
@@ -376,6 +378,7 @@ bool initialize_buffer(Buffer_t* buffer){
           }else if(name_len > 4 && strcmp(buffer->name + (name_len - 4), ".cfg") == 0){
                buffer->syntax_fn = syntax_highlight_config;
                buffer->syntax_user_data = malloc(sizeof(SyntaxConfig_t));
+               buffer->type = BFT_CONFIG;
                if(!buffer->syntax_user_data){
                     ce_message("failed to allocate syntax user data for buffer");
                     free(buffer_state);
@@ -386,6 +389,7 @@ bool initialize_buffer(Buffer_t* buffer){
                    (name_len > 5 && strcmp(buffer->name + (name_len - 5), ".diff") == 0)){
                buffer->syntax_fn = syntax_highlight_diff;
                buffer->syntax_user_data = malloc(sizeof(SyntaxDiff_t));
+               buffer->type = BFT_DIFF;
                if(!buffer->syntax_user_data){
                     ce_message("failed to allocate syntax user data for buffer");
                     free(buffer_state);
@@ -397,6 +401,7 @@ bool initialize_buffer(Buffer_t* buffer){
      if(!buffer->syntax_fn){
           buffer->syntax_fn = syntax_highlight_plain;
           buffer->syntax_user_data = malloc(sizeof(SyntaxPlain_t));
+          buffer->type = BFT_PLAIN;
           if(!buffer->syntax_user_data){
                ce_message("failed to allocate syntax user data for buffer");
                free(buffer_state);
@@ -1712,8 +1717,7 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferVi
      // TODO: handle case where filename is too long to fit in the status bar
      attron(COLOR_PAIR(S_VIEW_STATUS));
      mvprintw(view->bottom_right.y, view->top_left.x + 1, " %s%s%s ",
-              view == current_view ? mode_names[vim_mode] : "",
-              buffer_flag_string(buffer), buffer->filename);
+              view == current_view ? mode_names[vim_mode] : "", buffer_flag_string(buffer), buffer->filename);
 #if 0 // NOTE: useful to show key presses when debugging
      if(view == current_view) printw("%s %d ", keyname(last_key), last_key);
 #endif
@@ -2292,26 +2296,31 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          buffer->syntax_fn = syntax_highlight_c;
                          free(buffer->syntax_user_data);
                          buffer->syntax_user_data = malloc(sizeof(SyntaxC_t));
+                         buffer->type = BFT_C;
                     }else if(buffer->syntax_fn == syntax_highlight_c){
                          ce_message("syntax 'python' now on %s", buffer->filename);
                          buffer->syntax_fn = syntax_highlight_python;
                          free(buffer->syntax_user_data);
                          buffer->syntax_user_data = malloc(sizeof(SyntaxPython_t));
+                         buffer->type = BFT_PYTHON;
                     }else if(buffer->syntax_fn == syntax_highlight_python){
                          ce_message("syntax 'config' now on %s", buffer->filename);
                          buffer->syntax_fn = syntax_highlight_config;
                          free(buffer->syntax_user_data);
                          buffer->syntax_user_data = malloc(sizeof(SyntaxConfig_t));
+                         buffer->type = BFT_CONFIG;
                     }else if(buffer->syntax_fn == syntax_highlight_config){
                          ce_message("syntax 'diff' now on %s", buffer->filename);
                          buffer->syntax_fn = syntax_highlight_diff;
                          free(buffer->syntax_user_data);
                          buffer->syntax_user_data = malloc(sizeof(SyntaxDiff_t));
+                         buffer->type = BFT_DIFF;
                     }else if(buffer->syntax_fn == syntax_highlight_diff){
                          ce_message("syntax 'plain' now on %s", buffer->filename);
                          buffer->syntax_fn = syntax_highlight_plain;
                          free(buffer->syntax_user_data);
                          buffer->syntax_user_data = malloc(sizeof(SyntaxPlain_t));
+                         buffer->type = BFT_PLAIN;
                     }
                } break;
                case 'h':

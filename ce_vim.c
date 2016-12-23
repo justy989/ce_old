@@ -1679,6 +1679,22 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
      return true;
 }
 
+const char* get_comment_string(BufferFileType_t type)
+{
+     switch(type){
+     default:
+          break;
+     case BFT_C:
+          return VIM_C_COMMENT_STRING;
+     case BFT_PYTHON:
+          return VIM_PYTHON_COMMENT_STRING;
+     case BFT_CONFIG:
+          return VIM_CONFIG_COMMENT_STRING;
+     }
+
+     return NULL;
+}
+
 bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, VimState_t* vim_state,
                       BufferCommitNode_t** commit_tail, VimBufferState_t* vim_buffer_state)
 {
@@ -1897,37 +1913,43 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
      } break;
      case VCT_COMMENT:
      {
+          const char* comment = get_comment_string(buffer->type);
+          if(!comment) break;
+
           for(int64_t i = action_range.sorted_start->y; i <= action_range.sorted_end->y; ++i){
                if(!strlen(buffer->lines[i])) continue;
 
                Point_t soft_beginning = {0, i};
                ce_move_cursor_to_soft_beginning_of_line(buffer, &soft_beginning);
 
-               if(!ce_insert_string(buffer, soft_beginning, VIM_COMMENT_STRING)){
+               if(!ce_insert_string(buffer, soft_beginning, comment)){
                     return false;
                }
 
                ce_commit_insert_string(commit_tail, soft_beginning, *cursor, *cursor,
-                                       strdup(VIM_COMMENT_STRING), BCC_KEEP_GOING);
+                                       strdup(comment), BCC_KEEP_GOING);
           }
 
           if(*commit_tail) (*commit_tail)->commit.chain = chain;
      } break;
      case VCT_UNCOMMENT:
      {
+          const char* comment = get_comment_string(buffer->type);
+          if(!comment) break;
+
           for(int64_t i = action_range.sorted_start->y; i <= action_range.sorted_end->y; ++i){
                Point_t soft_beginning = {0, i};
                ce_move_cursor_to_soft_beginning_of_line(buffer, &soft_beginning);
 
-               if(strncmp(buffer->lines[i] + soft_beginning.x, VIM_COMMENT_STRING,
-                          strlen(VIM_COMMENT_STRING)) != 0) continue;
+               if(strncmp(buffer->lines[i] + soft_beginning.x, comment,
+                          strlen(comment)) != 0) continue;
 
-               if(!ce_remove_string(buffer, soft_beginning, strlen(VIM_COMMENT_STRING))){
+               if(!ce_remove_string(buffer, soft_beginning, strlen(comment))){
                     return false;
                }
 
                ce_commit_remove_string(commit_tail, soft_beginning, *cursor, *cursor,
-                                       strdup(VIM_COMMENT_STRING), BCC_KEEP_GOING);
+                                       strdup(comment), BCC_KEEP_GOING);
           }
 
           if(*commit_tail) (*commit_tail)->commit.chain = chain;

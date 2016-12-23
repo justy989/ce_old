@@ -256,9 +256,8 @@ void* terminal_reader(void* data)
                byte++;
           }
 
-          if(rc){
-               sem_post(&term->updated);
-          }
+          // if we've read anything, say that we've updated!
+          if(rc) sem_post(&term->updated);
      }
 
      pthread_exit(NULL);
@@ -267,6 +266,8 @@ void* terminal_reader(void* data)
 
 bool terminal_init(Terminal_t* term, int64_t width, int64_t height, Buffer_t* buffer)
 {
+     if(term->is_alive) return false;
+
      int master_fd;
      int slave_fd;
 
@@ -351,9 +352,11 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height, Buffer_t* bu
 
      term->buffer = buffer;
 
-     if(!ce_alloc_lines(term->buffer, 1)){
-          term->is_alive = false;
-          return false;
+     if(term->buffer->line_count == 0){
+          if(!ce_alloc_lines(term->buffer, 1)){
+               term->is_alive = false;
+               return false;
+          }
      }
 
      term->buffer->status = BS_READONLY;
@@ -367,11 +370,19 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height, Buffer_t* bu
 
      sem_init(&term->updated, 0, 1);
 
-     term->cursor = (Point_t){0, 0};
+     int64_t last_line = term->buffer->line_count - 1;
 
-     term->color_lines = calloc(1, sizeof(*term->color_lines));
-     term->color_lines->fg = COLOR_FOREGROUND;
-     term->color_lines->bg = COLOR_BACKGROUND;
+     term->cursor = (Point_t){0, last_line};
+
+     if(term->buffer->lines[last_line][0]){
+          term->cursor.x = strlen(term->buffer->lines[last_line]);
+     }
+
+     if(!term->color_lines){
+          term->color_lines = calloc(1, sizeof(*term->color_lines));
+          term->color_lines->fg = COLOR_FOREGROUND;
+          term->color_lines->bg = COLOR_BACKGROUND;
+     }
 
      return true;
 }

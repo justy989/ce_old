@@ -82,6 +82,7 @@ typedef struct{
      InputHistory_t load_file_history;
 
      TerminalNode_t* terminal_head;
+     TerminalNode_t* terminal_current; // most recent terminal in focus
 
      AutoComplete_t auto_complete;
 

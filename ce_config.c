@@ -3015,8 +3015,27 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 #endif
                     } break;
                     case 24: // Ctrl + x
-                         if(config_state->terminal_head){
-                              BufferView_t* view = ce_buffer_in_view(config_state->tab_current->view_head, config_state->terminal_head->buffer);
+                         if(config_state->terminal_current){
+                              // revive terminal if it is dead !
+                              if(!config_state->terminal_current->terminal.is_alive){
+                                   // TODO: create buffer_view_width() and buffer_view_height()
+                                   int64_t width = buffer_view->bottom_right.x - buffer_view->top_left.x;
+                                   int64_t height = buffer_view->bottom_right.y - buffer_view->top_left.y;
+
+                                   terminal_init(&config_state->terminal_current->terminal, width, height, config_state->terminal_current->buffer);
+
+                                   TerminalCheckUpdateData_t* check_update_data = calloc(1, sizeof(*check_update_data));
+                                   check_update_data->config_state = config_state;
+                                   check_update_data->terminal_node = config_state->terminal_current;
+
+                                   int rc = pthread_create(&config_state->terminal_current->check_update_thread, NULL, terminal_check_update, check_update_data);
+                                   if(rc != 0){
+                                        ce_message("pthread_create() for terminal_check_update() failed");
+                                        break;
+                                   }
+                              }
+
+                              BufferView_t* view = ce_buffer_in_view(config_state->tab_current->view_head, config_state->terminal_current->buffer);
                               if(view){
                                    config_state->tab_current->view_current = view;
                                    buffer_view = view;
@@ -3024,32 +3043,24 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                    tab_view_save_overrideable(config_state->tab_current);
                                    config_state->tab_current->view_current = config_state->tab_current->view_overrideable;
                                    buffer_view = config_state->tab_current->view_current;
-                                   buffer_view->buffer = config_state->terminal_head->buffer;
+                                   buffer_view->buffer = config_state->terminal_current->buffer;
                               }else{
-                                   buffer_view->buffer = config_state->terminal_head->buffer;
+                                   buffer_view->buffer = config_state->terminal_current->buffer;
                               }
 
-                              config_state->vim_state.mode = VM_INSERT;
-                              buffer_view->cursor = config_state->terminal_head->terminal.cursor;
+                              buffer_view->cursor = config_state->terminal_current->terminal.cursor;
                               buffer_view->top_row = 0;
                               buffer_view->left_column = 0;
                               view_follow_cursor(buffer_view, config_state->line_number_type);
+                              config_state->vim_state.mode = VM_INSERT;
                               break;
                          }
 
-                         // intentionally fall through
+                         // intentionally fall through if there was no terminal available
                     case 1: // Ctrl + a
                     {
                          int64_t width = buffer_view->bottom_right.x - buffer_view->top_left.x;
                          int64_t height = buffer_view->bottom_right.y - buffer_view->top_left.y;
-
-#if 0
-                         if(config_state->terminal.fd){
-                              terminal_free(&config_state->terminal);
-                              pthread_cancel(config_state->terminal_check_update_thread);
-                              pthread_join(config_state->terminal_check_update_thread, NULL);
-                         }
-#endif
 
                          TerminalNode_t* node = calloc(1, sizeof(*node));
                          if(!node) break;
@@ -3105,6 +3116,9 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          }else{
                               config_state->terminal_head = node;
                          }
+
+                         config_state->terminal_current = node;
+                         config_state->vim_state.mode = VM_INSERT;
                     } break;
                     case 14: // Ctrl + n
                          if(config_state->input) break;

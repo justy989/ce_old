@@ -12,6 +12,7 @@ BIG:
 -incremental replace (although already doable with 'n.')
 -support tab character
 -multiline regex search/replace
+-dired mode
 
 LITTLE:
 -r<enter>

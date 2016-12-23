@@ -1597,7 +1597,7 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
           }
      }
 
-     if(!buffer->absolutely_no_line_numbers_under_any_circumstances && line_number_type){
+     if(!buffer->absolutely_no_line_numbers_under_any_circumstances){
           for(int64_t i = last_line + 1; i <= last_line_in_view; ++i) {
                move(term_top_left->y + (i - buffer_top_left->y), term_top_left->x);
                addch('~');

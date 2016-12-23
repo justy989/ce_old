@@ -947,6 +947,29 @@ void* terminal_check_update(void* data)
      return NULL;
 }
 
+bool start_terminal_in_view(BufferView_t* buffer_view, TerminalNode_t* node, ConfigState_t* config_state)
+{
+     // TODO: create buffer_view_width() and buffer_view_height()
+     int64_t width = buffer_view->bottom_right.x - buffer_view->top_left.x;
+     int64_t height = buffer_view->bottom_right.y - buffer_view->top_left.y;
+
+     if(!terminal_init(&node->terminal, width, height, node->buffer)){
+          return false;
+     }
+
+     TerminalCheckUpdateData_t* check_update_data = calloc(1, sizeof(*check_update_data));
+     check_update_data->config_state = config_state;
+     check_update_data->terminal_node = node;
+
+     int rc = pthread_create(&node->check_update_thread, NULL, terminal_check_update, check_update_data);
+     if(rc != 0){
+          ce_message("pthread_create() for terminal_check_update() failed");
+          return false;
+     }
+
+     return true;
+}
+
 void handle_mouse_event(ConfigState_t* config_state, Buffer_t* buffer, BufferView_t* buffer_view, Point_t* cursor)
 {
      MEVENT event;
@@ -3018,19 +3041,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          if(config_state->terminal_current){
                               // revive terminal if it is dead !
                               if(!config_state->terminal_current->terminal.is_alive){
-                                   // TODO: create buffer_view_width() and buffer_view_height()
-                                   int64_t width = buffer_view->bottom_right.x - buffer_view->top_left.x;
-                                   int64_t height = buffer_view->bottom_right.y - buffer_view->top_left.y;
-
-                                   terminal_init(&config_state->terminal_current->terminal, width, height, config_state->terminal_current->buffer);
-
-                                   TerminalCheckUpdateData_t* check_update_data = calloc(1, sizeof(*check_update_data));
-                                   check_update_data->config_state = config_state;
-                                   check_update_data->terminal_node = config_state->terminal_current;
-
-                                   int rc = pthread_create(&config_state->terminal_current->check_update_thread, NULL, terminal_check_update, check_update_data);
-                                   if(rc != 0){
-                                        ce_message("pthread_create() for terminal_check_update() failed");
+                                   if(!start_terminal_in_view(buffer_view, config_state->terminal_current, config_state)){
                                         break;
                                    }
                               }
@@ -3059,9 +3070,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          // intentionally fall through if there was no terminal available
                     case 1: // Ctrl + a
                     {
-                         int64_t width = buffer_view->bottom_right.x - buffer_view->top_left.x;
-                         int64_t height = buffer_view->bottom_right.y - buffer_view->top_left.y;
-
                          TerminalNode_t* node = calloc(1, sizeof(*node));
                          if(!node) break;
 
@@ -3085,18 +3093,10 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          BufferNode_t* new_buffer_node = ce_append_buffer_to_list(*head, node->buffer);
                          if(!new_buffer_node){
                               ce_message("failed to add shell command buffer to list");
-                              return false;
+                              break;
                          }
 
-                         terminal_init(&node->terminal, width, height, node->buffer);
-
-                         TerminalCheckUpdateData_t* check_update_data = calloc(1, sizeof(*check_update_data));
-                         check_update_data->config_state = config_state;
-                         check_update_data->terminal_node = node;
-
-                         int rc = pthread_create(&node->check_update_thread, NULL, terminal_check_update, check_update_data);
-                         if(rc != 0){
-                              ce_message("pthread_create() for terminal_check_update() failed");
+                         if(!start_terminal_in_view(buffer_view, node, config_state)){
                               break;
                          }
 

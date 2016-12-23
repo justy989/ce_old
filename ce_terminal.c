@@ -92,14 +92,14 @@ void* terminal_reader(void* data)
                                    TerminalColorNode_t* last_node = term->color_lines + (term->buffer->line_count - 1);
                                    while(last_node->next) last_node = last_node->next;
 
-                                   TerminalColorNode_t* new_last_node = malloc(sizeof(*new_last_node));
+                                   TerminalColorNode_t* new_last_node = calloc(1, sizeof(*new_last_node));
                                    if(!new_last_node) break;
 
-                                   last_node->next = new_last_node;
                                    new_last_node->fg = last_node->fg;
                                    new_last_node->bg = last_node->bg;
                                    new_last_node->index = strlen(term->buffer->lines[term->buffer->line_count - 1]);
                                    new_last_node->next = NULL;
+                                   last_node->next = new_last_node;
 
                                    for(int a = 0; a <= csi_argument_index; ++a){
                                         switch(csi_arguments[a]){

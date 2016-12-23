@@ -495,7 +495,7 @@ void terminal_highlight(SyntaxHighlighterData_t* data, void* user_data)
           terminal_highlight->highlight_type = HL_OFF;
           break;
      case SS_INITIALIZING:
-          terminal_highlight->unique_color_id = S_AUTO_COMPLETE + 1;
+          terminal_highlight->unique_color_id = TERM_START_COLOR;
           terminal_highlight->last_fg = -1;
           terminal_highlight->last_bg = -1;
           terminal_highlight->highlight_type = HL_OFF;
@@ -543,6 +543,10 @@ void terminal_highlight(SyntaxHighlighterData_t* data, void* user_data)
                init_pair(terminal_highlight->unique_color_id, color_node->fg, bg_color);
                attron(COLOR_PAIR(terminal_highlight->unique_color_id));
                terminal_highlight->unique_color_id++;
+
+               if(terminal_highlight->unique_color_id >= COLOR_PAIRS){
+                    terminal_highlight->unique_color_id = TERM_START_COLOR;
+               }
           }
 
           terminal_highlight->last_fg = color_node->fg;

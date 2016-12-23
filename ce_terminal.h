@@ -7,6 +7,8 @@
 #include "ce.h"
 #include "ce_syntax.h"
 
+#define TERM_START_COLOR (S_AUTO_COMPLETE + 1)
+
 typedef struct TerminalColorNode_t{
      int index;
      int fg;

@@ -30,6 +30,7 @@ LITTLE:
 -we can still hit the drawing bug where config_state->tab_current->view_input_save is null
 -if you make a change and undo, the buffer *sometimes* still says modified
 -indentation outside functions is really bad !
+-terminal colors that go over 256 start over-writing other colors and show as incorrect
 */
 
 #include <assert.h>

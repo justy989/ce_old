@@ -39,8 +39,9 @@ typedef struct{
      Buffer_t* buffer;
 
      TerminalColorNode_t* color_lines; // array of nodes that lead to linked lists, size is buffer->line_count
-     TerminalColorPairNode_t* color_pairs_head; // shared pointer
 }Terminal_t;
+
+extern TerminalColorPairNode_t* terminal_color_pairs_head; // exposed for cleanup if necessary
 
 bool terminal_init(Terminal_t* term, int64_t width, int64_t height, Buffer_t* buffer);
 void terminal_free(Terminal_t* term);

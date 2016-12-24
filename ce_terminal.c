@@ -12,13 +12,13 @@
 
 pid_t pid;
 
-TerminalColorPairNode_t* g_color_pairs_head = NULL;
+TerminalColorPairNode_t* terminal_color_pairs_head = NULL;
 
 void terminal_switch_color(int fg, int bg)
 {
-     assert(g_color_pairs_head);
+     assert(terminal_color_pairs_head);
 
-     TerminalColorPairNode_t* pair_itr = g_color_pairs_head;
+     TerminalColorPairNode_t* pair_itr = terminal_color_pairs_head;
      TerminalColorPairNode_t* prev = NULL;
 
      int color_id = TERM_START_COLOR;
@@ -417,17 +417,16 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height, Buffer_t* bu
           term->color_lines->bg = COLOR_BACKGROUND;
      }
 
-     if(!g_color_pairs_head){
-          g_color_pairs_head = calloc(1, sizeof(*g_color_pairs_head));
-          if(!g_color_pairs_head) return false; // leak !
+     if(!terminal_color_pairs_head){
+          terminal_color_pairs_head = calloc(1, sizeof(*terminal_color_pairs_head));
+          if(!terminal_color_pairs_head) return false; // leak !
 
-          g_color_pairs_head->fg = -1;
-          g_color_pairs_head->bg = -1;
+          terminal_color_pairs_head->fg = -1;
+          terminal_color_pairs_head->bg = -1;
 
-          init_pair(TERM_START_COLOR, g_color_pairs_head->fg, g_color_pairs_head->bg);
+          init_pair(TERM_START_COLOR, terminal_color_pairs_head->fg, terminal_color_pairs_head->bg);
      }
 
-     term->color_pairs_head = g_color_pairs_head;
      return true;
 }
 

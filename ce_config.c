@@ -2065,7 +2065,7 @@ bool destroyer(BufferNode_t** head, void* user_data)
      }
 
      if(config_state->terminal_head){
-          TerminalColorPairNode_t* color_itr = config_state->terminal_head->terminal.color_pairs_head;
+          TerminalColorPairNode_t* color_itr = terminal_color_pairs_head;
 
           while(color_itr){
                TerminalColorPairNode_t* tmp = color_itr;

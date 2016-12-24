@@ -635,7 +635,7 @@ Buffer_t* open_file_buffer(BufferNode_t* head, const char* filename)
      return NULL;
 }
 
-bool delete_buffer_at_index(BufferNode_t** head, TabView_t* tab_head, int64_t buffer_index)
+bool delete_buffer_at_index(BufferNode_t** head, TabView_t* tab_head, int64_t buffer_index, TerminalNode_t** terminal_head, TerminalNode_t** terminal_current)
 {
      // find which buffer the user wants to delete
      Buffer_t* delete_buffer = NULL;
@@ -647,6 +647,31 @@ bool delete_buffer_at_index(BufferNode_t** head, TabView_t* tab_head, int64_t bu
           }
           buffer_index--;
           itr = itr->next;
+     }
+
+     if(!itr) return false;
+
+     TerminalNode_t* term_itr = *terminal_head;
+     TerminalNode_t* term_prev = NULL;
+
+     while(term_itr){
+          if(term_itr->buffer == delete_buffer) break;
+          term_prev = term_itr;
+          term_itr = term_itr->next;
+     }
+
+     if(term_itr){
+          if(term_itr == *terminal_current) *terminal_current = NULL;
+
+          pthread_cancel(term_itr->check_update_thread);
+          pthread_join(term_itr->check_update_thread, NULL);
+          terminal_free(&term_itr->terminal);
+
+          if(term_prev){
+               term_prev->next = term_itr->next;
+          }else{
+               (*terminal_head)->next = term_itr->next;
+          }
      }
 
      ce_remove_buffer_from_list(head, delete_buffer);
@@ -930,6 +955,17 @@ void* terminal_check_update(void* data)
      return NULL;
 }
 
+TerminalNode_t* is_terminal_buffer(TerminalNode_t* terminal_head, Buffer_t* buffer)
+{
+     while(terminal_head){
+          if(terminal_head->buffer == buffer) return terminal_head;
+
+          terminal_head = terminal_head->next;
+     }
+
+     return NULL;
+}
+
 bool start_terminal_in_view(BufferView_t* buffer_view, TerminalNode_t* node, ConfigState_t* config_state)
 {
      // TODO: create buffer_view_width() and buffer_view_height()
@@ -951,17 +987,6 @@ bool start_terminal_in_view(BufferView_t* buffer_view, TerminalNode_t* node, Con
      }
 
      return true;
-}
-
-TerminalNode_t* is_terminal_buffer(TerminalNode_t* terminal_head, Buffer_t* buffer)
-{
-     while(terminal_head){
-          if(terminal_head->buffer == buffer) return terminal_head;
-
-          terminal_head = terminal_head->next;
-     }
-
-     return NULL;
 }
 
 void split_view(BufferView_t* head_view, BufferView_t* current_view, bool horizontal, LineNumberType_t line_number_type)
@@ -2552,7 +2577,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          // TODO: what if you delete the terminal buffer!
 
                          for(int64_t b = 0; b < buffers_to_delete; ++b){
-                              if(!delete_buffer_at_index(head, config_state->tab_head, delete_index)){
+                              if(!delete_buffer_at_index(head, config_state->tab_head, delete_index,
+                                                         &config_state->terminal_head, &config_state->terminal_current)){
                                    return false; // quit !
                               }
                          }

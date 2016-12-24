@@ -468,6 +468,10 @@ static void syntax_calc_trailing_whitespace(SyntaxHighlighterData_t* data, int64
                }
           }
      }
+
+     if(*trailing_white_space_begin == line_length){
+          *trailing_white_space_begin = -1;
+     }
 }
 
 static void syntax_calc_matching_pair(SyntaxHighlighterData_t* data, Point_t* matched_pair)
@@ -666,7 +670,7 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
           }
 
           // highlight trailing whitespace
-          if(data->loc.x >= syntax->trailing_whitespace_begin){
+          if(syntax->trailing_whitespace_begin >= 0 && data->loc.x >= syntax->trailing_whitespace_begin){
                syntax_set_color(S_TRAILING_WHITESPACE, HL_OFF);
           }
      } break;

@@ -825,26 +825,41 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
 // TODO: rather than taking in config_state, I'd like to take in only the parts it needs, if it's too much, config_state is fine
 void jump_to_next_shell_command_file_destination(BufferNode_t* head, ConfigState_t* config_state, bool forwards)
 {
-     if(!config_state->terminal_current) return;
+     TerminalNode_t* terminal_node = config_state->terminal_current;
+     if(!terminal_node) return;
 
-     Buffer_t* command_buffer = config_state->terminal_current->buffer;
+     Buffer_t* terminal_buffer = config_state->terminal_current->buffer;
+     BufferView_t* terminal_view = ce_buffer_in_view(config_state->tab_current->view_head, terminal_buffer);
+
+     if(!terminal_view){
+          TerminalNode_t* term_itr = config_state->terminal_head;
+          while(term_itr){
+               terminal_view = ce_buffer_in_view(config_state->tab_current->view_head, term_itr->buffer);
+               if(terminal_view){
+                    terminal_buffer = term_itr->buffer;
+                    config_state->terminal_current = term_itr;
+                    break;
+               }
+               term_itr = term_itr->next;
+          }
+     }
+
      int64_t lines_checked = 0;
      int64_t delta = forwards ? 1 : -1;
-     for(int64_t i = config_state->terminal_current->last_jump_location + delta; lines_checked < command_buffer->line_count;
+     for(int64_t i = config_state->terminal_current->last_jump_location + delta; lines_checked < terminal_buffer->line_count;
          i += delta, lines_checked++){
-          if(i == command_buffer->line_count && forwards){
+          if(i == terminal_buffer->line_count && forwards){
                i = 0;
           }else if(i <= 0 && !forwards){
-               i = command_buffer->line_count - 1;
+               i = terminal_buffer->line_count - 1;
           }
 
-          if(goto_file_destination_in_buffer(head, command_buffer, i, config_state->tab_current->view_head,
+          if(goto_file_destination_in_buffer(head, terminal_buffer, i, config_state->tab_current->view_head,
                                              config_state->tab_current->view_current, &config_state->terminal_current->last_jump_location)){
                // NOTE: change the cursor, so when you go back to that buffer, your cursor is on the line we last jumped to
-               command_buffer->cursor.x = 0;
-               command_buffer->cursor.y = i;
-               BufferView_t* command_view = ce_buffer_in_view(config_state->tab_current->view_head, command_buffer);
-               if(command_view) command_view->cursor = command_buffer->cursor;
+               terminal_buffer->cursor.x = 0;
+               terminal_buffer->cursor.y = i;
+               if(terminal_view) terminal_view->cursor = terminal_buffer->cursor;
                break;
           }
      }
@@ -1690,11 +1705,11 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
 }
 
 void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferView_t* overrideable_view, VimMode_t vim_mode, int last_key,
-                        char recording_macro)
+                        char recording_macro, TerminalNode_t* terminal_current)
 {
      Buffer_t* buffer = view->buffer;
-     if(view->next_horizontal) draw_view_statuses(view->next_horizontal, current_view, overrideable_view, vim_mode, last_key, recording_macro);
-     if(view->next_vertical) draw_view_statuses(view->next_vertical, current_view, overrideable_view, vim_mode, last_key, recording_macro);
+     if(view->next_horizontal) draw_view_statuses(view->next_horizontal, current_view, overrideable_view, vim_mode, last_key, recording_macro, terminal_current);
+     if(view->next_vertical) draw_view_statuses(view->next_vertical, current_view, overrideable_view, vim_mode, last_key, recording_macro, terminal_current);
 
      // NOTE: mode names need space at the end for OCD ppl like me
      static const char* mode_names[] = {
@@ -1722,6 +1737,7 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferVi
      if(view == current_view) printw("%s %d ", keyname(last_key), last_key);
 #endif
      if(view == overrideable_view) printw("^ ");
+     if(terminal_current && view->buffer == terminal_current->buffer) printw("$ ");
      if(view == current_view && recording_macro) printw("RECORDING %c ", recording_macro);
      int64_t row = view->cursor.y + 1;
      int64_t column = view->cursor.x + 1;
@@ -3429,7 +3445,7 @@ void view_drawer(void* user_data)
 
      draw_view_statuses(config_state->tab_current->view_head, config_state->tab_current->view_current,
                         config_state->tab_current->view_overrideable, config_state->vim_state.mode, config_state->last_key,
-                        config_state->vim_state.recording_macro);
+                        config_state->vim_state.recording_macro, config_state->terminal_current);
 
      // draw input status
      if(config_state->input){
@@ -3457,7 +3473,7 @@ void view_drawer(void* user_data)
           ce_draw_views(config_state->view_input, NULL, LNT_NONE, HLT_NONE);
           draw_view_statuses(config_state->view_input, config_state->tab_current->view_current,
                              NULL, config_state->vim_state.mode, config_state->last_key,
-                             config_state->vim_state.recording_macro);
+                             config_state->vim_state.recording_macro, config_state->terminal_current);
      }
 
      // draw auto complete

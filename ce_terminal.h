@@ -16,6 +16,12 @@ typedef struct TerminalColorNode_t{
      struct TerminalColorNode_t* next;
 }TerminalColorNode_t;
 
+typedef struct TerminalColorPairNode_t{
+     int fg;
+     int bg;
+     struct TerminalColorPairNode_t* next;
+}TerminalColorPairNode_t;
+
 // ce's virtual terminal
 typedef struct{
      bool is_alive;
@@ -32,7 +38,8 @@ typedef struct{
 
      Buffer_t* buffer;
 
-     TerminalColorNode_t* color_lines;
+     TerminalColorNode_t* color_lines; // array of nodes that lead to linked lists, size is buffer->line_count
+     TerminalColorPairNode_t* color_pairs_head; // shared pointer
 }Terminal_t;
 
 bool terminal_init(Terminal_t* term, int64_t width, int64_t height, Buffer_t* buffer);
@@ -43,7 +50,6 @@ bool terminal_send_key(Terminal_t* term, int key);
 
 typedef struct{
      Terminal_t* terminal;
-     int unique_color_id;
      int last_fg;
      int last_bg;
      HighlightType_t highlight_type;

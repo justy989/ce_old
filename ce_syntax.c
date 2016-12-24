@@ -682,7 +682,7 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
           }
 
           // highlight line numbers!
-          if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
+          syntax_set_color(S_LINE_NUMBERS, HL_OFF);
 
           // NOTE: post pass after the line to see if multiline comments begin or end
           for(int64_t c = data->loc.x; c < line_length; ++c){
@@ -909,7 +909,7 @@ void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data)
           }
 
           // highlight line numbers!
-          if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
+          syntax_set_color(S_LINE_NUMBERS, HL_OFF);
           break;
      }
 }
@@ -1023,7 +1023,7 @@ void syntax_highlight_config(SyntaxHighlighterData_t* data, void* user_data)
           }
 
           // highlight line numbers!
-          if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
+          syntax_set_color(S_LINE_NUMBERS, HL_OFF);
           break;
      }
 }
@@ -1063,7 +1063,7 @@ void syntax_highlight_plain(SyntaxHighlighterData_t* data, void* user_data)
           }
 
           // highlight line numbers!
-          if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
+          syntax_set_color(S_LINE_NUMBERS, HL_OFF);
           break;
      }
 }
@@ -1113,7 +1113,7 @@ void syntax_highlight_diff(SyntaxHighlighterData_t* data, void* user_data)
           }
 
           // highlight line numbers!
-          if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
+          syntax_set_color(S_LINE_NUMBERS, HL_OFF);
           break;
      }
 }

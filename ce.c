@@ -1584,18 +1584,16 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
           const char* line_to_print = buffer_line + buffer_top_left->x;
 
           if(buffer->syntax_fn){
+               // call syntax function at the beginning of the line
                syntax_data.loc = (Point_t){buffer_top_left->x, i};
                syntax_data.state = SS_BEGINNING_OF_LINE;
                buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
-          }
 
-          if(line_length >= buffer_top_left->x){
                for(int64_t c = 0; c < min; ++c){
-                    if(buffer->syntax_fn){
-                         syntax_data.loc = (Point_t){buffer_top_left->x + c, i};
-                         syntax_data.state = SS_CHARACTER;
-                         buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
-                    }
+                    // call syntax function for each character
+                    syntax_data.loc = (Point_t){buffer_top_left->x + c, i};
+                    syntax_data.state = SS_CHARACTER;
+                    buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
 
                     // print each character
                     if(isprint(line_to_print[c])){
@@ -1604,13 +1602,22 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                          addch(non_printable_repr);
                     }
                }
-          }
 
-          // call syntax function at the end of the line as well
-          if(buffer->syntax_fn){
+               // call syntax function at the end of the line
                syntax_data.loc = (Point_t){buffer_top_left->x + min, i};
                syntax_data.state = SS_END_OF_LINE;
                buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
+          }else{
+               if(line_length >= buffer_top_left->x){
+                    for(int64_t c = 0; c < min; ++c){
+                         // print each character
+                         if(isprint(line_to_print[c])){
+                              addch(line_to_print[c]);
+                         }else{
+                              addch(non_printable_repr);
+                         }
+                    }
+               }
           }
      }
 

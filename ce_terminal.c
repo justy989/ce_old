@@ -12,6 +12,39 @@
 
 pid_t pid;
 
+TerminalColorPairNode_t* g_color_pairs_head = NULL;
+
+void terminal_switch_color(int fg, int bg)
+{
+     assert(g_color_pairs_head);
+
+     TerminalColorPairNode_t* pair_itr = g_color_pairs_head;
+     TerminalColorPairNode_t* prev = NULL;
+
+     int color_id = TERM_START_COLOR;
+     while(pair_itr){
+          if(pair_itr->fg == fg && pair_itr->bg == bg) break;
+          prev = pair_itr;
+          pair_itr = pair_itr->next;
+          color_id++;
+     }
+
+     if(!pair_itr){
+          TerminalColorPairNode_t* node = calloc(1, sizeof(*node));
+          if(!node) return;
+
+          node->fg = fg;
+          node->bg = bg;
+          node->next = NULL;
+
+          init_pair(color_id, node->fg, node->bg);
+
+          prev->next = node;
+     }
+
+     attron(COLOR_PAIR(color_id));
+}
+
 void handle_sigchld(int signal)
 {
      int stat;
@@ -384,6 +417,17 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height, Buffer_t* bu
           term->color_lines->bg = COLOR_BACKGROUND;
      }
 
+     if(!g_color_pairs_head){
+          g_color_pairs_head = calloc(1, sizeof(*g_color_pairs_head));
+          if(!g_color_pairs_head) return false; // leak !
+
+          g_color_pairs_head->fg = -1;
+          g_color_pairs_head->bg = -1;
+
+          init_pair(TERM_START_COLOR, g_color_pairs_head->fg, g_color_pairs_head->bg);
+     }
+
+     term->color_pairs_head = g_color_pairs_head;
      return true;
 }
 
@@ -495,7 +539,6 @@ void terminal_highlight(SyntaxHighlighterData_t* data, void* user_data)
           terminal_highlight->highlight_type = HL_OFF;
           break;
      case SS_INITIALIZING:
-          terminal_highlight->unique_color_id = TERM_START_COLOR;
           terminal_highlight->last_fg = -1;
           terminal_highlight->last_bg = -1;
           terminal_highlight->highlight_type = HL_OFF;
@@ -537,17 +580,7 @@ void terminal_highlight(SyntaxHighlighterData_t* data, void* user_data)
                return;
           }
 
-          standend();
-
-          if(color_node->fg >= 0 || color_node->bg >= 0 || bg_color >= 0){
-               init_pair(terminal_highlight->unique_color_id, color_node->fg, bg_color);
-               attron(COLOR_PAIR(terminal_highlight->unique_color_id));
-               terminal_highlight->unique_color_id++;
-
-               if(terminal_highlight->unique_color_id >= COLOR_PAIRS){
-                    terminal_highlight->unique_color_id = TERM_START_COLOR;
-               }
-          }
+          terminal_switch_color(color_node->fg, bg_color);
 
           terminal_highlight->last_fg = color_node->fg;
           terminal_highlight->last_bg = bg_color;
@@ -562,13 +595,7 @@ void terminal_highlight(SyntaxHighlighterData_t* data, void* user_data)
                return;
           }
 
-          standend();
-
-          if(color_node->fg >= 0 || color_node->bg >= 0){
-               init_pair(terminal_highlight->unique_color_id, color_node->fg, color_node->bg);
-               attron(COLOR_PAIR(terminal_highlight->unique_color_id));
-               terminal_highlight->unique_color_id++;
-          }
+          terminal_switch_color(color_node->fg, color_node->bg);
 
           terminal_highlight->last_fg = color_node->fg;
           terminal_highlight->last_bg = color_node->bg;

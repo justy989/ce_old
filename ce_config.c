@@ -2064,6 +2064,16 @@ bool destroyer(BufferNode_t** head, void* user_data)
           }
      }
 
+     if(config_state->terminal_head){
+          TerminalColorPairNode_t* color_itr = config_state->terminal_head->terminal.color_pairs_head;
+
+          while(color_itr){
+               TerminalColorPairNode_t* tmp = color_itr;
+               color_itr = color_itr->next;
+               free(tmp);
+          }
+     }
+
      TerminalNode_t* term_itr = config_state->terminal_head;
      while(term_itr){
           if(term_itr->check_update_thread){

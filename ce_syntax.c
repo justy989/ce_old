@@ -904,7 +904,9 @@ void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data)
                }
           }
 
-          if(data->loc.x >= syntax->trailing_whitespace_begin) syntax_set_color(S_TRAILING_WHITESPACE, HL_OFF);
+          if(syntax->trailing_whitespace_begin >= 0 && data->loc.x >= syntax->trailing_whitespace_begin){
+               syntax_set_color(S_TRAILING_WHITESPACE, HL_OFF);
+          }
      } break;
      case SS_END_OF_LINE:
           if(data->cursor.y == data->loc.y && data->highlight_line_type == HLT_ENTIRE_LINE){
@@ -1018,7 +1020,9 @@ void syntax_highlight_config(SyntaxHighlighterData_t* data, void* user_data)
                }
           }
 
-          if(data->loc.x >= syntax->trailing_whitespace_begin) syntax_set_color(S_TRAILING_WHITESPACE, HL_OFF);
+          if(syntax->trailing_whitespace_begin >= 0 && data->loc.x >= syntax->trailing_whitespace_begin){
+               syntax_set_color(S_TRAILING_WHITESPACE, HL_OFF);
+          }
      } break;
      case SS_END_OF_LINE:
           if(data->cursor.y == data->loc.y && data->highlight_line_type == HLT_ENTIRE_LINE){

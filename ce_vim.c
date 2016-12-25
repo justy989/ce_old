@@ -233,7 +233,7 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                break;
           case '#':
           {
-               if(cursor->y < buffer->line_count){
+               if(buffer->type == BFT_C && cursor->y < buffer->line_count){
                     bool all_whitespace = true;
 
                     for(int64_t i = 0; i < cursor->x; ++i){

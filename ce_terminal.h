@@ -7,12 +7,20 @@
 #include "ce.h"
 #include "ce_syntax.h"
 
+#define TERM_START_COLOR (S_AUTO_COMPLETE + 1)
+
 typedef struct TerminalColorNode_t{
      int index;
      int fg;
      int bg;
      struct TerminalColorNode_t* next;
 }TerminalColorNode_t;
+
+typedef struct TerminalColorPairNode_t{
+     int fg;
+     int bg;
+     struct TerminalColorPairNode_t* next;
+}TerminalColorPairNode_t;
 
 // ce's virtual terminal
 typedef struct{
@@ -30,8 +38,10 @@ typedef struct{
 
      Buffer_t* buffer;
 
-     TerminalColorNode_t* color_lines;
+     TerminalColorNode_t* color_lines; // array of nodes that lead to linked lists, size is buffer->line_count
 }Terminal_t;
+
+extern TerminalColorPairNode_t* terminal_color_pairs_head; // exposed for cleanup if necessary
 
 bool terminal_init(Terminal_t* term, int64_t width, int64_t height, Buffer_t* buffer);
 void terminal_free(Terminal_t* term);
@@ -41,7 +51,6 @@ bool terminal_send_key(Terminal_t* term, int key);
 
 typedef struct{
      Terminal_t* terminal;
-     int unique_color_id;
      int last_fg;
      int last_bg;
      HighlightType_t highlight_type;

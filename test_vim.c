@@ -1938,6 +1938,7 @@ TEST(comment_line)
      key_handler_test_init(&kht);
 
      const char* original_line = "if(true){";
+     kht.buffer.type = BFT_C;
      ce_append_line(&kht.buffer, original_line);
      kht.cursor.x = 2;
 
@@ -1958,6 +1959,7 @@ TEST(comment_multi_line)
      KeyHandlerTest_t kht;
      key_handler_test_init(&kht);
 
+     kht.buffer.type = BFT_C;
      ce_append_line(&kht.buffer, "if(tacos.are.the.best){");
      ce_append_line(&kht.buffer, "     eat(tacos);");
      ce_append_line(&kht.buffer, "}");
@@ -1984,6 +1986,7 @@ TEST(uncomment_line)
      KeyHandlerTest_t kht;
      key_handler_test_init(&kht);
 
+     kht.buffer.type = BFT_C;
      const char* original_line = "//if(true){";
      ce_append_line(&kht.buffer, original_line);
      kht.cursor.x = 2;
@@ -2005,6 +2008,7 @@ TEST(uncomment_multi_line)
      KeyHandlerTest_t kht;
      key_handler_test_init(&kht);
 
+     kht.buffer.type = BFT_C;
      ce_append_line(&kht.buffer, "//if(tacos.are.the.best){");
      ce_append_line(&kht.buffer, "     //eat(tacos);");
      ce_append_line(&kht.buffer, "//}");

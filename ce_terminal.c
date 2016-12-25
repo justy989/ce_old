@@ -12,6 +12,39 @@
 
 pid_t pid;
 
+TerminalColorPairNode_t* terminal_color_pairs_head = NULL;
+
+void terminal_switch_color(int fg, int bg)
+{
+     assert(terminal_color_pairs_head);
+
+     TerminalColorPairNode_t* pair_itr = terminal_color_pairs_head;
+     TerminalColorPairNode_t* prev = NULL;
+
+     int color_id = TERM_START_COLOR;
+     while(pair_itr){
+          if(pair_itr->fg == fg && pair_itr->bg == bg) break;
+          prev = pair_itr;
+          pair_itr = pair_itr->next;
+          color_id++;
+     }
+
+     if(!pair_itr){
+          TerminalColorPairNode_t* node = calloc(1, sizeof(*node));
+          if(!node) return;
+
+          node->fg = fg;
+          node->bg = bg;
+          node->next = NULL;
+
+          init_pair(color_id, node->fg, node->bg);
+
+          prev->next = node;
+     }
+
+     attron(COLOR_PAIR(color_id));
+}
+
 void handle_sigchld(int signal)
 {
      int stat;
@@ -92,14 +125,14 @@ void* terminal_reader(void* data)
                                    TerminalColorNode_t* last_node = term->color_lines + (term->buffer->line_count - 1);
                                    while(last_node->next) last_node = last_node->next;
 
-                                   TerminalColorNode_t* new_last_node = malloc(sizeof(*new_last_node));
+                                   TerminalColorNode_t* new_last_node = calloc(1, sizeof(*new_last_node));
                                    if(!new_last_node) break;
 
-                                   last_node->next = new_last_node;
                                    new_last_node->fg = last_node->fg;
                                    new_last_node->bg = last_node->bg;
                                    new_last_node->index = strlen(term->buffer->lines[term->buffer->line_count - 1]);
                                    new_last_node->next = NULL;
+                                   last_node->next = new_last_node;
 
                                    for(int a = 0; a <= csi_argument_index; ++a){
                                         switch(csi_arguments[a]){
@@ -256,9 +289,8 @@ void* terminal_reader(void* data)
                byte++;
           }
 
-          if(rc){
-               sem_post(&term->updated);
-          }
+          // if we've read anything, say that we've updated!
+          if(rc) sem_post(&term->updated);
      }
 
      pthread_exit(NULL);
@@ -267,6 +299,8 @@ void* terminal_reader(void* data)
 
 bool terminal_init(Terminal_t* term, int64_t width, int64_t height, Buffer_t* buffer)
 {
+     if(term->is_alive) return false;
+
      int master_fd;
      int slave_fd;
 
@@ -351,9 +385,11 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height, Buffer_t* bu
 
      term->buffer = buffer;
 
-     if(!ce_alloc_lines(term->buffer, 1)){
-          term->is_alive = false;
-          return false;
+     if(term->buffer->line_count == 0){
+          if(!ce_alloc_lines(term->buffer, 1)){
+               term->is_alive = false;
+               return false;
+          }
      }
 
      term->buffer->status = BS_READONLY;
@@ -365,13 +401,31 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height, Buffer_t* bu
           return false;
      }
 
-     sem_init(&term->updated, 0, 1);
+     sem_init(&term->updated, 0, 0);
 
-     term->cursor = (Point_t){0, 0};
+     int64_t last_line = term->buffer->line_count - 1;
 
-     term->color_lines = calloc(1, sizeof(*term->color_lines));
-     term->color_lines->fg = COLOR_FOREGROUND;
-     term->color_lines->bg = COLOR_BACKGROUND;
+     term->cursor = (Point_t){0, last_line};
+
+     if(term->buffer->lines[last_line][0]){
+          term->cursor.x = strlen(term->buffer->lines[last_line]);
+     }
+
+     if(!term->color_lines){
+          term->color_lines = calloc(1, sizeof(*term->color_lines));
+          term->color_lines->fg = COLOR_FOREGROUND;
+          term->color_lines->bg = COLOR_BACKGROUND;
+     }
+
+     if(!terminal_color_pairs_head){
+          terminal_color_pairs_head = calloc(1, sizeof(*terminal_color_pairs_head));
+          if(!terminal_color_pairs_head) return false; // leak !
+
+          terminal_color_pairs_head->fg = -1;
+          terminal_color_pairs_head->bg = -1;
+
+          init_pair(TERM_START_COLOR, terminal_color_pairs_head->fg, terminal_color_pairs_head->bg);
+     }
 
      return true;
 }
@@ -401,7 +455,6 @@ void terminal_free(Terminal_t* term)
           sem_destroy(&term->updated);
           pthread_cancel(term->reader_thread);
           pthread_join(term->reader_thread, NULL);
-          ce_free_buffer(term->buffer);
      }
 
      term->is_alive = false;
@@ -485,7 +538,6 @@ void terminal_highlight(SyntaxHighlighterData_t* data, void* user_data)
           terminal_highlight->highlight_type = HL_OFF;
           break;
      case SS_INITIALIZING:
-          terminal_highlight->unique_color_id = S_AUTO_COMPLETE + 1;
           terminal_highlight->last_fg = -1;
           terminal_highlight->last_bg = -1;
           terminal_highlight->highlight_type = HL_OFF;
@@ -527,13 +579,7 @@ void terminal_highlight(SyntaxHighlighterData_t* data, void* user_data)
                return;
           }
 
-          standend();
-
-          if(color_node->fg >= 0 || color_node->bg >= 0 || bg_color >= 0){
-               init_pair(terminal_highlight->unique_color_id, color_node->fg, bg_color);
-               attron(COLOR_PAIR(terminal_highlight->unique_color_id));
-               terminal_highlight->unique_color_id++;
-          }
+          terminal_switch_color(color_node->fg, bg_color);
 
           terminal_highlight->last_fg = color_node->fg;
           terminal_highlight->last_bg = bg_color;
@@ -548,13 +594,7 @@ void terminal_highlight(SyntaxHighlighterData_t* data, void* user_data)
                return;
           }
 
-          standend();
-
-          if(color_node->fg >= 0 || color_node->bg >= 0){
-               init_pair(terminal_highlight->unique_color_id, color_node->fg, color_node->bg);
-               attron(COLOR_PAIR(terminal_highlight->unique_color_id));
-               terminal_highlight->unique_color_id++;
-          }
+          terminal_switch_color(color_node->fg, color_node->bg);
 
           terminal_highlight->last_fg = color_node->fg;
           terminal_highlight->last_bg = color_node->bg;

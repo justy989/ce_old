@@ -5,7 +5,9 @@
 
 #include "ce.h"
 
-#define VIM_COMMENT_STRING "//"
+#define VIM_C_COMMENT_STRING "//"
+#define VIM_PYTHON_COMMENT_STRING "#"
+#define VIM_CONFIG_COMMENT_STRING "#"
 #define TAB_STRING "     "
 
 typedef enum{

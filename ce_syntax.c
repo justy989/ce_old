@@ -373,7 +373,7 @@ static int64_t syntax_is_c_typename(const char* line, int64_t start_offset)
      itr = line + start_offset;
      if(count >= 2 && itr[count-2] == '_' && itr[count-1] == 't') return count;
 
-#if 1
+#if 0
      // NOTE: Justin uses this while working on Bryte!
      if(isupper(*itr)){
           return count;
@@ -468,6 +468,10 @@ static void syntax_calc_trailing_whitespace(SyntaxHighlighterData_t* data, int64
                }
           }
      }
+
+     if(*trailing_white_space_begin == line_length){
+          *trailing_white_space_begin = -1;
+     }
 }
 
 static void syntax_calc_matching_pair(SyntaxHighlighterData_t* data, Point_t* matched_pair)
@@ -552,6 +556,8 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
 
           syntax->highlight.type = HL_OFF;
 
+          syntax_calc_trailing_whitespace(data, &syntax->trailing_whitespace_begin);
+
           SyntaxHighlighterData_t data_copy = *data;
           data_copy.state = SS_CHARACTER;
 
@@ -559,8 +565,6 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
                data_copy.loc = (Point_t){x, data->loc.y};
                syntax_highlight_c(&data_copy, user_data);
           }
-
-          syntax_calc_trailing_whitespace(data, &syntax->trailing_whitespace_begin);
 
           if(data->loc.y == data->cursor.y){
                syntax->highlight.type = HL_CURRENT_LINE;
@@ -666,7 +670,9 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
           }
 
           // highlight trailing whitespace
-          if(data->loc.x >= syntax->trailing_whitespace_begin) syntax_set_color(S_TRAILING_WHITESPACE, syntax->highlight.type);
+          if(syntax->trailing_whitespace_begin >= 0 && data->loc.x >= syntax->trailing_whitespace_begin){
+               syntax_set_color(S_TRAILING_WHITESPACE, HL_OFF);
+          }
      } break;
      case SS_END_OF_LINE:
      {
@@ -682,7 +688,7 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
           }
 
           // highlight line numbers!
-          if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
+          syntax_set_color(S_LINE_NUMBERS, HL_OFF);
 
           // NOTE: post pass after the line to see if multiline comments begin or end
           for(int64_t c = data->loc.x; c < line_length; ++c){
@@ -826,6 +832,8 @@ void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data)
           syntax->current_color = S_NORMAL;
           syntax->current_color_left = 0;
 
+          syntax_calc_trailing_whitespace(data, &syntax->trailing_whitespace_begin);
+
           // lie to me !
           SyntaxHighlighterData_t data_copy = *data;
           data_copy.state = SS_CHARACTER;
@@ -834,8 +842,6 @@ void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data)
                data_copy.loc = (Point_t){x, data->loc.y};
                syntax_highlight_python(&data_copy, user_data);
           }
-
-          syntax_calc_trailing_whitespace(data, &syntax->trailing_whitespace_begin);
 
           if(data->loc.y == data->cursor.y){
                syntax->highlight.type = HL_CURRENT_LINE;
@@ -898,7 +904,9 @@ void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data)
                }
           }
 
-          if(data->loc.x >= syntax->trailing_whitespace_begin) syntax_set_color(S_TRAILING_WHITESPACE, syntax->highlight.type);
+          if(syntax->trailing_whitespace_begin >= 0 && data->loc.x >= syntax->trailing_whitespace_begin){
+               syntax_set_color(S_TRAILING_WHITESPACE, HL_OFF);
+          }
      } break;
      case SS_END_OF_LINE:
           if(data->cursor.y == data->loc.y && data->highlight_line_type == HLT_ENTIRE_LINE){
@@ -909,7 +917,7 @@ void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data)
           }
 
           // highlight line numbers!
-          if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
+          syntax_set_color(S_LINE_NUMBERS, HL_OFF);
           break;
      }
 }
@@ -949,6 +957,8 @@ void syntax_highlight_config(SyntaxHighlighterData_t* data, void* user_data)
           syntax->current_color = S_NORMAL;
           syntax->current_color_left = 0;
 
+          syntax_calc_trailing_whitespace(data, &syntax->trailing_whitespace_begin);
+
           // lie to me !
           SyntaxHighlighterData_t data_copy = *data;
           data_copy.state = SS_CHARACTER;
@@ -963,8 +973,6 @@ void syntax_highlight_config(SyntaxHighlighterData_t* data, void* user_data)
           }else{
                syntax->highlight.type = HL_OFF;
           }
-
-          syntax_calc_trailing_whitespace(data, &syntax->trailing_whitespace_begin);
 
           syntax->current_color = syntax_set_color(syntax->current_color, syntax->highlight.type);
      } break;
@@ -1012,7 +1020,9 @@ void syntax_highlight_config(SyntaxHighlighterData_t* data, void* user_data)
                }
           }
 
-          if(data->loc.x >= syntax->trailing_whitespace_begin) syntax_set_color(S_TRAILING_WHITESPACE, syntax->highlight.type);
+          if(syntax->trailing_whitespace_begin >= 0 && data->loc.x >= syntax->trailing_whitespace_begin){
+               syntax_set_color(S_TRAILING_WHITESPACE, HL_OFF);
+          }
      } break;
      case SS_END_OF_LINE:
           if(data->cursor.y == data->loc.y && data->highlight_line_type == HLT_ENTIRE_LINE){
@@ -1023,7 +1033,7 @@ void syntax_highlight_config(SyntaxHighlighterData_t* data, void* user_data)
           }
 
           // highlight line numbers!
-          if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
+          syntax_set_color(S_LINE_NUMBERS, HL_OFF);
           break;
      }
 }
@@ -1063,7 +1073,7 @@ void syntax_highlight_plain(SyntaxHighlighterData_t* data, void* user_data)
           }
 
           // highlight line numbers!
-          if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
+          syntax_set_color(S_LINE_NUMBERS, HL_OFF);
           break;
      }
 }
@@ -1113,7 +1123,7 @@ void syntax_highlight_diff(SyntaxHighlighterData_t* data, void* user_data)
           }
 
           // highlight line numbers!
-          if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
+          syntax_set_color(S_LINE_NUMBERS, HL_OFF);
           break;
      }
 }

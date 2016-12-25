@@ -633,14 +633,17 @@ bool find_matching_string_forward(const Buffer_t* buffer, Point_t* location, cha
      Point_t itr = (Point_t){location->x + 1, location->y};
      char curr = 0;
      char prev = 0;
+     char prev_prev = 0;
      int64_t last_index = ce_last_index(buffer->lines[itr.y]);
 
      while(ce_point_on_buffer(buffer, itr)){
           ce_get_char(buffer, itr, &curr);
 
-          if(curr == matchee && prev != '\\'){
-               *location = itr;
-               return true;
+          if(curr == matchee){
+               if(prev != '\\' || (prev == '\\' && prev_prev == '\\')){
+                    *location = itr;
+                    return true;
+               }
           }
 
           itr.x++;
@@ -651,6 +654,7 @@ bool find_matching_string_forward(const Buffer_t* buffer, Point_t* location, cha
                last_index = ce_last_index(buffer->lines[itr.y]);
           }
 
+          prev_prev = prev;
           prev = curr;
      }
 
@@ -758,9 +762,22 @@ bool find_matching_string_backward(const Buffer_t* buffer, Point_t* location, ch
      while(ce_point_on_buffer(buffer, itr)){
           ce_get_char(buffer, itr, &curr);
 
-          if(prev == matchee && curr != '\\'){
-               *location = prev_itr;
-               return true;
+          if(prev == matchee){
+               if(curr != '\\'){
+                    *location = prev_itr;
+                    return true;
+               }
+
+               // if the backslashes are adjacent, then they aren't applied to the quote
+               Point_t next_point = {itr.x - 1, itr.y};
+               if(next_point.x >= 0){
+                    char next;
+                    ce_get_char(buffer, next_point, &next);
+                    if(curr == '\\' && next == '\\'){
+                         *location = prev_itr;
+                         return true;
+                    }
+               }
           }
 
           prev = curr;
@@ -1514,6 +1531,7 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
      int64_t max_width = (term_bottom_right->x - term_top_left->x) + 1;
      int64_t max_height = (term_bottom_right->y - term_top_left->y) + 1;
      int64_t last_line = buffer_top_left->y + (term_bottom_right->y - term_top_left->y);
+     int64_t last_line_in_view = last_line;
      if(last_line >= buffer->line_count) last_line = buffer->line_count - 1;
 
      standend();
@@ -1560,26 +1578,22 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
           const char* buffer_line = buffer->lines[i];
           int64_t line_length = strlen(buffer_line);
 
-          int64_t print_line_length = strlen(buffer_line + buffer_top_left->x);
-
-          int64_t min = max_width < print_line_length ? max_width : print_line_length;
           const char* line_to_print = buffer_line + buffer_top_left->x;
+          int64_t print_line_length = strlen(line_to_print);
+          int64_t min = max_width < print_line_length ? max_width : print_line_length;
 
-          // NOTE: we probably want to move this check outside the loop
-          if(has_colors() == TRUE){
-               if(buffer->syntax_fn){
-                    syntax_data.loc = (Point_t){buffer_top_left->x, i};
-                    syntax_data.state = SS_BEGINNING_OF_LINE;
-                    buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
-               }
+          if(buffer->syntax_fn){
+               // call syntax function at the beginning of the line
+               syntax_data.loc = (Point_t){buffer_top_left->x, i};
+               syntax_data.state = SS_BEGINNING_OF_LINE;
+               buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
 
                if(line_length >= buffer_top_left->x){
                     for(int64_t c = 0; c < min; ++c){
-                         if(buffer->syntax_fn){
-                              syntax_data.loc = (Point_t){buffer_top_left->x + c, i};
-                              syntax_data.state = SS_CHARACTER;
-                              buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
-                         }
+                         // call syntax function for each character
+                         syntax_data.loc = (Point_t){buffer_top_left->x + c, i};
+                         syntax_data.state = SS_CHARACTER;
+                         buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
 
                          // print each character
                          if(isprint(line_to_print[c])){
@@ -1590,21 +1604,28 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                     }
                }
 
-               // call syntax function at the end of the line as well
-               if(buffer->syntax_fn){
-                    syntax_data.loc = (Point_t){buffer_top_left->x + min, i};
-                    syntax_data.state = SS_END_OF_LINE;
-                    buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
-               }
+               // call syntax function at the end of the line
+               syntax_data.loc = (Point_t){buffer_top_left->x + min, i};
+               syntax_data.state = SS_END_OF_LINE;
+               buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
           }else{
-               for(int64_t c = 0; c < min; ++c){
-                    // print each character
-                    if(isprint(line_to_print[c])){
-                         addch(line_to_print[c]);
-                    }else{
-                         addch(non_printable_repr);
+               if(line_length >= buffer_top_left->x){
+                    for(int64_t c = 0; c < min; ++c){
+                         // print each character
+                         if(isprint(line_to_print[c])){
+                              addch(line_to_print[c]);
+                         }else{
+                              addch(non_printable_repr);
+                         }
                     }
                }
+          }
+     }
+
+     if(!buffer->absolutely_no_line_numbers_under_any_circumstances){
+          for(int64_t i = last_line + 1; i <= last_line_in_view; ++i) {
+               move(term_top_left->y + (i - buffer_top_left->y), term_top_left->x);
+               addch('~');
           }
      }
 

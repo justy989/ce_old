@@ -141,12 +141,14 @@ const char* random_greeting()
           "Oy! ce's a beaut!",
           "The default config has a great vimplementation!",
           "They see me slurpin' They hatin'",
-          "'Days of pain are worth the years of upcoming prosperity' -confucius",
+          "'Days of pain are worth the years of upcoming prosperity' -confucius, probably",
           "ce, aka, 'the cache miss king'",
-          "", // TODO: terminal illness jokey joke?
+          "All the terminal you want with none of the illness",
+          "I used ce before it was cool",
      };
 
      srand(time(NULL));
+
      return greetings[ rand() % (sizeof(greetings) / sizeof(greetings[0]))];
 }
 

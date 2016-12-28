@@ -1,7 +1,6 @@
 #include "ce_terminal.h"
 #include "ce_syntax.h"
 
-#include <pty.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <pwd.h>
@@ -9,6 +8,13 @@
 #include <sys/wait.h>
 #include <ctype.h>
 #include <assert.h>
+#ifdef __APPLE__
+     #include <util.h>
+     #include <sys/ioctl.h>
+#else
+     #include <pty.h>
+     #include <fcntl.h> // for O_* constants (sem_open)
+#endif
 
 pid_t pid;
 
@@ -77,7 +83,7 @@ void* terminal_reader(void* data)
           if(rc < 0){
                ce_message("%s() read() from shell failed: %s\n", __FUNCTION__, strerror(errno));
                term->is_alive = false;
-               sem_post(&term->updated);
+               sem_post(term->updated);
                pthread_exit(NULL);
           }
 
@@ -290,7 +296,7 @@ void* terminal_reader(void* data)
           }
 
           // if we've read anything, say that we've updated!
-          if(rc) sem_post(&term->updated);
+          if(rc) sem_post(term->updated);
      }
 
      pthread_exit(NULL);
@@ -344,7 +350,7 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height, Buffer_t* bu
                return false;
           }
 
-          char* sh = (pw->pw_shell[0]) ? pw->pw_shell : "/bin/bash";
+          char* sh = "/bin/bash";
 
           // reset env
           unsetenv("COLUMNS");
@@ -401,7 +407,7 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height, Buffer_t* bu
           return false;
      }
 
-     sem_init(&term->updated, 0, 0);
+     term->updated = sem_open("terminal_updated", O_CREAT | O_EXCL, S_IRUSR | S_IWUSR, 0);
 
      int64_t last_line = term->buffer->line_count - 1;
 
@@ -452,7 +458,7 @@ void terminal_free(Terminal_t* term)
 
           free(term->color_lines);
 
-          sem_destroy(&term->updated);
+          sem_close(term->updated);
           pthread_cancel(term->reader_thread);
           pthread_join(term->reader_thread, NULL);
      }
@@ -469,8 +475,6 @@ bool terminal_resize(Terminal_t* term, int64_t width, int64_t height)
 
      window_size.ws_row = height;
      window_size.ws_col = width;
-
-     ce_message("resizing terminal %ld, %ld", width, height);
 
      if(ioctl(term->fd, TIOCSWINSZ, &window_size) < 0){
           ce_message("%s() ioctl() failed %s", __FUNCTION__, strerror(errno));

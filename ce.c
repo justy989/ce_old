@@ -1187,7 +1187,7 @@ bool ce_move_cursor_backward_to_char(const Buffer_t* buffer, Point_t* location, 
      if(!ce_point_on_buffer(buffer, *location)) return false;
 
      char* line = buffer->lines[location->y];
-     const char* found_char = memrchr(line, c, location->x);
+     const char* found_char = ce_memrchr(line, c, location->x);
      if(!found_char) return false;
 
      location->x = (found_char - line);

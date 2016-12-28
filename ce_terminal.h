@@ -25,7 +25,7 @@ typedef struct TerminalColorPairNode_t{
 // ce's virtual terminal
 typedef struct{
      bool is_alive;
-     sem_t updated;
+     sem_t* updated;
 
      Point_t cursor;
 

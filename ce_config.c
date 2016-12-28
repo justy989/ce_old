@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <dirent.h>
 #include <sys/ioctl.h>
+#include <signal.h>
 
 #include "ce_config.h"
 #include "ce_syntax.h"
@@ -934,7 +935,7 @@ void* terminal_check_update(void* data)
      Terminal_t* terminal = &check_update_data->terminal_node->terminal;
 
      while(terminal->is_alive){
-          sem_wait(&terminal->updated);
+          sem_wait(terminal->updated);
 
           if(config_state->tab_current->view_current->buffer == terminal->buffer){
                config_state->tab_current->view_current->cursor = terminal->cursor;
@@ -3195,7 +3196,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
                          // name terminal
                          char buffer_name[64];
-                         snprintf(buffer_name, 64, "[terminal %ld]", id);
+                         snprintf(buffer_name, 64, "[terminal %" PRId64 "]", id);
                          node->buffer->name = strdup(buffer_name);
 
                          config_state->terminal_current = node;

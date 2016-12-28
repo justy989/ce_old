@@ -3118,16 +3118,21 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                    }
                               }
 
-                              BufferView_t* view = ce_buffer_in_view(config_state->tab_current->view_head, config_state->terminal_current->buffer);
-                              if(view){
-                                   config_state->tab_current->view_current = view;
-                                   buffer_view = view;
+                              BufferView_t* terminal_view = ce_buffer_in_view(config_state->tab_current->view_head,
+                                                                              config_state->terminal_current->buffer);
+                              if(terminal_view){
+                                   // if terminal is already in view
+                                   config_state->tab_current->view_current = terminal_view;
+                                   buffer_view = terminal_view;
                               }else if(config_state->tab_current->view_overrideable){
+                                   // if an overrideable view exists
                                    tab_view_save_overrideable(config_state->tab_current);
                                    config_state->tab_current->view_current = config_state->tab_current->view_overrideable;
                                    buffer_view = config_state->tab_current->view_current;
                                    buffer_view->buffer = config_state->terminal_current->buffer;
                               }else{
+                                   // otherwise use the current view
+                                   buffer->cursor = buffer_view->cursor; // save cursor before switching
                                    buffer_view->buffer = config_state->terminal_current->buffer;
                               }
 
@@ -3175,6 +3180,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               tab_view_save_overrideable(config_state->tab_current);
                               config_state->tab_current->view_current = config_state->tab_current->view_overrideable;
                               buffer_view = config_state->tab_current->view_current;
+                         }else{
+                              buffer->cursor = buffer_view->cursor; // save cursor before switching
                          }
 
                          buffer_view->buffer = node->buffer;

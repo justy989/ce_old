@@ -13,6 +13,7 @@
      #include <sys/ioctl.h>
 #else
      #include <pty.h>
+     #include <fcntl.h> // for O_* constants (sem_open)
 #endif
 
 pid_t pid;

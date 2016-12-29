@@ -8,6 +8,7 @@
 #include <sys/wait.h>
 #include <ctype.h>
 #include <assert.h>
+
 #ifdef __APPLE__
      #include <util.h>
      #include <sys/ioctl.h>
@@ -16,6 +17,7 @@
      #include <fcntl.h> // for O_* constants (sem_open)
 #endif
 
+int g_terminal_id = 1;
 pid_t pid;
 
 TerminalColorPairNode_t* terminal_color_pairs_head = NULL;
@@ -400,14 +402,20 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height, Buffer_t* bu
 
      term->buffer->status = BS_READONLY;
 
+     char name_buffer[128];
+     snprintf(name_buffer, 128, "terminal_updated_%d", g_terminal_id++);
+     term->updated = sem_open(name_buffer, O_CREAT, 0644, 0);
+     if(!term->updated){
+          ce_message("%s() sem_open() failed: %s\n", __FUNCTION__, strerror(errno));
+          return false;
+     }
+
      int rc = pthread_create(&term->reader_thread, NULL, terminal_reader, term);
      if(rc != 0){
           term->is_alive = false;
           ce_message("pthread_create() failed");
           return false;
      }
-
-     term->updated = sem_open("terminal_updated", O_CREAT | O_EXCL, S_IRUSR | S_IWUSR, 0);
 
      int64_t last_line = term->buffer->line_count - 1;
 

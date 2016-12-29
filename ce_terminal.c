@@ -18,7 +18,6 @@
 #endif
 
 int g_terminal_id = 1;
-pid_t pid;
 
 TerminalColorPairNode_t* terminal_color_pairs_head = NULL;
 
@@ -53,22 +52,24 @@ void terminal_switch_color(int fg, int bg)
      attron(COLOR_PAIR(color_id));
 }
 
-void handle_sigchld(int signal)
+void handle_sigchld(int signal, siginfo_t* info, void *ptr)
 {
+     (void)(ptr);
+
      int stat;
      pid_t p;
 
      ce_message("terminal shell saw signal: %d", signal);
 
      if(signal != SIGINT){
-          if((p = waitpid(pid, &stat, WNOHANG)) < 0){
-               ce_message("terminal waiting for shell pid %d failed: %s\n", pid, strerror(errno));
+          if((p = waitpid(info->si_pid, &stat, WNOHANG)) < 0){
+               ce_message("terminal waiting for shell pid %d failed: %s\n", info->si_pid, strerror(errno));
           }
 
-          if (pid != p) return;
+          if(info->si_pid != p) return;
 
           if(!WIFEXITED(stat) || WEXITSTATUS(stat)){
-               ce_message("terminal shell child finished with error '%d'\n", stat);
+               ce_message("terminal shell child exitted with code %d\n", stat);
           }
      }
 }
@@ -323,9 +324,9 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height, Buffer_t* bu
           return false;
      }
 
-     pid = fork();
+     term->pid = fork();
 
-     switch(pid){
+     switch(term->pid){
      case -1:
           ce_message("%s() fork() failed", __FUNCTION__);
           return false;
@@ -379,11 +380,18 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height, Buffer_t* bu
           _exit(1);
      } break;
      default:
+     {
           close(slave_fd);
           term->fd = master_fd;
 
-          signal(SIGCHLD, handle_sigchld);
-          break;
+          struct sigaction sa;
+          memset(&sa, 0, sizeof(sa));
+          sa.sa_sigaction = handle_sigchld;
+          sigemptyset(&sa.sa_mask);
+          if(sigaction(SIGCHLD, &sa, NULL) == -1){
+               // TODO: handle error
+          }
+     } break;
      }
 
      term->is_alive = true;
@@ -447,7 +455,7 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height, Buffer_t* bu
 void terminal_free(Terminal_t* term)
 {
      if(term->is_alive){
-          kill(pid, SIGHUP);
+          kill(term->pid, SIGHUP);
      }
 
      if(term->fd){

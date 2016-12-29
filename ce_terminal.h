@@ -34,6 +34,7 @@ typedef struct{
 
      pthread_t reader_thread;
 
+     pid_t pid;
      int fd;
 
      Buffer_t* buffer;

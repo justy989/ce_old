@@ -1471,7 +1471,6 @@ bool calc_auto_complete_start_and_path(AutoComplete_t* auto_complete, const char
                memcpy(path + start_path_len, path_begin, user_path_len);
                path[path_len] = 0;
 
-               ce_message("%s:%s", start_path, path);
                rc = generate_auto_complete_files_in_dir(auto_complete, path);
                free(path);
           }else{
@@ -1485,7 +1484,6 @@ bool calc_auto_complete_start_and_path(AutoComplete_t* auto_complete, const char
 
                path[user_path_len] = 0;
 
-               ce_message("%s", path);
                rc = generate_auto_complete_files_in_dir(auto_complete, path);
                free(path);
           }

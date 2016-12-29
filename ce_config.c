@@ -562,7 +562,12 @@ void input_cancel(ConfigState_t* config_state)
                config_state->tab_current->view_input_save->cursor = config_state->buffer_before_query->cursor;
                center_view(config_state->tab_current->view_input_save);
           }
+
+          // free the search path so we can re-use it
+          free(config_state->load_file_search_path);
+          config_state->load_file_search_path = NULL;
      }
+
      input_end(config_state);
 }
 
@@ -1422,7 +1427,7 @@ bool generate_auto_complete_files_in_dir(AutoComplete_t* auto_complete, const ch
 }
 
 bool calc_auto_complete_start_and_path(AutoComplete_t* auto_complete, const char* line, Point_t cursor,
-                                       Buffer_t* completion_buffer)
+                                       Buffer_t* completion_buffer, const char* start_path)
 {
      // we only auto complete in the case where the cursor is up against path with directories
      // -pat|
@@ -1444,23 +1449,48 @@ bool calc_auto_complete_start_and_path(AutoComplete_t* auto_complete, const char
           path_begin++; // account for iterating 1 too far
      }
 
+     if(!start_path) start_path = ".";
+
      // generate based on the path
      bool rc = false;
      if(last_slash){
-          int64_t path_len = (last_slash - path_begin) + 1;
-          char* path = malloc(path_len + 1);
-          if(!path){
-               ce_message("failed to alloc path");
-               return false;
+          int64_t user_path_len = (last_slash - path_begin) + 1;
+
+          if(*path_begin != '/'){
+               int64_t start_path_len = strlen(start_path) + 1;
+               int64_t path_len = user_path_len + start_path_len;
+
+               char* path = malloc(path_len + 1);
+               if(!path){
+                    ce_message("failed to alloc path");
+                    return false;
+               }
+
+               memcpy(path, start_path, start_path_len - 1);
+               path[start_path_len - 1] = '/'; // add a slash between, since start_path doesn't come with one
+               memcpy(path + start_path_len, path_begin, user_path_len);
+               path[path_len] = 0;
+
+               ce_message("%s:%s", start_path, path);
+               rc = generate_auto_complete_files_in_dir(auto_complete, path);
+               free(path);
+          }else{
+               char* path = malloc(user_path_len + 1);
+               if(!path){
+                    ce_message("failed to alloc path");
+                    return false;
+               }
+
+               memcpy(path, path_begin, user_path_len);
+
+               path[user_path_len] = 0;
+
+               ce_message("%s", path);
+               rc = generate_auto_complete_files_in_dir(auto_complete, path);
+               free(path);
           }
-
-          memcpy(path, path_begin, path_len);
-          path[path_len] = 0;
-
-          rc = generate_auto_complete_files_in_dir(auto_complete, path);
-          free(path);
      }else{
-          rc = generate_auto_complete_files_in_dir(auto_complete, ".");
+          rc = generate_auto_complete_files_in_dir(auto_complete, start_path);
      }
 
      // set the start point if we generated files
@@ -1523,13 +1553,25 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                bool switched_to_open_file = false;
 
                for(int64_t i = 0; i < config_state->view_input->buffer->line_count; ++i){
-                    Buffer_t* new_buffer = open_file_buffer(head, config_state->view_input->buffer->lines[i]);
+                    Buffer_t* new_buffer = NULL;
+                    if(config_state->load_file_search_path && config_state->view_input->buffer->lines[i][0] != '/'){
+                         char path[BUFSIZ];
+                         snprintf(path, BUFSIZ, "%s/%s", config_state->load_file_search_path, config_state->view_input->buffer->lines[i]);
+                         new_buffer = open_file_buffer(head, path);
+                    }else{
+                         new_buffer = open_file_buffer(head, config_state->view_input->buffer->lines[i]);
+                    }
+
                     if(!switched_to_open_file && new_buffer){
                          config_state->tab_current->view_current->buffer = new_buffer;
                          config_state->tab_current->view_current->cursor = (Point_t){0, 0};
                          switched_to_open_file = true;
                     }
                }
+
+               // free the search path so we can re-use it
+               free(config_state->load_file_search_path);
+               config_state->load_file_search_path = NULL;
 
                if(!switched_to_open_file){
                     config_state->tab_current->view_current->buffer = head->buffer; // message buffer
@@ -2534,7 +2576,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          calc_auto_complete_start_and_path(&config_state->auto_complete,
                                                            buffer->lines[cursor->y],
                                                            *cursor,
-                                                           config_state->completion_buffer);
+                                                           config_state->completion_buffer,
+                                                           config_state->load_file_search_path);
                          handled_key = true;
                          key = 0;
                     }
@@ -2560,7 +2603,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               calc_auto_complete_start_and_path(&config_state->auto_complete,
                                                                 buffer->lines[cursor->y],
                                                                 *cursor,
-                                                                config_state->completion_buffer);
+                                                                config_state->completion_buffer,
+                                                                config_state->load_file_search_path);
                               break;
                          }
                     }
@@ -3221,13 +3265,33 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          break;
                     case 6: // Ctrl + f
                     {
+                         assert(config_state->load_file_search_path == NULL);
+
                          buffer->cursor = buffer_view->cursor;
 
                          input_start(config_state, "Load File", key);
+
+                         // when searching for a file, see if we would like to use a path other than the one ce was run at.
+                         TerminalNode_t* terminal_node = is_terminal_buffer(config_state->terminal_head, buffer);
+                         if(terminal_node){
+                              // if we are looking at a terminal, use the terminal's cwd
+                              config_state->load_file_search_path = terminal_get_current_directory(&terminal_node->terminal);
+                         }else{
+                              // if our file has a relative path in it, use that
+                              char* last_slash = strrchr(buffer->filename, '/');
+                              if(last_slash){
+                                   int64_t path_len = last_slash - buffer->filename;
+                                   config_state->load_file_search_path = malloc(path_len + 1);
+                                   strncpy(config_state->load_file_search_path, buffer->filename, path_len);
+                                   config_state->load_file_search_path[path_len] = 0;
+                              }
+                         }
+
                          calc_auto_complete_start_and_path(&config_state->auto_complete,
                                                            config_state->view_input->buffer->lines[0],
                                                            *cursor,
-                                                           config_state->completion_buffer);
+                                                           config_state->completion_buffer,
+                                                           config_state->load_file_search_path);
                          if(config_state->tab_current->view_overrideable){
                               tab_view_save_overrideable(config_state->tab_current);
 

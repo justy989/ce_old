@@ -545,6 +545,13 @@ bool terminal_send_key(Terminal_t* term, int key)
      return true;
 }
 
+char* terminal_get_current_directory(Terminal_t* term)
+{
+     char cwd_file[BUFSIZ];
+     snprintf(cwd_file, BUFSIZ, "/proc/%d/cwd", term->pid);
+     return realpath(cwd_file, NULL);
+}
+
 void terminal_highlight(SyntaxHighlighterData_t* data, void* user_data)
 {
      if(!user_data) return;

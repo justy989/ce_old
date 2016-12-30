@@ -407,7 +407,12 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height, Buffer_t* bu
           return false;
      }
 
+     sem_unlink("terminal_updated");
      term->updated = sem_open("terminal_updated", O_CREAT | O_EXCL, S_IRUSR | S_IWUSR, 0);
+     if(term->updated == SEM_FAILED){
+          ce_message("%s() sem_open() failed %s", __FUNCTION__, strerror(errno));
+          return false;
+     }
 
      int64_t last_line = term->buffer->line_count - 1;
 

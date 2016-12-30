@@ -562,7 +562,12 @@ void input_cancel(ConfigState_t* config_state)
                config_state->tab_current->view_input_save->cursor = config_state->buffer_before_query->cursor;
                center_view(config_state->tab_current->view_input_save);
           }
+
+          // free the search path so we can re-use it
+          free(config_state->load_file_search_path);
+          config_state->load_file_search_path = NULL;
      }
+
      input_end(config_state);
 }
 
@@ -719,7 +724,7 @@ void reset_buffer_commits(BufferCommitNode_t** tail)
 
 // NOTE: modify last_jump if we succeed
 bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64_t line, BufferView_t* head_view,
-                                     BufferView_t* view, int64_t* last_jump)
+                                     BufferView_t* view, int64_t* last_jump, char* terminal_current_directory)
 {
      if(!buffer->line_count) return false;
 
@@ -729,6 +734,12 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
      char filename[BUFSIZ];
      char line_number_str[BUFSIZ];
      char column_number_str[BUFSIZ];
+
+     // prepend the terminal current directory with a slash
+     strncpy(filename, terminal_current_directory, BUFSIZ);
+     int64_t filename_start = strlen(filename);
+     filename[filename_start] = '/';
+     filename_start++;
 
      // handle git diff format
      if(buffer->lines[line][0] == '@' && buffer->lines[line][1] == '@'){
@@ -748,7 +759,7 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
           // +++ b/ce.c
           char* first_slash = strchr(buffer->lines[file_line], '/');
           if(!first_slash) return false;
-          strncpy(filename, first_slash + 1, BUFSIZ);
+          strncpy(filename + filename_start, first_slash + 1, BUFSIZ - filename_start);
           if(access(filename, F_OK) == -1) return false; // file does not exist
 
           // @@ -1633,9 +1636,26 @@ static int set_color(Syntax_t syntax, HighlightType_t highlight_type)
@@ -766,8 +777,10 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
           char* file_end = strpbrk(buffer->lines[line], ": ");
           if(!file_end) return false;
           int64_t filename_len = file_end - buffer->lines[line];
-          strncpy(filename, buffer->lines[line], filename_len);
-          filename[filename_len] = 0;
+          if(filename_len > (BUFSIZ - filename_start)) return false;
+          strncpy(filename + filename_start, buffer->lines[line], filename_len);
+          filename[filename_start + filename_len] = 0;
+          ce_message("goto: '%s'", filename);
           if(access(filename, F_OK) == -1) return false; // file does not exist
 
           char* line_number_begin_delim = NULL;
@@ -880,14 +893,19 @@ void jump_to_next_shell_command_file_destination(BufferNode_t* head, ConfigState
                i = terminal_buffer->line_count - 1;
           }
 
+          char* terminal_current_directory = terminal_get_current_directory(&config_state->terminal_current->terminal);
           if(goto_file_destination_in_buffer(head, terminal_buffer, i, config_state->tab_current->view_head,
-                                             config_state->tab_current->view_current, &config_state->terminal_current->last_jump_location)){
+                                             config_state->tab_current->view_current, &config_state->terminal_current->last_jump_location,
+                                             terminal_current_directory)){
                // NOTE: change the cursor, so when you go back to that buffer, your cursor is on the line we last jumped to
                terminal_buffer->cursor.x = 0;
                terminal_buffer->cursor.y = i;
                if(terminal_view) terminal_view->cursor = terminal_buffer->cursor;
+               free(terminal_current_directory);
                break;
           }
+
+          free(terminal_current_directory);
      }
 }
 
@@ -1422,7 +1440,7 @@ bool generate_auto_complete_files_in_dir(AutoComplete_t* auto_complete, const ch
 }
 
 bool calc_auto_complete_start_and_path(AutoComplete_t* auto_complete, const char* line, Point_t cursor,
-                                       Buffer_t* completion_buffer)
+                                       Buffer_t* completion_buffer, const char* start_path)
 {
      // we only auto complete in the case where the cursor is up against path with directories
      // -pat|
@@ -1444,23 +1462,46 @@ bool calc_auto_complete_start_and_path(AutoComplete_t* auto_complete, const char
           path_begin++; // account for iterating 1 too far
      }
 
+     if(!start_path) start_path = ".";
+
      // generate based on the path
      bool rc = false;
      if(last_slash){
-          int64_t path_len = (last_slash - path_begin) + 1;
-          char* path = malloc(path_len + 1);
-          if(!path){
-               ce_message("failed to alloc path");
-               return false;
+          int64_t user_path_len = (last_slash - path_begin) + 1;
+
+          if(*path_begin != '/'){
+               int64_t start_path_len = strlen(start_path) + 1;
+               int64_t path_len = user_path_len + start_path_len;
+
+               char* path = malloc(path_len + 1);
+               if(!path){
+                    ce_message("failed to alloc path");
+                    return false;
+               }
+
+               memcpy(path, start_path, start_path_len - 1);
+               path[start_path_len - 1] = '/'; // add a slash between, since start_path doesn't come with one
+               memcpy(path + start_path_len, path_begin, user_path_len);
+               path[path_len] = 0;
+
+               rc = generate_auto_complete_files_in_dir(auto_complete, path);
+               free(path);
+          }else{
+               char* path = malloc(user_path_len + 1);
+               if(!path){
+                    ce_message("failed to alloc path");
+                    return false;
+               }
+
+               memcpy(path, path_begin, user_path_len);
+
+               path[user_path_len] = 0;
+
+               rc = generate_auto_complete_files_in_dir(auto_complete, path);
+               free(path);
           }
-
-          memcpy(path, path_begin, path_len);
-          path[path_len] = 0;
-
-          rc = generate_auto_complete_files_in_dir(auto_complete, path);
-          free(path);
      }else{
-          rc = generate_auto_complete_files_in_dir(auto_complete, ".");
+          rc = generate_auto_complete_files_in_dir(auto_complete, start_path);
      }
 
      // set the start point if we generated files
@@ -1523,13 +1564,25 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                bool switched_to_open_file = false;
 
                for(int64_t i = 0; i < config_state->view_input->buffer->line_count; ++i){
-                    Buffer_t* new_buffer = open_file_buffer(head, config_state->view_input->buffer->lines[i]);
+                    Buffer_t* new_buffer = NULL;
+                    if(config_state->load_file_search_path && config_state->view_input->buffer->lines[i][0] != '/'){
+                         char path[BUFSIZ];
+                         snprintf(path, BUFSIZ, "%s/%s", config_state->load_file_search_path, config_state->view_input->buffer->lines[i]);
+                         new_buffer = open_file_buffer(head, path);
+                    }else{
+                         new_buffer = open_file_buffer(head, config_state->view_input->buffer->lines[i]);
+                    }
+
                     if(!switched_to_open_file && new_buffer){
                          config_state->tab_current->view_current->buffer = new_buffer;
                          config_state->tab_current->view_current->cursor = (Point_t){0, 0};
                          switched_to_open_file = true;
                     }
                }
+
+               // free the search path so we can re-use it
+               free(config_state->load_file_search_path);
+               config_state->load_file_search_path = NULL;
 
                if(!switched_to_open_file){
                     config_state->tab_current->view_current->buffer = head->buffer; // message buffer
@@ -1662,15 +1715,6 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
 
           TerminalNode_t* terminal_node = is_terminal_buffer(config_state->terminal_head, itr->buffer);
           if(terminal_node) config_state->terminal_current = terminal_node;
-     }else if(is_terminal_buffer(config_state->terminal_head, buffer_view->buffer)){
-          BufferView_t* view_to_change = buffer_view;
-          if(config_state->tab_current->view_previous) view_to_change = config_state->tab_current->view_previous;
-
-          if(goto_file_destination_in_buffer(head, buffer_view->buffer, cursor->y,
-                                             config_state->tab_current->view_head, view_to_change,
-                                             &config_state->terminal_current->last_jump_location)){
-               config_state->tab_current->view_current = view_to_change;
-          }
      }else if(buffer_view->buffer == &config_state->mark_list_buffer){
           int64_t line = cursor->y - 1; // account for buffer list row header
           if(line < 0) return;
@@ -1727,7 +1771,23 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           config_state->editting_register = itr->reg_char;
           vim_enter_normal_mode(&config_state->vim_state);
           ce_insert_string(config_state->view_input->buffer, (Point_t){0,0}, itr->text);
+     }else{
+          TerminalNode_t* terminal_node = is_terminal_buffer(config_state->terminal_head, buffer_view->buffer);
+          if(terminal_node){
+               BufferView_t* view_to_change = buffer_view;
+               if(config_state->tab_current->view_previous) view_to_change = config_state->tab_current->view_previous;
+
+               char* terminal_current_directory = terminal_get_current_directory(&terminal_node->terminal);
+               if(goto_file_destination_in_buffer(head, buffer_view->buffer, cursor->y,
+                                                  config_state->tab_current->view_head, view_to_change,
+                                                  &config_state->terminal_current->last_jump_location,
+                                                  terminal_current_directory)){
+                    config_state->tab_current->view_current = view_to_change;
+               }
+               free(terminal_current_directory);
+          }
      }
+
 }
 
 void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferView_t* overrideable_view, VimMode_t vim_mode, int last_key,
@@ -2534,7 +2594,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          calc_auto_complete_start_and_path(&config_state->auto_complete,
                                                            buffer->lines[cursor->y],
                                                            *cursor,
-                                                           config_state->completion_buffer);
+                                                           config_state->completion_buffer,
+                                                           config_state->load_file_search_path);
                          handled_key = true;
                          key = 0;
                     }
@@ -2560,7 +2621,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               calc_auto_complete_start_and_path(&config_state->auto_complete,
                                                                 buffer->lines[cursor->y],
                                                                 *cursor,
-                                                                config_state->completion_buffer);
+                                                                config_state->completion_buffer,
+                                                                config_state->load_file_search_path);
                               break;
                          }
                     }
@@ -3119,16 +3181,21 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                    }
                               }
 
-                              BufferView_t* view = ce_buffer_in_view(config_state->tab_current->view_head, config_state->terminal_current->buffer);
-                              if(view){
-                                   config_state->tab_current->view_current = view;
-                                   buffer_view = view;
+                              BufferView_t* terminal_view = ce_buffer_in_view(config_state->tab_current->view_head,
+                                                                              config_state->terminal_current->buffer);
+                              if(terminal_view){
+                                   // if terminal is already in view
+                                   config_state->tab_current->view_current = terminal_view;
+                                   buffer_view = terminal_view;
                               }else if(config_state->tab_current->view_overrideable){
+                                   // if an overrideable view exists
                                    tab_view_save_overrideable(config_state->tab_current);
                                    config_state->tab_current->view_current = config_state->tab_current->view_overrideable;
                                    buffer_view = config_state->tab_current->view_current;
                                    buffer_view->buffer = config_state->terminal_current->buffer;
                               }else{
+                                   // otherwise use the current view
+                                   buffer->cursor = buffer_view->cursor; // save cursor before switching
                                    buffer_view->buffer = config_state->terminal_current->buffer;
                               }
 
@@ -3176,6 +3243,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               tab_view_save_overrideable(config_state->tab_current);
                               config_state->tab_current->view_current = config_state->tab_current->view_overrideable;
                               buffer_view = config_state->tab_current->view_current;
+                         }else{
+                              buffer->cursor = buffer_view->cursor; // save cursor before switching
                          }
 
                          buffer_view->buffer = node->buffer;
@@ -3214,13 +3283,33 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          break;
                     case 6: // Ctrl + f
                     {
+                         assert(config_state->load_file_search_path == NULL);
+
                          buffer->cursor = buffer_view->cursor;
 
                          input_start(config_state, "Load File", key);
+
+                         // when searching for a file, see if we would like to use a path other than the one ce was run at.
+                         TerminalNode_t* terminal_node = is_terminal_buffer(config_state->terminal_head, buffer);
+                         if(terminal_node){
+                              // if we are looking at a terminal, use the terminal's cwd
+                              config_state->load_file_search_path = terminal_get_current_directory(&terminal_node->terminal);
+                         }else{
+                              // if our file has a relative path in it, use that
+                              char* last_slash = strrchr(buffer->filename, '/');
+                              if(last_slash){
+                                   int64_t path_len = last_slash - buffer->filename;
+                                   config_state->load_file_search_path = malloc(path_len + 1);
+                                   strncpy(config_state->load_file_search_path, buffer->filename, path_len);
+                                   config_state->load_file_search_path[path_len] = 0;
+                              }
+                         }
+
                          calc_auto_complete_start_and_path(&config_state->auto_complete,
                                                            config_state->view_input->buffer->lines[0],
                                                            *cursor,
-                                                           config_state->completion_buffer);
+                                                           config_state->completion_buffer,
+                                                           config_state->load_file_search_path);
                          if(config_state->tab_current->view_overrideable){
                               tab_view_save_overrideable(config_state->tab_current);
 

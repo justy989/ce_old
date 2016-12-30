@@ -93,8 +93,9 @@ typedef struct{
 
      bool do_not_highlight_search;
 
+     char* load_file_search_path;
+
      bool quit;
 } ConfigState_t;
 
 #endif
-

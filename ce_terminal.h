@@ -34,6 +34,7 @@ typedef struct{
 
      pthread_t reader_thread;
 
+     pid_t pid;
      int fd;
 
      Buffer_t* buffer;
@@ -48,6 +49,7 @@ void terminal_free(Terminal_t* term);
 
 bool terminal_resize(Terminal_t* term, int64_t width, int64_t height);
 bool terminal_send_key(Terminal_t* term, int key);
+char* terminal_get_current_directory(Terminal_t* term); // string returned must be free'd
 
 typedef struct{
      Terminal_t* terminal;

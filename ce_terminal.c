@@ -410,11 +410,10 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height, Buffer_t* bu
 
      term->buffer->status = BS_READONLY;
 
-     char name_buffer[128];
-     snprintf(name_buffer, 128, "terminal_updated_%d", g_terminal_id++);
-     term->updated = sem_open(name_buffer, O_CREAT, 0644, 0);
-     if(!term->updated){
-          ce_message("%s() sem_open() failed: %s\n", __FUNCTION__, strerror(errno));
+     sem_unlink("terminal_updated");
+     term->updated = sem_open("terminal_updated", O_CREAT | O_EXCL, S_IRUSR | S_IWUSR, 0);
+     if(term->updated == SEM_FAILED){
+          ce_message("%s() sem_open() failed %s", __FUNCTION__, strerror(errno));
           return false;
      }
 

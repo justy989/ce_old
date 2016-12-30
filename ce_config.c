@@ -724,7 +724,7 @@ void reset_buffer_commits(BufferCommitNode_t** tail)
 
 // NOTE: modify last_jump if we succeed
 bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64_t line, BufferView_t* head_view,
-                                     BufferView_t* view, int64_t* last_jump)
+                                     BufferView_t* view, int64_t* last_jump, char* terminal_current_directory)
 {
      if(!buffer->line_count) return false;
 
@@ -734,6 +734,12 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
      char filename[BUFSIZ];
      char line_number_str[BUFSIZ];
      char column_number_str[BUFSIZ];
+
+     // prepend the terminal current directory with a slash
+     strncpy(filename, terminal_current_directory, BUFSIZ);
+     int64_t filename_start = strlen(filename);
+     filename[filename_start] = '/';
+     filename_start++;
 
      // handle git diff format
      if(buffer->lines[line][0] == '@' && buffer->lines[line][1] == '@'){
@@ -753,7 +759,7 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
           // +++ b/ce.c
           char* first_slash = strchr(buffer->lines[file_line], '/');
           if(!first_slash) return false;
-          strncpy(filename, first_slash + 1, BUFSIZ);
+          strncpy(filename + filename_start, first_slash + 1, BUFSIZ - filename_start);
           if(access(filename, F_OK) == -1) return false; // file does not exist
 
           // @@ -1633,9 +1636,26 @@ static int set_color(Syntax_t syntax, HighlightType_t highlight_type)
@@ -771,8 +777,10 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
           char* file_end = strpbrk(buffer->lines[line], ": ");
           if(!file_end) return false;
           int64_t filename_len = file_end - buffer->lines[line];
-          strncpy(filename, buffer->lines[line], filename_len);
-          filename[filename_len] = 0;
+          if(filename_len > (BUFSIZ - filename_start)) return false;
+          strncpy(filename + filename_start, buffer->lines[line], filename_len);
+          filename[filename_start + filename_len] = 0;
+          ce_message("goto: '%s'", filename);
           if(access(filename, F_OK) == -1) return false; // file does not exist
 
           char* line_number_begin_delim = NULL;
@@ -885,14 +893,19 @@ void jump_to_next_shell_command_file_destination(BufferNode_t* head, ConfigState
                i = terminal_buffer->line_count - 1;
           }
 
+          char* terminal_current_directory = terminal_get_current_directory(&config_state->terminal_current->terminal);
           if(goto_file_destination_in_buffer(head, terminal_buffer, i, config_state->tab_current->view_head,
-                                             config_state->tab_current->view_current, &config_state->terminal_current->last_jump_location)){
+                                             config_state->tab_current->view_current, &config_state->terminal_current->last_jump_location,
+                                             terminal_current_directory)){
                // NOTE: change the cursor, so when you go back to that buffer, your cursor is on the line we last jumped to
                terminal_buffer->cursor.x = 0;
                terminal_buffer->cursor.y = i;
                if(terminal_view) terminal_view->cursor = terminal_buffer->cursor;
+               free(terminal_current_directory);
                break;
           }
+
+          free(terminal_current_directory);
      }
 }
 
@@ -1702,15 +1715,6 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
 
           TerminalNode_t* terminal_node = is_terminal_buffer(config_state->terminal_head, itr->buffer);
           if(terminal_node) config_state->terminal_current = terminal_node;
-     }else if(is_terminal_buffer(config_state->terminal_head, buffer_view->buffer)){
-          BufferView_t* view_to_change = buffer_view;
-          if(config_state->tab_current->view_previous) view_to_change = config_state->tab_current->view_previous;
-
-          if(goto_file_destination_in_buffer(head, buffer_view->buffer, cursor->y,
-                                             config_state->tab_current->view_head, view_to_change,
-                                             &config_state->terminal_current->last_jump_location)){
-               config_state->tab_current->view_current = view_to_change;
-          }
      }else if(buffer_view->buffer == &config_state->mark_list_buffer){
           int64_t line = cursor->y - 1; // account for buffer list row header
           if(line < 0) return;
@@ -1767,7 +1771,23 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           config_state->editting_register = itr->reg_char;
           vim_enter_normal_mode(&config_state->vim_state);
           ce_insert_string(config_state->view_input->buffer, (Point_t){0,0}, itr->text);
+     }else{
+          TerminalNode_t* terminal_node = is_terminal_buffer(config_state->terminal_head, buffer_view->buffer);
+          if(terminal_node){
+               BufferView_t* view_to_change = buffer_view;
+               if(config_state->tab_current->view_previous) view_to_change = config_state->tab_current->view_previous;
+
+               char* terminal_current_directory = terminal_get_current_directory(&terminal_node->terminal);
+               if(goto_file_destination_in_buffer(head, buffer_view->buffer, cursor->y,
+                                                  config_state->tab_current->view_head, view_to_change,
+                                                  &config_state->terminal_current->last_jump_location,
+                                                  terminal_current_directory)){
+                    config_state->tab_current->view_current = view_to_change;
+               }
+               free(terminal_current_directory);
+          }
      }
+
 }
 
 void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferView_t* overrideable_view, VimMode_t vim_mode, int last_key,

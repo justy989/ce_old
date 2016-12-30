@@ -17,8 +17,6 @@
      #include <fcntl.h> // for O_* constants (sem_open)
 #endif
 
-int g_terminal_id = 1;
-
 TerminalColorPairNode_t* terminal_color_pairs_head = NULL;
 
 void terminal_switch_color(int fg, int bg)

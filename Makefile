@@ -1,5 +1,5 @@
 CC?=clang
-CFLAGS+=-Wall -Werror -Wextra -std=c11 -ggdb3 -fdiagnostics-color=always -D_GNU_SOURCE $(SCROLL_FLAG)
+CFLAGS+=-Wall -Werror -Wextra -std=c11 -ggdb3 -D_GNU_SOURCE $(SCROLL_FLAG)
 LINK=-lncurses -lutil -lm
 
 all: LINK += -lpthread

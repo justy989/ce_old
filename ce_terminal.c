@@ -72,6 +72,105 @@ void handle_sigchld(int signal, siginfo_t* info, void *ptr)
      }
 }
 
+void terminal_clear_region(Terminal_t* term, int64_t a_x, int64_t a_y, int64_t b_x, int64_t b_y)
+{
+     assert(a_x <= b_x && a_y <= b_y);
+
+     for(int64_t y = a_y; y <= b_y; ++y){
+          for(int64_t x = a_x; x <= b_x; ++x){
+               ce_set_char(term->buffer, (Point_t){x, y}, ' ');
+          }
+     }
+}
+
+void terminal_scroll_up(Terminal_t* term, int64_t start, int64_t lines)
+{
+     int64_t max_lines = (term->scroll_bottom - start) + 1;
+
+     if(lines < 0){
+          lines = 0;
+     }else if(lines > max_lines){
+          lines = max_lines;
+     }
+
+     int64_t last_line = term->scroll_bottom - lines;
+
+     terminal_clear_region(term, 0, start, term->width - 1, (start + lines) - 1);
+
+     for(int64_t i = start; i <= last_line; ++i){
+          char* tmp = term->buffer->lines[i];
+          term->buffer->lines[i] = term->buffer->lines[i + lines];
+          term->buffer->lines[i + lines] = tmp;
+     }
+}
+
+void terminal_scroll_down(Terminal_t* term, int64_t start, int64_t lines)
+{
+     int64_t max_lines = (term->scroll_bottom - start) + 1;
+
+     if(lines < 0){
+          lines = 0;
+     }else if(lines > max_lines){
+          lines = max_lines;
+     }
+
+     int64_t last_line = term->scroll_bottom - lines;
+
+     terminal_clear_region(term, 0, last_line + 1, term->width - 1, term->scroll_bottom);
+
+     for(int64_t i = start; i <= last_line; ++i){
+          char* tmp = term->buffer->lines[i];
+          term->buffer->lines[i] = term->buffer->lines[i - lines];
+          term->buffer->lines[i - lines] = tmp;
+     }
+}
+
+void terminal_scroll_set(Terminal_t* term, int64_t scroll_top, int64_t scroll_bottom)
+{
+     int64_t last_row = term->height - 1;
+
+     if(scroll_top < 0){
+          scroll_top = 0;
+     }else if(scroll_top > last_row){
+          scroll_top = last_row;
+     }
+
+     if(scroll_bottom < 0){
+          scroll_bottom = 0;
+     }else if(scroll_bottom > last_row){
+          scroll_bottom = last_row;
+     }
+
+     if(scroll_top > scroll_bottom){
+          term->scroll_top = scroll_bottom;
+          term->scroll_bottom = scroll_top;
+     }else{
+          term->scroll_top = scroll_top;
+          term->scroll_bottom = scroll_bottom;
+     }
+}
+
+void terminal_set_mode(Terminal_t* term, bool priv, bool on, int* args, int arg_count)
+{
+     for(int i = 0; i < arg_count; ++i){
+          if(priv){
+               switch(args[i]){
+               default:
+                    break;
+               case 6:
+                    term->cursor_origin = on;
+                    break;
+               // TODO: 1049 save/load cursor for xterm compatibility
+               }
+          }else{
+               switch(args[i]){
+               default:
+                    break;
+               }
+          }
+     }
+}
+
 void* terminal_reader(void* data)
 {
      Terminal_t* term = data;
@@ -92,6 +191,7 @@ void* terminal_reader(void* data)
 
           int csi_arguments[16]; // NPAR, does it exist?
           int csi_argument_index = 0;
+          bool csi_priv = false;
 
           for(int c = 0; c < 16; ++c) csi_arguments[c] = 0;
 
@@ -109,22 +209,205 @@ void* terminal_reader(void* data)
                          }else{
                               switch(*byte){
                               default:
+#if 0
+                                   ce_message("unhandled csi: %c", *byte);
+                                   for(int i = 0; i <= csi_argument_index; ++i){
+                                        ce_message("  arg: %d", csi_arguments[i]);
+                                   }
+#endif
                                    break;
-                              case 'K':
+                              case '@': // insert blank chars
+                              {
+                                   int spaces = 1;
+                                   if(csi_arguments[0]) spaces = csi_arguments[0];
+
+                                   for(int c = 0; c < spaces; c++){
+                                        if(ce_insert_char(term->buffer, term->cursor, ' ')){
+                                             term->cursor.x++;
+
+                                             if(term->cursor.x >= term->width){
+                                                  term->cursor.x = 0;
+                                                  term->cursor.y++;
+                                             }
+                                        }
+                                   }
+                              } break;
+                              case 'A': // move cursor up
+                              {
+                                   int distance = 1;
+                                   if(csi_arguments[0]) distance = csi_arguments[0];
+
+                                   term->cursor.y -= distance;
+                              } break;
+                              case 'B': // move cursor down
+                              case 'e':
+                              {
+                                   int distance = 1;
+                                   if(csi_arguments[0]) distance = csi_arguments[0];
+
+                                   term->cursor.y += distance;
+                              } break;
+                              case 'C': // move cursor forward
+                              case 'a':
+                              {
+                                   int distance = 1;
+                                   if(csi_arguments[0]) distance = csi_arguments[0];
+
+                                   term->cursor.x += distance;
+                              } break;
+                              case 'D': // move cursor backward
+                              {
+                                   int distance = 1;
+                                   if(csi_arguments[0]) distance = csi_arguments[0];
+
+                                   term->cursor.x += distance;
+                              } break;
+                              case 'E': // move cursor down and to first column
+                              {
+                                   int distance = 1;
+                                   if(csi_arguments[0]) distance = csi_arguments[0];
+
+                                   term->cursor.y += distance;
+                                   term->cursor.x = 0;
+                              } break;
+                              case 'F': // move cursor up and to first column
+                              {
+                                   int distance = 1;
+                                   if(csi_arguments[0]) distance = csi_arguments[0];
+
+                                   term->cursor.y -= distance;
+                                   term->cursor.x = 0;
+                              } break;
+                              case 'G': // move to collumn
+                              case '`':
+                              {
+                                   int column = 1;
+                                   if(csi_arguments[0]) column = csi_arguments[0];
+
+                                   term->cursor.x = column - 1;
+                              } break;
+                              case 'H': // move to row column
+                              case 'f':
+                              {
+                                   int column = 1;
+                                   if(csi_arguments[1]) column = csi_arguments[1];
+
+                                   int row = 1;
+                                   if(csi_arguments[0]) row = csi_arguments[0];
+
+                                   term->cursor.x = column - 1;
+                                   term->cursor.y = row - 1;
+                              } break;
+                              case 'J': // clear screen
                                    switch(csi_arguments[0]){
                                    default:
-                                   {
-                                        int64_t len = (strlen(term->buffer->lines[term->cursor.y]) - term->cursor.x);
-                                        for(int64_t r = 0; r < len; ++r){
-                                             Point_t loc = {term->cursor.x + r, term->cursor.y};
-                                             ce_remove_char_readonly(term->buffer, loc);
-                                        }
-                                   } break;
-                                   case 1:
                                         break;
-                                   case 2:
+                                   case 0: // below cursor
+                                        terminal_clear_region(term, term->cursor.x, term->cursor.y, term->width - 1, term->cursor.y);
+                                        if(term->cursor.y < term->height){
+                                             terminal_clear_region(term, 0, term->cursor.y + 1, term->width - 1, term->height - 1);
+                                        }
+                                        break;
+                                   case 1: // above cursor
+                                        terminal_clear_region(term, 0, term->cursor.y, term->cursor.x, term->cursor.y);
+                                        if(term->cursor.y > 0){
+                                             terminal_clear_region(term, 0, 0, term->width - 1, term->cursor.y - 1);
+                                        }
+                                        break;
+                                   case 2: // everthang
+                                        terminal_clear_region(term, 0, 0, term->width - 1, term->cursor.y);
                                         break;
                                    }
+                                   break;
+                              case 'K': // clear line
+                                   switch(csi_arguments[0]){
+                                   default:
+                                        break;
+                                   case 0: // right
+                                        terminal_clear_region(term, term->cursor.x, term->cursor.y, term->width - 1, term->cursor.y);
+                                        break;
+                                   case 1: // left
+                                        terminal_clear_region(term, 0, term->cursor.y, term->cursor.x, term->cursor.y);
+                                        break;
+                                   case 2: // all
+                                        terminal_clear_region(term, 0, term->cursor.y, term->width - 1, term->cursor.y);
+                                        break;
+                                   }
+                                   break;
+                              case 'S':
+                              {
+                                   int lines = 1;
+                                   if(csi_arguments[1]) lines = csi_arguments[1];
+                                   terminal_scroll_up(term, term->scroll_top, lines);
+                              } break;
+                              case 'T':
+                              {
+                                   int lines = 1;
+                                   if(csi_arguments[1]) lines = csi_arguments[1];
+                                   terminal_scroll_down(term, term->scroll_top, lines);
+                              } break;
+                              case 'L': // insert newlines
+                              {
+                                   int lines = 1;
+                                   if(csi_arguments[1]) lines = csi_arguments[1];
+
+                                   for(int l = 0; l < lines; ++l){
+                                        ce_insert_char(term->buffer, term->cursor, '\n');
+                                        term->cursor.y++;
+                                        term->cursor.x = 0;
+                                   }
+                              } break;
+                              case 'M': // delete lines
+                              {
+                                   int characters = 1;
+                                   if(csi_arguments[1]) characters = csi_arguments[1];
+
+                                   for(int c = 0; c < characters; ++c){
+                                        if(ce_remove_line(term->buffer, term->cursor.y)){
+                                             term->cursor.y--;
+                                        }
+                                   }
+                              } break;
+                              case 'X': // erase n characters
+                              {
+                                   int characters = 1;
+                                   if(csi_arguments[1]) characters = csi_arguments[1];
+
+                                   terminal_clear_region(term, term->cursor.x, term->cursor.y, term->cursor.x + characters - 1, term->cursor.y);
+                              } break;
+                              case 'P':
+                              {
+                                   int characters = 1;
+                                   if(csi_arguments[1]) characters = csi_arguments[1];
+
+                                   for(int c = 0; c < characters; ++c){
+                                        ce_remove_char(term->buffer, term->cursor);
+                                   }
+                              } break;
+                              case 'd': // move to row
+                              {
+                                   int row = 1;
+                                   if(csi_arguments[0]) row = csi_arguments[0];
+
+                                   term->cursor.y = row - 1;
+                              } break;
+                              case '?':
+                                   csi_priv = true;
+                                   break;
+                              case 'r': // set scrolling region
+                                   if(!csi_priv){
+                                        int top = 0;
+                                        int bottom = term->scroll_bottom - 1;
+
+                                        terminal_scroll_set(term, top, bottom);
+                                        term->cursor = (Point_t){0, 0};
+                                   }
+                                   break;
+                              case 'h':
+                                   terminal_set_mode(term, csi_priv, true, csi_arguments, csi_argument_index + 1);
+                                   break;
+                              case 'l':
+                                   terminal_set_mode(term, csi_priv, false, csi_arguments, csi_argument_index + 1);
                                    break;
                               case 'm':
                               {
@@ -217,6 +500,7 @@ void* terminal_reader(void* data)
                               }
 
                               csi_argument_index = 0;
+                              csi_priv = false;
 
                               // clear arguments
                               for(int c = 0; c < 16; ++c) csi_arguments[c] = 0;
@@ -265,8 +549,14 @@ void* terminal_reader(void* data)
                     }
                }else{
                     switch(*byte){
-                    case 27: // escape
+                    case '\033': // escape
                          escape = true;
+                         break;
+                    case '\030': // clear csi
+                         csi = false;
+                         csi_argument_index = 0;
+                         csi_priv = false;
+                         for(int c = 0; c < 16; ++c) csi_arguments[c] = 0;
                          break;
                     case '\b': // backspace
                          term->cursor.x--;
@@ -361,7 +651,7 @@ bool terminal_init(Terminal_t* term, int64_t width, int64_t height, Buffer_t* bu
           setenv("USER", pw->pw_name, 1);
           setenv("SHELL", sh, 1);
           setenv("HOME", pw->pw_dir, 1);
-          setenv("TERM", "dumb", 1); // we can change this to "urxvt" when we implement all VT102 commands
+          setenv("TERM", "rxvt", 1);
 
           // reset signal handlers
           signal(SIGCHLD, SIG_DFL);
@@ -551,6 +841,7 @@ char* terminal_get_current_directory(Terminal_t* term)
 
 void terminal_highlight(SyntaxHighlighterData_t* data, void* user_data)
 {
+     return; // skip for now, becuase the underlying has to change!
      if(!user_data) return;
 
      TerminalHighlight_t* terminal_highlight = user_data;

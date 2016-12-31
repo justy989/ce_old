@@ -32,6 +32,11 @@ typedef struct{
      int64_t width;
      int64_t height;
 
+     int64_t scroll_top;
+     int64_t scroll_bottom;
+
+     bool cursor_origin;
+
      pthread_t reader_thread;
 
      pid_t pid;

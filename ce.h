@@ -28,6 +28,14 @@
 #define KEY_ESCAPE 27
 #define KEY_TAB '\t'
 
+#ifdef __APPLE__
+#define RE_WORD_BOUNDARY_START "[[:<:]]"
+#define RE_WORD_BOUNDARY_END   "[[:>:]]"
+#else
+#define RE_WORD_BOUNDARY_START "\\b"
+#define RE_WORD_BOUNDARY_END   "\\b"
+#endif
+
 typedef enum {
      LNT_NONE,
      LNT_ABSOLUTE,

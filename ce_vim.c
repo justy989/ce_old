@@ -633,7 +633,7 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
      if(itr != string){
           int64_t len = itr - string;
           memcpy(tmp, string, len * sizeof(*tmp));
-          tmp[len + 1] = 0;
+          tmp[len] = 0;
           built_action.multiplier = itoi(tmp);
 
           if(built_action.multiplier == 0){
@@ -1585,9 +1585,9 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                     if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) break;
                     char* search_str = ce_dupe_string(buffer, word_start, word_end);
                     int64_t search_len = strlen(search_str);
-                    int64_t word_search_len = search_len + 4; // make room for prepended and appended "\b", word boundaries
+                    int64_t word_search_len = (sizeof RE_WORD_BOUNDARY_START-1) + search_len + (sizeof RE_WORD_BOUNDARY_END-1);
                     char* word_search_str = malloc(word_search_len + 1);
-                    snprintf(word_search_str, word_search_len + 1, "\\b%s\\b", search_str);
+                    snprintf(word_search_str, word_search_len + 1, RE_WORD_BOUNDARY_START "%s" RE_WORD_BOUNDARY_END, search_str);
                     word_search_str[word_search_len] = 0;
                     free(search_str);
 

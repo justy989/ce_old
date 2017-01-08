@@ -30,6 +30,8 @@ LITTLE:
 -we can still hit the drawing bug where config_state->tab_current->view_input_save is null
 -if you make a change and undo, the buffer *sometimes* still says modified
 -we incorrectly highlight search matches sometimes (searches with word boundaries)
+-cannot do '*' on a word at the end of a line
+-pasting into an empty file crashes
 */
 
 #include <assert.h>

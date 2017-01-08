@@ -347,6 +347,19 @@ static int64_t syntax_is_c_typename(const char* line, int64_t start_offset)
           "signed",
           "unsigned",
           "void",
+#if 0
+          // NOTE: Justin uses these in bryte
+          "S8",
+          "S16",
+          "S32",
+          "S64",
+          "U8",
+          "U16",
+          "U32",
+          "U64",
+          "F32",
+          "F64",
+#endif
      };
 
      static const int keyword_count = sizeof(keywords) / sizeof(keywords[0]);
@@ -591,6 +604,8 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
                if(!syntax->inside_string){
                     if((syntax->current_color_left = syntax_is_c_constant_number(line_to_print, data->loc.x))){
                          syntax->current_color = syntax_set_color(S_CONSTANT_NUMBER, syntax->highlight.type);
+                    }else if((syntax->current_color_left = syntax_is_c_typename(line_to_print, data->loc.x))){
+                         syntax->current_color = syntax_set_color(S_TYPE, syntax->highlight.type);
                     }else if((syntax->current_color_left = syntax_is_c_caps_var(line_to_print, data->loc.x))){
                          syntax->current_color = syntax_set_color(S_CONSTANT, syntax->highlight.type);
                     }
@@ -598,8 +613,6 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
                     if(!syntax->current_color_left && !syntax->inside_comment && !syntax->inside_multiline_comment){
                          if((syntax->current_color_left = syntax_is_c_control(line_to_print, data->loc.x))){
                               syntax->current_color = syntax_set_color(S_CONTROL, syntax->highlight.type);
-                         }else if((syntax->current_color_left = syntax_is_c_typename(line_to_print, data->loc.x))){
-                              syntax->current_color = syntax_set_color(S_TYPE, syntax->highlight.type);
                          }else if((syntax->current_color_left = syntax_is_c_keyword(line_to_print, data->loc.x))){
                               syntax->current_color = syntax_set_color(S_KEYWORD, syntax->highlight.type);
                          }else if((syntax->current_color_left = syntax_is_c_preprocessor(line_to_print, data->loc.x))){

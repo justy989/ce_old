@@ -356,9 +356,12 @@ bool initialize_buffer(Buffer_t* buffer){
 
      if(buffer->name){
           int64_t name_len = strlen(buffer->name);
-          if(name_len > 2 &&
-             (strcmp(buffer->name + (name_len - 2), ".c") == 0 ||
-              strcmp(buffer->name + (name_len - 2), ".h") == 0)){
+          if((name_len > 2 &&
+              (strcmp(buffer->name + (name_len - 2), ".c") == 0 ||
+               strcmp(buffer->name + (name_len - 2), ".h") == 0)) ||
+             (name_len > 4 &&
+              (strcmp(buffer->name + (name_len - 4), ".cpp") == 0 ||
+              (strcmp(buffer->name + (name_len - 4), ".hpp") == 0)))){
                buffer->syntax_fn = syntax_highlight_c;
                buffer->syntax_user_data = malloc(sizeof(SyntaxC_t));
                buffer->type = BFT_C;
@@ -2443,7 +2446,10 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     break;
                }
 
-               if(handled_key) ce_keys_free(&config_state->vim_state.command_head);
+               if(handled_key){
+                    key = 0;
+                    ce_keys_free(&config_state->vim_state.command_head);
+               }
           } break;
           case 'm':
           {
@@ -2686,6 +2692,9 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     config_state->do_not_highlight_search = false;
                     center_view_when_cursor_outside_portion(buffer_view, 0.25f, 0.75f);
                }
+
+               // don't save 'g' if we completed an action with it, this ensures we don't use it in the next update
+               if(key == 'g') key = 0;
           } break;
           case VKH_UNHANDLED_KEY:
                switch(key){
@@ -3185,6 +3194,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                                                               config_state->terminal_current->buffer);
                               if(terminal_view){
                                    // if terminal is already in view
+                                   config_state->tab_current->view_previous = config_state->tab_current->view_current; // save previous view
                                    config_state->tab_current->view_current = terminal_view;
                                    buffer_view = terminal_view;
                               }else if(config_state->tab_current->view_overrideable){

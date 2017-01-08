@@ -2692,6 +2692,10 @@ bool ce_get_word_at_location(const Buffer_t* buffer, Point_t location, Point_t* 
           success = ce_get_homogenous_adjacents(buffer, word_start, word_end, ce_iswordchar);
           if(!success) return false;
      }
+
+     // if the end is passed the end of the line, don't include it
+     if(word_end->x > ce_last_index(buffer->lines[word_end->y])) word_end->x--;
+
      return true;
 }
 

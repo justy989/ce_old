@@ -438,6 +438,7 @@ static void syntax_determine_highlight(SyntaxHighlighterData_t* data, SyntaxHigh
 
      if(ce_point_in_range(data->loc, data->buffer->highlight_start, data->buffer->highlight_end)){
           highlight->type = HL_VISUAL;
+          highlight->chars_til_highlight--;
      }else{
           highlight->highlight_left--;
 

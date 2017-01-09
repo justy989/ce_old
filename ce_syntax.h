@@ -77,6 +77,7 @@ typedef struct{
      int64_t highlight_left;
 
      regmatch_t regex_matches[1];
+     bool no_more_matches_on_line;
 }SyntaxHighlight_t;
 
 typedef struct{

@@ -483,7 +483,25 @@ BufferNode_t* new_buffer_from_file(BufferNode_t* head, const char* filename)
      case LF_IS_DIRECTORY:
           return NULL;
      case LF_SUCCESS:
-          break;
+     {
+          // adjust the filepath if it doesn't match our pwd
+          char full_path[PATH_MAX + 1];
+          char* res = realpath(filename, full_path);
+          if(!res) break;
+          free(buffer->name);
+          char cwd[PATH_MAX + 1];
+          if(getcwd(cwd, sizeof(cwd)) != NULL){
+               size_t cwd_len = strlen(cwd);
+               // if the file is in our current directory, only show part of the path
+               if(strncmp(cwd, full_path, cwd_len) == 0){
+                    buffer->name = strdup(full_path + cwd_len + 1);
+               }else{
+                    buffer->name = strdup(full_path);
+               }
+          }else{
+               buffer->name = strdup(full_path);
+          }
+     } break;
      }
 
      if(!initialize_buffer(buffer)){

@@ -347,7 +347,7 @@ static int64_t syntax_is_c_typename(const char* line, int64_t start_offset)
           "signed",
           "unsigned",
           "void",
-#if 0
+#if 1
           // NOTE: Justin uses these in bryte
           "S8",
           "S16",

@@ -497,6 +497,8 @@ bool ce_remove_char_readonly(Buffer_t* buffer, Point_t location)
 
 char* ce_dupe_string(const Buffer_t* buffer, Point_t start, Point_t end)
 {
+     if(!ce_point_on_buffer(buffer, start) || !ce_point_on_buffer(buffer, end)) return NULL;
+
      int64_t total_len = ce_compute_length(buffer, start, end);
      assert(total_len);
 

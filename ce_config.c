@@ -1841,7 +1841,7 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferVi
      attron(COLOR_PAIR(S_VIEW_STATUS));
      mvprintw(view->bottom_right.y, view->top_left.x + 1, " %s%s%s ",
               view == current_view ? mode_names[vim_mode] : "", buffer_flag_string(buffer), buffer->filename);
-#if 1 // NOTE: useful to show key presses when debugging
+#if 0 // NOTE: useful to show key presses when debugging
      if(view == current_view) printw("%s %d ", keyname(last_key), last_key);
 #endif
      if(view == overrideable_view) printw("^ ");

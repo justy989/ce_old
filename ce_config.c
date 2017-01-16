@@ -976,9 +976,10 @@ void* terminal_check_update(void* data)
      while(terminal->is_alive){
           sem_wait(terminal->updated);
 
-          if(config_state->tab_current->view_current->buffer == terminal->buffer){
-               config_state->tab_current->view_current->cursor = terminal->cursor;
-               view_follow_cursor(config_state->tab_current->view_current, LNT_NONE);
+          BufferView_t* terminal_view = ce_buffer_in_view(config_state->tab_current->view_head, terminal->buffer);
+          if(terminal_view){
+               terminal_view->cursor = terminal->cursor;
+               view_follow_cursor(terminal_view, LNT_NONE);
           }
 
           if(config_state->vim_state.mode == VM_INSERT && !terminal->is_alive){
@@ -1840,7 +1841,7 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferVi
      attron(COLOR_PAIR(S_VIEW_STATUS));
      mvprintw(view->bottom_right.y, view->top_left.x + 1, " %s%s%s ",
               view == current_view ? mode_names[vim_mode] : "", buffer_flag_string(buffer), buffer->filename);
-#if 0 // NOTE: useful to show key presses when debugging
+#if 1 // NOTE: useful to show key presses when debugging
      if(view == current_view) printw("%s %d ", keyname(last_key), last_key);
 #endif
      if(view == overrideable_view) printw("^ ");
@@ -2583,6 +2584,19 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                macro_commits_dump(head);
           } break;
 #endif
+          case KEY_ENTER:
+          case -1:
+          {
+               TerminalNode_t* terminal_node = is_terminal_buffer(config_state->terminal_head, buffer);
+               if(terminal_node){
+                    terminal_send_key(&terminal_node->terminal, key);
+                    config_state->vim_state.mode = VM_INSERT;
+                    buffer_view->cursor = terminal_node->terminal.cursor;
+                    view_follow_cursor(buffer_view, config_state->line_number_type);
+                    handled_key = true;
+                    key = 0;
+               }
+          } break;
           }
      }else{
           TerminalNode_t* terminal_node = is_terminal_buffer(config_state->terminal_head, buffer);

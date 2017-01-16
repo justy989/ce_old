@@ -13,6 +13,7 @@ BIG:
 -support tab character
 -multiline regex search/replace
 -dired mode
+-visual block mode
 
 LITTLE:
 -r<enter>

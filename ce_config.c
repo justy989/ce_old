@@ -356,9 +356,12 @@ bool initialize_buffer(Buffer_t* buffer){
 
      if(buffer->name){
           int64_t name_len = strlen(buffer->name);
-          if(name_len > 2 &&
-             (strcmp(buffer->name + (name_len - 2), ".c") == 0 ||
-              strcmp(buffer->name + (name_len - 2), ".h") == 0)){
+          if((name_len > 2 &&
+              (strcmp(buffer->name + (name_len - 2), ".c") == 0 ||
+               strcmp(buffer->name + (name_len - 2), ".h") == 0)) ||
+             (name_len > 4 &&
+              (strcmp(buffer->name + (name_len - 4), ".cpp") == 0 ||
+              (strcmp(buffer->name + (name_len - 4), ".hpp") == 0)))){
                buffer->syntax_fn = syntax_highlight_c;
                buffer->syntax_user_data = malloc(sizeof(SyntaxC_t));
                buffer->type = BFT_C;
@@ -480,7 +483,25 @@ BufferNode_t* new_buffer_from_file(BufferNode_t* head, const char* filename)
      case LF_IS_DIRECTORY:
           return NULL;
      case LF_SUCCESS:
-          break;
+     {
+          // adjust the filepath if it doesn't match our pwd
+          char full_path[PATH_MAX + 1];
+          char* res = realpath(filename, full_path);
+          if(!res) break;
+          free(buffer->name);
+          char cwd[PATH_MAX + 1];
+          if(getcwd(cwd, sizeof(cwd)) != NULL){
+               size_t cwd_len = strlen(cwd);
+               // if the file is in our current directory, only show part of the path
+               if(strncmp(cwd, full_path, cwd_len) == 0){
+                    buffer->name = strdup(full_path + cwd_len + 1);
+               }else{
+                    buffer->name = strdup(full_path);
+               }
+          }else{
+               buffer->name = strdup(full_path);
+          }
+     } break;
      }
 
      if(!initialize_buffer(buffer)){
@@ -955,9 +976,10 @@ void* terminal_check_update(void* data)
      while(terminal->is_alive){
           sem_wait(terminal->updated);
 
-          if(config_state->tab_current->view_current->buffer == terminal->buffer){
-               config_state->tab_current->view_current->cursor = terminal->cursor;
-               view_follow_cursor(config_state->tab_current->view_current, LNT_NONE);
+          BufferView_t* terminal_view = ce_buffer_in_view(config_state->tab_current->view_head, terminal->buffer);
+          if(terminal_view){
+               terminal_view->cursor = terminal->cursor;
+               view_follow_cursor(terminal_view, LNT_NONE);
           }
 
           if(config_state->vim_state.mode == VM_INSERT && !terminal->is_alive){
@@ -2443,7 +2465,10 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     break;
                }
 
-               if(handled_key) ce_keys_free(&config_state->vim_state.command_head);
+               if(handled_key){
+                    key = 0;
+                    ce_keys_free(&config_state->vim_state.command_head);
+               }
           } break;
           case 'm':
           {
@@ -2559,6 +2584,19 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                macro_commits_dump(head);
           } break;
 #endif
+          case KEY_ENTER:
+          case -1:
+          {
+               TerminalNode_t* terminal_node = is_terminal_buffer(config_state->terminal_head, buffer);
+               if(terminal_node){
+                    terminal_send_key(&terminal_node->terminal, key);
+                    config_state->vim_state.mode = VM_INSERT;
+                    buffer_view->cursor = terminal_node->terminal.cursor;
+                    view_follow_cursor(buffer_view, config_state->line_number_type);
+                    handled_key = true;
+                    key = 0;
+               }
+          } break;
           }
      }else{
           TerminalNode_t* terminal_node = is_terminal_buffer(config_state->terminal_head, buffer);
@@ -2686,6 +2724,9 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     config_state->do_not_highlight_search = false;
                     center_view_when_cursor_outside_portion(buffer_view, 0.25f, 0.75f);
                }
+
+               // don't save 'g' if we completed an action with it, this ensures we don't use it in the next update
+               if(key == 'g') key = 0;
           } break;
           case VKH_UNHANDLED_KEY:
                switch(key){
@@ -3185,6 +3226,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                                                               config_state->terminal_current->buffer);
                               if(terminal_view){
                                    // if terminal is already in view
+                                   config_state->tab_current->view_previous = config_state->tab_current->view_current; // save previous view
                                    config_state->tab_current->view_current = terminal_view;
                                    buffer_view = terminal_view;
                               }else if(config_state->tab_current->view_overrideable){

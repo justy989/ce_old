@@ -347,6 +347,19 @@ static int64_t syntax_is_c_typename(const char* line, int64_t start_offset)
           "signed",
           "unsigned",
           "void",
+#if 1
+          // NOTE: Justin uses these in bryte
+          "S8",
+          "S16",
+          "S32",
+          "S64",
+          "U8",
+          "U16",
+          "U32",
+          "U64",
+          "F32",
+          "F64",
+#endif
      };
 
      static const int keyword_count = sizeof(keywords) / sizeof(keywords[0]);
@@ -425,6 +438,7 @@ static void syntax_determine_highlight(SyntaxHighlighterData_t* data, SyntaxHigh
 
      if(ce_point_in_range(data->loc, data->buffer->highlight_start, data->buffer->highlight_end)){
           highlight->type = HL_VISUAL;
+          highlight->chars_til_highlight--;
      }else{
           highlight->highlight_left--;
 
@@ -437,9 +451,13 @@ static void syntax_determine_highlight(SyntaxHighlighterData_t* data, SyntaxHigh
           }
 
           if(data->highlight_regex){
-               if(highlight->chars_til_highlight < 0){
+               if(highlight->chars_til_highlight < 0 && !highlight->no_more_matches_on_line){
                     int regex_rc = regexec(data->highlight_regex, buffer_line + data->loc.x, 1, highlight->regex_matches, 0);
-                    if(regex_rc == 0) highlight->chars_til_highlight = highlight->regex_matches[0].rm_so;
+                    if(regex_rc == 0){
+                         highlight->chars_til_highlight = highlight->regex_matches[0].rm_so;
+                    }else{
+                         highlight->no_more_matches_on_line = true;
+                    }
                }
 
                if(highlight->chars_til_highlight == 0){
@@ -572,6 +590,8 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
                syntax->highlight.type = HL_OFF;
           }
 
+          syntax->highlight.no_more_matches_on_line = false;
+
           if(syntax->inside_multiline_comment){
                syntax->current_color = S_COMMENT;
           }
@@ -591,6 +611,8 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
                if(!syntax->inside_string){
                     if((syntax->current_color_left = syntax_is_c_constant_number(line_to_print, data->loc.x))){
                          syntax->current_color = syntax_set_color(S_CONSTANT_NUMBER, syntax->highlight.type);
+                    }else if((syntax->current_color_left = syntax_is_c_typename(line_to_print, data->loc.x))){
+                         syntax->current_color = syntax_set_color(S_TYPE, syntax->highlight.type);
                     }else if((syntax->current_color_left = syntax_is_c_caps_var(line_to_print, data->loc.x))){
                          syntax->current_color = syntax_set_color(S_CONSTANT, syntax->highlight.type);
                     }
@@ -598,8 +620,6 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
                     if(!syntax->current_color_left && !syntax->inside_comment && !syntax->inside_multiline_comment){
                          if((syntax->current_color_left = syntax_is_c_control(line_to_print, data->loc.x))){
                               syntax->current_color = syntax_set_color(S_CONTROL, syntax->highlight.type);
-                         }else if((syntax->current_color_left = syntax_is_c_typename(line_to_print, data->loc.x))){
-                              syntax->current_color = syntax_set_color(S_TYPE, syntax->highlight.type);
                          }else if((syntax->current_color_left = syntax_is_c_keyword(line_to_print, data->loc.x))){
                               syntax->current_color = syntax_set_color(S_KEYWORD, syntax->highlight.type);
                          }else if((syntax->current_color_left = syntax_is_c_preprocessor(line_to_print, data->loc.x))){
@@ -849,6 +869,8 @@ void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data)
                syntax->highlight.type = HL_OFF;
           }
 
+          syntax->highlight.no_more_matches_on_line = false;
+
           syntax->current_color = syntax_set_color(syntax->current_color, syntax->highlight.type);
      } break;
      case SS_CHARACTER:
@@ -974,6 +996,8 @@ void syntax_highlight_config(SyntaxHighlighterData_t* data, void* user_data)
                syntax->highlight.type = HL_OFF;
           }
 
+          syntax->highlight.no_more_matches_on_line = false;
+
           syntax->current_color = syntax_set_color(syntax->current_color, syntax->highlight.type);
      } break;
      case SS_CHARACTER:
@@ -1057,6 +1081,8 @@ void syntax_highlight_plain(SyntaxHighlighterData_t* data, void* user_data)
                syntax->highlight.type = HL_OFF;
           }
 
+          syntax->highlight.no_more_matches_on_line = false;
+
           syntax_set_color(S_NORMAL, syntax->highlight.type);
      } break;
      case SS_CHARACTER:
@@ -1096,6 +1122,8 @@ void syntax_highlight_diff(SyntaxHighlighterData_t* data, void* user_data)
           }else{
                syntax->highlight.type = HL_OFF;
           }
+
+          syntax->highlight.no_more_matches_on_line = false;
 
           const char* buffer_line = data->buffer->lines[data->loc.y];
 

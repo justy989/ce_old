@@ -561,7 +561,11 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                     }
 
                     // always use the cursor as the start of the visual selection
-                    vim_state->last_action.motion.visual_start_after = true;
+                    if(vim_state->last_action.motion.type == VMT_VISUAL_RANGE ||
+                       vim_state->last_action.motion.type == VMT_VISUAL_LINE){
+                         vim_state->last_action.motion.visual_start_after = true;
+                         vim_state->last_action.motion.visual_length = labs(vim_state->last_action.motion.visual_length);
+                    }
                }
 
                if(recording_macro && recording_macro == vim_state->recording_macro){
@@ -1735,6 +1739,8 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
           *cursor = *action_range.sorted_start;
 
           char* commit_string = ce_dupe_string(buffer, *action_range.sorted_start, *action_range.sorted_end);
+          if(!commit_string) return false;
+
           int64_t len = ce_compute_length(buffer, *action_range.sorted_start, *action_range.sorted_end);
 
           if(!ce_remove_string(buffer, *action_range.sorted_start, len)){

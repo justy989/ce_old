@@ -13,6 +13,7 @@ BIG:
 -support tab character
 -multiline regex search/replace
 -dired mode
+-visual block mode
 
 LITTLE:
 -r<enter>
@@ -23,13 +24,8 @@ LITTLE:
 -user code can infinite loop if you call ce_advance_cursor(buffer, &a, 1) and rely on
  ce_points_equal(a, b) being false when b is at the end of a line.
 -vim's 'ci}' and 'di}' behave differently in a nice way, emulate that
--hit an undo brace bug, unsure how to reproduce. I wrapped some code in an if statement,
- then decided I didn't want the if statement. The closing if statement brace did not get undone.
--visual replace *sometimes* infinite loops
 -syntax highlight printf formatters: '%s'
 -we can still hit the drawing bug where config_state->tab_current->view_input_save is null
--if you make a change and undo, the buffer *sometimes* still says modified
--we incorrectly highlight search matches sometimes (searches with word boundaries)
 */
 
 #include <assert.h>

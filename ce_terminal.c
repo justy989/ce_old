@@ -525,6 +525,8 @@ bool terminal_send_key(Terminal_t* term, int key)
                break;
           default:
                string = keybound(key, 0);
+               if(!string) return false;
+
                size = strlen(string);
                free_string = true;
                break;

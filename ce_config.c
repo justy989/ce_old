@@ -45,7 +45,12 @@ void* draw_limiter(void* user_data)
 {
      ConfigState_t* config_state = user_data;
 
-     while(true){
+     gettimeofday(&config_state->last_draw_time, 0);
+
+     // move it back in time so we always draw immediately
+     config_state->last_draw_time.tv_sec--;
+
+     while(!config_state->quit){
           // limit draw rate
           struct timeval cur_time = {};
           gettimeofday(&cur_time, 0);
@@ -60,7 +65,11 @@ void* draw_limiter(void* user_data)
           config_state->last_draw_time = cur_time;
 
           view_drawer(config_state);
+
+          config_state->draw_necessary = false;
      }
+
+     pthread_exit(NULL);
 }
 
 int64_t count_digits(int64_t n)
@@ -1001,6 +1010,8 @@ void* terminal_check_update(void* data)
 
           config_state->draw_necessary = true;
      }
+
+     pthread_exit(NULL);
 
      return NULL;
 }
@@ -2317,6 +2328,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
      Point_t* cursor = &config_state->tab_current->view_current->cursor;
 
      bool handled_key = false;
+     bool skip_drawing = false;
 
      if(config_state->vim_state.mode != VM_INSERT){
           switch(config_state->last_key){
@@ -2611,6 +2623,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     view_follow_cursor(buffer_view, config_state->line_number_type);
                     handled_key = true;
                     key = 0;
+                    skip_drawing = true;
                }
           } break;
           }
@@ -2627,6 +2640,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          view_follow_cursor(buffer_view, LNT_NONE);
                          handled_key = true;
                          key = 0;
+                         skip_drawing = true;
                     }
                }
           }else{
@@ -2722,6 +2736,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                    terminal_send_key(terminal, *itr);
                                    itr++;
                               }
+                              skip_drawing = true;
                          }
                     }
                }
@@ -3519,6 +3534,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
      if(ce_buffer_in_view(config_state->tab_current->view_head, &config_state->macro_list_buffer)){
           update_macro_list_buffer(config_state);
      }
+
+     if(!skip_drawing) config_state->draw_necessary = true;
 
      return true;
 }

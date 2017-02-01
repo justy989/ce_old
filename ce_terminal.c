@@ -286,6 +286,7 @@ void* terminal_reader(void* data)
 
                          // NOTE: copy the color profile from the end of the previous line
                          term->color_lines[term->buffer->line_count - 1] = *itr;
+                         sem_post(term->updated);
                     } break;
                     case '\r': // Carriage return
                          term->cursor.x = 0;

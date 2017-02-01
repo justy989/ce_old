@@ -560,15 +560,19 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                          }
                     }
 
-                    // always use the cursor as the start of the visual selection
-                    if(vim_state->last_action.motion.type == VMT_VISUAL_RANGE ||
-                       vim_state->last_action.motion.type == VMT_VISUAL_LINE){
+                    // always use the cursor as the start of the visual selection, unless the action was an indent/unindent
+                    if((vim_state->last_action.motion.type == VMT_VISUAL_RANGE ||
+                        vim_state->last_action.motion.type == VMT_VISUAL_LINE) &&
+                       (vim_state->last_action.change.type != VCT_INDENT &&
+                        vim_state->last_action.change.type != VCT_UNINDENT)){
                          vim_state->last_action.motion.visual_start_after = true;
                          vim_state->last_action.motion.visual_length = labs(vim_state->last_action.motion.visual_length);
                     }
                }
 
                if(recording_macro && recording_macro == vim_state->recording_macro){
+                    assert(vim_state->macro_commit_current);
+
                     ce_keys_push(&vim_state->record_macro_head, key);
 
                     if(!vim_state->command_head->next){
@@ -819,10 +823,16 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           break;
      case '>':
           built_action.change.type = VCT_INDENT;
-          break;
+          built_action.end_in_vim_mode = vim_mode;
+          if(built_action.motion.type == VMT_NONE)  built_action.motion.type = VMT_LINE;
+          *action = built_action;
+          return VCS_COMPLETE;
      case '<':
           built_action.change.type = VCT_UNINDENT;
-          break;
+          built_action.end_in_vim_mode = vim_mode;
+          if(built_action.motion.type == VMT_NONE)  built_action.motion.type = VMT_LINE;
+          *action = built_action;
+          return VCS_COMPLETE;
      case '~':
           built_action.change.type = VCT_FLIP_CASE;
           break;
@@ -1151,20 +1161,6 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
                     return VCS_INVALID;
                }
                break;
-          case '<':
-               if(change_char == '<') {
-                    built_action.motion.type = VMT_LINE;
-               }else{
-                    return VCS_INVALID;
-               }
-               break;
-          case '>':
-               if(change_char == '>') {
-                    built_action.motion.type = VMT_LINE;
-               }else{
-                    return VCS_INVALID;
-               }
-               break;
           case '}':
                built_action.motion.type = VMT_NEXT_BLANK_LINE;
                break;
@@ -1224,7 +1220,11 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
           action_range->start = *a;
           action_range->end = *b;
           action_range->start.x = 0;
-          action_range->end.x = strlen(buffer->lines[action_range->end.y]);
+          int last_line = buffer->line_count - 1;
+          int line = action_range->end.y;
+          if(last_line < 0) return false;
+          if(line > last_line) line = last_line;
+          action_range->end.x = strlen(buffer->lines[line]);
           action_range->yank_mode = YANK_LINE;
      }else if(buffer->line_count){ // can't do motions without a buffer !
           int64_t multiplier = action->multiplier * action->motion.multiplier;

@@ -2703,58 +2703,98 @@ bool ce_get_word_at_location(const Buffer_t* buffer, Point_t location, Point_t* 
 
 int64_t ce_get_indentation_for_line(const Buffer_t* buffer, Point_t location, int64_t tab_len)
 {
-     // first, match this line's indentation
-     char curr;
+     if(location.y >= buffer->line_count) return 0;
 
-     // then, check the line for a '{' that is unmatched on location's line + indent if you find one
-     for(int64_t y = location.y; y >= 0; --y){
-          int64_t start_x = last_index_before_comment(buffer, y);
-          if(y == location.y && start_x > location.x) start_x = location.x - 1;
+     switch(buffer->type){
+     default:
+          break;
+     case BFT_PYTHON:
+          for(int64_t y = location.y; y >= 0; --y){
+               const char* itr = buffer->lines[y];
 
-          for(int64_t x = start_x; x >= 0; x--){
-               Point_t iter = {x, y};
-               ce_get_char(buffer, iter, &curr);
+               // find previous line that isn't blank
+               bool blank = true;
 
-               switch(curr){
-               default:
-                    break;
-               case '"':
-                    if(!find_matching_string_backward(buffer, &iter, '"')){
-                         return false;
+               while(*itr){
+                    if(!isblank(*itr)){
+                         blank = false;
+                         break;
                     }
-                    x = iter.x;
-                    y = iter.y;
-                    break;
-               case '\'':
-                    if(!find_matching_string_backward(buffer, &iter, '\'')){
-                         return false;
-                    }
-                    x = iter.x;
-                    y = iter.y;
-                    break;
-               case '{':
-               {
-                    Point_t match = iter;
-                    bool matched = ce_move_cursor_to_matching_pair(buffer, &match, '{');
 
-                    if(ce_point_after(match, location) || ce_points_equal(match, location) || !matched){
-                         // '{' is globally unmatched, or unmatched on our line
-                         Point_t bol = {0, y};
-                         ce_move_cursor_to_soft_beginning_of_line(buffer, &bol);
-                         return bol.x + tab_len; // if a line has "{{", we don't want to double tab the next line!
-                    }
-               } break;
-               case '(':
-               {
-                    Point_t match = iter;
-                    bool matched = ce_move_cursor_to_matching_pair(buffer, &match, '(');
+                    itr++;
+               }
 
-                    if(ce_point_after(match, location) || ce_points_equal(match, location) || !matched){
-                         return iter.x + 1; // if a line has "{{", we don't want to double tab the next line!
+               if(blank) continue;
+
+               // use it as indentation unless it ends in a ':'
+               int indentation = itr - buffer->lines[y];
+
+               while(*itr) itr++;
+               itr--;
+
+               if(*itr == ':') indentation += 5;
+               return indentation;
+          }
+
+          break;
+     case BFT_C:
+     {
+          // first, match this line's indentation
+          char curr;
+
+          // then, check the line for a '{' that is unmatched on location's line + indent if you find one
+          for(int64_t y = location.y; y >= 0; --y){
+               int64_t start_x = last_index_before_comment(buffer, y);
+               if(y == location.y && start_x > location.x) start_x = location.x - 1;
+
+               for(int64_t x = start_x; x >= 0; x--){
+                    Point_t iter = {x, y};
+                    ce_get_char(buffer, iter, &curr);
+
+                    switch(curr){
+                    default:
+                         break;
+                    case '"':
+                         if(!find_matching_string_backward(buffer, &iter, '"')){
+                              return false;
+                         }
+                         x = iter.x;
+                         y = iter.y;
+                         break;
+                    case '\'':
+                         if(!find_matching_string_backward(buffer, &iter, '\'')){
+                              return false;
+                         }
+                         x = iter.x;
+                         y = iter.y;
+                         break;
+                    case '{':
+                    {
+                         Point_t match = iter;
+                         bool matched = ce_move_cursor_to_matching_pair(buffer, &match, '{');
+
+                         if(ce_point_after(match, location) || ce_points_equal(match, location) || !matched){
+                              // '{' is globally unmatched, or unmatched on our line
+                              Point_t bol = {0, y};
+                              ce_move_cursor_to_soft_beginning_of_line(buffer, &bol);
+                              return bol.x + tab_len; // if a line has "{{", we don't want to double tab the next line!
+                         }
+                    } break;
+                    case '(':
+                    {
+                         Point_t match = iter;
+                         bool matched = ce_move_cursor_to_matching_pair(buffer, &match, '(');
+
+                         if(ce_point_after(match, location) || ce_points_equal(match, location) || !matched){
+                              return iter.x + 1; // if a line has "{{", we don't want to double tab the next line!
+                         }
+                    } break;
                     }
-               } break;
                }
           }
+
+          break;
+     }
      }
 
      return 0;

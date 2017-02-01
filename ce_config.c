@@ -47,9 +47,6 @@ void* draw_limiter(void* user_data)
 
      gettimeofday(&config_state->last_draw_time, 0);
 
-     // move it back in time so we always draw immediately
-     config_state->last_draw_time.tv_sec--;
-
      while(!config_state->quit){
           // limit draw rate
           struct timeval cur_time = {};

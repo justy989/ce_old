@@ -8,12 +8,15 @@
 #include <fcntl.h>
 #include <dirent.h>
 #include <sys/ioctl.h>
+#include <sys/time.h>
 #include <signal.h>
 
 #include "ce_config.h"
 #include "ce_syntax.h"
 
 #define SCROLL_LINES 1
+
+void view_drawer(void* user_data);
 
 const char* buffer_flag_string(Buffer_t* buffer)
 {
@@ -36,8 +39,29 @@ void sigint_handler(int signal)
      ce_message("recieved signal %d", signal);
 }
 
-pthread_mutex_t draw_lock;
 pthread_mutex_t view_input_save_lock;
+
+void* draw_limiter(void* user_data)
+{
+     ConfigState_t* config_state = user_data;
+
+     while(true){
+          // limit draw rate
+          struct timeval cur_time = {};
+          gettimeofday(&cur_time, 0);
+
+          long long elapsed = (cur_time.tv_sec - config_state->last_draw_time.tv_sec) * 1000000LL + cur_time.tv_usec - config_state->last_draw_time.tv_usec;
+
+          if(elapsed < LIMIT_FPS || !config_state->draw_necessary){
+               usleep(100);
+               continue;
+          }
+
+          config_state->last_draw_time = cur_time;
+
+          view_drawer(config_state);
+     }
+}
 
 int64_t count_digits(int64_t n)
 {
@@ -50,7 +74,6 @@ int64_t count_digits(int64_t n)
      return count;
 }
 
-void view_drawer(void* user_data);
 
 bool input_history_init(InputHistory_t* history)
 {
@@ -957,18 +980,8 @@ typedef struct{
      TerminalNode_t* terminal_node;
 }TerminalCheckUpdateData_t;
 
-void terminal_check_update_cleanup(void* data)
-{
-     // release locks we could be holding
-     pthread_mutex_unlock(&draw_lock);
-
-     free(data);
-}
-
 void* terminal_check_update(void* data)
 {
-     pthread_cleanup_push(terminal_check_update_cleanup, data);
-
      TerminalCheckUpdateData_t* check_update_data = data;
      ConfigState_t* config_state = check_update_data->config_state;
      Terminal_t* terminal = &check_update_data->terminal_node->terminal;
@@ -986,13 +999,9 @@ void* terminal_check_update(void* data)
                vim_enter_normal_mode(&config_state->vim_state);
           }
 
-          // make sure the other view drawer is done before drawing
-          pthread_mutex_lock(&draw_lock);
-          pthread_mutex_unlock(&draw_lock);
-          view_drawer(config_state);
+          config_state->draw_necessary = true;
      }
 
-     pthread_cleanup_pop(data);
      return NULL;
 }
 
@@ -2062,8 +2071,6 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      define_key(NULL, KEY_ENTER);       // Blow away enter
      define_key("\x0D", KEY_ENTER);     // Enter       (13) (0x0D) ASCII "CR"  NL Carriage Return
 
-     pthread_mutex_init(&draw_lock, NULL);
-
      auto_complete_end(&config_state->auto_complete);
      config_state->vim_state.insert_start = (Point_t){-1, -1};
 
@@ -2142,13 +2149,24 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
           ce_message("failed to register ctrl+c (SIGINT) signal handler.");
      }
 
-     view_drawer(*user_data);
+     // TODO: start drawing thread
+     config_state->draw_necessary = true;
+
+     int rc = pthread_create(&config_state->draw_limiter_thread, NULL, draw_limiter, config_state);
+     if(rc != 0){
+          ce_message("pthread_create() for draw_limiter() failed");
+          return false;
+     }
+
      return true;
 }
 
 bool destroyer(BufferNode_t** head, void* user_data)
 {
      ConfigState_t* config_state = user_data;
+
+     pthread_cancel(config_state->draw_limiter_thread);
+     pthread_join(config_state->draw_limiter_thread, NULL);
 
      // write out file with some state we can use to restore
      {
@@ -2266,8 +2284,6 @@ bool destroyer(BufferNode_t** head, void* user_data)
      // history
      input_history_free(&config_state->search_history);
      input_history_free(&config_state->load_file_history);
-
-     pthread_mutex_destroy(&draw_lock);
 
      auto_complete_free(&config_state->auto_complete);
 
@@ -2605,12 +2621,12 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     Terminal_t* terminal = &terminal_node->terminal;
                     buffer_view->cursor = terminal->cursor;
                     if(terminal_send_key(terminal, key)){
-                         handled_key = true;
-                         key = 0;
                          if(buffer_view->cursor.x < (terminal->width - 1)){
                               buffer_view->cursor.x++;
                          }
                          view_follow_cursor(buffer_view, LNT_NONE);
+                         handled_key = true;
+                         key = 0;
                     }
                }
           }else{
@@ -3504,20 +3520,16 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           update_macro_list_buffer(config_state);
      }
 
-     view_drawer(user_data);
-
      return true;
 }
 
 void view_drawer(void* user_data)
 {
-     // grab the draw lock so we can draw
-     if(pthread_mutex_trylock(&draw_lock) != 0) return;
+     ConfigState_t* config_state = user_data;
 
      // clear all lines in the terminal
      erase();
 
-     ConfigState_t* config_state = user_data;
      Buffer_t* buffer = config_state->tab_current->view_current->buffer;
      BufferView_t* buffer_view = config_state->tab_current->view_current;
      Point_t* cursor = &config_state->tab_current->view_current->cursor;
@@ -3698,6 +3710,4 @@ void view_drawer(void* user_data)
 
      // update the screen with what we drew
      refresh();
-
-     pthread_mutex_unlock(&draw_lock);
 }

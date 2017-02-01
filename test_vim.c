@@ -2039,7 +2039,7 @@ TEST(indent_line)
      ce_append_line(&kht.buffer, original_line);
      kht.cursor.x = 2;
 
-     key_handler_test_run(&kht, ">>");
+     key_handler_test_run(&kht, ">");
      EXPECT(kht.cursor.x == 2 && kht.cursor.y == 0);
      EXPECT(strcmp(kht.buffer.lines[0], "     if(true){") == 0);
 
@@ -2061,13 +2061,13 @@ TEST(indent_multi_line)
      ce_append_line(&kht.buffer, "}");
      kht.cursor.x = 2;
 
-     key_handler_test_run(&kht, "Vjj>>");
+     key_handler_test_run(&kht, "Vjj>");
      EXPECT(kht.cursor.x == 0 && kht.cursor.y == 2);
      EXPECT(strcmp(kht.buffer.lines[0], "     if(tacos.are.the.best){") == 0);
      EXPECT(strcmp(kht.buffer.lines[1], "          eat(tacos);") == 0);
      EXPECT(strcmp(kht.buffer.lines[2], "     }") == 0);
 
-     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     EXPECT(kht.vim_state.mode == VM_VISUAL_LINE);
 
      key_handler_test_undo(&kht);
      EXPECT(strcmp(kht.buffer.lines[0], "if(tacos.are.the.best){") == 0);
@@ -2086,7 +2086,7 @@ TEST(unindent_line)
      ce_append_line(&kht.buffer, original_line);
      kht.cursor.x = 2;
 
-     key_handler_test_run(&kht, "<<");
+     key_handler_test_run(&kht, "<");
      EXPECT(kht.cursor.x == 2 && kht.cursor.y == 0);
      EXPECT(strcmp(kht.buffer.lines[0], "if(true){") == 0);
 
@@ -2108,13 +2108,13 @@ TEST(unindent_multi_line)
      ce_append_line(&kht.buffer, "     }");
      kht.cursor.x = 2;
 
-     key_handler_test_run(&kht, "Vjj<<");
+     key_handler_test_run(&kht, "Vjj<");
      EXPECT(kht.cursor.x == 0 && kht.cursor.y == 2);
      EXPECT(strcmp(kht.buffer.lines[0], "if(tacos.are.the.best){") == 0);
      EXPECT(strcmp(kht.buffer.lines[1], "     eat(tacos);") == 0);
      EXPECT(strcmp(kht.buffer.lines[2], "}") == 0);
 
-     EXPECT(kht.vim_state.mode == VM_NORMAL);
+     EXPECT(kht.vim_state.mode == VM_VISUAL_LINE);
 
      key_handler_test_undo(&kht);
      EXPECT(strcmp(kht.buffer.lines[0], "     if(tacos.are.the.best){") == 0);

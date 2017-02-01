@@ -7,6 +7,8 @@
 #include "ce_vim.h"
 #include "ce_terminal.h"
 
+#define LIMIT_FPS (1000000 / 10)
+
 typedef struct InputHistoryNode_t {
      char* entry;
      struct InputHistoryNode_t* next;
@@ -94,6 +96,10 @@ typedef struct{
      bool do_not_highlight_search;
 
      char* load_file_search_path;
+
+     bool draw_necessary;
+     pthread_t draw_limiter_thread;
+     struct timeval last_draw_time;
 
      bool quit;
 } ConfigState_t;

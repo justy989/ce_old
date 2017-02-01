@@ -824,11 +824,15 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
      case '>':
           built_action.change.type = VCT_INDENT;
           built_action.end_in_vim_mode = vim_mode;
-          break;
+          if(built_action.motion.type == VMT_NONE)  built_action.motion.type = VMT_LINE;
+          *action = built_action;
+          return VCS_COMPLETE;
      case '<':
           built_action.change.type = VCT_UNINDENT;
           built_action.end_in_vim_mode = vim_mode;
-          break;
+          if(built_action.motion.type == VMT_NONE)  built_action.motion.type = VMT_LINE;
+          *action = built_action;
+          return VCS_COMPLETE;
      case '~':
           built_action.change.type = VCT_FLIP_CASE;
           break;
@@ -1152,20 +1156,6 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
                break;
           case 'y':
                if(change_char == 'y') {
-                    built_action.motion.type = VMT_LINE;
-               }else{
-                    return VCS_INVALID;
-               }
-               break;
-          case '<':
-               if(change_char == '<') {
-                    built_action.motion.type = VMT_LINE;
-               }else{
-                    return VCS_INVALID;
-               }
-               break;
-          case '>':
-               if(change_char == '>') {
                     built_action.motion.type = VMT_LINE;
                }else{
                     return VCS_INVALID;

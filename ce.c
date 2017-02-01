@@ -2738,6 +2738,7 @@ int64_t ce_get_indentation_for_line(const Buffer_t* buffer, Point_t location, in
 
           break;
      case BFT_C:
+     case BFT_CONFIG:
      {
           // first, match this line's indentation
           char curr;

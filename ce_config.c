@@ -59,11 +59,11 @@ void* draw_limiter(void* user_data)
                continue;
           }
 
-          config_state->last_draw_time = cur_time;
-
           view_drawer(config_state);
 
           config_state->draw_necessary = false;
+
+          gettimeofday(&config_state->last_draw_time, 0);
      }
 
      pthread_exit(NULL);

@@ -7,7 +7,7 @@
 #include "ce_vim.h"
 #include "ce_terminal.h"
 
-#define LIMIT_FPS (1000000 / 15)
+#define LIMIT_FPS (1000000 / 10)
 
 typedef struct InputHistoryNode_t {
      char* entry;
@@ -97,7 +97,7 @@ typedef struct{
 
      char* load_file_search_path;
 
-     bool draw_necessary;
+     volatile bool draw_necessary;
      pthread_t draw_limiter_thread;
      struct timeval last_draw_time;
 

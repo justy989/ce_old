@@ -560,9 +560,11 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                          }
                     }
 
-                    // always use the cursor as the start of the visual selection
-                    if(vim_state->last_action.motion.type == VMT_VISUAL_RANGE ||
-                       vim_state->last_action.motion.type == VMT_VISUAL_LINE){
+                    // always use the cursor as the start of the visual selection, unless the action was an indent/unindent
+                    if((vim_state->last_action.motion.type == VMT_VISUAL_RANGE ||
+                        vim_state->last_action.motion.type == VMT_VISUAL_LINE) &&
+                       (vim_state->last_action.change.type != VCT_INDENT &&
+                        vim_state->last_action.change.type != VCT_UNINDENT)){
                          vim_state->last_action.motion.visual_start_after = true;
                          vim_state->last_action.motion.visual_length = labs(vim_state->last_action.motion.visual_length);
                     }
@@ -821,9 +823,11 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           break;
      case '>':
           built_action.change.type = VCT_INDENT;
+          built_action.end_in_vim_mode = vim_mode;
           break;
      case '<':
           built_action.change.type = VCT_UNINDENT;
+          built_action.end_in_vim_mode = vim_mode;
           break;
      case '~':
           built_action.change.type = VCT_FLIP_CASE;

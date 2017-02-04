@@ -1285,12 +1285,14 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                case VMT_LINE:
                     action_range->start.x = 0;
                     action_range->end.x = strlen(buffer->lines[action_range->end.y]);
+                    if(action_range->end.y >= buffer->line_count) action_range->end.y = buffer->line_count - 1;
                     action_range->yank_mode = YANK_LINE;
                     break;
                case VMT_LINE_UP:
                     action_range->start.x = 0;
                     action_range->start.y--;
                     if(action_range->start.y < 0) action_range->start.y = 0;
+                    if(action_range->end.y >= buffer->line_count) action_range->end.y = buffer->line_count - 1;
                     action_range->end.x = strlen(buffer->lines[action_range->end.y]);
                     action_range->yank_mode = YANK_LINE;
                     break;

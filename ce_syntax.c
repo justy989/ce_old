@@ -239,6 +239,8 @@ static void syntax_is_c_string_literal(const char* line, int64_t start_offset, i
                     // pass
                }else if(*itr == '.'){
                     // pass
+               }else if(*itr == '_'){
+                    //
                }else if(*itr == '/'){
                     // pass
                }else{

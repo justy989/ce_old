@@ -927,6 +927,8 @@ TEST(insert_indent)
      KeyHandlerTest_t kht;
      key_handler_test_init(&kht);
 
+     kht.buffer.type = BFT_C;
+
      const char* original_line = "if(tacos){";
      ce_append_line(&kht.buffer, original_line);
 
@@ -949,6 +951,8 @@ TEST(insert_indented_brace)
      KeyHandlerTest_t kht;
      key_handler_test_init(&kht);
 
+     kht.buffer.type = BFT_C;
+
      const char* original_line = "if(tacos){";
      ce_append_line(&kht.buffer, original_line);
 
@@ -970,6 +974,8 @@ TEST(insert_indented_paren)
 {
      KeyHandlerTest_t kht;
      key_handler_test_init(&kht);
+
+     kht.buffer.type = BFT_C;
 
      const char* original_line = "if(tacos)";
      ce_append_line(&kht.buffer, original_line);

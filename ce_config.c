@@ -930,6 +930,11 @@ void jump_to_next_shell_command_file_destination(BufferNode_t* head, ConfigState
      }
 }
 
+void move_jump_location_to_end_of_output(TerminalNode_t* terminal_node)
+{
+     terminal_node->last_jump_location = terminal_node->buffer->line_count - 1;
+}
+
 void commit_input_to_history(Buffer_t* input_buffer, InputHistory_t* history)
 {
      if(!input_buffer->line_count) return;
@@ -2398,6 +2403,32 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     Buffer_t* file_buffer = open_file_buffer(*head, filename);
                     if(file_buffer) buffer_view->buffer = file_buffer;
                } break;
+               case 'd':
+               {
+                    TerminalNode_t* term_itr = config_state->terminal_head;
+                    while(term_itr){
+                         if(ce_buffer_in_view(config_state->tab_current->view_head, term_itr->buffer)){
+                              Point_t word_start;
+                              Point_t word_end;
+                              if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) break;
+                              assert(word_start.y == word_end.y);
+                              int len = (word_end.x - word_start.x) + 1;
+
+                              // TODO: create function to send command
+                              char input_buffer[BUFSIZ];
+                              snprintf(input_buffer, BUFSIZ, "cscope -L1%*.*s", len, len, buffer->lines[cursor->y] + word_start.x);
+                              char* input_itr = input_buffer;
+                              while(*input_itr){
+                                   terminal_send_key(&term_itr->terminal, *input_itr);
+                                   input_itr++;
+                              }
+                              move_jump_location_to_end_of_output(term_itr);
+                              terminal_send_key(&term_itr->terminal, KEY_ENTER);
+                              break;
+                         }
+                         term_itr = term_itr->next;
+                    }
+               } break;
                case 'v':
                     config_state->tab_current->view_overrideable = config_state->tab_current->view_current;
                     config_state->tab_current->overriden_buffer = NULL;
@@ -2589,6 +2620,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           {
                TerminalNode_t* terminal_node = is_terminal_buffer(config_state->terminal_head, buffer);
                if(terminal_node){
+                    move_jump_location_to_end_of_output(terminal_node);
                     terminal_send_key(&terminal_node->terminal, key);
                     config_state->vim_state.mode = VM_INSERT;
                     buffer_view->cursor = terminal_node->terminal.cursor;
@@ -2604,6 +2636,9 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                if(key != KEY_ESCAPE){
                     Terminal_t* terminal = &terminal_node->terminal;
                     buffer_view->cursor = terminal->cursor;
+
+                    if(key == KEY_ENTER)  move_jump_location_to_end_of_output(terminal_node);
+
                     if(terminal_send_key(terminal, key)){
                          handled_key = true;
                          key = 0;

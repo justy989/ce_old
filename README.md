@@ -116,6 +116,7 @@ gv|mark the view as overrideable
 gl|cycle through line number modes
 gs|cycle through syntax highlighting modes
 gh|turn off search highlighting (until you search again)
+gd|run cscope goto symbol definition in terminal (if terminal is in view)
 <<|unindent current line or all lines in visual selection
 >>|indent current line or all lines in visual selection
 %|find matching quotes, parents, brackets, square brackets, angled brackets

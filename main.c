@@ -26,6 +26,9 @@ LITTLE:
 -vim's 'ci}' and 'di}' behave differently in a nice way, emulate that
 -syntax highlight printf formatters: '%s'
 -we can still hit the drawing bug where config_state->tab_current->view_input_save is null
+-paste in insert mode
+-ctrl + o
+-support valgrind file destination format
 */
 
 #include <assert.h>

@@ -1046,6 +1046,13 @@ void split_view(BufferView_t* head_view, BufferView_t* current_view, bool horizo
           new_view->cursor = current_view->cursor;
           new_view->top_row = current_view->top_row;
           new_view->left_column = current_view->left_column;
+
+          BufferViewState_t* buffer_view_state = calloc(1, sizeof(*buffer_view_state));
+          if(!buffer_view_state){
+               ce_message("failed to allocate buffer view state");
+          }else{
+               new_view->user_data = buffer_view_state;
+          }
      }
 }
 
@@ -1358,6 +1365,62 @@ void update_macro_list_buffer(ConfigState_t* config_state)
      config_state->macro_list_buffer.status = BS_READONLY;
 }
 
+void view_jump_insert(BufferViewState_t* view_state, const char* filepath, Point_t location)
+{
+     // update data
+     strncpy(view_state->jump_circle[view_state->jump_last].filepath, filepath, PATH_MAX);
+     view_state->jump_circle[view_state->jump_last].location = location;
+
+     // update trackers
+     view_state->jump_current = view_state->jump_last;
+     view_state->jump_last++;
+     if(view_state->jump_last >= JUMP_LIST_MAX) view_state->jump_last = 0;
+}
+
+void view_jump_to_previous(BufferView_t* view, BufferNode_t* buffer_head)
+{
+     BufferViewState_t* view_state = view->user_data;
+
+     Jump_t* jump = view_state->jump_circle + view_state->jump_current;
+     if(!jump->filepath[0]) return; // the jump is empty
+
+     int jump_index = view_state->jump_current;
+
+     jump_index--;
+     if(jump_index < 0) jump_index = (JUMP_LIST_MAX - 1);
+     if(jump_index == view_state->jump_last) return; // we have reach the beginning of the history and cannot go back further
+
+     view_state->jump_current = jump_index;
+
+     view->buffer = open_file_buffer(buffer_head, jump->filepath);
+     view->cursor = jump->location;
+     center_view(view);
+
+     view_state->jumped_to_previous = true;
+}
+
+void view_jump_to_next(BufferView_t* view, BufferNode_t* buffer_head)
+{
+     BufferViewState_t* view_state = view->user_data;
+     int jump_index = view_state->jump_current;
+
+     jump_index++;
+     if(view_state->jumped_to_previous) jump_index++;
+     jump_index %= JUMP_LIST_MAX;
+     if(jump_index == view_state->jump_last) return; // we have reach the end of the history and cannot go further
+
+     Jump_t* jump = view_state->jump_circle + jump_index;
+     if(!jump->filepath[0]) return; // the jump is empty
+
+     view_state->jump_current = jump_index;
+
+     view->buffer = open_file_buffer(buffer_head, jump->filepath);
+     view->cursor = jump->location;
+     center_view(view);
+
+     view_state->jumped_to_previous = false;
+}
+
 Point_t get_cursor_on_terminal(const Point_t* cursor, const BufferView_t* buffer_view, LineNumberType_t line_number_type)
 {
      Point_t p = {cursor->x - buffer_view->left_column + buffer_view->top_left.x,
@@ -1600,6 +1663,11 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                          new_buffer = open_file_buffer(head, config_state->view_input->buffer->lines[i]);
                     }
 
+                    if(i == 0){
+                         view_jump_insert(buffer_view->user_data, config_state->buffer_before_query->filename,
+                                          config_state->buffer_before_query->cursor);
+                    }
+
                     if(!switched_to_open_file && new_buffer){
                          config_state->tab_current->view_current->buffer = new_buffer;
                          config_state->tab_current->view_current->cursor = (Point_t){0, 0};
@@ -1625,6 +1693,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
 
                commit_input_to_history(config_state->view_input->buffer, &config_state->search_history);
                vim_yank_add(&config_state->vim_state.yank_head, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
+               view_jump_insert(buffer_view->user_data, buffer->filename, *cursor);
                break;
           case '?':
                if(!config_state->view_input->buffer->line_count) break;
@@ -1900,6 +1969,14 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
           return false;
      }
 
+     BufferViewState_t* buffer_view_state = calloc(1, sizeof(*buffer_view_state));
+     if(!buffer_view_state){
+          ce_message("failed to allocate buffer view state");
+          return false;
+     }
+
+     config_state->tab_head->view_head->user_data = buffer_view_state;
+
      config_state->view_input = calloc(1, sizeof(*config_state->view_input));
      if(!config_state->view_input){
           ce_message("failed to allocate buffer view for input");
@@ -1975,7 +2052,14 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
                if(i == 0){
                     config_state->tab_current->view_current->buffer = node->buffer;
                }else{
-                    ce_split_view(config_state->tab_current->view_head, node->buffer, true);
+                    BufferView_t* buffer_view = ce_split_view(config_state->tab_current->view_head, node->buffer, true);
+                    BufferViewState_t* buffer_view_state = calloc(1, sizeof(*buffer_view_state));
+                    if(!buffer_view_state){
+                         ce_message("failed to allocate buffer view state");
+                         return false;
+                    }
+
+                    buffer_view->user_data = buffer_view_state;
                }
           }
      }
@@ -2949,6 +3033,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
                               if(empty_first_line) ce_remove_line(config_state->view_input->buffer, 0);
                          }else{
+                              view_jump_insert(buffer_view->user_data, buffer->filename, *cursor);
+
                               buffer->cursor = config_state->tab_current->view_current->cursor;
 
                               // try to find a better place to put the cursor to start
@@ -3462,6 +3548,14 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          split_view(config_state->tab_current->view_head, config_state->tab_current->view_current, true, config_state->line_number_type);
                          resize_terminal_if_in_view(config_state->tab_current->view_head, config_state->terminal_head);
                     } break;
+                    case 15: // ctrl + o
+                         view_jump_to_previous(buffer_view, *head);
+                         handled_key = true;
+                         break;
+                    case 9: // ctrl + i (also tab)
+                         view_jump_to_next(buffer_view, *head);
+                         handled_key = true;
+                         break;
                     }
                }
                break;
@@ -3540,7 +3634,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
      }
 
      view_drawer(user_data);
-
      return true;
 }
 

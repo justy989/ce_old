@@ -2287,6 +2287,7 @@ bool ce_change_buffer_in_views(BufferView_t* head, Buffer_t* match, Buffer_t* ne
           head->left_column = 0;
      }
 
+     free(head->user_data);
      return true;
 }
 

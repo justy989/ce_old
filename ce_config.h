@@ -56,6 +56,20 @@ typedef struct TerminalNode_t{
 }TerminalNode_t;
 
 typedef struct{
+     char filepath[PATH_MAX];
+     Point_t location;
+}Jump_t;
+
+#define JUMP_LIST_MAX 32
+
+typedef struct{
+     Jump_t jump_circle[JUMP_LIST_MAX];
+     int64_t jump_current;
+     int64_t jump_last; // last insert
+     bool jumped_to_previous;
+}BufferViewState_t;
+
+typedef struct{
      bool input;
      const char* input_message;
      int input_key;

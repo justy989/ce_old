@@ -196,6 +196,8 @@ typedef struct BufferView_t {
 
      Buffer_t* buffer;
 
+     void* user_data; // NOTE: free'd by ce_free_views(), TODO: allow user to free, it's just painful to iterate over them manually
+
      struct BufferView_t* next_horizontal;
      struct BufferView_t* next_vertical;
 } BufferView_t;

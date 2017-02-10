@@ -379,6 +379,15 @@ bool initialize_buffer(Buffer_t* buffer){
                     free(buffer_state);
                     return false;
                }
+          }else if(name_len > 3 && strcmp(buffer->name + (name_len - 3), ".sh") == 0){
+               buffer->syntax_fn = syntax_highlight_bash;
+               buffer->syntax_user_data = malloc(sizeof(SyntaxBash_t));
+               buffer->type = BFT_BASH;
+               if(!buffer->syntax_user_data){
+                    ce_message("failed to allocate syntax user data for buffer");
+                    free(buffer_state);
+                    return false;
+               }
           }else if(name_len > 4 && strcmp(buffer->name + (name_len - 4), ".cfg") == 0){
                buffer->syntax_fn = syntax_highlight_config;
                buffer->syntax_user_data = malloc(sizeof(SyntaxConfig_t));
@@ -727,6 +736,63 @@ void scroll_view_to_last_line(BufferView_t* view)
      if(view->top_row < 0) view->top_row = 0;
 }
 
+void view_jump_insert(BufferViewState_t* view_state, const char* filepath, Point_t location)
+{
+     // update data
+     strncpy(view_state->jump_circle[view_state->jump_last].filepath, filepath, PATH_MAX);
+     view_state->jump_circle[view_state->jump_last].location = location;
+
+     // update trackers
+     view_state->jump_current = view_state->jump_last;
+     view_state->jump_last++;
+     if(view_state->jump_last >= JUMP_LIST_MAX) view_state->jump_last = 0;
+}
+
+void view_jump_to_previous(BufferView_t* view, BufferNode_t* buffer_head)
+{
+     BufferViewState_t* view_state = view->user_data;
+
+     Jump_t* jump = view_state->jump_circle + view_state->jump_current;
+     if(!jump->filepath[0]) return; // the jump is empty
+
+     int jump_index = view_state->jump_current;
+
+     jump_index--;
+     if(jump_index < 0) jump_index = (JUMP_LIST_MAX - 1);
+     if(jump_index == view_state->jump_last) return; // we have reach the beginning of the history and cannot go back further
+
+     view_state->jump_current = jump_index;
+
+     view->buffer = open_file_buffer(buffer_head, jump->filepath);
+     view->cursor = jump->location;
+     center_view(view);
+
+     view_state->jumped_to_previous = true;
+}
+
+void view_jump_to_next(BufferView_t* view, BufferNode_t* buffer_head)
+{
+     BufferViewState_t* view_state = view->user_data;
+     int jump_index = view_state->jump_current;
+
+     jump_index++;
+     if(view_state->jumped_to_previous) jump_index++;
+     jump_index %= JUMP_LIST_MAX;
+     if(jump_index == view_state->jump_last) return; // we have reach the end of the history and cannot go further
+
+     Jump_t* jump = view_state->jump_circle + jump_index;
+     if(!jump->filepath[0]) return; // the jump is empty
+
+     view_state->jump_current = jump_index;
+
+     view->buffer = open_file_buffer(buffer_head, jump->filepath);
+     view->cursor = jump->location;
+     center_view(view);
+
+     view_state->jumped_to_previous = false;
+}
+
+
 // NOTE: clear commits then create the initial required entry to restart
 void reset_buffer_commits(BufferCommitNode_t** tail)
 {
@@ -858,6 +924,7 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
      if(line_number_str[0]){
           Buffer_t* new_buffer = open_file_buffer(head, filename);
           if(new_buffer){
+               view_jump_insert(view->user_data, view->buffer->filename, view->cursor);
                view->buffer = new_buffer;
                Point_t dst = {0, atoi(line_number_str) - 1}; // line numbers are 1 indexed
                ce_set_cursor(new_buffer, &view->cursor, dst);
@@ -1363,62 +1430,6 @@ void update_macro_list_buffer(ConfigState_t* config_state)
      ce_append_line(&config_state->macro_list_buffer, "// \\\\ -> \\"); // HAHAHAHAHA
 
      config_state->macro_list_buffer.status = BS_READONLY;
-}
-
-void view_jump_insert(BufferViewState_t* view_state, const char* filepath, Point_t location)
-{
-     // update data
-     strncpy(view_state->jump_circle[view_state->jump_last].filepath, filepath, PATH_MAX);
-     view_state->jump_circle[view_state->jump_last].location = location;
-
-     // update trackers
-     view_state->jump_current = view_state->jump_last;
-     view_state->jump_last++;
-     if(view_state->jump_last >= JUMP_LIST_MAX) view_state->jump_last = 0;
-}
-
-void view_jump_to_previous(BufferView_t* view, BufferNode_t* buffer_head)
-{
-     BufferViewState_t* view_state = view->user_data;
-
-     Jump_t* jump = view_state->jump_circle + view_state->jump_current;
-     if(!jump->filepath[0]) return; // the jump is empty
-
-     int jump_index = view_state->jump_current;
-
-     jump_index--;
-     if(jump_index < 0) jump_index = (JUMP_LIST_MAX - 1);
-     if(jump_index == view_state->jump_last) return; // we have reach the beginning of the history and cannot go back further
-
-     view_state->jump_current = jump_index;
-
-     view->buffer = open_file_buffer(buffer_head, jump->filepath);
-     view->cursor = jump->location;
-     center_view(view);
-
-     view_state->jumped_to_previous = true;
-}
-
-void view_jump_to_next(BufferView_t* view, BufferNode_t* buffer_head)
-{
-     BufferViewState_t* view_state = view->user_data;
-     int jump_index = view_state->jump_current;
-
-     jump_index++;
-     if(view_state->jumped_to_previous) jump_index++;
-     jump_index %= JUMP_LIST_MAX;
-     if(jump_index == view_state->jump_last) return; // we have reach the end of the history and cannot go further
-
-     Jump_t* jump = view_state->jump_circle + jump_index;
-     if(!jump->filepath[0]) return; // the jump is empty
-
-     view_state->jump_current = jump_index;
-
-     view->buffer = open_file_buffer(buffer_head, jump->filepath);
-     view->cursor = jump->location;
-     center_view(view);
-
-     view_state->jumped_to_previous = false;
 }
 
 Point_t get_cursor_on_terminal(const Point_t* cursor, const BufferView_t* buffer_view, LineNumberType_t line_number_type)

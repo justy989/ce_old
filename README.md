@@ -64,6 +64,8 @@ Ctrl+k|move cursor to the view to the above
 Ctrl+l|move cursor to the view to the right
 Ctrl+n|goto the next file definition in the shell command buffer (works with compilation errors, fgrep, git diff, etc)
 Ctrl+p|goto the previous file definition in the shell command buffer (works with compilation errors, fgrep, git diff, etc)
+Ctrl+o|goto previous jump location
+Ctrl+i|goto next jump location
 i|enter insert mode
 esc|enter normal mode
 h|move cursor left

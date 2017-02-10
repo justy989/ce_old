@@ -104,6 +104,7 @@ typedef enum{
      BFT_PLAIN,
      BFT_C,
      BFT_PYTHON,
+     BFT_BASH,
      BFT_CONFIG,
      BFT_DIFF,
      BFT_TERMINAL,

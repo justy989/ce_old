@@ -50,6 +50,15 @@ int64_t count_digits(int64_t n)
      return count;
 }
 
+bool string_all_digits(const char* string)
+{
+     for(const char* c = string; *c; c++){
+          if(!isdigit(*c)) return false;
+     }
+
+     return true;
+}
+
 void view_drawer(void* user_data);
 
 bool input_history_init(InputHistory_t* history)
@@ -828,8 +837,11 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
      filename[filename_start] = '/';
      filename_start++;
 
-     // handle git diff format
+     // check for different file destination formats we understand
      if(buffer->lines[line][0] == '@' && buffer->lines[line][1] == '@'){
+          // handle git diff format
+          // '@@ -1633,9 +1636,26 @@ static int set_color(Syntax_t syntax, HighlightType_t highlight_type)'
+
           // search backward for a filename
           int64_t file_line = line - 1;
           for(;file_line >= 0; --file_line){
@@ -849,7 +861,6 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
           strncpy(filename + filename_start, first_slash + 1, BUFSIZ - filename_start);
           if(access(filename, F_OK) == -1) return false; // file does not exist
 
-          // @@ -1633,9 +1636,26 @@ static int set_color(Syntax_t syntax, HighlightType_t highlight_type)
           char* plus = strchr(buffer->lines[line], '+');
           if(!plus) return false;
           char* comma = strchr(plus, ',');
@@ -859,8 +870,27 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
           assert(line_number_len < BUFSIZ);
           strncpy(line_number_str, plus + 1, line_number_len);
           line_number_str[line_number_len] = 0;
+     }else if(buffer->lines[line][0] == '=' && buffer->lines[line][1] == '='){
+          // handle valgrind format
+          // '==7330==    by 0x638B16A: initializer (ce_config.c:1983)'
+          char* open_paren = strchr(buffer->lines[line], '(');
+          char* close_paren = strchr(buffer->lines[line], ')');
+          if(!open_paren || !close_paren) return false;
+
+          char* file_end = strchr(open_paren, ':');
+          if(!file_end) return false;
+
+          int64_t filename_len = file_end - (open_paren + 1);
+          if(filename_len > (BUFSIZ - filename_start)) return false;
+          strncpy(filename + filename_start, (open_paren + 1), filename_len);
+
+          int64_t line_number_len = (close_paren - file_end) - 1;
+          strncpy(line_number_str, file_end + 1, line_number_len);
+
+          if(!string_all_digits(line_number_str)) return false;
      }else{
           // handle grep and cscope formats
+          // 'ce_config.c:1983:15'
           char* file_end = strpbrk(buffer->lines[line], ": ");
           if(!file_end) return false;
           int64_t filename_len = file_end - buffer->lines[line];
@@ -891,15 +921,7 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
           strncpy(line_number_str, line_number_begin_delim + 1, line_number_len);
           line_number_str[line_number_len] = 0;
 
-          bool all_digits = true;
-          for(char* c = line_number_str; *c; c++){
-               if(!isdigit(*c)){
-                    all_digits = false;
-                    break;
-               }
-          }
-
-          if(!all_digits) return false;
+          if(!string_all_digits(line_number_str)) return false;
 
           char* third_colon = strchr(line_number_end_delim + 1, ':');
           if(third_colon){
@@ -907,17 +929,7 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
                strncpy(column_number_str, line_number_end_delim + 1, line_number_len);
                column_number_str[line_number_len] = 0;
 
-               all_digits = true;
-               for(char* c = column_number_str; *c; c++){
-                    if(!isdigit(*c)){
-                         all_digits = false;
-                         break;
-                    }
-               }
-
-               if(!all_digits){
-                    column_number_str[0] = 0;
-               }
+               if(!string_all_digits(column_number_str)) column_number_str[0] = 0;
           }
      }
 

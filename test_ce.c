@@ -1923,6 +1923,7 @@ TEST(get_indentation_for_line_open_bracket)
 
      Buffer_t buffer = {};
      buffer.line_count = 6;
+     buffer.type = BFT_C;
      buffer.lines = malloc(6 * sizeof(char*));
      buffer.lines[0] = strdup("int is_delicious_cat(cat_t cat){");
      buffer.lines[1] = strdup("     if(is_kitten(cat)){");

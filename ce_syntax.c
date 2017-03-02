@@ -876,6 +876,8 @@ void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data)
 
           // is our cursor on something we can match?
           syntax_calc_matching_pair(data, &syntax->matched_pair);
+
+          if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
      } break;
      case SS_BEGINNING_OF_LINE:
      {
@@ -992,6 +994,8 @@ void syntax_highlight_bash(SyntaxHighlighterData_t* data, void* user_data)
 
           // is our cursor on something we can match?
           syntax_calc_matching_pair(data, &syntax->matched_pair);
+
+          if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
      } break;
      case SS_BEGINNING_OF_LINE:
      {
@@ -1106,6 +1110,8 @@ void syntax_highlight_config(SyntaxHighlighterData_t* data, void* user_data)
 
           // is our cursor on something we can match?
           syntax_calc_matching_pair(data, &syntax->matched_pair);
+
+          if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
      } break;
      case SS_BEGINNING_OF_LINE:
      {
@@ -1207,6 +1213,8 @@ void syntax_highlight_plain(SyntaxHighlighterData_t* data, void* user_data)
      case SS_INITIALIZING:
      {
           syntax->highlight.type = HL_OFF;
+
+          if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
      } break;
      case SS_BEGINNING_OF_LINE:
      {
@@ -1249,6 +1257,8 @@ void syntax_highlight_diff(SyntaxHighlighterData_t* data, void* user_data)
      case SS_INITIALIZING:
      {
           syntax->highlight.type = HL_OFF;
+
+          if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
      } break;
      case SS_BEGINNING_OF_LINE:
      {

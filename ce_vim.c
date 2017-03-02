@@ -1845,7 +1845,8 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                size_t len = strlen(yank->text);
                char* save_str = malloc(len + 2); // newline and '\0'
                Point_t cursor_loc = {0, cursor->y + 1};
-               Point_t insert_loc = {strlen(buffer->lines[cursor->y]), cursor->y};
+               Point_t insert_loc = {0, cursor->y};
+               if(buffer->line_count) insert_loc.x = strlen(buffer->lines[cursor->y]);
 
                save_str[0] = '\n'; // prepend a new line to create a line
                memcpy(save_str + 1, yank->text, len + 1); // also copy the '\0'

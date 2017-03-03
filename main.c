@@ -31,6 +31,7 @@ LITTLE:
 -weird bug with jump lists and '/' in confirm_action()
 -'idea for move action' while in visual mode
 -allow passing file destination format in command line
+-when pasting into terminal, we get garbage every time
 */
 
 #include <assert.h>

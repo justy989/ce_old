@@ -1858,7 +1858,12 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           center_view(buffer_view);
 
           TerminalNode_t* terminal_node = is_terminal_buffer(config_state->terminal_head, itr->buffer);
-          if(terminal_node) config_state->terminal_current = terminal_node;
+          if(terminal_node){
+               int64_t new_width = buffer_view->bottom_right.x - buffer_view->top_left.x;
+               int64_t new_height = buffer_view->bottom_right.y - buffer_view->top_left.y;
+               terminal_resize(&terminal_node->terminal, new_width, new_height);
+               config_state->terminal_current = terminal_node;
+          }
      }else if(buffer_view->buffer == &config_state->mark_list_buffer){
           int64_t line = cursor->y - 1; // account for buffer list row header
           if(line < 0) return;

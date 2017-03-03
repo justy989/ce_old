@@ -63,10 +63,8 @@ typedef struct{
 #define JUMP_LIST_MAX 32
 
 typedef struct{
-     Jump_t jump_circle[JUMP_LIST_MAX];
+     Jump_t jumps[JUMP_LIST_MAX];
      int64_t jump_current;
-     int64_t jump_last; // last insert
-     bool jumped_to_previous;
 }BufferViewState_t;
 
 typedef struct{

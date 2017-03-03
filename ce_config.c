@@ -748,48 +748,56 @@ void scroll_view_to_last_line(BufferView_t* view)
 void view_jump_insert(BufferViewState_t* view_state, const char* filepath, Point_t location)
 {
      // update data
-     strncpy(view_state->jump_circle[view_state->jump_last].filepath, filepath, PATH_MAX);
-     view_state->jump_circle[view_state->jump_last].location = location;
+     int64_t next_index = view_state->jump_current + 1;
+     if(next_index < JUMP_LIST_MAX - 1){
+          strncpy(view_state->jumps[view_state->jump_current].filepath, filepath, PATH_MAX);
+          view_state->jumps[view_state->jump_current].location = location;
 
-     // update trackers
-     view_state->jump_current = view_state->jump_last;
-     view_state->jump_last++;
-     if(view_state->jump_last >= JUMP_LIST_MAX) view_state->jump_last = 0;
+          // clear all jumps afterwards
+          for(int64_t i = next_index; i < JUMP_LIST_MAX; ++i){
+               view_state->jumps[i].filepath[0] = 0;
+          }
+     }else{
+          // TODO: shift down all elements, forgetting the first
+     }
+
+     view_state->jump_current = next_index;
 }
 
 void view_jump_to_previous(BufferView_t* view, BufferNode_t* buffer_head)
 {
      BufferViewState_t* view_state = view->user_data;
 
-     Jump_t* jump = view_state->jump_circle + view_state->jump_current;
+     if(view_state->jump_current == 0) return; // history is empty
+
+     int jump_index = view_state->jump_current - 1;
+     Jump_t* jump = view_state->jumps + jump_index;
      if(!jump->filepath[0]) return; // the jump is empty
 
-     int jump_index = view_state->jump_current;
+     // if this is our first jump, insert our current location
+     if(view_state->jump_current < (JUMP_LIST_MAX)){
+          Jump_t* forward_jump = view_state->jumps + view_state->jump_current + 1;
 
-     jump_index--;
-     if(jump_index < 0) jump_index = (JUMP_LIST_MAX - 1);
-     if(jump_index == view_state->jump_last) return; // we have reach the beginning of the history and cannot go back further
+          if(!forward_jump->filepath[0]){
+               view_jump_insert(view_state, view->buffer->filename, view->cursor);
+          }
+     }
 
      view_state->jump_current = jump_index;
 
      view->buffer = open_file_buffer(buffer_head, jump->filepath);
      view->cursor = jump->location;
      center_view(view);
-
-     view_state->jumped_to_previous = true;
 }
 
 void view_jump_to_next(BufferView_t* view, BufferNode_t* buffer_head)
 {
      BufferViewState_t* view_state = view->user_data;
-     int jump_index = view_state->jump_current;
 
-     jump_index++;
-     if(view_state->jumped_to_previous) jump_index++;
-     jump_index %= JUMP_LIST_MAX;
-     if(jump_index == view_state->jump_last) return; // we have reach the end of the history and cannot go further
+     if(view_state->jump_current >= JUMP_LIST_MAX - 1) return;
 
-     Jump_t* jump = view_state->jump_circle + jump_index;
+     int jump_index = view_state->jump_current + 1;
+     Jump_t* jump = view_state->jumps + jump_index;
      if(!jump->filepath[0]) return; // the jump is empty
 
      view_state->jump_current = jump_index;
@@ -797,10 +805,7 @@ void view_jump_to_next(BufferView_t* view, BufferNode_t* buffer_head)
      view->buffer = open_file_buffer(buffer_head, jump->filepath);
      view->cursor = jump->location;
      center_view(view);
-
-     view_state->jumped_to_previous = false;
 }
-
 
 // NOTE: clear commits then create the initial required entry to restart
 void reset_buffer_commits(BufferCommitNode_t** tail)
@@ -1669,6 +1674,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                     *cursor = (Point_t){0, line - 1};
                     ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
                     center_view(buffer_view);
+                    view_jump_insert(buffer_view->user_data, buffer_view->buffer->filename, buffer_view->cursor);
                }
           } break;
           case 6: // Ctrl + f
@@ -2861,10 +2867,16 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          view_follow_cursor(buffer_view, config_state->line_number_type);
                     }
                }else if(vkh_result.completed_action.motion.type == VMT_SEARCH ||
-                        vkh_result.completed_action.motion.type == VMT_SEARCH_WORD_UNDER_CURSOR ||
-                        vkh_result.completed_action.motion.type == VMT_GOTO_MARK){
+                        vkh_result.completed_action.motion.type == VMT_SEARCH_WORD_UNDER_CURSOR){
                     config_state->do_not_highlight_search = false;
                     center_view_when_cursor_outside_portion(buffer_view, 0.25f, 0.75f);
+               }else if(vkh_result.completed_action.motion.type == VMT_GOTO_MARK){
+                    config_state->do_not_highlight_search = false;
+                    center_view_when_cursor_outside_portion(buffer_view, 0.25f, 0.75f);
+                    view_jump_insert(buffer_view->user_data, buffer_view->buffer->filename, buffer_view->cursor);
+               }else if(vkh_result.completed_action.motion.type == VMT_BEGINNING_OF_FILE ||
+                        vkh_result.completed_action.motion.type == VMT_END_OF_FILE){
+                    view_jump_insert(buffer_view->user_data, buffer_view->buffer->filename, buffer_view->cursor);
                }
 
                // don't save 'g' if we completed an action with it, this ensures we don't use it in the next update

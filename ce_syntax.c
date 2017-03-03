@@ -798,7 +798,10 @@ void syntax_is_python_string(const char* line, int64_t start_offset, char* is_st
 {
      if(*is_string){
           if(line[start_offset] == *is_string){
-               *is_string = 0;
+               // ignore quote's with backslashes in front when we are inside a string already
+               if(start_offset > 0 && line[start_offset - 1] != '\\'){
+                    *is_string = 0;
+               }
           }
      }else{
           if(line[start_offset] == '\'' || line[start_offset] == '"'){

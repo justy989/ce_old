@@ -749,6 +749,7 @@ void view_jump_insert(BufferViewState_t* view_state, const char* filepath, Point
 {
      // update data
      int64_t next_index = view_state->jump_current + 1;
+
      if(next_index < JUMP_LIST_MAX - 1){
           strncpy(view_state->jumps[view_state->jump_current].filepath, filepath, PATH_MAX);
           view_state->jumps[view_state->jump_current].location = location;
@@ -757,11 +758,17 @@ void view_jump_insert(BufferViewState_t* view_state, const char* filepath, Point
           for(int64_t i = next_index; i < JUMP_LIST_MAX; ++i){
                view_state->jumps[i].filepath[0] = 0;
           }
-     }else{
-          // TODO: shift down all elements, forgetting the first
-     }
 
-     view_state->jump_current = next_index;
+          // advance jump index
+          view_state->jump_current = next_index;
+     }else{
+          for(int64_t i = 0; i < JUMP_LIST_MAX; ++i){
+               view_state->jumps[i] = view_state->jumps[i + 1];
+          }
+
+          strncpy(view_state->jumps[view_state->jump_current].filepath, filepath, PATH_MAX);
+          view_state->jumps[view_state->jump_current].location = location;
+     }
 }
 
 void view_jump_to_previous(BufferView_t* view, BufferNode_t* buffer_head)

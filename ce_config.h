@@ -3,9 +3,13 @@
 
 // configuration module to control the editor, builds into ce_config.so and can be rebuilt reloaded at runtime with F5
 
+#include <sys/time.h>
+
 #include "ce.h"
 #include "ce_vim.h"
 #include "ce_terminal.h"
+
+#define DRAW_USEC_LIMIT 66666
 
 typedef struct InputHistoryNode_t {
      char* entry;
@@ -106,6 +110,8 @@ typedef struct{
      bool do_not_highlight_search;
 
      char* load_file_search_path;
+
+     struct timeval last_draw_time;
 
      bool quit;
 } ConfigState_t;

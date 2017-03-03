@@ -1068,6 +1068,8 @@ void* terminal_check_update(void* data)
      TerminalCheckUpdateData_t* check_update_data = data;
      ConfigState_t* config_state = check_update_data->config_state;
      Terminal_t* terminal = &check_update_data->terminal_node->terminal;
+     struct timeval current_time;
+     uint64_t elapsed = 0;
 
      while(terminal->is_alive){
           sem_wait(terminal->updated);
@@ -1076,6 +1078,8 @@ void* terminal_check_update(void* data)
           if(terminal_view){
                terminal_view->cursor = terminal->cursor;
                view_follow_cursor(terminal_view, LNT_NONE);
+          }else{
+               continue;
           }
 
           if(config_state->vim_state.mode == VM_INSERT && !terminal->is_alive){
@@ -1084,8 +1088,16 @@ void* terminal_check_update(void* data)
 
           // make sure the other view drawer is done before drawing
           pthread_mutex_lock(&draw_lock);
-          pthread_mutex_unlock(&draw_lock);
+
+          // wait for our interval limit, before drawing
+          do{
+               gettimeofday(&current_time, NULL);
+               elapsed = (current_time.tv_sec - config_state->last_draw_time.tv_sec) * 1000000LL +
+                         (current_time.tv_usec - config_state->last_draw_time.tv_usec);
+          }while(elapsed < DRAW_USEC_LIMIT);
+
           view_drawer(config_state);
+          pthread_mutex_unlock(&draw_lock);
      }
 
      pthread_cleanup_pop(data);
@@ -2267,7 +2279,10 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
           ce_message("failed to register ctrl+c (SIGINT) signal handler.");
      }
 
-     view_drawer(*user_data);
+     if(pthread_mutex_trylock(&draw_lock) == 0){
+          view_drawer(*user_data);
+          pthread_mutex_unlock(&draw_lock);
+     }
      return true;
 }
 
@@ -3675,15 +3690,17 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           update_macro_list_buffer(config_state);
      }
 
-     view_drawer(user_data);
+     // grab the draw lock so we can draw
+     if(pthread_mutex_trylock(&draw_lock) == 0){
+          view_drawer(user_data);
+          pthread_mutex_unlock(&draw_lock);
+     }
+
      return true;
 }
 
 void view_drawer(void* user_data)
 {
-     // grab the draw lock so we can draw
-     if(pthread_mutex_trylock(&draw_lock) != 0) return;
-
      // clear all lines in the terminal
      erase();
 
@@ -3869,5 +3886,5 @@ void view_drawer(void* user_data)
      // update the screen with what we drew
      refresh();
 
-     pthread_mutex_unlock(&draw_lock);
+     gettimeofday(&config_state->last_draw_time, NULL);
 }

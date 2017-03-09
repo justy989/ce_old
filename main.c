@@ -26,12 +26,12 @@ LITTLE:
 -vim's 'ci}' and 'di}' behave differently in a nice way, emulate that
 -syntax highlight printf formatters: '%s'
 -we can still hit the drawing bug where config_state->tab_current->view_input_save is null
--paste in insert mode
 -load and run arbitrary function
 -weird bug with jump lists and '/' in confirm_action()
 -'idea for move action' while in visual mode
 -allow passing file destination format in command line
 -when pasting into terminal, we get garbage every time
+-when auto completing, use double tab to complete current selection
 */
 
 #include <assert.h>

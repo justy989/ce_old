@@ -2813,6 +2813,21 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          key = 0;
                     }
                     break;
+               case KEY_REDO:
+               {
+                    VimYankNode_t* yank = vim_yank_find(config_state->vim_state.yank_head, '"');
+
+                    if(!yank) break;
+
+                    if(ce_insert_string(buffer, *cursor, yank->text)){
+                         ce_commit_insert_string(&buffer_state->commit_tail, *cursor, *cursor,
+                                                 *cursor, strdup(yank->text), BCC_STOP);
+                         handled_key = true;
+                         key = 0;
+                    }
+
+                    ce_advance_cursor(buffer, cursor, strlen(yank->text));
+               } break;
                }
           }
      }

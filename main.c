@@ -30,8 +30,9 @@ LITTLE:
 -weird bug with jump lists and '/' in confirm_action()
 -'idea for move action' while in visual mode
 -allow passing file destination format in command line
--when pasting into terminal, we get garbage every time
 -when auto completing, use double tab to complete current selection
+-when pasting into terminal in insert mode, we get garbage like every time
+-crash when deleting newly created buffer when trying to free user_data, ce.c in ce_change_buffer_in_views() at line 2291
 */
 
 #include <assert.h>

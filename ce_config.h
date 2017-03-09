@@ -71,6 +71,23 @@ typedef struct{
      int64_t jump_current;
 }BufferViewState_t;
 
+typedef enum{
+     CFAT_NONE,
+     CFAT_INTEGER,
+     CFAT_DECIMAL,
+     CFAT_STRING,
+}CustomFunctionArgType_t;
+
+typedef struct{
+     CustomFunctionArgType_t type;
+
+     union{
+          int64_t integer;
+          double decimal;
+          const char* string;
+     };
+}CustomFunctionArg_t;
+
 typedef struct{
      bool input;
      const char* input_message;

@@ -742,10 +742,7 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           get_motion = false;
           break;
      case 'S':
-          built_action.change.type = VCT_DELETE;
-          built_action.motion.type = VMT_LINE_SOFT;
-          built_action.end_in_vim_mode = VM_INSERT;
-          get_motion = false;
+          built_action.change.type = VCT_SUBSTITUTE;
           break;
      case 'i':
           if(vim_mode == VM_VISUAL_RANGE) { // wait for iw in visual range mode
@@ -2161,6 +2158,62 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
 
           vim_state->playing_macro = 0;
           vim_state->command_head = save_command_head;
+     } break;
+     case VCT_SUBSTITUTE:
+     {
+          VimYankNode_t* yank = vim_yank_find(vim_state->yank_head, action->change.reg ? action->change.reg : '"');
+          if(!yank) return false;
+
+          // delete range
+          *cursor = *action_range.sorted_start;
+
+          char* commit_string = ce_dupe_string(buffer, *action_range.sorted_start, *action_range.sorted_end);
+          if(!commit_string) return false;
+
+          int64_t len = ce_compute_length(buffer, *action_range.sorted_start, *action_range.sorted_end);
+
+          if(!ce_remove_string(buffer, *action_range.sorted_start, len)){
+               free(commit_string);
+               return false;
+          }
+
+          ce_commit_remove_string(commit_tail, *action_range.sorted_start, *cursor, *action_range.sorted_start, commit_string, BCC_KEEP_GOING);
+
+          // paste
+          // TODO: consolidate with paste before
+          switch(yank->mode){
+          default:
+               return false;
+          case YANK_NORMAL:
+          {
+               if(!ce_insert_string(buffer, *action_range.sorted_start, yank->text)){
+                    return false;
+               }
+
+               ce_commit_insert_string(commit_tail,
+                                       *action_range.sorted_start, *action_range.sorted_start, *action_range.sorted_start,
+                                       strdup(yank->text), chain);
+          } break;
+          case YANK_LINE:
+          {
+               size_t len = strlen(yank->text);
+               char* save_str = malloc(len + 2); // newline and '\0'
+               Point_t insert_loc = {0, cursor->y};
+               Point_t cursor_loc = {0, cursor->y};
+
+               save_str[len] = '\n'; // append a new line to create a line
+               save_str[len+1] = '\0';
+               memcpy(save_str, yank->text, len);
+
+               if(!ce_insert_string(buffer, insert_loc, save_str)){
+                    return false;
+               }
+
+               ce_commit_insert_string(commit_tail,
+                                       insert_loc, *cursor, cursor_loc,
+                                       save_str, chain);
+          } break;
+          }
      } break;
      }
 

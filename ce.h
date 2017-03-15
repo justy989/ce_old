@@ -41,7 +41,7 @@ typedef enum {
      LNT_ABSOLUTE,
      LNT_RELATIVE,
      LNT_RELATIVE_AND_ABSOLUTE,
-} LineNumberType_t;
+}LineNumberType_t;
 
 typedef enum {
      HLT_NONE,

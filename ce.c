@@ -78,7 +78,7 @@ LoadFileResult_t ce_load_file(Buffer_t* buffer, const char* filename)
 
      // check if directory
      {
-          struct stat info;
+          struct stat info = {};
           stat(filename, &info);
           if(S_ISDIR(info.st_mode)){
                ce_message("%s() '%s' is a directory.", __FUNCTION__, filename);
@@ -2289,6 +2289,7 @@ bool ce_change_buffer_in_views(BufferView_t* head, Buffer_t* match, Buffer_t* ne
      }
 
      free(head->user_data);
+     head->user_data = NULL;
      return true;
 }
 
@@ -2297,6 +2298,9 @@ bool free_buffer_views(BufferView_t* head)
 {
      if(head->next_horizontal) free_buffer_views(head->next_horizontal);
      if(head->next_vertical) free_buffer_views(head->next_vertical);
+
+     free(head->user_data);
+     head->user_data = NULL;
 
      free(head);
 

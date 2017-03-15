@@ -11,22 +11,22 @@
 
 #define DRAW_USEC_LIMIT 33333
 
-typedef struct InputHistoryNode_t {
+typedef struct InputHistoryNode_t{
      char* entry;
      struct InputHistoryNode_t* next;
      struct InputHistoryNode_t* prev;
-} InputHistoryNode_t;
+}InputHistoryNode_t;
 
-typedef struct {
+typedef struct{
      InputHistoryNode_t* head;
      InputHistoryNode_t* tail;
      InputHistoryNode_t* cur;
-} InputHistory_t;
+}InputHistory_t;
 
 typedef struct{
      BufferCommitNode_t* commit_tail;
      VimBufferState_t vim_buffer_state;
-} BufferState_t;
+}BufferState_t;
 
 typedef struct TabView_t{
      BufferView_t* view_head;
@@ -36,20 +36,20 @@ typedef struct TabView_t{
      BufferView_t* view_overrideable;
      Buffer_t* overriden_buffer;
      struct TabView_t* next;
-} TabView_t;
+}TabView_t;
 
 typedef struct CompleteNode_t{
      char* option;
      struct CompleteNode_t* next;
      struct CompleteNode_t* prev;
-} CompleteNode_t;
+}CompleteNode_t;
 
 typedef struct{
      CompleteNode_t* head;
      CompleteNode_t* tail;
      CompleteNode_t* current;
      Point_t start;
-} AutoComplete_t;
+}AutoComplete_t;
 
 typedef struct TerminalNode_t{
      Terminal_t terminal;
@@ -131,6 +131,6 @@ typedef struct{
      struct timeval last_draw_time;
 
      bool quit;
-} ConfigState_t;
+}ConfigState_t;
 
 #endif

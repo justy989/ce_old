@@ -747,6 +747,8 @@ void scroll_view_to_last_line(BufferView_t* view)
 
 void view_jump_insert(BufferViewState_t* view_state, const char* filepath, Point_t location)
 {
+     if(view_state == NULL) return;
+
      // update data
      int64_t next_index = view_state->jump_current + 1;
 
@@ -2064,11 +2066,12 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      config_state->macro_list_buffer.status = BS_READONLY;
      config_state->macro_list_buffer.absolutely_no_line_numbers_under_any_circumstances = true;
 
-     // if we reload, the shell command buffer may already exist, don't recreate it
+     // if we reload, the completionbuffer may already exist, don't recreate it
      BufferNode_t* itr = *head;
      while(itr){
           if(strcmp(itr->buffer->name, "[completions]") == 0){
                config_state->completion_buffer = itr->buffer;
+               break;
           }
           itr = itr->next;
      }

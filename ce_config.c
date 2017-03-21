@@ -1998,6 +1998,26 @@ void resize_terminal_if_in_view(BufferView_t* view_head, TerminalNode_t* termina
      }
 }
 
+bool run_command_on_terminal_in_view(TerminalNode_t* terminal_head, BufferView_t* view_head, const char* command)
+{
+     TerminalNode_t* term_itr = terminal_head;
+     while(term_itr){
+          if(ce_buffer_in_view(view_head, term_itr->buffer)){
+               while(*command){
+                    terminal_send_key(&term_itr->terminal, *command);
+                    command++;
+               }
+               move_jump_location_to_end_of_output(term_itr);
+               terminal_send_key(&term_itr->terminal, KEY_ENTER);
+               return true;
+          }
+
+          term_itr = term_itr->next;
+     }
+
+     return false;
+}
+
 bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, char** argv, void** user_data)
 {
      // NOTE: need to set these in this module
@@ -2548,29 +2568,27 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                } break;
                case 'd':
                {
-                    TerminalNode_t* term_itr = config_state->terminal_head;
-                    while(term_itr){
-                         if(ce_buffer_in_view(config_state->tab_current->view_head, term_itr->buffer)){
-                              Point_t word_start;
-                              Point_t word_end;
-                              if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) break;
-                              assert(word_start.y == word_end.y);
-                              int len = (word_end.x - word_start.x) + 1;
+                    Point_t word_start;
+                    Point_t word_end;
+                    if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) break;
+                    assert(word_start.y == word_end.y);
+                    int len = (word_end.x - word_start.x) + 1;
 
-                              // TODO: create function to send command
-                              char input_buffer[BUFSIZ];
-                              snprintf(input_buffer, BUFSIZ, "cscope -L1%*.*s", len, len, buffer->lines[cursor->y] + word_start.x);
-                              char* input_itr = input_buffer;
-                              while(*input_itr){
-                                   terminal_send_key(&term_itr->terminal, *input_itr);
-                                   input_itr++;
-                              }
-                              move_jump_location_to_end_of_output(term_itr);
-                              terminal_send_key(&term_itr->terminal, KEY_ENTER);
-                              break;
-                         }
-                         term_itr = term_itr->next;
-                    }
+                    char command[BUFSIZ];
+                    snprintf(command, BUFSIZ, "cscope -L1%*.*s", len, len, buffer->lines[cursor->y] + word_start.x);
+                    run_command_on_terminal_in_view(config_state->terminal_head, config_state->tab_current->view_head, command);
+               } break;
+               case 'b':
+               {
+                    char command[BUFSIZ];
+                    strncpy(command, "make", BUFSIZ);
+                    run_command_on_terminal_in_view(config_state->terminal_head, config_state->tab_current->view_head, command);
+               } break;
+               case 'm':
+               {
+                    char command[BUFSIZ];
+                    strncpy(command, "make clean", BUFSIZ);
+                    run_command_on_terminal_in_view(config_state->terminal_head, config_state->tab_current->view_head, command);
                } break;
                case 'v':
                     config_state->tab_current->view_overrideable = config_state->tab_current->view_current;

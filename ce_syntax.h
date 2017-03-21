@@ -125,6 +125,19 @@ typedef struct{
      int64_t trailing_whitespace_begin;
 
      SyntaxHighlight_t highlight;
+}SyntaxBash_t;
+
+typedef struct{
+     char inside_string;
+
+     int current_color;
+     int64_t current_color_left;
+
+     Point_t matched_pair;
+
+     int64_t trailing_whitespace_begin;
+
+     SyntaxHighlight_t highlight;
 }SyntaxConfig_t;
 
 typedef struct{
@@ -135,6 +148,7 @@ typedef struct{
 void syntax_highlight_plain(SyntaxHighlighterData_t* data, void* user_data);
 void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data);
 void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data);
+void syntax_highlight_bash(SyntaxHighlighterData_t* data, void* user_data);
 void syntax_highlight_config(SyntaxHighlighterData_t* data, void* user_data);
 void syntax_highlight_diff(SyntaxHighlighterData_t* data, void* user_data);
 

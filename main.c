@@ -26,9 +26,15 @@ LITTLE:
 -vim's 'ci}' and 'di}' behave differently in a nice way, emulate that
 -syntax highlight printf formatters: '%s'
 -we can still hit the drawing bug where config_state->tab_current->view_input_save is null
--paste in insert mode
--ctrl + o
--support valgrind file destination format
+-load and run arbitrary function
+-weird bug with jump lists and '/' in confirm_action()
+-'idea for move action' while in visual mode
+-allow passing file destination format in command line
+-when auto completing, use double tab to complete current selection
+-when pasting into terminal in insert mode, we get garbage like every time
+-crash when deleting newly created buffer when trying to free user_data, ce.c in ce_change_buffer_in_views() at line 2291
+-crash when building eg, color_node invalid pointer in ce_terminal.c:603
+-ci( doesn't work when inside another symbol like quotes
 */
 
 #include <assert.h>
@@ -67,7 +73,7 @@ bool config_open(Config_t* config, const char* path)
      }
 
      // TODO: macro?
-     config->path = strdup(path);
+     config->path = strdup(path); // NOTE: leaks when we segfault
      config->initializer = dlsym(config->so_handle, "initializer");
      if(!config->initializer) ce_message("no initializer() found in '%s'", path);
 

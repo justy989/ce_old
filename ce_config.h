@@ -3,26 +3,30 @@
 
 // configuration module to control the editor, builds into ce_config.so and can be rebuilt reloaded at runtime with F5
 
+#include <sys/time.h>
+
 #include "ce.h"
 #include "ce_vim.h"
 #include "ce_terminal.h"
 
-typedef struct InputHistoryNode_t {
+#define DRAW_USEC_LIMIT 33333
+
+typedef struct InputHistoryNode_t{
      char* entry;
      struct InputHistoryNode_t* next;
      struct InputHistoryNode_t* prev;
-} InputHistoryNode_t;
+}InputHistoryNode_t;
 
-typedef struct {
+typedef struct{
      InputHistoryNode_t* head;
      InputHistoryNode_t* tail;
      InputHistoryNode_t* cur;
-} InputHistory_t;
+}InputHistory_t;
 
 typedef struct{
      BufferCommitNode_t* commit_tail;
      VimBufferState_t vim_buffer_state;
-} BufferState_t;
+}BufferState_t;
 
 typedef struct TabView_t{
      BufferView_t* view_head;
@@ -32,20 +36,20 @@ typedef struct TabView_t{
      BufferView_t* view_overrideable;
      Buffer_t* overriden_buffer;
      struct TabView_t* next;
-} TabView_t;
+}TabView_t;
 
 typedef struct CompleteNode_t{
      char* option;
      struct CompleteNode_t* next;
      struct CompleteNode_t* prev;
-} CompleteNode_t;
+}CompleteNode_t;
 
 typedef struct{
      CompleteNode_t* head;
      CompleteNode_t* tail;
      CompleteNode_t* current;
      Point_t start;
-} AutoComplete_t;
+}AutoComplete_t;
 
 typedef struct TerminalNode_t{
      Terminal_t terminal;
@@ -54,6 +58,35 @@ typedef struct TerminalNode_t{
      int64_t last_jump_location;
      struct TerminalNode_t* next;
 }TerminalNode_t;
+
+typedef struct{
+     char filepath[PATH_MAX];
+     Point_t location;
+}Jump_t;
+
+#define JUMP_LIST_MAX 32
+
+typedef struct{
+     Jump_t jumps[JUMP_LIST_MAX];
+     int64_t jump_current;
+}BufferViewState_t;
+
+typedef enum{
+     CFAT_NONE,
+     CFAT_INTEGER,
+     CFAT_DECIMAL,
+     CFAT_STRING,
+}CustomFunctionArgType_t;
+
+typedef struct{
+     CustomFunctionArgType_t type;
+
+     union{
+          int64_t integer;
+          double decimal;
+          const char* string;
+     };
+}CustomFunctionArg_t;
 
 typedef struct{
      bool input;
@@ -95,7 +128,9 @@ typedef struct{
 
      char* load_file_search_path;
 
+     struct timeval last_draw_time;
+
      bool quit;
-} ConfigState_t;
+}ConfigState_t;
 
 #endif

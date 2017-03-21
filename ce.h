@@ -41,7 +41,7 @@ typedef enum {
      LNT_ABSOLUTE,
      LNT_RELATIVE,
      LNT_RELATIVE_AND_ABSOLUTE,
-} LineNumberType_t;
+}LineNumberType_t;
 
 typedef enum {
      HLT_NONE,
@@ -104,6 +104,7 @@ typedef enum{
      BFT_PLAIN,
      BFT_C,
      BFT_PYTHON,
+     BFT_BASH,
      BFT_CONFIG,
      BFT_DIFF,
      BFT_TERMINAL,
@@ -195,6 +196,8 @@ typedef struct BufferView_t {
      int64_t left_column;
 
      Buffer_t* buffer;
+
+     void* user_data; // NOTE: free'd by ce_free_views(), TODO: allow user to free, it's just painful to iterate over them manually
 
      struct BufferView_t* next_horizontal;
      struct BufferView_t* next_vertical;

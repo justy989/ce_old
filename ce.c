@@ -78,7 +78,7 @@ LoadFileResult_t ce_load_file(Buffer_t* buffer, const char* filename)
 
      // check if directory
      {
-          struct stat info;
+          struct stat info = {};
           stat(filename, &info);
           if(S_ISDIR(info.st_mode)){
                ce_message("%s() '%s' is a directory.", __FUNCTION__, filename);
@@ -1489,8 +1489,6 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                     const Point_t* term_bottom_right, const Point_t* buffer_top_left, const regex_t* highlight_regex,
                     LineNumberType_t line_number_type, HighlightLineType_t highlight_line_type)
 {
-     if(!buffer->line_count) return true;
-
      if(!g_terminal_dimensions){
           ce_message("%s() unknown terminal dimensions", __FUNCTION__);
           return false;
@@ -1530,94 +1528,97 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
           return false;
      }
 
-     int64_t max_width = (term_bottom_right->x - term_top_left->x) + 1;
-     int64_t max_height = (term_bottom_right->y - term_top_left->y) + 1;
      int64_t last_line = buffer_top_left->y + (term_bottom_right->y - term_top_left->y);
      int64_t last_line_in_view = last_line;
-     if(last_line >= buffer->line_count) last_line = buffer->line_count - 1;
+          if(last_line >= buffer->line_count) last_line = buffer->line_count - 1;
 
-     standend();
+     if(buffer->line_count){
+          int64_t max_width = (term_bottom_right->x - term_top_left->x) + 1;
+          int64_t max_height = (term_bottom_right->y - term_top_left->y) + 1;
 
-     // figure out how wide the line number margin needs to be
-     int line_number_size = 0;
-     if(!buffer->absolutely_no_line_numbers_under_any_circumstances){
-          line_number_size = ce_get_line_number_column_width(line_number_type, buffer->line_count, buffer_top_left->y, last_line);
-          if(line_number_size){
-               max_width -= line_number_size;
-               line_number_size--;
-          }
-     }
+          standend();
 
-     Point_t buffer_bottom_right = *buffer_top_left;
-     buffer_bottom_right.x += max_width;
-     buffer_bottom_right.y += max_height;
-
-     SyntaxHighlighterData_t syntax_data;
-
-     syntax_data.buffer = buffer;
-     syntax_data.top_left = *buffer_top_left;
-     syntax_data.bottom_right = buffer_bottom_right;
-     syntax_data.cursor = *cursor;
-     syntax_data.highlight_regex = highlight_regex;
-     syntax_data.line_number_type = line_number_type;
-     syntax_data.highlight_line_type = highlight_line_type;
-     syntax_data.state = SS_INITIALIZING;
-     syntax_data.loc = (Point_t){0, buffer_top_left->y};
-
-     if(buffer->syntax_fn) buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
-
-     for(int64_t i = buffer_top_left->y; i <= last_line; ++i) {
-          move(term_top_left->y + (i - buffer_top_left->y), term_top_left->x);
-
-          if(!buffer->absolutely_no_line_numbers_under_any_circumstances && line_number_type){
-               long value = i + 1;
-               if(line_number_type == LNT_RELATIVE || (line_number_type == LNT_RELATIVE_AND_ABSOLUTE && cursor->y != i)){
-                    value = abs((int)(cursor->y - i));
+          // figure out how wide the line number margin needs to be
+          int line_number_size = 0;
+          if(!buffer->absolutely_no_line_numbers_under_any_circumstances){
+               line_number_size = ce_get_line_number_column_width(line_number_type, buffer->line_count, buffer_top_left->y, last_line);
+               if(line_number_size){
+                    max_width -= line_number_size;
+                    line_number_size--;
                }
-               printw("%*d ", line_number_size, value);
           }
 
-          const char* buffer_line = buffer->lines[i];
-          int64_t line_length = strlen(buffer_line);
+          Point_t buffer_bottom_right = *buffer_top_left;
+          buffer_bottom_right.x += max_width;
+          buffer_bottom_right.y += max_height;
 
-          const char* line_to_print = buffer_line + buffer_top_left->x;
-          int64_t print_line_length = strlen(line_to_print);
-          int64_t min = max_width < print_line_length ? max_width : print_line_length;
+          SyntaxHighlighterData_t syntax_data;
 
-          if(buffer->syntax_fn){
-               // call syntax function at the beginning of the line
-               syntax_data.loc = (Point_t){buffer_top_left->x, i};
-               syntax_data.state = SS_BEGINNING_OF_LINE;
-               buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
+          syntax_data.buffer = buffer;
+          syntax_data.top_left = *buffer_top_left;
+          syntax_data.bottom_right = buffer_bottom_right;
+          syntax_data.cursor = *cursor;
+          syntax_data.highlight_regex = highlight_regex;
+          syntax_data.line_number_type = line_number_type;
+          syntax_data.highlight_line_type = highlight_line_type;
+          syntax_data.state = SS_INITIALIZING;
+          syntax_data.loc = (Point_t){0, buffer_top_left->y};
 
-               if(line_length >= buffer_top_left->x){
-                    for(int64_t c = 0; c < min; ++c){
-                         // call syntax function for each character
-                         syntax_data.loc = (Point_t){buffer_top_left->x + c, i};
-                         syntax_data.state = SS_CHARACTER;
-                         buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
+          if(buffer->syntax_fn) buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
 
-                         // print each character
-                         if(isprint(line_to_print[c])){
-                              addch(line_to_print[c]);
-                         }else{
-                              addch(non_printable_repr);
+          for(int64_t i = buffer_top_left->y; i <= last_line; ++i) {
+               move(term_top_left->y + (i - buffer_top_left->y), term_top_left->x);
+
+               if(!buffer->absolutely_no_line_numbers_under_any_circumstances && line_number_type){
+                    long value = i + 1;
+                    if(line_number_type == LNT_RELATIVE || (line_number_type == LNT_RELATIVE_AND_ABSOLUTE && cursor->y != i)){
+                         value = abs((int)(cursor->y - i));
+                    }
+                    printw("%*d ", line_number_size, value);
+               }
+
+               const char* buffer_line = buffer->lines[i];
+               int64_t line_length = strlen(buffer_line);
+
+               const char* line_to_print = buffer_line + buffer_top_left->x;
+               int64_t print_line_length = strlen(line_to_print);
+               int64_t min = max_width < print_line_length ? max_width : print_line_length;
+
+               if(buffer->syntax_fn){
+                    // call syntax function at the beginning of the line
+                    syntax_data.loc = (Point_t){buffer_top_left->x, i};
+                    syntax_data.state = SS_BEGINNING_OF_LINE;
+                    buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
+
+                    if(line_length >= buffer_top_left->x){
+                         for(int64_t c = 0; c < min; ++c){
+                              // call syntax function for each character
+                              syntax_data.loc = (Point_t){buffer_top_left->x + c, i};
+                              syntax_data.state = SS_CHARACTER;
+                              buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
+
+                              // print each character
+                              if(isprint(line_to_print[c])){
+                                   addch(line_to_print[c]);
+                              }else{
+                                   addch(non_printable_repr);
+                              }
                          }
                     }
-               }
 
-               // call syntax function at the end of the line
-               syntax_data.loc = (Point_t){buffer_top_left->x + min, i};
-               syntax_data.state = SS_END_OF_LINE;
-               buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
-          }else{
-               if(line_length >= buffer_top_left->x){
-                    for(int64_t c = 0; c < min; ++c){
-                         // print each character
-                         if(isprint(line_to_print[c])){
-                              addch(line_to_print[c]);
-                         }else{
-                              addch(non_printable_repr);
+                    // call syntax function at the end of the line
+                    syntax_data.loc = (Point_t){buffer_top_left->x + min, i};
+                    syntax_data.state = SS_END_OF_LINE;
+                    buffer->syntax_fn(&syntax_data, buffer->syntax_user_data);
+               }else{
+                    if(line_length >= buffer_top_left->x){
+                         for(int64_t c = 0; c < min; ++c){
+                              // print each character
+                              if(isprint(line_to_print[c])){
+                                   addch(line_to_print[c]);
+                              }else{
+                                   addch(non_printable_repr);
+                              }
                          }
                     }
                }
@@ -2287,6 +2288,8 @@ bool ce_change_buffer_in_views(BufferView_t* head, Buffer_t* match, Buffer_t* ne
           head->left_column = 0;
      }
 
+     free(head->user_data);
+     head->user_data = NULL;
      return true;
 }
 
@@ -2295,6 +2298,9 @@ bool free_buffer_views(BufferView_t* head)
 {
      if(head->next_horizontal) free_buffer_views(head->next_horizontal);
      if(head->next_vertical) free_buffer_views(head->next_vertical);
+
+     free(head->user_data);
+     head->user_data = NULL;
 
      free(head);
 

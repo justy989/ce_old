@@ -2664,6 +2664,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          config_state->tab_current->view_current->cursor = (Point_t){0, 1};
                     }
 
+                    ce_keys_free(&config_state->vim_state.command_head);
+
                     handled_key = true;
                     key = 0;
                }
@@ -2687,6 +2689,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          config_state->tab_current->view_current->cursor = (Point_t){0, 1};
                     }
 
+                    ce_keys_free(&config_state->vim_state.command_head);
                     handled_key = true;
                     key = 0;
                }
@@ -2710,6 +2713,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          config_state->tab_current->view_current->cursor = (Point_t){0, 1};
                     }
 
+                    ce_keys_free(&config_state->vim_state.command_head);
                     handled_key = true;
                     key = 0;
                }
@@ -2741,6 +2745,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          config_state->tab_current->view_current->cursor = (Point_t){0, 1};
                     }
 
+                    ce_keys_free(&config_state->vim_state.command_head);
                     handled_key = true;
                     key = 0;
                }

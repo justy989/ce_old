@@ -2,7 +2,7 @@
 
 [![Build Status](https://travis-ci.org/justy989/ce.svg?branch=master)](https://travis-ci.org/justy989/ce)
 
-###But why?
+### But why?
 - Emacs and Vim are awesome, but they have some problems we'd like to address without having to learn/write
   vimscript or emacs lisp. However, we want to take some awesome ideas from each:
   - Emacs's idea where everything is a just a plain text buffer. We can do things like, run shell
@@ -31,17 +31,17 @@
 - It is fun learning how to make a text editor.
 - Using something on a daily basis that we created gives us the warm and fuzzies.
 
-###How To Build
+### How To Build
 - Requirements
   - c11 compiler
   - ncurses library
 - Step(s)
   - `$ make`
 
-###How To Run
+### How To Run
 `$ ce path/to/file.c`
 
-###Default Keybindings (in normal or visual mode)
+### Default Keybindings (in normal or visual mode)
 Key Sequence|Action
 ------------|------
 Ctrl+f|load file
@@ -118,7 +118,9 @@ gv|mark the view as overrideable
 gl|cycle through line number modes
 gs|cycle through syntax highlighting modes
 gh|turn off search highlighting (until you search again)
-gd|run cscope goto symbol definition in terminal (if terminal is in view)
+gd|run cscope goto symbol definition in terminal (if a terminal is in view)
+gb|run `make` in terminal (if a terminal is in view)
+gm|run `make clean` in terminal (if a terminal is in view)
 <<|unindent current line or all lines in visual selection
 >>|indent current line or all lines in visual selection
 %|find matching quotes, parents, brackets, square brackets, angled brackets
@@ -127,7 +129,7 @@ gd|run cscope goto symbol definition in terminal (if terminal is in view)
 ~|flip case
 F5|reload ce's config
 
-###Cool Shell Commands To Run In ce
+### Cool Shell Commands To Run In ce
 `$ fgrep -n -H <pattern> <files>`  
 `$ fgrep -n -H Buffer ce_config.c`  
 `$ fgrep -n default *`  

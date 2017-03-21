@@ -1660,7 +1660,7 @@ bool calc_auto_complete_start_and_path(AutoComplete_t* auto_complete, const char
      return rc;
 }
 
-void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
+void confirm_action(ConfigState_t* config_state, BufferNode_t* head, void* shared_object_handle)
 {
      BufferView_t* buffer_view = config_state->tab_current->view_current;
      Buffer_t* buffer = buffer_view->buffer;
@@ -1841,6 +1841,22 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                yank->text = new_yank;
                config_state->editting_register = 0;
           } break;
+          case ' ':
+          {
+               Command_t command;
+               if(!command_parse(&command, config_state->view_input->buffer->lines[0])){
+                    ce_message("failed to parse command: '%s'", config_state->view_input->buffer->lines[0]);
+                    return;
+               }
+               char command_name_buffer[BUFSIZ];
+               snprintf(command_name_buffer, BUFSIZ, "command_%s", command.name);
+               ce_command* command_func = dlsym(shared_object_handle, command_name_buffer);
+               if(!command_func){
+                    ce_message("failed to load: '%s'", command.name);
+                    return;
+               }
+               command_func(&command, config_state);
+          } break;
           }
      }else if(buffer_view->buffer == &config_state->buffer_list_buffer){
           int64_t line = cursor->y - 1; // account for buffer list row header
@@ -2016,6 +2032,25 @@ bool run_command_on_terminal_in_view(TerminalNode_t* terminal_head, BufferView_t
      }
 
      return false;
+}
+
+#define ECHO_HELP "usage: echo [string]"
+
+void command_echo(Command_t* command, void* user_data)
+{
+     (void)(user_data);
+
+     if(command->arg_count != 1){
+          ce_message(ECHO_HELP);
+          return;
+     }
+
+     if(command->args[0].type != CAT_STRING){
+          ce_message(ECHO_HELP);
+          return;
+     }
+
+     ce_message("%s", command->args[0].string);
 }
 
 bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, char** argv, void** user_data)
@@ -2460,7 +2495,7 @@ bool destroyer(BufferNode_t** head, void* user_data)
      return true;
 }
 
-bool key_handler(int key, BufferNode_t** head, void* user_data)
+bool key_handler(int key, BufferNode_t** head, void* user_data, void* shared_object_handle)
 {
      ConfigState_t* config_state = user_data;
      Buffer_t* buffer = config_state->tab_current->view_current->buffer;
@@ -2577,6 +2612,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     char command[BUFSIZ];
                     snprintf(command, BUFSIZ, "cscope -L1%*.*s", len, len, buffer->lines[cursor->y] + word_start.x);
                     run_command_on_terminal_in_view(config_state->terminal_head, config_state->tab_current->view_head, command);
+                    jump_to_next_shell_command_file_destination(*head, config_state, true);
                } break;
                case 'b':
                {
@@ -3000,7 +3036,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     }
                     break;
                case 25: // Ctrl + y
-                    confirm_action(config_state, *head);
+                    confirm_action(config_state, *head, shared_object_handle);
                     ce_keys_free(&config_state->vim_state.command_head);
                     break;
                }
@@ -3263,10 +3299,11 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          half_page_down(config_state->tab_current->view_current);
                     } break;
                     case ':':
-                    {
                          input_start(config_state, "Goto Line", key);
-                    }
-                    break;
+                         break;
+                    case ' ':
+                         input_start(config_state, "Command", key);
+                         break;
                     case '/':
                     {
                          input_start(config_state, "Regex Search", key);

@@ -1223,19 +1223,19 @@ TEST(change_change_to_end_of_line)
      key_handler_test_free(&kht);
 }
 
-TEST(change_change_from_soft_beginning_of_line)
+TEST(substitue_from_soft_beginning_of_line)
 {
      KeyHandlerTest_t kht;
      key_handler_test_init(&kht);
 
      const char* original_line = "     if(best.editor == ce){";
      ce_append_line(&kht.buffer, original_line);
-     kht.cursor.x = 10;
+     kht.cursor.x = 5;
 
-     key_handler_test_run(&kht, "SI'm on a boat\\e");
-     EXPECT(kht.cursor.x == 17 && kht.cursor.y == 0);
+     key_handler_test_run(&kht, "yewwSe");
+     EXPECT(kht.cursor.x == 8 && kht.cursor.y == 0);
      EXPECT(kht.vim_state.mode == VM_NORMAL);
-     EXPECT(strcmp(kht.buffer.lines[0], "     I'm on a boat") == 0);
+     EXPECT(strcmp(kht.buffer.lines[0], "     if(if.editor == ce){") == 0);
 
      key_handler_test_undo(&kht);
      EXPECT(strcmp(kht.buffer.lines[0], original_line) == 0);
@@ -1243,7 +1243,7 @@ TEST(change_change_from_soft_beginning_of_line)
      key_handler_test_free(&kht);
 }
 
-TEST(change_change_from_soft_beginning_of_line_dupe)
+TEST(change_change_from_soft_beginning_of_line)
 {
      KeyHandlerTest_t kht;
      key_handler_test_init(&kht);

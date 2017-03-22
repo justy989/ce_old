@@ -71,22 +71,10 @@ typedef struct{
      int64_t jump_current;
 }BufferViewState_t;
 
-typedef enum{
-     CFAT_NONE,
-     CFAT_INTEGER,
-     CFAT_DECIMAL,
-     CFAT_STRING,
-}CustomFunctionArgType_t;
-
 typedef struct{
-     CustomFunctionArgType_t type;
-
-     union{
-          int64_t integer;
-          double decimal;
-          const char* string;
-     };
-}CustomFunctionArg_t;
+     ce_command* func;
+     const char* name;
+}CommandEntry_t;
 
 typedef struct{
      bool input;
@@ -130,7 +118,12 @@ typedef struct{
 
      struct timeval last_draw_time;
 
+     CommandEntry_t* command_entries;
+     int64_t command_entry_count;
+
      bool quit;
+
+     BufferNode_t** save_buffer_head;
 }ConfigState_t;
 
 #endif

@@ -445,7 +445,10 @@ static void syntax_determine_highlight(SyntaxHighlighterData_t* data, SyntaxHigh
           highlight->highlight_left--;
 
           if(highlight->highlight_left <= 0){
-               if(data->highlight_line_type && data->loc.y == data->cursor.y){
+               if(ce_points_equal(data->loc, data->buffer->mark)){
+                    highlight->type = HL_VISUAL;
+                    highlight->highlight_left = 1;
+               }else if(data->highlight_line_type && data->loc.y == data->cursor.y){
                     highlight->type = HL_CURRENT_LINE;
                }else{
                     highlight->type = HL_OFF;

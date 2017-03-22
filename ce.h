@@ -9,6 +9,7 @@
 #include <ncurses.h>
 #include <errno.h>
 #include <regex.h>
+#include <dlfcn.h>
 
 #define CE_CONFIG "ce_config.so"
 #define MESSAGE_FILE "messages"
@@ -118,8 +119,11 @@ typedef struct Buffer_t{
      BufferFileType_t type;
 
      Point_t cursor;
+
+     // TODO: these are used for drawing, consider passing them as arguments?
      Point_t highlight_start;
      Point_t highlight_end;
+     Point_t mark;
 
      union {
           char* filename;
@@ -222,12 +226,39 @@ typedef struct KeyNode_t{
      struct KeyNode_t* next;
 } KeyNode_t;
 
+typedef enum{
+     CAT_INTEGER,
+     CAT_DECIMAL,
+     CAT_STRING,
+     CAT_COUNT
+}CommandArgType_t;
+
+typedef struct{
+     CommandArgType_t type;
+
+     union{
+          int64_t integer;
+          double decimal;
+          char* string;
+     };
+}CommandArg_t;
+
+#define COMMAND_NAME_MAX_LEN 128
+
+typedef struct{
+     char name[COMMAND_NAME_MAX_LEN];
+     CommandArg_t* args;
+     int64_t arg_count;
+}Command_t;
+
 extern Point_t* g_terminal_dimensions;
 
 // CE Configuration-Defined Functions
 typedef bool ce_initializer (BufferNode_t**, Point_t*, int, char**, void**);
 typedef void ce_destroyer   (BufferNode_t**, void*);
 typedef bool ce_key_handler (int, BufferNode_t**, void*);
+
+typedef void ce_command (Command_t*, void*);
 
 
 // BufferList Manipulation Functions
@@ -357,6 +388,10 @@ int64_t ce_get_line_number_column_width(LineNumberType_t line_number_type, int64
 KeyNode_t* ce_keys_push(KeyNode_t** head, int key);
 int* ce_keys_get_string(KeyNode_t* head);
 void ce_keys_free(KeyNode_t** head);
+
+// Commands
+bool command_parse(Command_t* command, const char* string);
+void command_free(Command_t* command);
 
 // Misc. Utility Functions
 int64_t ce_count_string_lines   (const char* string);

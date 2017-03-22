@@ -939,6 +939,11 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           built_action.end_in_vim_mode = vim_mode;
           get_motion = false;
           break;
+     case KEY_ENTER:
+          built_action.change.type = VCT_SET_MARK;
+          built_action.change.reg = '0';
+          get_motion = false;
+          break;
      case 'm':
           built_action.change.type = VCT_SET_MARK;
           built_action.change.reg = *(++itr);
@@ -960,6 +965,12 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           if(!isprint(built_action.motion.reg)){
                return VCS_INVALID;
           }
+          get_motion = false;
+          break;
+     case ' ':
+          built_action.change.type = VCT_MOTION;
+          built_action.motion.type = VMT_GOTO_MARK;
+          built_action.motion.reg = '0';
           get_motion = false;
           break;
      }
@@ -1642,7 +1653,7 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                          if(ce_find_regex(buffer, search_start, &vim_state->search.regex, &match, &match_len, vim_state->search.direction)){
                               ce_set_cursor(buffer, &action_range->end, match);
                          }else{
-                              ce_message("failed to find match for '%s'", yank->text);
+                              //ce_message("failed to find match for '%s'", yank->text);
                               action_range->end = *cursor;
                               return false;
                          }
@@ -1651,8 +1662,10 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                case VMT_GOTO_MARK:
                {
                     Point_t* marked_location = vim_mark_find(vim_buffer_state->mark_head, action->motion.reg);
-                    if(marked_location) {
-                         ce_move_cursor_to_soft_beginning_of_line(buffer, marked_location);
+                    if(marked_location && marked_location->y < buffer->line_count){
+                         if(marked_location->x >= (int64_t)(strlen(buffer->lines[marked_location->y]))){
+                              ce_move_cursor_to_soft_beginning_of_line(buffer, marked_location);
+                         }
                          action_range->end = *marked_location;
                     }
                } break;

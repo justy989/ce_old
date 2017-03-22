@@ -35,6 +35,7 @@ LITTLE:
 -crash when deleting newly created buffer when trying to free user_data, ce.c in ce_change_buffer_in_views() at line 2291
 -crash when building eg, color_node invalid pointer in ce_terminal.c:603
 -ci( doesn't work when inside another symbol like quotes
+-'gf' or 'goto file under cursor' is often wrong
 */
 
 #include <assert.h>
@@ -151,6 +152,7 @@ const char* random_greeting()
           "ce, aka, 'the cache miss king'",
           "All the terminal you want with none of the illness",
           "I used ce before it was cool",
+          "'Where has this been all my life' -emacs enthusiast",
      };
 
      srand(time(NULL));

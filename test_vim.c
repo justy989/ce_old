@@ -1747,6 +1747,7 @@ TEST(mark_set_goto)
      ce_append_line(&kht.buffer, "if(true){");
      ce_append_line(&kht.buffer, "     printf(\"\\n\");");
      ce_append_line(&kht.buffer, "}");
+     kht.cursor.x = 5;
      kht.cursor.y = 1;
 
      key_handler_test_run(&kht, "maj'a");

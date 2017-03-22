@@ -1642,7 +1642,7 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                          if(ce_find_regex(buffer, search_start, &vim_state->search.regex, &match, &match_len, vim_state->search.direction)){
                               ce_set_cursor(buffer, &action_range->end, match);
                          }else{
-                              ce_message("failed to find match for '%s'", yank->text);
+                              //ce_message("failed to find match for '%s'", yank->text);
                               action_range->end = *cursor;
                               return false;
                          }

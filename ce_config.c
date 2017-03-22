@@ -2053,6 +2053,137 @@ void command_echo(Command_t* command, void* user_data)
      ce_message("%s", command->args[0].string);
 }
 
+#define RELOAD_BUFFER_HELP "usage: reload_buffer"
+
+void command_reload_buffer(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message(RELOAD_BUFFER_HELP);
+          return;
+     }
+
+     ConfigState_t* config_state = (ConfigState_t*)(user_data);
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Buffer_t* buffer = buffer_view->buffer;
+
+     if(access(buffer->filename, R_OK) != 0){
+          ce_message("failed to read %s: %s", buffer->filename, strerror(errno));
+          return;
+     }
+
+     // reload file
+     if(buffer->status == BS_READONLY){
+          // NOTE: maybe ce_clear_lines shouldn't care about readonly
+          ce_clear_lines_readonly(buffer);
+     }else{
+          ce_clear_lines(buffer);
+     }
+
+     ce_load_file(buffer, buffer->filename);
+     ce_clamp_cursor(buffer, &buffer_view->cursor);
+}
+
+static void command_syntax_help()
+{
+     ce_message("usage: syntax [string]");
+     ce_message(" supported styles: 'c', 'python', 'config', 'diff', 'plain'");
+}
+
+void command_syntax(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 1){
+          command_syntax_help();
+          return;
+     }
+
+     if(command->args[0].type != CAT_STRING){
+          command_syntax_help();
+          return;
+     }
+
+     ConfigState_t* config_state = (ConfigState_t*)(user_data);
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Buffer_t* buffer = buffer_view->buffer;
+
+     if(strcmp(command->args[0].string, "c") == 0){
+          ce_message("syntax 'c' now on %s", buffer->filename);
+          buffer->syntax_fn = syntax_highlight_c;
+          free(buffer->syntax_user_data);
+          buffer->syntax_user_data = malloc(sizeof(SyntaxC_t));
+          buffer->type = BFT_C;
+     }else if(strcmp(command->args[0].string, "python") == 0){
+          ce_message("syntax 'python' now on %s", buffer->filename);
+          buffer->syntax_fn = syntax_highlight_python;
+          free(buffer->syntax_user_data);
+          buffer->syntax_user_data = malloc(sizeof(SyntaxPython_t));
+          buffer->type = BFT_PYTHON;
+     }else if(strcmp(command->args[0].string, "config") == 0){
+          ce_message("syntax 'config' now on %s", buffer->filename);
+          buffer->syntax_fn = syntax_highlight_config;
+          free(buffer->syntax_user_data);
+          buffer->syntax_user_data = malloc(sizeof(SyntaxConfig_t));
+          buffer->type = BFT_CONFIG;
+     }else if(strcmp(command->args[0].string, "diff") == 0){
+          ce_message("syntax 'diff' now on %s", buffer->filename);
+          buffer->syntax_fn = syntax_highlight_diff;
+          free(buffer->syntax_user_data);
+          buffer->syntax_user_data = malloc(sizeof(SyntaxDiff_t));
+          buffer->type = BFT_DIFF;
+     }else if(strcmp(command->args[0].string, "plain") == 0){
+          ce_message("syntax 'plain' now on %s", buffer->filename);
+          buffer->syntax_fn = syntax_highlight_plain;
+          free(buffer->syntax_user_data);
+          buffer->syntax_user_data = malloc(sizeof(SyntaxPlain_t));
+          buffer->type = BFT_PLAIN;
+     }else{
+          ce_message("unknown syntax '%s'", command->args[0].string);
+     }
+}
+
+static void command_line_number_help()
+{
+     ce_message("usage: line_number [string]");
+     ce_message(" supported modes: 'none', 'absolute', 'relative', 'both'");
+}
+
+#define NOH_HELP "usage: noh"
+
+void command_noh(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message(NOH_HELP);
+          return;
+     }
+
+     ConfigState_t* config_state = (ConfigState_t*)(user_data);
+     config_state->do_not_highlight_search = true;
+}
+
+void command_line_number(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 1){
+          command_line_number_help();
+          return;
+     }
+
+     if(command->args[0].type != CAT_STRING){
+          command_line_number_help();
+          return;
+     }
+
+     ConfigState_t* config_state = (ConfigState_t*)(user_data);
+
+     if(strcmp(command->args[0].string, "none") == 0){
+          config_state->line_number_type = LNT_NONE;
+     }else if(strcmp(command->args[0].string, "absolute") == 0){
+          config_state->line_number_type = LNT_ABSOLUTE;
+     }else if(strcmp(command->args[0].string, "relative") == 0){
+          config_state->line_number_type = LNT_RELATIVE;
+     }else if(strcmp(command->args[0].string, "both") == 0){
+          config_state->line_number_type = LNT_RELATIVE_AND_ABSOLUTE;
+     }
+}
+
 bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, char** argv, void** user_data)
 {
      // NOTE: need to set these in this module
@@ -2563,25 +2694,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data, void* shared_obj
                          config_state->tab_current = itr;
                     }
                     break;
-               case 'r': // reload file
-               {
-                    ce_message("reloading %s", buffer->filename);
-                    if(access(buffer->filename, R_OK) != 0){
-                         ce_message("failed to read %s: %s", buffer->filename, strerror(errno));
-                         break;
-                    }
-
-                    // reload file
-                    if(buffer->status == BS_READONLY){
-                         // NOTE: maybe ce_clear_lines shouldn't care about readonly
-                         ce_clear_lines_readonly(buffer);
-                    }else{
-                         ce_clear_lines(buffer);
-                    }
-
-                    ce_load_file(buffer, buffer->filename);
-                    ce_clamp_cursor(buffer, &buffer_view->cursor);
-               } break;
                case 'f':
                {
                     if(!buffer->lines[cursor->y]) break;
@@ -2651,43 +2763,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data, void* shared_obj
                     // quit !
                     return false;
                }
-               case 's':
-               {
-                    if(buffer->syntax_fn == syntax_highlight_plain){
-                         ce_message("syntax 'c' now on %s", buffer->filename);
-                         buffer->syntax_fn = syntax_highlight_c;
-                         free(buffer->syntax_user_data);
-                         buffer->syntax_user_data = malloc(sizeof(SyntaxC_t));
-                         buffer->type = BFT_C;
-                    }else if(buffer->syntax_fn == syntax_highlight_c){
-                         ce_message("syntax 'python' now on %s", buffer->filename);
-                         buffer->syntax_fn = syntax_highlight_python;
-                         free(buffer->syntax_user_data);
-                         buffer->syntax_user_data = malloc(sizeof(SyntaxPython_t));
-                         buffer->type = BFT_PYTHON;
-                    }else if(buffer->syntax_fn == syntax_highlight_python){
-                         ce_message("syntax 'config' now on %s", buffer->filename);
-                         buffer->syntax_fn = syntax_highlight_config;
-                         free(buffer->syntax_user_data);
-                         buffer->syntax_user_data = malloc(sizeof(SyntaxConfig_t));
-                         buffer->type = BFT_CONFIG;
-                    }else if(buffer->syntax_fn == syntax_highlight_config){
-                         ce_message("syntax 'diff' now on %s", buffer->filename);
-                         buffer->syntax_fn = syntax_highlight_diff;
-                         free(buffer->syntax_user_data);
-                         buffer->syntax_user_data = malloc(sizeof(SyntaxDiff_t));
-                         buffer->type = BFT_DIFF;
-                    }else if(buffer->syntax_fn == syntax_highlight_diff){
-                         ce_message("syntax 'plain' now on %s", buffer->filename);
-                         buffer->syntax_fn = syntax_highlight_plain;
-                         free(buffer->syntax_user_data);
-                         buffer->syntax_user_data = malloc(sizeof(SyntaxPlain_t));
-                         buffer->type = BFT_PLAIN;
-                    }
-               } break;
-               case 'h':
-                    config_state->do_not_highlight_search = true;
-                    break;
                case 'n':
                     input_start(config_state, "Rename Buffer", key);
                     break;
@@ -2895,6 +2970,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data, void* shared_obj
      }
 
      if(!handled_key){
+          Point_t save_cursor = *cursor;
           VimKeyHandlerResult_t vkh_result = vim_key_handler(key, &config_state->vim_state, config_state->tab_current->view_current->buffer,
                                                              &config_state->tab_current->view_current->cursor, &buffer_state->commit_tail,
                                                              &buffer_state->vim_buffer_state, false);
@@ -2974,13 +3050,14 @@ bool key_handler(int key, BufferNode_t** head, void* user_data, void* shared_obj
                         vkh_result.completed_action.motion.type == VMT_SEARCH_WORD_UNDER_CURSOR){
                     config_state->do_not_highlight_search = false;
                     center_view_when_cursor_outside_portion(buffer_view, 0.25f, 0.75f);
+                    view_jump_insert(buffer_view->user_data, buffer_view->buffer->filename, save_cursor);
                }else if(vkh_result.completed_action.motion.type == VMT_GOTO_MARK){
                     config_state->do_not_highlight_search = false;
                     center_view_when_cursor_outside_portion(buffer_view, 0.25f, 0.75f);
-                    view_jump_insert(buffer_view->user_data, buffer_view->buffer->filename, buffer_view->cursor);
+                    view_jump_insert(buffer_view->user_data, buffer_view->buffer->filename, save_cursor);
                }else if(vkh_result.completed_action.motion.type == VMT_BEGINNING_OF_FILE ||
                         vkh_result.completed_action.motion.type == VMT_END_OF_FILE){
-                    view_jump_insert(buffer_view->user_data, buffer_view->buffer->filename, buffer_view->cursor);
+                    view_jump_insert(buffer_view->user_data, buffer_view->buffer->filename, save_cursor);
                }
 
                // don't save 'g' if we completed an action with it, this ensures we don't use it in the next update

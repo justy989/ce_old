@@ -85,6 +85,7 @@ t|goto before character on line (next character typed)
 y|yank
 p|paste after cursor
 P|paste before cursor
+~|flip case
 u|undo
 /|incremental search forward
 ?|incremental search backward
@@ -113,21 +114,26 @@ gt|goto next tab
 gT|goto previous tab
 gc|comment current line or all lines in visual selection
 gu|uncomment current line or all lines in visual selection
-gr|reload buffer from associated file
 gv|mark the view as overrideable
-gl|cycle through line number modes
-gs|cycle through syntax highlighting modes
-gh|turn off search highlighting (until you search again)
 gd|run cscope goto symbol definition in terminal (if a terminal is in view)
 gb|run `make` in terminal (if a terminal is in view)
 gm|run `make clean` in terminal (if a terminal is in view)
 <<|unindent current line or all lines in visual selection
->>|indent current line or all lines in visual selection
+`>>`|indent current line or all lines in visual selection
 %|find matching quotes, parents, brackets, square brackets, angled brackets
 \*|search forward for the word under the cursor
 #|search forward for the word under the cursor
-~|flip case
+space|in normal mode, run command
 F5|reload ce's config
+
+### Commands (press `space` in normal mode)
+Name|Action
+----|------
+echo|echo string in message buffer
+reload_buffer|reload current buffer
+noh|turn off highlighting search matches(until you search again)
+syntax|set syntax mode
+line_number|set line number mode
 
 ### Cool Shell Commands To Run In ce
 `$ fgrep -n -H <pattern> <files>`  

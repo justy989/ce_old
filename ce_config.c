@@ -317,34 +317,44 @@ void auto_complete_free(AutoComplete_t* auto_complete)
     auto_complete->current = NULL;
 }
 
-void auto_complete_next(AutoComplete_t* auto_complete, const char* match)
+bool auto_complete_next(AutoComplete_t* auto_complete, const char* match)
 {
      int64_t match_len = 0;
-     if(match) match_len = strlen(match);
+     if(match){
+          match_len = strlen(match);
+     }else{
+          match = "";
+     }
      CompleteNode_t* initial_node = auto_complete->current;
 
      do{
           auto_complete->current = auto_complete->current->next;
           if(!auto_complete->current) auto_complete->current = auto_complete->head;
-          if(strncmp(auto_complete->current->option, match, match_len) == 0) return;
+          if(strncmp(auto_complete->current->option, match, match_len) == 0) return true;
      }while(auto_complete->current != initial_node);
 
      auto_complete_end(auto_complete);
+     return false;
 }
 
-void auto_complete_prev(AutoComplete_t* auto_complete, const char* match)
+bool auto_complete_prev(AutoComplete_t* auto_complete, const char* match)
 {
      int64_t match_len = 0;
-     if(match) match_len = strlen(match);
+     if(match){
+          match_len = strlen(match);
+     }else{
+          match = "";
+     }
      CompleteNode_t* initial_node = auto_complete->current;
 
      do{
           auto_complete->current = auto_complete->current->prev;
           if(!auto_complete->current) auto_complete->current = auto_complete->tail;
-          if(strncmp(auto_complete->current->option, match, match_len) == 0) return;
+          if(strncmp(auto_complete->current->option, match, match_len) == 0) return true;
      }while(auto_complete->current != initial_node);
 
      auto_complete_end(auto_complete);
+     return false;
 }
 
 bool initialize_buffer(Buffer_t* buffer){
@@ -1557,10 +1567,8 @@ void update_completion_buffer(Buffer_t* completion_buffer, AutoComplete_t* auto_
      if(match) match_len = strlen(match);
      int64_t line_count = 0;
      CompleteNode_t* itr = auto_complete->head;
-     ce_message("completions: (%ld match len)", match_len);
      while(itr){
           if(strncmp(itr->option, match, match_len) == 0 || match_len == 0){
-               ce_message("  %s", itr->option);
                ce_append_line_readonly(completion_buffer, itr->option);
                line_count++;
 
@@ -3029,15 +3037,16 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               Point_t end = {cursor->x - 1, cursor->y};
                               if(end.x < 0) end.x = 0;
                               char* match = "";
-                              if(!ce_points_equal(config_state->auto_complete.start, *cursor)) match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
-                              int64_t offset = cursor->x - config_state->auto_complete.start.x;
-                              if(offset < 0) offset = 0;
-                              const char* option = config_state->auto_complete.current->option + offset;
-                              if(match && strncmp(match, option, strlen(match)) != 0){
+
+                              if(auto_completing(&config_state->auto_complete)){
+                                   if(!ce_points_equal(config_state->auto_complete.start, *cursor)) match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
                                    auto_complete_next(&config_state->auto_complete, match);
                               }else{
-                                   config_state->auto_complete.current = config_state->auto_complete.head;
+                                   auto_complete_start(&config_state->auto_complete, (Point_t){0, cursor->y});
+                                   if(!ce_points_equal(config_state->auto_complete.start, *cursor)) match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
+                                   auto_complete_next(&config_state->auto_complete, match);
                               }
+
                               update_completion_buffer(config_state->completion_buffer, &config_state->auto_complete, match);
                               if(!ce_points_equal(config_state->auto_complete.start, end))free(match);
                          } break;
@@ -3125,14 +3134,14 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     break;
                case 14: // Ctrl + n
                     if(auto_completing(&config_state->auto_complete)){
-                         Point_t end = *cursor;
-                         end.x--;
+                         Point_t end = {cursor->x - 1, cursor->y};
                          if(end.x < 0) end.x = 0;
-                         char* match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
+                         char* match = "";
+                         if(!ce_points_equal(config_state->auto_complete.start, *cursor)) match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
                          auto_complete_next(&config_state->auto_complete, match);
                          update_completion_buffer(config_state->completion_buffer, &config_state->auto_complete,
                                                   match);
-                         free(match);
+                         if(!ce_points_equal(config_state->auto_complete.start, *cursor)) free(match);
                          break;
                     }
 
@@ -3145,14 +3154,14 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     break;
                case 16: // Ctrl + p
                     if(auto_completing(&config_state->auto_complete)){
-                         Point_t end = *cursor;
-                         end.x--;
+                         Point_t end = {cursor->x - 1, cursor->y};
                          if(end.x < 0) end.x = 0;
-                         char* match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
+                         char* match = "";
+                         if(!ce_points_equal(config_state->auto_complete.start, *cursor)) match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
                          auto_complete_prev(&config_state->auto_complete, match);
                          update_completion_buffer(config_state->completion_buffer, &config_state->auto_complete,
                                                   match);
-                         free(match);
+                         if(!ce_points_equal(config_state->auto_complete.start, *cursor)) free(match);
                          break;
                     }
 

@@ -1886,24 +1886,26 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                          view_jump_insert(buffer_view->user_data, buffer_view->buffer->filename, buffer_view->cursor);
                     }
                }else{
-                    // run command
-                    Command_t command = {};
-                    if(!command_parse(&command, config_state->view_input->buffer->lines[0])){
-                         ce_message("failed to parse command: '%s'", config_state->view_input->buffer->lines[0]);
-                    }else{
-                         ce_command* command_func = NULL;
-                         for(int64_t i = 0; i < config_state->command_entry_count; ++i){
-                              CommandEntry_t* entry = config_state->command_entries + i;
-                              if(strcmp(entry->name, command.name) == 0){
-                                   command_func = entry->func;
-                                   break;
-                              }
-                         }
-
-                         if(command_func){
-                              command_func(&command, config_state);
+                    // run all commands in the input buffer
+                    for(int64_t l = 0; l < config_state->view_input->buffer->line_count; ++l){
+                         Command_t command = {};
+                         if(!command_parse(&command, config_state->view_input->buffer->lines[l])){
+                              ce_message("failed to parse command: '%s'", config_state->view_input->buffer->lines[0]);
                          }else{
-                              ce_message("unknown command: '%s'", command.name);
+                              ce_command* command_func = NULL;
+                              for(int64_t i = 0; i < config_state->command_entry_count; ++i){
+                                   CommandEntry_t* entry = config_state->command_entries + i;
+                                   if(strcmp(entry->name, command.name) == 0){
+                                        command_func = entry->func;
+                                        break;
+                                   }
+                              }
+
+                              if(command_func){
+                                   command_func(&command, config_state);
+                              }else{
+                                   ce_message("unknown command: '%s'", command.name);
+                              }
                          }
                     }
                }

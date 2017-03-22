@@ -119,8 +119,11 @@ typedef struct Buffer_t{
      BufferFileType_t type;
 
      Point_t cursor;
+
+     // TODO: these are used for drawing, consider passing them as arguments?
      Point_t highlight_start;
      Point_t highlight_end;
+     Point_t mark;
 
      union {
           char* filename;

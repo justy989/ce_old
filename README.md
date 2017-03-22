@@ -65,6 +65,8 @@ Key Sequence|Action
 `Ctrl+p`|goto the previous file definition in the shell command buffer (works with compilation errors, fgrep, git diff, etc)
 `Ctrl+o`|goto previous jump list location
 `Ctrl+i`|goto next jump list location
+`return`|in normal mode, set mark in 0 register
+`space`|in normal mode, goto mark in 0 register
 `i`|enter insert mode
 `esc`|enter normal mode
 `h`|move cursor left

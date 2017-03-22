@@ -3111,11 +3111,11 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                }else if(vkh_result.completed_action.motion.type == VMT_SEARCH ||
                         vkh_result.completed_action.motion.type == VMT_SEARCH_WORD_UNDER_CURSOR){
                     config_state->do_not_highlight_search = false;
-                    center_view_when_cursor_outside_portion(buffer_view, 0.25f, 0.75f);
+                    center_view_when_cursor_outside_portion(buffer_view, 0.15f, 0.85f);
                     view_jump_insert(buffer_view->user_data, buffer_view->buffer->filename, save_cursor);
                }else if(vkh_result.completed_action.motion.type == VMT_GOTO_MARK){
                     config_state->do_not_highlight_search = false;
-                    center_view_when_cursor_outside_portion(buffer_view, 0.25f, 0.75f);
+                    center_view_when_cursor_outside_portion(buffer_view, 0.15f, 0.85f);
                     view_jump_insert(buffer_view->user_data, buffer_view->buffer->filename, save_cursor);
                }else if(vkh_result.completed_action.motion.type == VMT_BEGINNING_OF_FILE ||
                         vkh_result.completed_action.motion.type == VMT_END_OF_FILE){
@@ -3923,6 +3923,7 @@ void view_drawer(void* user_data)
 
      ConfigState_t* config_state = user_data;
      Buffer_t* buffer = config_state->tab_current->view_current->buffer;
+     BufferState_t* buffer_state = buffer->user_data;
      BufferView_t* buffer_view = config_state->tab_current->view_current;
      Point_t* cursor = &config_state->tab_current->view_current->cursor;
 
@@ -3980,6 +3981,9 @@ void view_drawer(void* user_data)
           buffer->highlight_start = (Point_t){0, 0};
           buffer->highlight_end = (Point_t){-1, 0};
      }
+
+     Point_t* vim_mark = vim_mark_find(buffer_state->vim_buffer_state.mark_head, '0');
+     if(vim_mark) buffer->mark = *vim_mark;
 
      const char* search = NULL;
      if(config_state->input && (config_state->input_key == '/' || config_state->input_key == '?') &&
@@ -4102,6 +4106,9 @@ void view_drawer(void* user_data)
 
      // update the screen with what we drew
      refresh();
+
+     // clear mark if one existed
+     if(vim_mark) buffer->mark = (Point_t){-1, -1};
 
      gettimeofday(&config_state->last_draw_time, NULL);
 }

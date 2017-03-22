@@ -152,6 +152,7 @@ const char* random_greeting()
           "ce, aka, 'the cache miss king'",
           "All the terminal you want with none of the illness",
           "I used ce before it was cool",
+          "'Where has this been all my life' -emacs enthusiast",
      };
 
      srand(time(NULL));

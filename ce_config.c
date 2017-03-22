@@ -374,6 +374,7 @@ bool initialize_buffer(Buffer_t* buffer){
      buffer_state->commit_tail = tail;
 
      buffer->user_data = buffer_state;
+     buffer->mark = (Point_t){-1, -1};
 
      if(buffer->name){
           int64_t name_len = strlen(buffer->name);

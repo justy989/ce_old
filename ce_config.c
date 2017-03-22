@@ -1660,7 +1660,7 @@ bool calc_auto_complete_start_and_path(AutoComplete_t* auto_complete, const char
      return rc;
 }
 
-void confirm_action(ConfigState_t* config_state, BufferNode_t* head, void* shared_object_handle)
+void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
 {
      BufferView_t* buffer_view = config_state->tab_current->view_current;
      Buffer_t* buffer = buffer_view->buffer;
@@ -1839,14 +1839,21 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head, void* share
                     ce_message("failed to parse command: '%s'", config_state->view_input->buffer->lines[0]);
                     return;
                }
-               char command_name_buffer[BUFSIZ];
-               snprintf(command_name_buffer, BUFSIZ, "command_%s", command.name);
-               ce_command* command_func = dlsym(shared_object_handle, command_name_buffer);
-               if(!command_func){
-                    ce_message("failed to load command: '%s'", command.name);
-                    return;
+
+               ce_command* command_func = NULL;
+               for(int64_t i = 0; i < config_state->command_entry_count; ++i){
+                    CommandEntry_t* entry = config_state->command_entries + i;
+                    if(strcmp(entry->name, command.name) == 0){
+                         command_func = entry->func;
+                         break;
+                    }
                }
-               command_func(&command, config_state);
+
+               if(command_func){
+                    command_func(&command, config_state);
+               }else{
+                    ce_message("unknown command: '%s'", command.name);
+               }
           } break;
           }
      }else if(buffer_view->buffer == &config_state->buffer_list_buffer){
@@ -2023,25 +2030,6 @@ bool run_command_on_terminal_in_view(TerminalNode_t* terminal_head, BufferView_t
      }
 
      return false;
-}
-
-#define ECHO_HELP "usage: echo [string]"
-
-void command_echo(Command_t* command, void* user_data)
-{
-     (void)(user_data);
-
-     if(command->arg_count != 1){
-          ce_message(ECHO_HELP);
-          return;
-     }
-
-     if(command->args[0].type != CAT_STRING){
-          ce_message(ECHO_HELP);
-          return;
-     }
-
-     ce_message("%s", command->args[0].string);
 }
 
 #define RELOAD_BUFFER_HELP "usage: reload_buffer"
@@ -2430,6 +2418,26 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      auto_complete_end(&config_state->auto_complete);
      config_state->vim_state.insert_start = (Point_t){-1, -1};
 
+     // init commands
+     {
+          // create a stack array so we can have the compiler track the number of elements
+          CommandEntry_t command_entries[] = {
+               {command_reload_buffer, "reload_buffer"},
+               {command_syntax, "syntax"},
+               {command_noh, "noh"},
+               {command_line_number, "line_number"},
+               {command_new_buffer, "new_buffer"},
+               {command_rename, "rename"},
+          };
+
+          // init and copy from our stack array
+          config_state->command_entry_count = sizeof(command_entries) / sizeof(command_entries[0]);
+          config_state->command_entries = malloc(config_state->command_entry_count * sizeof(*config_state->command_entries));
+          for(int64_t i = 0; i < config_state->command_entry_count; ++i){
+               config_state->command_entries[i] = command_entries[i];
+          }
+     }
+
      // read in state file if it exists
      // TODO: load this into a buffer instead of dealing with the freakin scanf nonsense
      {
@@ -2658,7 +2666,7 @@ bool destroyer(BufferNode_t** head, void* user_data)
      return true;
 }
 
-bool key_handler(int key, BufferNode_t** head, void* user_data, void* shared_object_handle)
+bool key_handler(int key, BufferNode_t** head, void* user_data)
 {
      ConfigState_t* config_state = user_data;
      Buffer_t* buffer = config_state->tab_current->view_current->buffer;
@@ -3140,7 +3148,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data, void* shared_obj
                     }
                     break;
                case 25: // Ctrl + y
-                    confirm_action(config_state, *head, shared_object_handle);
+                    confirm_action(config_state, *head);
                     ce_keys_free(&config_state->vim_state.command_head);
                     break;
                }

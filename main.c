@@ -369,7 +369,7 @@ int main(int argc, char** argv)
                     ce_message("%s: %s", current_config.path, strerror(errno));
                }
           // user-defined or default key_handler()
-          }else if(!current_config.key_handler(key, &buffer_list_head, user_data, current_config.so_handle)){
+          }else if(!current_config.key_handler(key, &buffer_list_head, user_data)){
                done = true;
           }
      }

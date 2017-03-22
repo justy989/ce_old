@@ -1686,18 +1686,6 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                     config_state->quit = true;
                }
                break;
-          case ':':
-          {
-               if(!config_state->view_input->buffer->line_count) break;
-
-               int64_t line = atoi(config_state->view_input->buffer->lines[0]);
-               if(line > 0){
-                    *cursor = (Point_t){0, line - 1};
-                    ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
-                    center_view(buffer_view);
-                    view_jump_insert(buffer_view->user_data, buffer_view->buffer->filename, buffer_view->cursor);
-               }
-          } break;
           case 6: // Ctrl + f
           {
                commit_input_to_history(config_state->view_input->buffer, &config_state->load_file_history);
@@ -1832,27 +1820,52 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                yank->text = new_yank;
                config_state->editting_register = 0;
           } break;
-          case ' ':
+          case ':':
           {
-               Command_t command = {};
-               if(!command_parse(&command, config_state->view_input->buffer->lines[0])){
-                    ce_message("failed to parse command: '%s'", config_state->view_input->buffer->lines[0]);
-                    return;
-               }
+               if(!config_state->view_input->buffer->line_count) break;
 
-               ce_command* command_func = NULL;
-               for(int64_t i = 0; i < config_state->command_entry_count; ++i){
-                    CommandEntry_t* entry = config_state->command_entries + i;
-                    if(strcmp(entry->name, command.name) == 0){
-                         command_func = entry->func;
+               bool alldigits = true;
+               const char* itr = config_state->view_input->buffer->lines[0];
+               while(*itr){
+                    if(!isdigit(*itr)){
+                         alldigits = false;
                          break;
                     }
+                    itr++;
                }
 
-               if(command_func){
-                    command_func(&command, config_state);
+               if(alldigits){
+                    // goto line
+
+                    int64_t line = atoi(config_state->view_input->buffer->lines[0]);
+                    if(line > 0){
+                         *cursor = (Point_t){0, line - 1};
+                         ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
+                         center_view(buffer_view);
+                         view_jump_insert(buffer_view->user_data, buffer_view->buffer->filename, buffer_view->cursor);
+                    }
                }else{
-                    ce_message("unknown command: '%s'", command.name);
+                    // run command
+                    Command_t command = {};
+                    if(!command_parse(&command, config_state->view_input->buffer->lines[0])){
+                         ce_message("failed to parse command: '%s'", config_state->view_input->buffer->lines[0]);
+                         return;
+                    }
+
+                    ce_command* command_func = NULL;
+                    for(int64_t i = 0; i < config_state->command_entry_count; ++i){
+                         CommandEntry_t* entry = config_state->command_entries + i;
+                         if(strcmp(entry->name, command.name) == 0){
+                              command_func = entry->func;
+                              break;
+                         }
+                    }
+
+                    if(command_func){
+                         command_func(&command, config_state);
+                    }else{
+                         ce_message("unknown command: '%s'", command.name);
+                    }
                }
           } break;
           }
@@ -3411,11 +3424,14 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          half_page_down(config_state->tab_current->view_current);
                     } break;
                     case ':':
-                         input_start(config_state, "Goto Line", key);
-                         break;
-                    case ' ':
+                    {
                          input_start(config_state, "Command", key);
-                         break;
+                         //auto_complete_free(&config_state->auto_complete);
+                         //for(int64_t i = 0; i < config_state->command_entry_count; ++i){
+                              //auto_complete_insert(&config_state->auto_complete, config_state->command_entries[i].name);
+                         //}
+                         //update_completion_buffer(config_state->completion_buffer, completion_buffer, auto_complete, completion);
+                    } break;
                     case '/':
                     {
                          input_start(config_state, "Regex Search", key);

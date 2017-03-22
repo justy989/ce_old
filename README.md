@@ -121,10 +121,10 @@ gm|run `make clean` in terminal (if a terminal is in view)
 %|find matching quotes, parents, brackets, square brackets, angled brackets
 \*|search forward for the word under the cursor
 #|search forward for the word under the cursor
-space|in normal mode, run command
+:|in normal mode, run command
 F5|reload ce's config
 
-### Commands (press `space` in normal mode)
+### Commands (press `:` in normal mode)
 Name|Action
 ----|------
 reload_buffer|reload the file associated with the current buffer

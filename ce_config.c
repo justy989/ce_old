@@ -357,6 +357,12 @@ bool auto_complete_prev(AutoComplete_t* auto_complete, const char* match)
      return false;
 }
 
+static bool string_ends_in_substring(const char* string, size_t string_len, const char* substring)
+{
+     size_t substring_len = strlen(substring);
+     return string_len > substring_len && strcmp(string + (string_len - substring_len), substring) == 0;
+}
+
 bool initialize_buffer(Buffer_t* buffer){
      BufferState_t* buffer_state = calloc(1, sizeof(*buffer_state));
      if(!buffer_state){
@@ -378,12 +384,10 @@ bool initialize_buffer(Buffer_t* buffer){
 
      if(buffer->name){
           int64_t name_len = strlen(buffer->name);
-          if((name_len > 2 &&
-              (strcmp(buffer->name + (name_len - 2), ".c") == 0 ||
-               strcmp(buffer->name + (name_len - 2), ".h") == 0)) ||
-             (name_len > 4 &&
-              (strcmp(buffer->name + (name_len - 4), ".cpp") == 0 ||
-              (strcmp(buffer->name + (name_len - 4), ".hpp") == 0)))){
+          if(string_ends_in_substring(buffer->name, name_len, ".c") ||
+             string_ends_in_substring(buffer->name, name_len, ".h") ||
+             string_ends_in_substring(buffer->name, name_len, ".cpp") ||
+             string_ends_in_substring(buffer->name, name_len, ".hpp")){
                buffer->syntax_fn = syntax_highlight_c;
                buffer->syntax_user_data = malloc(sizeof(SyntaxC_t));
                buffer->type = BFT_C;
@@ -392,7 +396,7 @@ bool initialize_buffer(Buffer_t* buffer){
                     free(buffer_state);
                     return false;
                }
-          }else if(name_len > 3 && strcmp(buffer->name + (name_len - 3), ".py") == 0){
+          }else if(string_ends_in_substring(buffer->name, name_len, ".py")){
                buffer->syntax_fn = syntax_highlight_python;
                buffer->syntax_user_data = malloc(sizeof(SyntaxPython_t));
                buffer->type = BFT_PYTHON;
@@ -401,7 +405,7 @@ bool initialize_buffer(Buffer_t* buffer){
                     free(buffer_state);
                     return false;
                }
-          }else if(name_len > 3 && strcmp(buffer->name + (name_len - 3), ".sh") == 0){
+          }else if(string_ends_in_substring(buffer->name, name_len, ".sh")){
                buffer->syntax_fn = syntax_highlight_bash;
                buffer->syntax_user_data = malloc(sizeof(SyntaxBash_t));
                buffer->type = BFT_BASH;
@@ -410,7 +414,7 @@ bool initialize_buffer(Buffer_t* buffer){
                     free(buffer_state);
                     return false;
                }
-          }else if(name_len > 4 && strcmp(buffer->name + (name_len - 4), ".cfg") == 0){
+          }else if(string_ends_in_substring(buffer->name, name_len, ".cfg")){
                buffer->syntax_fn = syntax_highlight_config;
                buffer->syntax_user_data = malloc(sizeof(SyntaxConfig_t));
                buffer->type = BFT_CONFIG;
@@ -419,9 +423,9 @@ bool initialize_buffer(Buffer_t* buffer){
                     free(buffer_state);
                     return false;
                }
-          }else if((name_len > 14 && strcmp(buffer->name + (name_len - 14), "COMMIT_EDITMSG") == 0) ||
-                   (name_len > 6 && strcmp(buffer->name + (name_len - 6), ".patch") == 0) ||
-                   (name_len > 5 && strcmp(buffer->name + (name_len - 5), ".diff") == 0)){
+          }else if(string_ends_in_substring(buffer->name, name_len, "COMMIT_EDITMSG") ||
+                   string_ends_in_substring(buffer->name, name_len, ".patch") ||
+                   string_ends_in_substring(buffer->name, name_len, ".diff")){
                buffer->syntax_fn = syntax_highlight_diff;
                buffer->syntax_user_data = malloc(sizeof(SyntaxDiff_t));
                buffer->type = BFT_DIFF;

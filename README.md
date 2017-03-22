@@ -72,7 +72,7 @@ Key Sequence|Action
 `h`|move cursor left
 `j`|move cursor down
 `k`|move cursor up
-`l|move cursor right`|
+`l`|move cursor right`|
 `w`|move by word
 `e`|move to end of word
 `b`|move to beginning of word

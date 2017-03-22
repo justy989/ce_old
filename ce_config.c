@@ -1799,15 +1799,6 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head, void* share
                center_view(buffer_view);
                free(replace_str);
           } break;
-          case 'n':
-          {
-               if(!config_state->view_input->buffer->lines) break;
-
-               free(buffer->filename);
-               buffer->filename = strdup(config_state->view_input->buffer->lines[0]);
-
-               if(buffer->status != BS_READONLY) buffer->status = BS_MODIFIED;
-          } break;
           case '@':
           {
                if(!config_state->view_input->buffer->lines) break;
@@ -1843,7 +1834,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head, void* share
           } break;
           case ' ':
           {
-               Command_t command;
+               Command_t command = {};
                if(!command_parse(&command, config_state->view_input->buffer->lines[0])){
                     ce_message("failed to parse command: '%s'", config_state->view_input->buffer->lines[0]);
                     return;
@@ -1852,7 +1843,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head, void* share
                snprintf(command_name_buffer, BUFSIZ, "command_%s", command.name);
                ce_command* command_func = dlsym(shared_object_handle, command_name_buffer);
                if(!command_func){
-                    ce_message("failed to load: '%s'", command.name);
+                    ce_message("failed to load command: '%s'", command.name);
                     return;
                }
                command_func(&command, config_state);
@@ -2140,12 +2131,6 @@ void command_syntax(Command_t* command, void* user_data)
      }
 }
 
-static void command_line_number_help()
-{
-     ce_message("usage: line_number [string]");
-     ce_message(" supported modes: 'none', 'absolute', 'relative', 'both'");
-}
-
 #define NOH_HELP "usage: noh"
 
 void command_noh(Command_t* command, void* user_data)
@@ -2157,6 +2142,12 @@ void command_noh(Command_t* command, void* user_data)
 
      ConfigState_t* config_state = (ConfigState_t*)(user_data);
      config_state->do_not_highlight_search = true;
+}
+
+static void command_line_number_help()
+{
+     ce_message("usage: line_number [string]");
+     ce_message(" supported modes: 'none', 'absolute', 'relative', 'both'");
 }
 
 void command_line_number(Command_t* command, void* user_data)
@@ -2181,6 +2172,47 @@ void command_line_number(Command_t* command, void* user_data)
           config_state->line_number_type = LNT_RELATIVE;
      }else if(strcmp(command->args[0].string, "both") == 0){
           config_state->line_number_type = LNT_RELATIVE_AND_ABSOLUTE;
+     }
+}
+
+#define NEW_BUFFER_HELP "usage: new_buffer"
+
+void command_new_buffer(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message(NEW_BUFFER_HELP);
+          return;
+     }
+
+     ConfigState_t* config_state = (ConfigState_t*)(user_data);
+     Buffer_t* new_buffer = new_buffer_from_string(*config_state->save_buffer_head, "unnamed", NULL);
+     ce_alloc_lines(new_buffer, 1);
+     config_state->tab_current->view_current->buffer = new_buffer;
+     config_state->tab_current->view_current->cursor = (Point_t){0, 0};
+}
+
+#define RENAME_HELP "usage: rename [string]"
+
+void command_rename(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 1){
+          ce_message(RENAME_HELP);
+          return;
+     }
+
+     if(command->args[0].type != CAT_STRING){
+          ce_message(RENAME_HELP);
+          return;
+     }
+
+     ConfigState_t* config_state = (ConfigState_t*)(user_data);
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Buffer_t* buffer = buffer_view->buffer;
+
+     if(buffer->name) free(buffer->name);
+     buffer->name = strdup(command->args[0].string);
+     if(buffer->status != BS_READONLY){
+          buffer->status = BS_MODIFIED;
      }
 }
 
@@ -2636,6 +2668,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data, void* shared_obj
 
      bool handled_key = false;
 
+     config_state->save_buffer_head = head;
+
      if(config_state->vim_state.mode != VM_INSERT){
           switch(config_state->last_key){
           default:
@@ -2742,10 +2776,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data, void* shared_obj
                     config_state->tab_current->view_overrideable = config_state->tab_current->view_current;
                     config_state->tab_current->overriden_buffer = NULL;
                     break;
-               case 'l':
-                    config_state->line_number_type++;
-                    config_state->line_number_type %= (LNT_RELATIVE_AND_ABSOLUTE + 1);
-                    break;
                case 'q':
                {
                     uint64_t unsaved_buffers = 0;
@@ -2763,9 +2793,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data, void* shared_obj
                     // quit !
                     return false;
                }
-               case 'n':
-                    input_start(config_state, "Rename Buffer", key);
-                    break;
                }
 
                if(handled_key){
@@ -3724,13 +3751,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data, void* shared_obj
                               input_start(config_state, "Replace", key);
                          }
                     break;
-                    case 5: // Ctrl + e
-                    {
-                         Buffer_t* new_buffer = new_buffer_from_string(*head, "unnamed", NULL);
-                         ce_alloc_lines(new_buffer, 1);
-                         config_state->tab_current->view_current->buffer = new_buffer;
-                         *cursor = (Point_t){0, 0};
-                    } break;
                     case 8: // Ctrl + h
                     {
                          Point_t point = {config_state->tab_current->view_current->top_left.x - 2, // account for window separator

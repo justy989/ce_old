@@ -47,7 +47,6 @@ Key Sequence|Action
 Ctrl+f|load file
 Ctrl+q|kill current window or stop recording macro
 Ctrl+w|save buffer
-Ctrl+e|open new unnamed buffer
 Ctrl+t|create new tab
 Ctrl+a|start a new dumb terminal
 Ctrl+x|goto last terminal
@@ -107,7 +106,6 @@ y?|view yank registers (confirm on register you want to edit)
 zt|scroll view so cursor is at the top
 zz|scroll view so cursor is in the middle
 zb|scroll view so cursor is at the bottom
-ga|save buffer as new filename
 gq|quit editor
 gf|goto file under cursor
 gt|goto next tab
@@ -134,6 +132,8 @@ reload_buffer|reload current buffer
 noh|turn off highlighting search matches(until you search again)
 syntax|set syntax mode
 line_number|set line number mode
+new_buffer|open a new empty and unnamed buffer
+rename|rename current buffer
 
 ### Cool Shell Commands To Run In ce
 `$ fgrep -n -H <pattern> <files>`  

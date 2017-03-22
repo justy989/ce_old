@@ -131,6 +131,8 @@ typedef struct{
      struct timeval last_draw_time;
 
      bool quit;
+
+     BufferNode_t** save_buffer_head;
 }ConfigState_t;
 
 #endif

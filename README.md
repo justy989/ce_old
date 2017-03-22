@@ -54,7 +54,7 @@ Ctrl+u|page up
 Ctrl+d|page down
 Ctrl+y|confirm action (used to perform actions based on current buffer)
 Ctrl+b|view buffer list (confirm on the cursor selected buffer to open it)
-Ctrl+r|redo
+Ctrl+r|redo edit
 Ctrl+v|vertical split
 Ctrl+g|horizontal split
 Ctrl+h|move cursor to the view to the left
@@ -63,8 +63,8 @@ Ctrl+k|move cursor to the view to the above
 Ctrl+l|move cursor to the view to the right
 Ctrl+n|goto the next file definition in the shell command buffer (works with compilation errors, fgrep, git diff, etc)
 Ctrl+p|goto the previous file definition in the shell command buffer (works with compilation errors, fgrep, git diff, etc)
-Ctrl+o|goto previous jump location
-Ctrl+i|goto next jump location
+Ctrl+o|goto previous jump list location
+Ctrl+i|goto next jump list location
 i|enter insert mode
 esc|enter normal mode
 h|move cursor left
@@ -74,8 +74,8 @@ l|move cursor right|
 w|move by word
 e|move to end of word
 b|move to beginning of word
-c|change
-d|delete
+c|change action
+d|delete action
 r|replace character
 x|remove character
 s|remove character and enter insert
@@ -84,8 +84,8 @@ t|goto before character on line (next character typed)
 y|yank
 p|paste after cursor
 P|paste before cursor
-~|flip case
-u|undo
+~|flip alphabetical character's case
+u|undo edit
 /|incremental search forward
 ?|incremental search backward
 n|goto next search match
@@ -127,13 +127,12 @@ F5|reload ce's config
 ### Commands (press `space` in normal mode)
 Name|Action
 ----|------
-echo|echo string in message buffer
-reload_buffer|reload current buffer
+reload_buffer|reload the file associated with the current buffer
+new_buffer|open a new empty and unnamed buffer
+rename|rename current buffer
 noh|turn off highlighting search matches(until you search again)
 syntax|set syntax mode
 line_number|set line number mode
-new_buffer|open a new empty and unnamed buffer
-rename|rename current buffer
 
 ### Cool Shell Commands To Run In ce
 `$ fgrep -n -H <pattern> <files>`  

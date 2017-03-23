@@ -97,7 +97,7 @@ bool config_revert(Config_t* config, const char* filepath, const char* stable_co
      ce_message("overwriting '%s' back to stable config", filepath);
      FILE* file = fopen(filepath, "wb");
      if(!file){
-          ce_message("failed to open '%s()': %s", filepath, strerror(errno));
+          ce_message("failed to open '%s': %s", filepath, strerror(errno));
           return false;
      }
      fwrite(stable_config_contents, stable_config_size, 1, file);

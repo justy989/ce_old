@@ -992,6 +992,22 @@ TEST(sanity_find_matching_pair_same_line_with_match_in_quotes)
      ce_free_buffer(&buffer);
 }
 
+TEST(sanity_find_matching_pair_match_in_quotes_with_parens_in_quote)
+{
+     Buffer_t buffer = {};
+     buffer.line_count = 1;
+     buffer.lines = malloc(1 * sizeof(char*));
+     buffer.lines[0] = strdup("error(\"function(arg()) has failed\")");
+
+     Point_t point = {8, 0};
+     ce_move_cursor_to_matching_pair(&buffer, &point, '(');
+
+     EXPECT(point.x == 34);
+     EXPECT(point.y == 0);
+
+     ce_free_buffer(&buffer);
+}
+
 TEST(sanity_find_matching_pair_multiline)
 {
      Buffer_t buffer = {};

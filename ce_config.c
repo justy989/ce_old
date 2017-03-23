@@ -4076,7 +4076,7 @@ void view_drawer(void* user_data)
      }
 
      Point_t terminal_cursor = get_cursor_on_terminal(cursor, buffer_view, line_number_type);
-     if(auto_completing(&config_state->auto_complete)){
+     if(auto_completing(&config_state->auto_complete) && config_state->auto_complete.current){
           move(terminal_cursor.y, terminal_cursor.x);
           int64_t offset = cursor->x - config_state->auto_complete.start.x;
           if(offset < 0) offset = 0;

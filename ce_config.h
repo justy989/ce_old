@@ -9,7 +9,8 @@
 #include "ce_vim.h"
 #include "ce_terminal.h"
 
-#define DRAW_USEC_LIMIT 33333
+// NOTE: 60 fps limit
+#define DRAW_USEC_LIMIT 16666
 
 typedef struct InputHistoryNode_t{
      char* entry;

@@ -1697,7 +1697,7 @@ bool calc_auto_complete_start_and_path(AutoComplete_t* auto_complete, const char
      return rc;
 }
 
-void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
+bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
 {
      BufferView_t* buffer_view = config_state->tab_current->view_current;
      Buffer_t* buffer = buffer_view->buffer;
@@ -1722,7 +1722,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                if(tolower(config_state->view_input->buffer->lines[0][0]) == 'y'){
                     config_state->quit = true;
                }
-               break;
+               return true;
           case 6: // Ctrl + f
           {
                commit_input_to_history(config_state->view_input->buffer, &config_state->load_file_history);
@@ -1762,6 +1762,8 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                if(config_state->tab_current->overriden_buffer){
                     tab_view_restore_overrideable(config_state->tab_current);
                }
+
+               return true;
           } break;
           case '/':
                if(!config_state->view_input->buffer->line_count) break;
@@ -1769,13 +1771,13 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                commit_input_to_history(config_state->view_input->buffer, &config_state->search_history);
                vim_yank_add(&config_state->vim_state.yank_head, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
                view_jump_insert(buffer_view->user_data, buffer->filename, *cursor);
-               break;
+               return true;
           case '?':
                if(!config_state->view_input->buffer->line_count) break;
 
                commit_input_to_history(config_state->view_input->buffer, &config_state->search_history);
                vim_yank_add(&config_state->vim_state.yank_head, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
-               break;
+               return true;
           case 'R':
           {
                if(!config_state->view_input->buffer->line_count) break; // NOTE: unsure if this is correct
@@ -1823,16 +1825,17 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                *cursor = begin;
                center_view(buffer_view);
                free(replace_str);
+               return true;
           } break;
           case '@':
           {
                if(!config_state->view_input->buffer->lines) break;
 
                int64_t line = config_state->tab_current->view_input_save->cursor.y - 1; // account for buffer list row header
-               if(line < 0) return;
+               if(line < 0) break;
 
                VimMacroNode_t* macro = vim_macro_find(config_state->vim_state.macro_head, config_state->editting_register);
-               if(!macro) return;
+               if(!macro) break;
 
                free(macro->command);
                int* new_macro_string = vim_char_string_to_command_string(config_state->view_input->buffer->lines[0]);
@@ -1842,15 +1845,17 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                }else{
                     ce_message("invalid editted macro string");
                }
+
                config_state->editting_register = 0;
+               return true;
           } break;
           case 'y':
           {
                int64_t line = config_state->tab_current->view_input_save->cursor.y;
-               if(line < 0) return;
+               if(line < 0) break;
 
                VimYankNode_t* yank = vim_yank_find(config_state->vim_state.yank_head, config_state->editting_register);
-               if(!yank) return;
+               if(!yank) break;
 
                char* new_yank = ce_dupe_buffer(config_state->view_input->buffer);
                free((char*)(yank->text));
@@ -1914,20 +1919,22 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                          }
                     }
                }
-          } break;
+
+               return true;
+          } break; // NOTE: Ahhh the unreachable break in it's natural habitat
           }
      }else if(buffer_view->buffer == &config_state->buffer_list_buffer){
           int64_t line = cursor->y - 1; // account for buffer list row header
-          if(line < 0) return;
+          if(line < 0) return false;
           BufferNode_t* itr = head;
 
           while(line > 0){
                itr = itr->next;
-               if(!itr) return;
+               if(!itr) return false;
                line--;
           }
 
-          if(!itr) return;
+          if(!itr) return false;
 
           buffer_view->buffer = itr->buffer;
           buffer_view->cursor = itr->buffer->cursor;
@@ -1940,18 +1947,20 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                terminal_resize(&terminal_node->terminal, new_width, new_height);
                config_state->terminal_current = terminal_node;
           }
+
+          return true;
      }else if(buffer_view->buffer == &config_state->mark_list_buffer){
           int64_t line = cursor->y - 1; // account for buffer list row header
-          if(line < 0) return;
+          if(line < 0) return false;
           VimMarkNode_t* itr = ((BufferState_t*)(config_state->buffer_before_query->user_data))->vim_buffer_state.mark_head;
 
           while(line > 0){
                itr = itr->next;
-               if(!itr) return;
+               if(!itr) return false;
                line--;
           }
 
-          if(!itr) return;
+          if(!itr) return false;
 
           buffer_view->buffer = config_state->buffer_before_query;
           buffer_view->cursor.y = itr->location.y;
@@ -1961,18 +1970,20 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           if(config_state->tab_current->view_overrideable){
                tab_view_restore_overrideable(config_state->tab_current);
           }
+
+          return true;
      }else if(buffer_view->buffer == &config_state->macro_list_buffer){
           int64_t line = cursor->y - 1; // account for buffer list row header
-          if(line < 0) return;
+          if(line < 0) return false;
           VimMacroNode_t* itr = config_state->vim_state.macro_head;
 
           while(line > 0){
                itr = itr->next;
-               if(!itr) return;
+               if(!itr) return false;
                line--;
           }
 
-          if(!itr) return;
+          if(!itr) return false;
 
           input_start(config_state, "Edit Macro", '@');
           config_state->editting_register = itr->reg;
@@ -1980,9 +1991,10 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           char* char_command = vim_command_string_to_char_string(itr->command);
           ce_insert_string(config_state->view_input->buffer, (Point_t){0,0}, char_command);
           free(char_command);
+          return true;
      }else if(buffer_view->buffer == &config_state->yank_list_buffer){
           int64_t line = cursor->y;
-          if(line < 0) return;
+          if(line < 0) return false;
 
           VimYankNode_t* itr = config_state->vim_state.yank_head;
           while(itr){
@@ -1996,6 +2008,7 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           config_state->editting_register = itr->reg_char;
           vim_enter_normal_mode(&config_state->vim_state);
           ce_insert_string(config_state->view_input->buffer, (Point_t){0,0}, itr->text);
+          return true;
      }else{
           TerminalNode_t* terminal_node = is_terminal_buffer(config_state->terminal_head, buffer_view->buffer);
           if(terminal_node){
@@ -2010,9 +2023,11 @@ void confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                     config_state->tab_current->view_current = view_to_change;
                }
                free(terminal_current_directory);
+               return true;
           }
      }
 
+     return false;
 }
 
 void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferView_t* overrideable_view, VimMode_t vim_mode, int last_key,
@@ -2953,7 +2968,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     Terminal_t* terminal = &terminal_node->terminal;
                     buffer_view->cursor = terminal->cursor;
 
-                    if(key == KEY_ENTER)  move_jump_location_to_end_of_output(terminal_node);
+                    if(key == KEY_ENTER) move_jump_location_to_end_of_output(terminal_node);
 
                     if(terminal_send_key(terminal, key)){
                          handled_key = true;
@@ -3014,6 +3029,16 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
                     ce_advance_cursor(buffer, cursor, strlen(yank->text));
                } break;
+               }
+          }
+     }
+
+     if(!handled_key){
+          if(key == KEY_ENTER){
+               if(confirm_action(config_state, *head)){
+                    ce_keys_free(&config_state->vim_state.command_head);
+                    handled_key = true;
+                    key = 0;
                }
           }
      }
@@ -3178,10 +3203,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               vim_enter_normal_mode(&config_state->vim_state);
                          }
                     }
-                    break;
-               case 25: // Ctrl + y
-                    confirm_action(config_state, *head);
-                    ce_keys_free(&config_state->vim_state.command_head);
                     break;
                }
 

@@ -1219,6 +1219,7 @@ void syntax_highlight_plain(SyntaxHighlighterData_t* data, void* user_data)
      case SS_INITIALIZING:
      {
           syntax->highlight.type = HL_OFF;
+          syntax->highlight.chars_til_highlight = -1;
 
           if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
      } break;

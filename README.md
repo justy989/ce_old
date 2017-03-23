@@ -52,7 +52,6 @@ Key Sequence|Action
 `Ctrl+x`|goto last terminal
 `Ctrl+u`|page up
 `Ctrl+d`|page down
-`Ctrl+y`|confirm action (used to perform actions based on current buffer)
 `Ctrl+b`|view buffer list (confirm on the cursor selected buffer to open it)
 `Ctrl+r`|redo edit
 `Ctrl+v`|vertical split
@@ -65,7 +64,7 @@ Key Sequence|Action
 `Ctrl+p`|goto the previous file definition in the shell command buffer (works with compilation errors, fgrep, git diff, etc)
 `Ctrl+o`|goto previous jump list location
 `Ctrl+i`|goto next jump list location
-`return`|in normal mode, set mark in 0 register
+`return`|in input mode, then confirm input action, in normal mode, set mark in 0 register, 
 `space`|in normal mode, goto mark in 0 register
 `i`|enter insert mode
 `esc`|enter normal mode

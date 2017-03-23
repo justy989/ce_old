@@ -663,6 +663,27 @@ bool find_matching_string_forward(const Buffer_t* buffer, Point_t* location, cha
      return false;
 }
 
+// NOTE: kinda 'c' specific
+static bool index_on_line_inside_string(const char* line, int64_t index)
+{
+     bool inside_double_quote_string = false;
+     bool inside_single_quote_string = false;
+
+     for(int64_t i = 0; i <= index; ++i){
+          if(line[i] == 0) return inside_double_quote_string || inside_single_quote_string;
+          // if we see a quote character, toggle inside_double_quote_string unless the charater before it is a backslash
+          if(!inside_single_quote_string && line[i] == '\"' && ((i == 0) || (i && line[i - 1] != '\\'))){
+               inside_double_quote_string = !inside_double_quote_string;
+          }
+
+          if(!inside_double_quote_string && line[i] == '\'' && ((i == 0) || (i && line[i - 1] != '\\'))){
+               inside_single_quote_string = !inside_single_quote_string;
+          }
+     }
+
+     return inside_double_quote_string || inside_single_quote_string;
+}
+
 bool find_matching_pair_forward(const Buffer_t* buffer, Point_t* location, char matchee, char match)
 {
      if(!ce_point_on_buffer(buffer, *location)) return false;
@@ -685,22 +706,17 @@ bool find_matching_pair_forward(const Buffer_t* buffer, Point_t* location, char 
                }
           }else{
                if(curr == match){
-                    if(count == 0){
-                         *location = itr;
-                         return true;
-                    }else{
-                         count--;
+                    // only count it if it isn't inside a string
+                    if(!index_on_line_inside_string(buffer->lines[itr.y], itr.x)){
+                         if(count == 0){
+                              *location = itr;
+                              return true;
+                         }else{
+                              count--;
+                         }
                     }
-               }else if(curr == matchee && !ce_points_equal(*location, itr)){
+               }else if(curr == matchee && !ce_points_equal(*location, itr) && !index_on_line_inside_string(buffer->lines[itr.y], itr.x)){
                     count++;
-               }else if(curr == '"'){
-                    if(!find_matching_string_forward(buffer, &itr, '"')){
-                         return false;
-                    }
-               }else if(curr == '\''){
-                    if(!find_matching_string_forward(buffer, &itr, '\'')){
-                         return false;
-                    }
                }else if(curr == '/' && prev == '/'){
                     // this is a comment, ignore the rest of the line
                     itr.x = 0;
@@ -824,22 +840,16 @@ bool find_matching_pair_backward(const Buffer_t* buffer, Point_t* location, char
                }
           }else{
                if(curr == match){
-                    if(count == 0){
-                         *location = itr;
-                         return true;
-                    }else{
-                         count--;
+                    if(!index_on_line_inside_string(buffer->lines[itr.y], itr.x)){
+                         if(count == 0){
+                              *location = itr;
+                              return true;
+                         }else{
+                              count--;
+                         }
                     }
-               }else if(curr == matchee && !ce_points_equal(*location, itr)){
+               }else if(curr == matchee && !ce_points_equal(*location, itr) && !index_on_line_inside_string(buffer->lines[itr.y], itr.x)){
                     count++;
-               }else if(curr == '"'){
-                    if(!find_matching_string_backward(buffer, &itr, '"')){
-                         return false;
-                    }
-               }else if(curr == '\''){
-                    if(!find_matching_string_backward(buffer, &itr, '\'')){
-                         return false;
-                    }
                }else if(curr == '/' && prev == '*'){
                     inside_multiline_comment = true;
                }

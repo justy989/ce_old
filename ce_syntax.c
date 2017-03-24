@@ -441,6 +441,7 @@ static void syntax_determine_highlight(SyntaxHighlighterData_t* data, SyntaxHigh
      if(ce_point_in_range(data->loc, data->buffer->highlight_start, data->buffer->highlight_end)){
           highlight->type = HL_VISUAL;
           highlight->chars_til_highlight--;
+          highlight->highlight_left--;
      }else{
           highlight->highlight_left--;
 
@@ -466,8 +467,16 @@ static void syntax_determine_highlight(SyntaxHighlighterData_t* data, SyntaxHigh
                }
 
                if(highlight->chars_til_highlight == 0){
-                    highlight->type = HL_VISUAL;
-                    highlight->highlight_left = highlight->regex_matches[0].rm_eo - highlight->regex_matches[0].rm_so;
+                    int64_t highlight_left = highlight->regex_matches[0].rm_eo - highlight->regex_matches[0].rm_so;
+                    Point_t end_match = {data->loc.x + highlight_left, data->loc.y};
+
+                    // if the next match is going to be in the highlight, don't do it!
+                    if(ce_point_in_range(data->buffer->highlight_start, data->loc, end_match)){
+                         // pass
+                    }else{
+                         highlight->type = HL_VISUAL;
+                         highlight->highlight_left = highlight_left;
+                    }
                }
 
                highlight->chars_til_highlight--;
@@ -522,6 +531,45 @@ static void syntax_calc_matching_pair(SyntaxHighlighterData_t* data, Point_t* ma
      }
 }
 
+static bool inside_multiline_c_comment_offscreen(int64_t first_line, int64_t last_line, const Buffer_t* buffer)
+{
+     bool inside_multiline_comment = false;
+
+     if(last_line >= buffer->line_count) last_line = buffer->line_count;
+
+     for(int64_t i = first_line; i < last_line; ++i) {
+          if(!buffer->lines[i][0]) continue;
+          const char* buffer_line = buffer->lines[i];
+          int64_t len = strlen(buffer_line);
+          bool found_open_multiline_comment = false;
+
+          for(int64_t c = 0; c < len; ++c){
+               if(buffer_line[c] == '/' && buffer_line[c + 1] == '*'){
+                    found_open_multiline_comment = true;
+                    break;
+               }
+
+               if(buffer_line[c] == '*' && buffer_line[c + 1] == '/'){
+                    inside_multiline_comment = true;
+               }
+          }
+
+          if(found_open_multiline_comment) break;
+     }
+
+     return inside_multiline_comment;
+}
+
+static void highlight_current_line_emptiness_until_end_of_line(int64_t cursor_line, int64_t current_line,
+                                                               HighlightLineType_t highlight_line_type,
+                                                               int64_t characters_until_end_of_line)
+{
+     if(cursor_line == current_line && highlight_line_type == HLT_ENTIRE_LINE){
+          syntax_set_color(S_NORMAL, HL_CURRENT_LINE);
+          for(int64_t c = 0; c < characters_until_end_of_line; ++c) addch(' ');
+     }
+}
+
 void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
 {
      if(!user_data) return;
@@ -539,31 +587,7 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
           // is our cursor on something we can match?
           syntax_calc_matching_pair(data, &syntax->matched_pair);
 
-          // figure out of any multiline comments are earlier in the file offscreen
-          syntax->inside_multiline_comment = false;
-          int64_t last_line = data->bottom_right.y;
-          if(last_line >= data->buffer->line_count) last_line = data->buffer->line_count;
-
-          for(int64_t i = data->loc.y; i < last_line; ++i) {
-               if(!data->buffer->lines[i][0]) continue;
-               const char* buffer_line = data->buffer->lines[i];
-               int64_t len = strlen(buffer_line);
-               bool found_open_multiline_comment = false;
-
-               for(int64_t c = 0; c < len; ++c){
-                    if(buffer_line[c] == '/' && buffer_line[c + 1] == '*'){
-                         found_open_multiline_comment = true;
-                         break;
-                    }
-
-                    if(buffer_line[c] == '*' && buffer_line[c + 1] == '/'){
-                         syntax->inside_multiline_comment = true;
-                    }
-               }
-
-               if(found_open_multiline_comment) break;
-          }
-
+          syntax->inside_multiline_comment = inside_multiline_c_comment_offscreen(data->loc.y, data->bottom_right.y, data->buffer);
           syntax->highlight.chars_til_highlight = -1;
 
           if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
@@ -699,13 +723,7 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
           const char* buffer_line = data->buffer->lines[data->loc.y];
           int64_t line_length = strlen(buffer_line);
 
-          // highlight the rest of the line, if configured
-          if(data->cursor.y == data->loc.y && data->highlight_line_type == HLT_ENTIRE_LINE){
-               syntax_set_color(S_NORMAL, HL_CURRENT_LINE);
-               for(int64_t c = data->loc.x; c < data->bottom_right.x; ++c){
-                    addch(' ');
-               }
-          }
+          highlight_current_line_emptiness_until_end_of_line(data->cursor.y, data->loc.y, data->highlight_line_type, data->bottom_right.x - data->loc.x);
 
           // highlight line numbers!
           syntax_set_color(S_LINE_NUMBERS, HL_OFF);
@@ -858,30 +876,7 @@ void syntax_highlight_java(SyntaxHighlighterData_t* data, void* user_data)
           // is our cursor on something we can match?
           syntax_calc_matching_pair(data, &syntax->matched_pair);
 
-          // figure out of any multiline comments are earlier in the file offscreen
-          syntax->inside_multiline_comment = false;
-          int64_t last_line = data->bottom_right.y;
-          if(last_line >= data->buffer->line_count) last_line = data->buffer->line_count;
-
-          for(int64_t i = data->loc.y; i < last_line; ++i) {
-               if(!data->buffer->lines[i][0]) continue;
-               const char* buffer_line = data->buffer->lines[i];
-               int64_t len = strlen(buffer_line);
-               bool found_open_multiline_comment = false;
-
-               for(int64_t c = 0; c < len; ++c){
-                    if(buffer_line[c] == '/' && buffer_line[c + 1] == '*'){
-                         found_open_multiline_comment = true;
-                         break;
-                    }
-
-                    if(buffer_line[c] == '*' && buffer_line[c + 1] == '/'){
-                         syntax->inside_multiline_comment = true;
-                    }
-               }
-
-               if(found_open_multiline_comment) break;
-          }
+          syntax->inside_multiline_comment = inside_multiline_c_comment_offscreen(data->loc.y, data->bottom_right.y, data->buffer);
 
           syntax->highlight.chars_til_highlight = -1;
 
@@ -1022,13 +1017,7 @@ void syntax_highlight_java(SyntaxHighlighterData_t* data, void* user_data)
           const char* buffer_line = data->buffer->lines[data->loc.y];
           int64_t line_length = strlen(buffer_line);
 
-          // highlight the rest of the line, if configured
-          if(data->cursor.y == data->loc.y && data->highlight_line_type == HLT_ENTIRE_LINE){
-               syntax_set_color(S_NORMAL, HL_CURRENT_LINE);
-               for(int64_t c = data->loc.x; c < data->bottom_right.x; ++c){
-                    addch(' ');
-               }
-          }
+          highlight_current_line_emptiness_until_end_of_line(data->cursor.y, data->loc.y, data->highlight_line_type, data->bottom_right.x - data->loc.x);
 
           // highlight line numbers!
           syntax_set_color(S_LINE_NUMBERS, HL_OFF);
@@ -1292,12 +1281,7 @@ void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data)
           const char* buffer_line = data->buffer->lines[data->loc.y];
           int64_t line_length = strlen(buffer_line);
 
-          if(data->cursor.y == data->loc.y && data->highlight_line_type == HLT_ENTIRE_LINE){
-               syntax->current_color = syntax_set_color(S_NORMAL, HL_CURRENT_LINE);
-               for(int64_t c = data->loc.x; c < data->bottom_right.x; ++c){
-                    addch(' ');
-               }
-          }
+          highlight_current_line_emptiness_until_end_of_line(data->cursor.y, data->loc.y, data->highlight_line_type, data->bottom_right.x - data->loc.x);
 
           // highlight line numbers!
           syntax_set_color(S_LINE_NUMBERS, HL_OFF);
@@ -1401,12 +1385,7 @@ void syntax_highlight_bash(SyntaxHighlighterData_t* data, void* user_data)
           }
      } break;
      case SS_END_OF_LINE:
-          if(data->cursor.y == data->loc.y && data->highlight_line_type == HLT_ENTIRE_LINE){
-               syntax->current_color = syntax_set_color(S_NORMAL, HL_CURRENT_LINE);
-               for(int64_t c = data->loc.x; c < data->bottom_right.x; ++c){
-                    addch(' ');
-               }
-          }
+          highlight_current_line_emptiness_until_end_of_line(data->cursor.y, data->loc.y, data->highlight_line_type, data->bottom_right.x - data->loc.x);
 
           // highlight line numbers!
           syntax_set_color(S_LINE_NUMBERS, HL_OFF);
@@ -1522,12 +1501,7 @@ void syntax_highlight_config(SyntaxHighlighterData_t* data, void* user_data)
           }
      } break;
      case SS_END_OF_LINE:
-          if(data->cursor.y == data->loc.y && data->highlight_line_type == HLT_ENTIRE_LINE){
-               syntax->current_color = syntax_set_color(S_NORMAL, HL_CURRENT_LINE);
-               for(int64_t c = data->loc.x; c < data->bottom_right.x; ++c){
-                    addch(' ');
-               }
-          }
+          highlight_current_line_emptiness_until_end_of_line(data->cursor.y, data->loc.y, data->highlight_line_type, data->bottom_right.x - data->loc.x);
 
           // highlight line numbers!
           syntax_set_color(S_LINE_NUMBERS, HL_OFF);
@@ -1567,12 +1541,7 @@ void syntax_highlight_plain(SyntaxHighlighterData_t* data, void* user_data)
           syntax_set_color(S_NORMAL, syntax->highlight.type);
      } break;
      case SS_END_OF_LINE:
-          if(data->cursor.y == data->loc.y && data->highlight_line_type == HLT_ENTIRE_LINE){
-               syntax_set_color(S_NORMAL, HL_CURRENT_LINE);
-               for(int64_t c = data->loc.x; c < data->bottom_right.x; ++c){
-                    addch(' ');
-               }
-          }
+          highlight_current_line_emptiness_until_end_of_line(data->cursor.y, data->loc.y, data->highlight_line_type, data->bottom_right.x - data->loc.x);
 
           // highlight line numbers!
           syntax_set_color(S_LINE_NUMBERS, HL_OFF);
@@ -1622,12 +1591,7 @@ void syntax_highlight_diff(SyntaxHighlighterData_t* data, void* user_data)
           syntax_set_color(syntax->current_color, syntax->highlight.type);
      } break;
      case SS_END_OF_LINE:
-          if(data->cursor.y == data->loc.y && data->highlight_line_type == HLT_ENTIRE_LINE){
-               syntax_set_color(S_NORMAL, HL_CURRENT_LINE);
-               for(int64_t c = data->loc.x; c < data->bottom_right.x; ++c){
-                    addch(' ');
-               }
-          }
+          highlight_current_line_emptiness_until_end_of_line(data->cursor.y, data->loc.y, data->highlight_line_type, data->bottom_right.x - data->loc.x);
 
           // highlight line numbers!
           syntax_set_color(S_LINE_NUMBERS, HL_OFF);

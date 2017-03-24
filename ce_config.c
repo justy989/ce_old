@@ -2253,6 +2253,35 @@ void command_line_number(Command_t* command, void* user_data)
      }
 }
 
+static void command_highlight_line_help()
+{
+     ce_message("usage: highlight_line [string]");
+     ce_message(" supported modes: 'none', 'text', 'entire'");
+}
+
+void command_highlight_line(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 1){
+          command_highlight_line_help();
+          return;
+     }
+
+     if(command->args[0].type != CAT_STRING){
+          command_highlight_line_help();
+          return;
+     }
+
+     ConfigState_t* config_state = (ConfigState_t*)(user_data);
+
+     if(strcmp(command->args[0].string, "none") == 0){
+          config_state->highlight_line_type = HLT_NONE;
+     }else if(strcmp(command->args[0].string, "text") == 0){
+          config_state->highlight_line_type = HLT_TO_END_OF_TEXT;
+     }else if(strcmp(command->args[0].string, "entire") == 0){
+          config_state->highlight_line_type = HLT_ENTIRE_LINE;
+     }
+}
+
 #define NEW_BUFFER_HELP "usage: new_buffer"
 
 void command_new_buffer(Command_t* command, void* user_data)
@@ -2516,6 +2545,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
                {command_syntax, "syntax"},
                {command_noh, "noh"},
                {command_line_number, "line_number"},
+               {command_highlight_line, "highlight_line"},
                {command_new_buffer, "new_buffer"},
                {command_rename, "rename"},
           };

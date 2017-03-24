@@ -884,6 +884,8 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
      char line_number_str[BUFSIZ];
      char column_number_str[BUFSIZ];
 
+     column_number_str[0] = 0;
+
      // prepend the terminal current directory with a slash
      strncpy(filename, terminal_current_directory, BUFSIZ);
      int64_t filename_start = strlen(filename);
@@ -2365,7 +2367,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      config_state->buffer_list_buffer.status = BS_READONLY;
      config_state->buffer_list_buffer.absolutely_no_line_numbers_under_any_circumstances = true;
      config_state->buffer_list_buffer.syntax_fn = syntax_highlight_c;
-     config_state->buffer_list_buffer.syntax_user_data = malloc(sizeof(SyntaxC_t));
+     config_state->buffer_list_buffer.syntax_user_data = realloc(config_state->buffer_list_buffer.syntax_user_data, sizeof(SyntaxC_t));
      config_state->buffer_list_buffer.type = BFT_C;
 
      config_state->mark_list_buffer.name = strdup("[marks]");
@@ -2373,7 +2375,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      config_state->mark_list_buffer.status = BS_READONLY;
      config_state->mark_list_buffer.absolutely_no_line_numbers_under_any_circumstances = true;
      config_state->mark_list_buffer.syntax_fn = syntax_highlight_c;
-     config_state->mark_list_buffer.syntax_user_data = malloc(sizeof(SyntaxC_t));
+     config_state->mark_list_buffer.syntax_user_data = realloc(config_state->mark_list_buffer.syntax_user_data, sizeof(SyntaxC_t));
      config_state->mark_list_buffer.type = BFT_C;
 
      config_state->yank_list_buffer.name = strdup("[yanks]");
@@ -2381,7 +2383,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      config_state->yank_list_buffer.status = BS_READONLY;
      config_state->yank_list_buffer.absolutely_no_line_numbers_under_any_circumstances = true;
      config_state->yank_list_buffer.syntax_fn = syntax_highlight_c;
-     config_state->yank_list_buffer.syntax_user_data = malloc(sizeof(SyntaxC_t));
+     config_state->yank_list_buffer.syntax_user_data = realloc(config_state->yank_list_buffer.syntax_user_data, sizeof(SyntaxC_t));
      config_state->yank_list_buffer.type = BFT_C;
 
      config_state->macro_list_buffer.name = strdup("[macros]");
@@ -2389,7 +2391,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      config_state->macro_list_buffer.status = BS_READONLY;
      config_state->macro_list_buffer.absolutely_no_line_numbers_under_any_circumstances = true;
      config_state->macro_list_buffer.syntax_fn = syntax_highlight_c;
-     config_state->macro_list_buffer.syntax_user_data = malloc(sizeof(SyntaxC_t));
+     config_state->macro_list_buffer.syntax_user_data = realloc(config_state->macro_list_buffer.syntax_user_data, sizeof(SyntaxC_t));
      config_state->macro_list_buffer.type = BFT_C;
 
      // if we reload, the completionbuffer may already exist, don't recreate it
@@ -2760,6 +2762,8 @@ bool destroyer(BufferNode_t** head, void* user_data)
      free_buffer_state(config_state->macro_list_buffer.user_data);
      free(config_state->macro_list_buffer.syntax_user_data);
      ce_free_buffer(&config_state->macro_list_buffer);
+
+     free(config_state->command_entries);
 
      // history
      input_history_free(&config_state->search_history);

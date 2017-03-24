@@ -589,6 +589,7 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
 
           syntax->inside_multiline_comment = inside_multiline_c_comment_offscreen(data->loc.y, data->bottom_right.y, data->buffer);
           syntax->highlight.chars_til_highlight = -1;
+          syntax->highlight.highlight_left = -1;
 
           if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
      } break;
@@ -621,6 +622,7 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
 
           syntax->highlight.no_more_matches_on_line = false;
           syntax->highlight.chars_til_highlight = -1;
+          syntax->highlight.highlight_left = -1;
 
           if(syntax->inside_multiline_comment){
                syntax->current_color = S_COMMENT;
@@ -879,6 +881,7 @@ void syntax_highlight_java(SyntaxHighlighterData_t* data, void* user_data)
           syntax->inside_multiline_comment = inside_multiline_c_comment_offscreen(data->loc.y, data->bottom_right.y, data->buffer);
 
           syntax->highlight.chars_til_highlight = -1;
+          syntax->highlight.highlight_left = -1;
 
           if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
      } break;
@@ -911,6 +914,7 @@ void syntax_highlight_java(SyntaxHighlighterData_t* data, void* user_data)
 
           syntax->highlight.no_more_matches_on_line = false;
           syntax->highlight.chars_til_highlight = -1;
+          syntax->highlight.highlight_left = -1;
 
           if(syntax->inside_multiline_comment){
                syntax->current_color = S_COMMENT;
@@ -1216,6 +1220,7 @@ void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data)
 
           syntax->highlight.no_more_matches_on_line = false;
           syntax->highlight.chars_til_highlight = -1;
+          syntax->highlight.highlight_left = -1;
 
           syntax->current_color = syntax_set_color(syntax->current_color, syntax->highlight.type);
      } break;
@@ -1338,6 +1343,7 @@ void syntax_highlight_bash(SyntaxHighlighterData_t* data, void* user_data)
 
           syntax->highlight.no_more_matches_on_line = false;
           syntax->highlight.chars_til_highlight = -1;
+          syntax->highlight.highlight_left = -1;
 
           syntax->current_color = syntax_set_color(syntax->current_color, syntax->highlight.type);
      } break;
@@ -1449,6 +1455,7 @@ void syntax_highlight_config(SyntaxHighlighterData_t* data, void* user_data)
 
           syntax->highlight.no_more_matches_on_line = false;
           syntax->highlight.chars_til_highlight = -1;
+          syntax->highlight.highlight_left = -1;
 
           syntax->current_color = syntax_set_color(syntax->current_color, syntax->highlight.type);
      } break;
@@ -1520,6 +1527,7 @@ void syntax_highlight_plain(SyntaxHighlighterData_t* data, void* user_data)
      {
           syntax->highlight.type = HL_OFF;
           syntax->highlight.chars_til_highlight = -1;
+          syntax->highlight.highlight_left = -1;
 
           if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
      } break;
@@ -1572,6 +1580,7 @@ void syntax_highlight_diff(SyntaxHighlighterData_t* data, void* user_data)
 
           syntax->highlight.no_more_matches_on_line = false;
           syntax->highlight.chars_til_highlight = -1;
+          syntax->highlight.highlight_left = -1;
 
           const char* buffer_line = data->buffer->lines[data->loc.y];
 

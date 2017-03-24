@@ -621,12 +621,6 @@ void input_cancel(ConfigState_t* config_state)
               config_state->input_key == ':'){
           if(config_state->tab_current->view_overrideable){
                tab_view_restore_overrideable(config_state->tab_current);
-          }else{
-               pthread_mutex_lock(&view_input_save_lock);
-               config_state->tab_current->view_input_save->buffer = config_state->buffer_before_query;
-               pthread_mutex_unlock(&view_input_save_lock);
-               config_state->tab_current->view_input_save->cursor = config_state->buffer_before_query->cursor;
-               center_view(config_state->tab_current->view_input_save);
           }
 
           // free the search path so we can re-use it
@@ -1747,11 +1741,6 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                          new_buffer = open_file_buffer(head, config_state->view_input->buffer->lines[i]);
                     }
 
-                    if(i == 0){
-                         view_jump_insert(buffer_view->user_data, config_state->buffer_before_query->filename,
-                                          config_state->buffer_before_query->cursor);
-                    }
-
                     if(!switched_to_open_file && new_buffer){
                          config_state->tab_current->view_current->buffer = new_buffer;
                          config_state->tab_current->view_current->cursor = (Point_t){0, 0};
@@ -1875,12 +1864,6 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           {
                if(config_state->tab_current->view_overrideable){
                     tab_view_restore_overrideable(config_state->tab_current);
-               }else{
-                    pthread_mutex_lock(&view_input_save_lock);
-                    config_state->tab_current->view_input_save->buffer = config_state->buffer_before_query;
-                    pthread_mutex_unlock(&view_input_save_lock);
-                    config_state->tab_current->view_input_save->cursor = config_state->buffer_before_query->cursor;
-                    center_view(config_state->tab_current->view_input_save);
                }
 
                if(!config_state->view_input->buffer->line_count) break;
@@ -2363,6 +2346,12 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
           return false;
      }
 
+     config_state->view_auto_complete = calloc(1, sizeof(*config_state->view_auto_complete));
+     if(!config_state->view_auto_complete){
+          ce_message("failed to allocate buffer view for auto complete");
+          return false;
+     }
+
      // setup input buffer
      ce_alloc_lines(&config_state->input_buffer, 1);
      initialize_buffer(&config_state->input_buffer);
@@ -2412,6 +2401,8 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
                return false;
           }
      }
+
+     config_state->view_auto_complete->buffer = config_state->completion_buffer;
 
      *user_data = config_state;
 
@@ -2739,6 +2730,7 @@ bool destroyer(BufferNode_t** head, void* user_data)
           free(config_state->input_buffer.syntax_user_data);
           ce_free_buffer(&config_state->input_buffer);
           free(config_state->view_input);
+          free(config_state->view_auto_complete);
      }
 
      free_buffer_state(config_state->buffer_list_buffer.user_data);
@@ -3513,7 +3505,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          }
                          auto_complete_start(&config_state->auto_complete, (Point_t){0, 0});
                          update_completion_buffer(config_state->completion_buffer, &config_state->auto_complete, NULL);
-                         override_buffer_in_view(config_state->tab_current, config_state->tab_current->view_current, config_state->completion_buffer, &config_state->buffer_before_query);
                          input_start(config_state, "Command", key);
                     } break;
                     case '/':
@@ -3831,12 +3822,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               config_state->tab_current->view_overrideable->buffer = config_state->completion_buffer;
                               config_state->tab_current->view_overrideable->cursor = (Point_t){0, 0};
                               center_view(config_state->tab_current->view_overrideable);
-                         }else{
-                              config_state->buffer_before_query = config_state->tab_current->view_input_save->buffer;
-                              config_state->buffer_before_query->cursor = config_state->tab_current->view_input_save->cursor;
-                              config_state->tab_current->view_input_save->buffer = config_state->completion_buffer;
-                              config_state->tab_current->view_input_save->cursor = (Point_t){0, 0};
-                              config_state->tab_current->view_input_save->top_row = 0;
                          }
                     } break;
                     case 20: // Ctrl + t
@@ -4003,15 +3988,16 @@ void view_drawer(void* user_data)
      get_terminal_view_rect(config_state->tab_head, &top_left, &bottom_right);
      ce_calc_views(config_state->tab_current->view_head, top_left, bottom_right);
 
-     int64_t input_view_height = 0;
      Point_t input_top_left = {};
      Point_t input_bottom_right = {};
+     Point_t auto_complete_top_left = {};
+     Point_t auto_complete_bottom_right = {};
      if(config_state->input){
-          input_view_height = config_state->view_input->buffer->line_count;
+          int64_t input_view_height = config_state->view_input->buffer->line_count;
           if(input_view_height) input_view_height--;
           pthread_mutex_lock(&view_input_save_lock);
           input_top_left = (Point_t){config_state->tab_current->view_input_save->top_left.x,
-                                   (config_state->tab_current->view_input_save->bottom_right.y - input_view_height) - 1};
+                                     (config_state->tab_current->view_input_save->bottom_right.y - input_view_height) - 1};
           input_bottom_right = config_state->tab_current->view_input_save->bottom_right;
           pthread_mutex_unlock(&view_input_save_lock);
           if(input_top_left.y < 1) input_top_left.y = 1; // clamp to growing to 1, account for input message
@@ -4023,6 +4009,13 @@ void view_drawer(void* user_data)
           pthread_mutex_lock(&view_input_save_lock);
           config_state->tab_current->view_input_save->bottom_right.y = input_top_left.y - 1;
           pthread_mutex_unlock(&view_input_save_lock);
+
+          if(auto_completing(&config_state->auto_complete)){
+               int64_t auto_complete_view_height = config_state->view_auto_complete->buffer->line_count;
+               auto_complete_top_left = (Point_t){input_top_left.x, (input_top_left.y - auto_complete_view_height) - 1};
+               auto_complete_bottom_right = (Point_t){input_bottom_right.x, input_top_left.y - 1};
+               ce_calc_views(config_state->view_auto_complete, auto_complete_top_left, auto_complete_bottom_right);
+          }
      }
 
      view_follow_cursor(buffer_view, config_state->line_number_type);
@@ -4086,6 +4079,25 @@ void view_drawer(void* user_data)
 
      // draw input status
      if(config_state->input){
+          if(auto_completing(&config_state->auto_complete)){
+               move(auto_complete_top_left.y - 1, auto_complete_top_left.x);
+
+               attron(COLOR_PAIR(S_BORDERS));
+               for(int i = auto_complete_top_left.x; i < auto_complete_bottom_right.x; ++i) addch(ACS_HLINE);
+               // if we are at the edge of the terminal, draw the inclusing horizontal line. We
+               if(auto_complete_bottom_right.x == g_terminal_dimensions->x - 1) addch(ACS_HLINE);
+
+               // clear auto complete buffer section
+               for(int y = auto_complete_top_left.y; y <= auto_complete_bottom_right.y; ++y){
+                    move(y, auto_complete_top_left.x);
+                    for(int x = auto_complete_top_left.x; x <= auto_complete_bottom_right.x; ++x){
+                         addch(' ');
+                    }
+               }
+
+               ce_draw_views(config_state->view_auto_complete, NULL, LNT_NONE, HLT_NONE);
+          }
+
           if(config_state->view_input == config_state->tab_current->view_current){
                move(input_top_left.y - 1, input_top_left.x);
 

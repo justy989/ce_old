@@ -99,6 +99,7 @@ typedef struct{
      TabView_t* tab_current;
 
      BufferView_t* view_input;
+     BufferView_t* view_auto_complete;
 
      InputHistory_t search_history;
      InputHistory_t load_file_history;

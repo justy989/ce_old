@@ -739,7 +739,6 @@ static int64_t syntax_is_java_keyword(const char* line, int64_t start_offset)
           "default",
           "package",
           "synchronized",
-          "boolean",
           "do",
           "if",
           "private",
@@ -747,7 +746,6 @@ static int64_t syntax_is_java_keyword(const char* line, int64_t start_offset)
           "double",
           "implements",
           "protected",
-          "byte",
           "else",
           "import",
           "public",
@@ -756,19 +754,13 @@ static int64_t syntax_is_java_keyword(const char* line, int64_t start_offset)
           "instanceof",
           "transient",
           "extends",
-          "int",
-          "short",
-          "try",
           "char",
           "final",
           "interface",
           "static",
-          "void",
           "class",
-          "long",
           "strictfp",
           "volatile",
-          "float",
           "native",
           "super",
           "while",
@@ -782,6 +774,7 @@ static int64_t syntax_is_java_keyword(const char* line, int64_t start_offset)
 int64_t syntax_is_java_control(const char* line, int64_t start_offset)
 {
      static const char* keywords [] = {
+          "try",
           "continue",
           "goto",
           "break",
@@ -806,6 +799,46 @@ int64_t syntax_is_java_control(const char* line, int64_t start_offset)
      static const int keyword_count = sizeof(keywords) / sizeof(keywords[0]);
 
      return match_keyword(line, start_offset, keywords, keyword_count);
+}
+
+static int64_t syntax_is_java_typename(const char* line, int64_t start_offset)
+{
+     // NOTE: simple rules for now:
+     //       -if it is one of the java standard type names
+     //       -if it starts with a capital letter
+
+     static const char* keywords [] = {
+          "boolean",
+          "byte",
+          "int",
+          "short",
+          "long",
+          "void",
+          "float",
+     };
+
+     static const int keyword_count = sizeof(keywords) / sizeof(keywords[0]);
+
+     int64_t match = match_keyword(line, start_offset, keywords, keyword_count);
+     if(match) return match;
+
+     if(start_offset > 0 && iscidentifier(line[start_offset - 1])) return 0; // weed out middle of words
+
+     const char* itr = line + start_offset;
+     int64_t count = 0;
+     for(char ch = *itr; iscidentifier(ch); ++itr){
+          ch = *itr;
+          count++;
+     }
+
+     if(!count) return 0;
+
+     // we overcounted on the last iteration!
+     count--;
+
+     if(isupper(line[start_offset])) return count;
+
+     return 0;
 }
 
 void syntax_highlight_java(SyntaxHighlighterData_t* data, void* user_data)
@@ -903,10 +936,10 @@ void syntax_highlight_java(SyntaxHighlighterData_t* data, void* user_data)
                if(!syntax->inside_string){
                     if((syntax->current_color_left = syntax_is_c_constant_number(line_to_print, data->loc.x))){
                          syntax->current_color = syntax_set_color(S_CONSTANT_NUMBER, syntax->highlight.type);
-                    }else if((syntax->current_color_left = syntax_is_c_typename(line_to_print, data->loc.x))){
-                         syntax->current_color = syntax_set_color(S_TYPE, syntax->highlight.type);
                     }else if((syntax->current_color_left = syntax_is_c_caps_var(line_to_print, data->loc.x))){
                          syntax->current_color = syntax_set_color(S_CONSTANT, syntax->highlight.type);
+                    }else if((syntax->current_color_left = syntax_is_java_typename(line_to_print, data->loc.x))){
+                         syntax->current_color = syntax_set_color(S_TYPE, syntax->highlight.type);
                     }
 
                     if(!syntax->current_color_left && !syntax->inside_comment && !syntax->inside_multiline_comment){

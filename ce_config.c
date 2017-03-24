@@ -405,6 +405,15 @@ bool initialize_buffer(Buffer_t* buffer){
                     free(buffer_state);
                     return false;
                }
+          }else if(string_ends_in_substring(buffer->name, name_len, ".java")){
+               buffer->syntax_fn = syntax_highlight_java;
+               buffer->syntax_user_data = malloc(sizeof(SyntaxJava_t));
+               buffer->type = BFT_JAVA;
+               if(!buffer->syntax_user_data){
+                    ce_message("failed to allocate syntax user data for buffer");
+                    free(buffer_state);
+                    return false;
+               }
           }else if(string_ends_in_substring(buffer->name, name_len, ".sh")){
                buffer->syntax_fn = syntax_highlight_bash;
                buffer->syntax_user_data = malloc(sizeof(SyntaxBash_t));
@@ -2171,6 +2180,12 @@ void command_syntax(Command_t* command, void* user_data)
           free(buffer->syntax_user_data);
           buffer->syntax_user_data = malloc(sizeof(SyntaxPython_t));
           buffer->type = BFT_PYTHON;
+     }else if(strcmp(command->args[0].string, "java") == 0){
+          ce_message("syntax 'java' now on %s", buffer->filename);
+          buffer->syntax_fn = syntax_highlight_java;
+          free(buffer->syntax_user_data);
+          buffer->syntax_user_data = malloc(sizeof(SyntaxJava_t));
+          buffer->type = BFT_JAVA;
      }else if(strcmp(command->args[0].string, "config") == 0){
           ce_message("syntax 'config' now on %s", buffer->filename);
           buffer->syntax_fn = syntax_highlight_config;

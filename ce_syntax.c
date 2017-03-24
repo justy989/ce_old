@@ -638,6 +638,290 @@ void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data)
                               }
                          }
                     }
+               }
+
+               // highlight comments
+               CommentType_t comment_type = syntax_is_c_comment(line_to_print, data->loc.x, syntax->inside_string);
+               switch(comment_type){
+               default:
+                    break;
+               case CT_SINGLE_LINE:
+                    syntax->inside_comment = true;
+                    syntax->current_color = syntax_set_color(S_COMMENT, syntax->highlight.type);
+                    break;
+               case CT_BEGIN_MULTILINE:
+                    if(!syntax->inside_comment){
+                         syntax->inside_multiline_comment = true;
+                         syntax->current_color = syntax_set_color(S_COMMENT, syntax->highlight.type);
+                    }
+                    break;
+               case CT_END_MULTILINE:
+                    syntax->inside_multiline_comment = false;
+                    syntax->current_color_left = 1;
+                    break;
+               }
+
+               // highlight strings
+               bool pre_quote_check = syntax->inside_string;
+               syntax_is_c_string_literal(line_to_print, data->loc.x, print_line_length, &syntax->inside_string, &syntax->last_quote_char);
+
+               // if inside_string has changed, update the color
+               if(pre_quote_check != syntax->inside_string){
+                    if(syntax->inside_string) syntax->current_color = syntax_set_color(S_STRING, syntax->highlight.type);
+                    else syntax->current_color_left = 1;
+               }
+          }else{
+               syntax->current_color_left--;
+
+               // if no color is left, go back to what the color should be based on state
+               if(syntax->current_color_left == 0){
+                    syntax->current_color = syntax_set_color(S_NORMAL, syntax->highlight.type);
+
+                    if(syntax->inside_comment || syntax->inside_multiline_comment){
+                         syntax->current_color = syntax_set_color(S_COMMENT, syntax->highlight.type);
+                    }else if(syntax->inside_string){
+                         syntax->current_color = syntax_set_color(S_STRING, syntax->highlight.type);
+                    }else if(syntax->matched_pair.x >= 0){
+                         if(ce_points_equal(data->loc, data->cursor) || ce_points_equal(data->loc, syntax->matched_pair)){
+                              syntax->current_color = syntax_set_color(S_MATCHING_PARENS, syntax->highlight.type);
+                         }
+                    }
+               }
+          }
+
+          // highlight trailing whitespace
+          if(syntax->trailing_whitespace_begin >= 0 && data->loc.x >= syntax->trailing_whitespace_begin){
+               syntax_set_color(S_TRAILING_WHITESPACE, HL_OFF);
+          }
+     } break;
+     case SS_END_OF_LINE:
+     {
+          const char* buffer_line = data->buffer->lines[data->loc.y];
+          int64_t line_length = strlen(buffer_line);
+
+          // highlight the rest of the line, if configured
+          if(data->cursor.y == data->loc.y && data->highlight_line_type == HLT_ENTIRE_LINE){
+               syntax_set_color(S_NORMAL, HL_CURRENT_LINE);
+               for(int64_t c = data->loc.x; c < data->bottom_right.x; ++c){
+                    addch(' ');
+               }
+          }
+
+          // highlight line numbers!
+          syntax_set_color(S_LINE_NUMBERS, HL_OFF);
+
+          // NOTE: post pass after the line to see if multiline comments begin or end
+          for(int64_t c = data->loc.x; c < line_length; ++c){
+               CommentType_t comment_type = syntax_is_c_comment(buffer_line, c, syntax->inside_string);
+               switch(comment_type){
+               default:
+                    break;
+               case CT_BEGIN_MULTILINE:
+                    if(!syntax->inside_comment) syntax->inside_multiline_comment = true;
+                    break;
+               case CT_END_MULTILINE:
+                    syntax->inside_multiline_comment = false;
+                    break;
+               }
+          }
+     } break;
+     }
+}
+
+static int64_t syntax_is_java_keyword(const char* line, int64_t start_offset)
+{
+     static const char* keywords [] = {
+          "abstract",
+          "for",
+          "new",
+          "switch",
+          "assert",
+          "default",
+          "package",
+          "synchronized",
+          "boolean",
+          "do",
+          "if",
+          "private",
+          "this",
+          "double",
+          "implements",
+          "protected",
+          "byte",
+          "else",
+          "import",
+          "public",
+          "case",
+          "enum",
+          "instanceof",
+          "transient",
+          "extends",
+          "int",
+          "short",
+          "try",
+          "char",
+          "final",
+          "interface",
+          "static",
+          "void",
+          "class",
+          "long",
+          "strictfp",
+          "volatile",
+          "float",
+          "native",
+          "super",
+          "while",
+     };
+
+     static const int keyword_count = sizeof(keywords) / sizeof(keywords[0]);
+
+     return match_keyword(line, start_offset, keywords, keyword_count);
+}
+
+int64_t syntax_is_java_control(const char* line, int64_t start_offset)
+{
+     static const char* keywords [] = {
+          "continue",
+          "goto",
+          "break",
+          "throw",
+          "throws",
+          "return",
+          "catch",
+          "finally",
+          "const",
+
+
+          "yield",
+          "break",
+          "except",
+          "raise",
+          "continue",
+          "finally",
+          "return",
+          "try",
+     };
+
+     static const int keyword_count = sizeof(keywords) / sizeof(keywords[0]);
+
+     return match_keyword(line, start_offset, keywords, keyword_count);
+}
+
+void syntax_highlight_java(SyntaxHighlighterData_t* data, void* user_data)
+{
+     if(!user_data) return;
+
+     SyntaxJava_t* syntax = user_data;
+
+     // init if we haven't initted already
+     switch(data->state){
+     default:
+          break;
+     case SS_INITIALIZING:
+     {
+          memset(syntax, 0, sizeof(*syntax));
+
+          // is our cursor on something we can match?
+          syntax_calc_matching_pair(data, &syntax->matched_pair);
+
+          // figure out of any multiline comments are earlier in the file offscreen
+          syntax->inside_multiline_comment = false;
+          int64_t last_line = data->bottom_right.y;
+          if(last_line >= data->buffer->line_count) last_line = data->buffer->line_count;
+
+          for(int64_t i = data->loc.y; i < last_line; ++i) {
+               if(!data->buffer->lines[i][0]) continue;
+               const char* buffer_line = data->buffer->lines[i];
+               int64_t len = strlen(buffer_line);
+               bool found_open_multiline_comment = false;
+
+               for(int64_t c = 0; c < len; ++c){
+                    if(buffer_line[c] == '/' && buffer_line[c + 1] == '*'){
+                         found_open_multiline_comment = true;
+                         break;
+                    }
+
+                    if(buffer_line[c] == '*' && buffer_line[c + 1] == '/'){
+                         syntax->inside_multiline_comment = true;
+                    }
+               }
+
+               if(found_open_multiline_comment) break;
+          }
+
+          syntax->highlight.chars_til_highlight = -1;
+
+          if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
+     } break;
+     case SS_BEGINNING_OF_LINE:
+     {
+          syntax->inside_comment = false;
+          syntax->inside_string = false;
+          syntax->last_quote_char = 0;
+
+          syntax->current_color = S_NORMAL;
+          syntax->current_color_left = 0;
+
+          syntax->highlight.type = HL_OFF;
+
+          syntax_calc_trailing_whitespace(data, &syntax->trailing_whitespace_begin);
+
+          SyntaxHighlighterData_t data_copy = *data;
+          data_copy.state = SS_CHARACTER;
+
+          for(int64_t x = 0; x < data->loc.x; ++x){
+               data_copy.loc = (Point_t){x, data->loc.y};
+               syntax_highlight_c(&data_copy, user_data);
+          }
+
+          if(data->loc.y == data->cursor.y){
+               syntax->highlight.type = HL_CURRENT_LINE;
+          }else{
+               syntax->highlight.type = HL_OFF;
+          }
+
+          syntax->highlight.no_more_matches_on_line = false;
+          syntax->highlight.chars_til_highlight = -1;
+
+          if(syntax->inside_multiline_comment){
+               syntax->current_color = S_COMMENT;
+          }
+
+          syntax->current_color = syntax_set_color(syntax->current_color, syntax->highlight.type);
+     } break;
+     case SS_CHARACTER:
+     {
+          syntax_determine_highlight(data, &syntax->highlight);
+          syntax->current_color = syntax_set_color(syntax->current_color, syntax->highlight.type);
+
+          const char* line_to_print = data->buffer->lines[data->loc.y];
+          int64_t print_line_length = strlen(line_to_print);
+
+          // syntax highligh c things we recognize
+          if(syntax->current_color_left == 0){
+               if(!syntax->inside_string){
+                    if((syntax->current_color_left = syntax_is_c_constant_number(line_to_print, data->loc.x))){
+                         syntax->current_color = syntax_set_color(S_CONSTANT_NUMBER, syntax->highlight.type);
+                    }else if((syntax->current_color_left = syntax_is_c_typename(line_to_print, data->loc.x))){
+                         syntax->current_color = syntax_set_color(S_TYPE, syntax->highlight.type);
+                    }else if((syntax->current_color_left = syntax_is_c_caps_var(line_to_print, data->loc.x))){
+                         syntax->current_color = syntax_set_color(S_CONSTANT, syntax->highlight.type);
+                    }
+
+                    if(!syntax->current_color_left && !syntax->inside_comment && !syntax->inside_multiline_comment){
+                         if((syntax->current_color_left = syntax_is_java_control(line_to_print, data->loc.x))){
+                              syntax->current_color = syntax_set_color(S_CONTROL, syntax->highlight.type);
+                         }else if((syntax->current_color_left = syntax_is_java_keyword(line_to_print, data->loc.x))){
+                              syntax->current_color = syntax_set_color(S_KEYWORD, syntax->highlight.type);
+                         }else if(syntax->matched_pair.x >= 0){
+                              if(ce_points_equal(data->loc, data->cursor) || ce_points_equal(data->loc, syntax->matched_pair)){
+                                   syntax->current_color = syntax_set_color(S_MATCHING_PARENS, syntax->highlight.type);
+                              }else if(syntax->current_color == S_MATCHING_PARENS){
+                                   syntax->current_color = syntax_set_color(S_NORMAL, syntax->highlight.type);
+                              }
+                         }
+                    }
 
                     if(!syntax->current_color_left){
                          if((syntax->current_color_left = syntax_is_c_fullpath(line_to_print, data->loc.x))){
@@ -971,6 +1255,10 @@ void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data)
           }
      } break;
      case SS_END_OF_LINE:
+     {
+          const char* buffer_line = data->buffer->lines[data->loc.y];
+          int64_t line_length = strlen(buffer_line);
+
           if(data->cursor.y == data->loc.y && data->highlight_line_type == HLT_ENTIRE_LINE){
                syntax->current_color = syntax_set_color(S_NORMAL, HL_CURRENT_LINE);
                for(int64_t c = data->loc.x; c < data->bottom_right.x; ++c){
@@ -980,7 +1268,12 @@ void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data)
 
           // highlight line numbers!
           syntax_set_color(S_LINE_NUMBERS, HL_OFF);
-          break;
+
+          // NOTE: post pass after the line to see if multiline comments begin or end
+          for(int64_t c = data->loc.x; c < line_length; ++c){
+               syntax_is_python_docstring(buffer_line, c, &syntax->inside_docstring);
+          }
+     } break;
      }
 }
 

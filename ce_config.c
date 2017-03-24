@@ -405,6 +405,15 @@ bool initialize_buffer(Buffer_t* buffer){
                     free(buffer_state);
                     return false;
                }
+          }else if(string_ends_in_substring(buffer->name, name_len, ".java")){
+               buffer->syntax_fn = syntax_highlight_java;
+               buffer->syntax_user_data = malloc(sizeof(SyntaxJava_t));
+               buffer->type = BFT_JAVA;
+               if(!buffer->syntax_user_data){
+                    ce_message("failed to allocate syntax user data for buffer");
+                    free(buffer_state);
+                    return false;
+               }
           }else if(string_ends_in_substring(buffer->name, name_len, ".sh")){
                buffer->syntax_fn = syntax_highlight_bash;
                buffer->syntax_user_data = malloc(sizeof(SyntaxBash_t));
@@ -2171,6 +2180,12 @@ void command_syntax(Command_t* command, void* user_data)
           free(buffer->syntax_user_data);
           buffer->syntax_user_data = malloc(sizeof(SyntaxPython_t));
           buffer->type = BFT_PYTHON;
+     }else if(strcmp(command->args[0].string, "java") == 0){
+          ce_message("syntax 'java' now on %s", buffer->filename);
+          buffer->syntax_fn = syntax_highlight_java;
+          free(buffer->syntax_user_data);
+          buffer->syntax_user_data = malloc(sizeof(SyntaxJava_t));
+          buffer->type = BFT_JAVA;
      }else if(strcmp(command->args[0].string, "config") == 0){
           ce_message("syntax 'config' now on %s", buffer->filename);
           buffer->syntax_fn = syntax_highlight_config;
@@ -2235,6 +2250,35 @@ void command_line_number(Command_t* command, void* user_data)
           config_state->line_number_type = LNT_RELATIVE;
      }else if(strcmp(command->args[0].string, "both") == 0){
           config_state->line_number_type = LNT_RELATIVE_AND_ABSOLUTE;
+     }
+}
+
+static void command_highlight_line_help()
+{
+     ce_message("usage: highlight_line [string]");
+     ce_message(" supported modes: 'none', 'text', 'entire'");
+}
+
+void command_highlight_line(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 1){
+          command_highlight_line_help();
+          return;
+     }
+
+     if(command->args[0].type != CAT_STRING){
+          command_highlight_line_help();
+          return;
+     }
+
+     ConfigState_t* config_state = (ConfigState_t*)(user_data);
+
+     if(strcmp(command->args[0].string, "none") == 0){
+          config_state->highlight_line_type = HLT_NONE;
+     }else if(strcmp(command->args[0].string, "text") == 0){
+          config_state->highlight_line_type = HLT_TO_END_OF_TEXT;
+     }else if(strcmp(command->args[0].string, "entire") == 0){
+          config_state->highlight_line_type = HLT_ENTIRE_LINE;
      }
 }
 
@@ -2501,6 +2545,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
                {command_syntax, "syntax"},
                {command_noh, "noh"},
                {command_line_number, "line_number"},
+               {command_highlight_line, "highlight_line"},
                {command_new_buffer, "new_buffer"},
                {command_rename, "rename"},
           };

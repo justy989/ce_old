@@ -1159,10 +1159,6 @@ pid_t bidirectional_popen(const char* cmd, int* in_fd, int* out_fd)
          close(input_fds[0]);
          close(output_fds[1]);
 
-         // set stdin to be non-blocking
-         int fd_flags = fcntl(input_fds[1], F_GETFL, 0);
-         fcntl(input_fds[1], F_SETFL, fd_flags | O_NONBLOCK);
-
          *in_fd = input_fds[1];
          *out_fd = output_fds[0];
      }
@@ -1285,11 +1281,6 @@ void* clang_complete_thread(void* data)
           pthread_exit(NULL);
      }
 
-     struct pollfd poll_fd;
-     memset(&poll_fd, 0, sizeof(poll_fd));
-     poll_fd.events = POLLOUT;
-     poll_fd.fd = input_fd;
-
      // write buffer data to stdin
      char* contents = ce_dupe_buffer(thread_data->buffer_to_complete);
      ssize_t len = strlen(contents);
@@ -1302,28 +1293,9 @@ void* clang_complete_thread(void* data)
                pthread_exit(NULL);
           }
           written += bytes_written;
-
-          int rc = poll(&poll_fd, 1, 10000);
-          if(rc == 0){
-               ce_message("timed out waiting to write to clang input fd");
-               pthread_exit(NULL);
-          }else if(rc < 0){
-               ce_message("polling failed: '%s'", strerror(errno));
-               pthread_exit(NULL);
-          }
      }
 
      close(input_fd);
-
-#if 0
-     char newline = '\n';
-     FILE* f = fopen("completion_file.c", "wb");
-     if(f){
-          fwrite(contents, len, 1, f);
-          fwrite(&newline, 1, 1, f);
-          fclose(f);
-     }
-#endif
 
      free(contents);
 

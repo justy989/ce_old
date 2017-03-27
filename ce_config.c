@@ -426,12 +426,20 @@ bool initialize_buffer(Buffer_t* buffer){
      if(buffer->name){
           int64_t name_len = strlen(buffer->name);
           if(string_ends_in_substring(buffer->name, name_len, ".c") ||
-             string_ends_in_substring(buffer->name, name_len, ".h") ||
-             string_ends_in_substring(buffer->name, name_len, ".cpp") ||
-             string_ends_in_substring(buffer->name, name_len, ".hpp")){
+             string_ends_in_substring(buffer->name, name_len, ".h")){
                buffer->syntax_fn = syntax_highlight_c;
                buffer->syntax_user_data = malloc(sizeof(SyntaxC_t));
                buffer->type = BFT_C;
+               if(!buffer->syntax_user_data){
+                    ce_message("failed to allocate syntax user data for buffer");
+                    free(buffer_state);
+                    return false;
+               }
+          }else if(string_ends_in_substring(buffer->name, name_len, ".cpp") ||
+                   string_ends_in_substring(buffer->name, name_len, ".hpp")){
+               buffer->syntax_fn = syntax_highlight_cpp;
+               buffer->syntax_user_data = malloc(sizeof(SyntaxCpp_t));
+               buffer->type = BFT_CPP;
                if(!buffer->syntax_user_data){
                     ce_message("failed to allocate syntax user data for buffer");
                     free(buffer_state);
@@ -1277,6 +1285,20 @@ void* clang_complete_thread(void* data)
 
      pthread_cleanup_push(clang_complete_thread_cleanup, data);
 
+     const char* compiler = NULL;
+     const char* language_flag = NULL;
+
+     if(thread_data->buffer_to_complete->type == BFT_C){
+          compiler = "clang";
+          language_flag = "-x c";
+     }else if(thread_data->buffer_to_complete->type == BFT_CPP){
+          compiler = "clang++";
+          language_flag = "-x c++";
+     }else{
+          ce_message("unsupported clang completion on buffer type %d", thread_data->buffer_to_complete->type);
+          pthread_exit(NULL);
+     }
+
      // NOTE: extend to fit more flags
      char bytes[BUFSIZ];
      bytes[0] = 0;
@@ -1318,8 +1340,8 @@ void* clang_complete_thread(void* data)
 
      // run command
      char command[BUFSIZ];
-     snprintf(command, BUFSIZ, "clang++ %s %s -fsyntax-only -ferror-limit=1 -x c++ - -Xclang -code-completion-at=-:%ld:%ld",
-              bytes, base_include, thread_data->cursor.y + 1, thread_data->cursor.x + 1);
+     snprintf(command, BUFSIZ, "%s %s %s -fsyntax-only -ferror-limit=1 %s - -Xclang -code-completion-at=-:%ld:%ld",
+              compiler, bytes, base_include, language_flag, thread_data->cursor.y + 1, thread_data->cursor.x + 1);
      //ce_message("%s", command);
 
      int input_fd = 0;
@@ -3443,7 +3465,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               if(!ce_points_equal(config_state->auto_complete.start, end))free(match);
                          } break;
                          }
-                    }else if(buffer->type == BFT_C){
+                    }else if(buffer->type == BFT_C || buffer->type == BFT_CPP){
                          if(auto_completing(&config_state->auto_complete)){
                               Point_t end = {cursor->x - 1, cursor->y};
                               if(end.x < 0) end.x = 0;
@@ -4403,18 +4425,16 @@ void view_drawer(void* user_data)
           terminal_cursor = get_cursor_on_terminal(cursor, buffer_view, line_number_type);
 
           if(auto_completing(&config_state->auto_complete)){
-               view_follow_highlight(config_state->view_auto_complete);
                int64_t auto_complete_view_height = config_state->view_auto_complete->buffer->line_count;
                auto_complete_top_left = (Point_t){input_top_left.x, (input_top_left.y - auto_complete_view_height) - 1};
                if(auto_complete_top_left.y < 0) auto_complete_top_left.y = 0; // account for separator line
                auto_complete_bottom_right = (Point_t){input_bottom_right.x, input_top_left.y - 1};
                ce_calc_views(config_state->view_auto_complete, auto_complete_top_left, auto_complete_bottom_right);
+               view_follow_highlight(config_state->view_auto_complete);
           }
      }else if(auto_completing(&config_state->auto_complete)){
           view_follow_cursor(buffer_view, line_number_type);
           terminal_cursor = get_cursor_on_terminal(cursor, buffer_view, line_number_type);
-
-          view_follow_highlight(config_state->view_auto_complete);
 
           int64_t auto_complete_view_height = config_state->view_auto_complete->buffer->line_count;
           auto_complete_top_left = (Point_t){config_state->tab_current->view_current->top_left.x,
@@ -4423,6 +4443,7 @@ void view_drawer(void* user_data)
           auto_complete_bottom_right = (Point_t){config_state->tab_current->view_current->bottom_right.x,
                                                  config_state->tab_current->view_current->bottom_right.y};
           ce_calc_views(config_state->view_auto_complete, auto_complete_top_left, auto_complete_bottom_right);
+          view_follow_highlight(config_state->view_auto_complete);
      }else{
           view_follow_cursor(buffer_view, line_number_type);
           terminal_cursor = get_cursor_on_terminal(cursor, buffer_view, line_number_type);

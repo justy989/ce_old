@@ -1267,11 +1267,50 @@ void* clang_complete_thread(void* data)
 
      pthread_cleanup_push(clang_complete_thread_cleanup, data);
 
+     // NOTE: extend to fit more flags
+     char bytes[BUFSIZ];
+     bytes[0] = 0;
+
+     char base_include[PATH_MAX];
+     base_include[0] = 0;
+
+     // build flags filepath
+     if(thread_data->buffer_to_complete->name[0] == '/'){
+          const char* last_slash = strrchr(thread_data->buffer_to_complete->name, '/');
+          int path_len = last_slash - thread_data->buffer_to_complete->name;
+          snprintf(bytes, BUFSIZ, "%.*s/.clang_complete", path_len, thread_data->buffer_to_complete->name);
+          snprintf(base_include, PATH_MAX, "-I%.*s", path_len, thread_data->buffer_to_complete->name);
+     }else{
+          strncpy(bytes, ".clang_complete", BUFSIZ);
+     }
+
+     // load flags, each flag is on its own line
+     {
+          FILE* flags_file = fopen(bytes, "r");
+          bytes[0] = 0;
+          if(flags_file){
+               char line[BUFSIZ];
+               size_t line_len;
+               size_t written = 0;
+               while(fgets(line, BUFSIZ, flags_file)){
+                    line_len = strlen(line);
+                    line[line_len - 1] = ' ';
+                    if(written + line_len > BUFSIZ) break;
+                    // filter out linker flags
+                    if(strncmp(line, "-Wl", 3) == 0) continue;
+                    strncpy(bytes + written, line, line_len);
+                    written += line_len;
+               }
+               bytes[written - 1] = 0;
+               fclose(flags_file);
+          }
+     }
+
      // run command
-     const char* flags = "-Wall -std=c11 -ggdb3 -D_GNU_SOURCE";
      char command[BUFSIZ];
-     snprintf(command, BUFSIZ, "clang %s -fsyntax-only -ferror-limit=1 -x c - -Xclang -code-completion-at=-:%ld:%ld",
-              flags, thread_data->cursor.y + 1, thread_data->cursor.x + 1);
+     snprintf(command, BUFSIZ, "clang %s %s -fsyntax-only -ferror-limit=1 -x c - -Xclang -code-completion-at=-:%ld:%ld",
+              bytes, base_include, thread_data->cursor.y + 1, thread_data->cursor.x + 1);
+     //ce_message("%s", command);
 
      int input_fd = 0;
      int output_fd = 0;
@@ -1304,8 +1343,6 @@ void* clang_complete_thread(void* data)
      // collect output
      int status = 0;
      pid_t w;
-     char bytes[BUFSIZ];
-     bytes[0] = 0;
      ssize_t byte_count = 1;
 
      do{

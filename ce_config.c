@@ -279,6 +279,7 @@ int64_t string_common_beginning(const char* a, const char* b)
 char* auto_complete_get_completion(AutoComplete_t* auto_complete, int64_t x)
 {
      int64_t offset = x - auto_complete->start.x;
+     if(offset < 0) return NULL;
 
      CompleteNode_t* itr = auto_complete->current;
      int64_t complete_len = strlen(auto_complete->current->option + offset);
@@ -307,18 +308,20 @@ char* auto_complete_get_completion(AutoComplete_t* auto_complete, int64_t x)
 
 void auto_complete_free(AutoComplete_t* auto_complete)
 {
-    CompleteNode_t* itr = auto_complete->head;
-    while(itr){
-         CompleteNode_t* tmp = itr;
-         itr = itr->next;
-         free(tmp->option);
-         free(tmp->description);
-         free(tmp);
-    }
+     auto_complete_end(auto_complete);
 
-    auto_complete->head = NULL;
-    auto_complete->tail = NULL;
-    auto_complete->current = NULL;
+     CompleteNode_t* itr = auto_complete->head;
+     while(itr){
+          CompleteNode_t* tmp = itr;
+          itr = itr->next;
+          free(tmp->option);
+          free(tmp->description);
+          free(tmp);
+     }
+
+     auto_complete->head = NULL;
+     auto_complete->tail = NULL;
+     auto_complete->current = NULL;
 }
 
 bool auto_complete_next(AutoComplete_t* auto_complete, const char* match)
@@ -363,7 +366,6 @@ bool auto_complete_prev(AutoComplete_t* auto_complete, const char* match)
 
 void update_completion_buffer(Buffer_t* completion_buffer, AutoComplete_t* auto_complete, const char* match)
 {
-     pthread_mutex_lock(&completion_lock);
      assert(completion_buffer->status == BS_READONLY);
      ce_clear_lines_readonly(completion_buffer);
 
@@ -393,7 +395,6 @@ void update_completion_buffer(Buffer_t* completion_buffer, AutoComplete_t* auto_
           itr = itr->next;
      }
 
-     pthread_mutex_unlock(&completion_lock);
 }
 
 
@@ -1224,8 +1225,32 @@ void* terminal_check_update(void* data)
      return NULL;
 }
 
+static void str_collapse_chars(char* string, char* collapseable_chars)
+{
+     char* src = string;
+     char* dst = string;
+
+     while(*dst){
+          bool collapseable = false;
+          for(char* collapse_itr = collapseable_chars; *collapse_itr != 0; ++collapse_itr){
+               if(*dst == *collapse_itr){
+                    collapseable = true;
+                    break;
+               }
+          }
+
+          *src = *dst;
+          if(!collapseable) src++;
+          dst++;
+     }
+
+     // append the null byte to the end
+     *src = 0;
+}
+
 typedef struct{
      Buffer_t* buffer_to_complete;
+     Point_t start;
      Point_t cursor;
      Buffer_t* clang_output_buffer;
      Buffer_t* completion_buffer;
@@ -1245,9 +1270,9 @@ void* clang_complete_thread(void* data)
      pthread_cleanup_push(clang_complete_thread_cleanup, data);
 
      // run command
-     const char* flags = "-Wall -Werror -Wextra -std=c11 -ggdb3 -D_GNU_SOURCE";
+     const char* flags = "-Wall -std=c11 -ggdb3 -D_GNU_SOURCE";
      char command[BUFSIZ];
-     snprintf(command, BUFSIZ, "clang %s -fsyntax-only -ferror-limit=1 -x c -Xclang -code-completion-at=-:%ld:%ld -",
+     snprintf(command, BUFSIZ, "clang %s -fsyntax-only -ferror-limit=1 -x c - -Xclang -code-completion-at=-:%ld:%ld",
               flags, thread_data->cursor.y + 1, thread_data->cursor.x + 1);
 
      int input_fd = 0;
@@ -1255,21 +1280,50 @@ void* clang_complete_thread(void* data)
      pid_t pid = bidirectional_popen(command, &input_fd, &output_fd);
      if(pid == 0){
           ce_message("failed to do bidirectional_popen() with clang command\n");
-          break;
+          pthread_exit(NULL);
      }
 
      struct pollfd poll_fd;
      memset(&poll_fd, 0, sizeof(poll_fd));
+     poll_fd.events = POLLOUT;
      poll_fd.fd = input_fd;
 
-
+     // write buffer data to stdin
      char* contents = ce_dupe_buffer(thread_data->buffer_to_complete);
-     size_t len = strlen(contents);
-     write(input_fd, contents, len);
-     free(contents);
+     ssize_t len = strlen(contents);
+     ssize_t written = 0;
 
-     // append end of transmission
+     while(written < len){
+          ssize_t bytes_written = write(input_fd, contents + written, len - written);
+          if(bytes_written < 0){
+               ce_message("failed to write to clang input fd: '%s'", strerror(errno));
+               pthread_exit(NULL);
+          }
+          written += bytes_written;
+
+          int rc = poll(&poll_fd, 1, 10000);
+          if(rc == 0){
+               ce_message("timed out waiting to write to clang input fd");
+               pthread_exit(NULL);
+          }else if(rc < 0){
+               ce_message("polling failed: '%s'", strerror(errno));
+               pthread_exit(NULL);
+          }
+     }
+
      close(input_fd);
+
+#if 0
+     char newline = '\n';
+     FILE* f = fopen("completion_file.c", "wb");
+     if(f){
+          fwrite(contents, len, 1, f);
+          fwrite(&newline, 1, 1, f);
+          fclose(f);
+     }
+#endif
+
+     free(contents);
 
      ce_clear_lines(thread_data->clang_output_buffer);
 
@@ -1310,32 +1364,63 @@ void* clang_complete_thread(void* data)
           }
      }while(!WIFEXITED(status) && !WIFSIGNALED(status));
 
+     pthread_mutex_lock(&completion_lock);
      auto_complete_free(thread_data->auto_complete);
 
      // populate auto complete
+     // addnstr : [#int#]addnstr(<#const char *#>, <#int#>)
      for(int64_t i = 0; i < thread_data->clang_output_buffer->line_count; ++i){
           const char* line = thread_data->clang_output_buffer->lines[i];
           if(strncmp(line, "COMPLETION: ", 12) == 0){
                const char* start = line + 12;
                const char* end = strchr(start, ' ');
-               const char* description = NULL;
+               const char* type_start = NULL;
+               const char* type_end = NULL;
+               const char* prototype = NULL;
                int completion_len = (end - start);
                if(end){
-                    description = end + 1;
+                    type_start = strstr(end, "[#");
+                    if(type_start) type_start += 2; // advance the pointer
+                    type_end = strstr(end, "#]");
+
+                    if(type_start && type_end) prototype = type_end + 2;
                }else{
                     completion_len = strlen(start);
                }
-               strncpy(bytes, start, completion_len);
-               bytes[completion_len] = 0;
-               auto_complete_insert(thread_data->auto_complete, bytes, description);
+
+               char option[completion_len + 1];
+               strncpy(option, start, completion_len);
+               option[completion_len] = 0;
+
+               if(type_start && type_end){
+                    const char* prototype_has_parens = strchr(prototype, '(');
+                    if(prototype_has_parens){
+                         snprintf(bytes, BUFSIZ, "%.*s %s", (int)(type_end - type_start), type_start, prototype);
+                         str_collapse_chars(bytes, "<>#");
+                    }else{
+                         snprintf(bytes, BUFSIZ, "%.*s", (int)(type_end - type_start), type_start);
+                    }
+
+                    auto_complete_insert(thread_data->auto_complete, option, bytes);
+               }else{
+                    auto_complete_insert(thread_data->auto_complete, option, NULL);
+               }
           }
      }
 
      // if any elements existed, let us know
      if(thread_data->auto_complete->head){
-          auto_complete_start(thread_data->auto_complete, thread_data->cursor);
-          update_completion_buffer(thread_data->completion_buffer, thread_data->auto_complete, "");
+          auto_complete_start(thread_data->auto_complete, thread_data->start);
+          if(!ce_points_equal(thread_data->start, thread_data->cursor)){
+               char* match = ce_dupe_string(thread_data->completion_buffer, thread_data->start, thread_data->cursor);
+               update_completion_buffer(thread_data->completion_buffer, thread_data->auto_complete, match);
+               free(match);
+          }else{
+               update_completion_buffer(thread_data->completion_buffer, thread_data->auto_complete, "");
+          }
      }
+
+     pthread_mutex_unlock(&completion_lock);
 
      // TODO: merge with terminal thread re-drawing code
      struct timeval current_time;
@@ -1795,6 +1880,8 @@ bool calc_auto_complete_start_and_path(AutoComplete_t* auto_complete, const char
 
      if(!start_path) start_path = ".";
 
+     pthread_mutex_lock(&completion_lock);
+
      // generate based on the path
      bool rc = false;
      if(last_slash){
@@ -1849,6 +1936,7 @@ bool calc_auto_complete_start_and_path(AutoComplete_t* auto_complete, const char
           }
      }
 
+     pthread_mutex_unlock(&completion_lock);
      return rc;
 }
 
@@ -2458,6 +2546,32 @@ void command_rename(Command_t* command, void* user_data)
      }
 }
 
+void clang_completion(ConfigState_t* config_state, Point_t start_completion)
+{
+     if(config_state->clang_complete_thread){
+          pthread_cancel(config_state->clang_complete_thread);
+          pthread_join(config_state->clang_complete_thread, NULL);
+     }
+
+     if(auto_completing(&config_state->auto_complete)){
+          auto_complete_end(&config_state->auto_complete);
+     }
+
+     ClangCompleteThreadData_t* thread_data = malloc(sizeof(*thread_data));
+     if(!thread_data) return;
+     thread_data->buffer_to_complete = config_state->tab_current->view_current->buffer;
+     thread_data->start = start_completion;
+     thread_data->cursor = config_state->tab_current->view_current->cursor;
+     thread_data->clang_output_buffer = &config_state->clang_completion_buffer;
+     thread_data->completion_buffer = config_state->completion_buffer;
+     thread_data->auto_complete = &config_state->auto_complete;
+     thread_data->config_state = config_state;
+     int rc = pthread_create(&config_state->clang_complete_thread, NULL, clang_complete_thread, thread_data);
+     if(rc != 0){
+          ce_message("pthread_create() for clang auto complete failed");
+     }
+}
+
 bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, char** argv, void** user_data)
 {
      // NOTE: need to set these in this module
@@ -2563,6 +2677,9 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
           config_state->completion_buffer->name = strdup("[completions]");
           config_state->completion_buffer->status = BS_READONLY;
           config_state->completion_buffer->absolutely_no_line_numbers_under_any_circumstances = true;
+          config_state->completion_buffer->syntax_fn = syntax_highlight_c;
+          config_state->completion_buffer->syntax_user_data = realloc(config_state->completion_buffer->syntax_user_data, sizeof(SyntaxC_t));
+          config_state->completion_buffer->type = BFT_C;
           BufferNode_t* new_buffer_node = ce_append_buffer_to_list(*head, config_state->completion_buffer);
           if(!new_buffer_node){
                ce_message("failed to add shell command buffer to list");
@@ -3196,28 +3313,30 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                case KEY_TAB:
                     if(auto_completing(&config_state->auto_complete)){
                          char* complete = auto_complete_get_completion(&config_state->auto_complete, cursor->x);
-                         int64_t complete_len = strlen(complete);
-                         if(ce_insert_string(buffer, *cursor, complete)){
-                              Point_t save_cursor = *cursor;
-                              ce_move_cursor(buffer, cursor, (Point_t){complete_len, cursor->y});
-                              cursor->x++;
-                              ce_commit_insert_string(&buffer_state->commit_tail, save_cursor, save_cursor, *cursor, complete, BCC_KEEP_GOING);
-                         }else{
-                              free(complete);
-                         }
+                         if(complete){
+                              int64_t complete_len = strlen(complete);
+                              if(ce_insert_string(buffer, *cursor, complete)){
+                                   Point_t save_cursor = *cursor;
+                                   ce_move_cursor(buffer, cursor, (Point_t){complete_len, 0});
+                                   cursor->x++;
+                                   ce_commit_insert_string(&buffer_state->commit_tail, save_cursor, save_cursor, *cursor, complete, BCC_KEEP_GOING);
+                              }else{
+                                   free(complete);
+                              }
 
-                         switch(config_state->input_key){
-                         default:
-                              break;
-                         case 6: // Ctrl + f
-                              calc_auto_complete_start_and_path(&config_state->auto_complete,
-                                                                buffer->lines[cursor->y],
-                                                                *cursor,
-                                                                config_state->completion_buffer,
-                                                                config_state->load_file_search_path);
-                              break;
-                         case ':':
-                              break;
+                              if(config_state->input){
+                                   switch(config_state->input_key){
+                                   default:
+                                        break;
+                                   case 6: // Ctrl + f
+                                        calc_auto_complete_start_and_path(&config_state->auto_complete,
+                                                                          buffer->lines[cursor->y],
+                                                                          *cursor,
+                                                                          config_state->completion_buffer,
+                                                                          config_state->load_file_search_path);
+                                        break;
+                                   }
+                              }
                          }
 
                          handled_key = true;
@@ -3302,46 +3421,28 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               auto_complete_next(&config_state->auto_complete, match);
                               update_completion_buffer(config_state->completion_buffer, &config_state->auto_complete, match);
                               free(match);
-                         }else{
-                              switch(key){
-                              default:
-                                   break;
-                              case '>':
-                              {
-                                   // only continue to complete if we type the full '->'
-                                   char prev_char = 0;
-                                   if(cursor->x > 1 && ce_get_char(buffer, (Point_t){cursor->x - 2, cursor->y}, &prev_char)){
-                                        if(prev_char != '-'){
-                                             break;
-                                        }
-                                   }else{
+                         }
+
+                         switch(key){
+                         default:
+                              break;
+                         case '>':
+                         {
+                              // only continue to complete if we type the full '->'
+                              char prev_char = 0;
+                              if(cursor->x > 1 && ce_get_char(buffer, (Point_t){cursor->x - 2, cursor->y}, &prev_char)){
+                                   if(prev_char != '-'){
                                         break;
                                    }
-
-                                   // intentional fallthrough
+                              }else{
+                                   break;
                               }
-                              case '.':
-                              {
-                                   if(config_state->clang_complete_thread){
-                                        pthread_cancel(config_state->clang_complete_thread);
-                                        pthread_join(config_state->clang_complete_thread, NULL);
-                                   }
 
-                                   ClangCompleteThreadData_t* thread_data = malloc(sizeof(*thread_data));
-                                   if(!thread_data) break;
-                                   thread_data->buffer_to_complete = buffer;
-                                   thread_data->cursor = buffer_view->cursor;
-                                   thread_data->clang_output_buffer = &config_state->clang_completion_buffer;
-                                   thread_data->completion_buffer = config_state->completion_buffer;
-                                   thread_data->auto_complete = &config_state->auto_complete;
-                                   thread_data->config_state = config_state;
-                                   int rc = pthread_create(&config_state->clang_complete_thread, NULL, clang_complete_thread, thread_data);
-                                   if(rc != 0){
-                                        ce_message("pthread_create() for clang auto complete failed");
-                                        return false;
-                                   }
-                              } break;
-                              }
+                              // intentional fallthrough
+                         }
+                         case '.':
+                              clang_completion(config_state, *cursor);
+                              break;
                          }
                     }
                }
@@ -3722,12 +3823,14 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     } break;
                     case ':':
                     {
+                         pthread_mutex_lock(&completion_lock);
                          auto_complete_free(&config_state->auto_complete);
                          for(int64_t i = 0; i < config_state->command_entry_count; ++i){
                               auto_complete_insert(&config_state->auto_complete, config_state->command_entries[i].name, NULL);
                          }
                          auto_complete_start(&config_state->auto_complete, (Point_t){0, 0});
                          update_completion_buffer(config_state->completion_buffer, &config_state->auto_complete, NULL);
+                         pthread_mutex_unlock(&completion_lock);
                          input_start(config_state, "Command", key);
                     } break;
                     case '/':
@@ -4110,6 +4213,22 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          handled_key = true;
                          break;
                     }
+               }else{
+                    switch(key){
+                    default:
+                         break;
+                    case 25: // Ctrl + y
+                    {
+                         Point_t beginning_of_word = *cursor;
+                         char cur_char = 0;
+                         if(ce_get_char(buffer, (Point_t){cursor->x - 1, cursor->y}, &cur_char)){
+                              if(isalpha(cur_char)){
+                                   ce_move_cursor_to_beginning_of_word(buffer, &beginning_of_word, true);
+                              }
+                         }
+                         clang_completion(config_state, beginning_of_word);
+                    } break;
+                    }
                }
                break;
           }
@@ -4245,7 +4364,7 @@ void view_drawer(void* user_data)
           if(auto_completing(&config_state->auto_complete)){
                int64_t auto_complete_view_height = config_state->view_auto_complete->buffer->line_count;
                auto_complete_top_left = (Point_t){input_top_left.x, (input_top_left.y - auto_complete_view_height) - 1};
-               if(auto_complete_top_left.y < terminal_cursor.y) auto_complete_top_left.y = terminal_cursor.y + 2; // account for separator line
+               if(auto_complete_top_left.y < 0) auto_complete_top_left.y = 0; // account for separator line
                auto_complete_bottom_right = (Point_t){input_bottom_right.x, input_top_left.y - 1};
                ce_calc_views(config_state->view_auto_complete, auto_complete_top_left, auto_complete_bottom_right);
           }
@@ -4364,21 +4483,20 @@ void view_drawer(void* user_data)
                              config_state->vim_state.recording_macro, config_state->terminal_current);
      }
 
-#if 0
      // TODO: re-enable
      // draw auto complete
      if(auto_completing(&config_state->auto_complete) && config_state->auto_complete.current){
           move(terminal_cursor.y, terminal_cursor.x);
           int64_t offset = cursor->x - config_state->auto_complete.start.x;
-          if(offset < 0) offset = 0;
-          const char* option = config_state->auto_complete.current->option + offset;
-          attron(COLOR_PAIR(S_AUTO_COMPLETE));
-          while(*option){
-               addch(*option);
-               option++;
+          if(offset >= 0){
+               const char* option = config_state->auto_complete.current->option + offset;
+               attron(COLOR_PAIR(S_AUTO_COMPLETE));
+               while(*option){
+                    addch(*option);
+                    option++;
+               }
           }
      }
-#endif
 
      // draw tab line
      if(config_state->tab_head->next){

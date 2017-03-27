@@ -1133,6 +1133,16 @@ void view_follow_cursor(BufferView_t* current_view, LineNumberType_t line_number
                       line_number_type, current_view->buffer->line_count);
 }
 
+void view_follow_highlight(BufferView_t* current_view)
+{
+     ce_follow_cursor(current_view->buffer->highlight_start, &current_view->left_column, &current_view->top_row,
+                      current_view->bottom_right.x - current_view->top_left.x,
+                      current_view->bottom_right.y - current_view->top_left.y,
+                      current_view->bottom_right.x == (g_terminal_dimensions->x - 1),
+                      current_view->bottom_right.y == (g_terminal_dimensions->y - 2),
+                      LNT_NONE, current_view->buffer->line_count);
+}
+
 // NOTE: stderr is redirected to stdout
 pid_t bidirectional_popen(const char* cmd, int* in_fd, int* out_fd)
 {
@@ -1310,7 +1320,6 @@ void* clang_complete_thread(void* data)
      char command[BUFSIZ];
      snprintf(command, BUFSIZ, "clang %s %s -fsyntax-only -ferror-limit=1 -x c - -Xclang -code-completion-at=-:%ld:%ld",
               bytes, base_include, thread_data->cursor.y + 1, thread_data->cursor.x + 1);
-     //ce_message("%s", command);
 
      int input_fd = 0;
      int output_fd = 0;
@@ -1359,8 +1368,7 @@ void* clang_complete_thread(void* data)
 
           w = waitpid(pid, &status, WNOHANG);
           if(w == -1){
-               perror("waitpid");
-               exit(EXIT_FAILURE);
+               pthread_exit(NULL);
           }
 
           if(WIFEXITED(status)){
@@ -4380,6 +4388,7 @@ void view_drawer(void* user_data)
           terminal_cursor = get_cursor_on_terminal(cursor, buffer_view, line_number_type);
 
           if(auto_completing(&config_state->auto_complete)){
+               view_follow_highlight(config_state->view_auto_complete);
                int64_t auto_complete_view_height = config_state->view_auto_complete->buffer->line_count;
                auto_complete_top_left = (Point_t){input_top_left.x, (input_top_left.y - auto_complete_view_height) - 1};
                if(auto_complete_top_left.y < 0) auto_complete_top_left.y = 0; // account for separator line
@@ -4390,12 +4399,13 @@ void view_drawer(void* user_data)
           view_follow_cursor(buffer_view, line_number_type);
           terminal_cursor = get_cursor_on_terminal(cursor, buffer_view, line_number_type);
 
+          view_follow_highlight(config_state->view_auto_complete);
           int64_t auto_complete_view_height = config_state->view_auto_complete->buffer->line_count;
           auto_complete_top_left = (Point_t){config_state->tab_current->view_current->top_left.x,
                                              (config_state->tab_current->view_current->bottom_right.y - auto_complete_view_height) - 1};
           if(auto_complete_top_left.y < terminal_cursor.y) auto_complete_top_left.y = terminal_cursor.y + 2;
           auto_complete_bottom_right = (Point_t){config_state->tab_current->view_current->bottom_right.x,
-                                                 config_state->tab_current->view_current->bottom_right.y - 1};
+                                                 config_state->tab_current->view_current->bottom_right.y};
           ce_calc_views(config_state->view_auto_complete, auto_complete_top_left, auto_complete_bottom_right);
      }else{
           view_follow_cursor(buffer_view, line_number_type);
@@ -4455,10 +4465,6 @@ void view_drawer(void* user_data)
      // NOTE: always draw from the head
      ce_draw_views(config_state->tab_current->view_head, highlight_regex, config_state->line_number_type, highlight_line_type);
 
-     draw_view_statuses(config_state->tab_current->view_head, config_state->tab_current->view_current,
-                        config_state->tab_current->view_overrideable, config_state->vim_state.mode, config_state->last_key,
-                        config_state->vim_state.recording_macro, config_state->terminal_current);
-
      // draw input status
      if(auto_completing(&config_state->auto_complete)){
           move(auto_complete_top_left.y - 1, auto_complete_top_left.x);
@@ -4478,6 +4484,10 @@ void view_drawer(void* user_data)
 
           ce_draw_views(config_state->view_auto_complete, NULL, LNT_NONE, HLT_NONE);
      }
+
+     draw_view_statuses(config_state->tab_current->view_head, config_state->tab_current->view_current,
+                        config_state->tab_current->view_overrideable, config_state->vim_state.mode, config_state->last_key,
+                        config_state->vim_state.recording_macro, config_state->terminal_current);
 
      if(config_state->input){
           if(config_state->view_input == config_state->tab_current->view_current){

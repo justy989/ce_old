@@ -3441,8 +3441,14 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               if(end.x < 0) end.x = 0;
                               char* match = "";
                               match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
-                              auto_complete_next(&config_state->auto_complete, match);
-                              update_completion_buffer(config_state->completion_buffer, &config_state->auto_complete, match);
+                              size_t match_len = strlen(match);
+                              if(config_state->auto_complete.current && strncmp(config_state->auto_complete.current->option, match, match_len) == 0){
+                                   // pass
+                              }else{
+                                   auto_complete_next(&config_state->auto_complete, match);
+                                   update_completion_buffer(config_state->completion_buffer, &config_state->auto_complete, match);
+                              }
+
                               free(match);
                          }
 

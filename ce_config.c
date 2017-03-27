@@ -1318,8 +1318,9 @@ void* clang_complete_thread(void* data)
 
      // run command
      char command[BUFSIZ];
-     snprintf(command, BUFSIZ, "clang %s %s -fsyntax-only -ferror-limit=1 -x c - -Xclang -code-completion-at=-:%ld:%ld",
+     snprintf(command, BUFSIZ, "clang++ %s %s -fsyntax-only -ferror-limit=1 -x c++ - -Xclang -code-completion-at=-:%ld:%ld",
               bytes, base_include, thread_data->cursor.y + 1, thread_data->cursor.x + 1);
+     //ce_message("%s", command);
 
      int input_fd = 0;
      int output_fd = 0;
@@ -2932,10 +2933,14 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
           ce_message("failed to register ctrl+c (SIGINT) signal handler.");
      }
 
+     // ignore sigpipe for when things like clang completion error our
+     signal(SIGPIPE, SIG_IGN);
+
      if(pthread_mutex_trylock(&draw_lock) == 0){
           view_drawer(*user_data);
           pthread_mutex_unlock(&draw_lock);
      }
+
      return true;
 }
 
@@ -3202,7 +3207,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     strncpy(command, "make clean", BUFSIZ);
                     run_command_on_terminal_in_view(config_state->terminal_head, config_state->tab_current->view_head, command);
                } break;
-#if 0
+#if 1
                // NOTE: useful for debugging
                case 'a':
                     config_state->tab_current->view_current->buffer = &config_state->clang_completion_buffer;
@@ -3444,7 +3449,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               if(end.x < 0) end.x = 0;
                               char* match = "";
                               match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
-                              size_t match_len = strlen(match);
+                              size_t match_len = 0;
+                              if(match) match_len = strlen(match);
                               if(config_state->auto_complete.current && strncmp(config_state->auto_complete.current->option, match, match_len) == 0){
                                    // pass
                               }else{
@@ -4409,6 +4415,7 @@ void view_drawer(void* user_data)
           terminal_cursor = get_cursor_on_terminal(cursor, buffer_view, line_number_type);
 
           view_follow_highlight(config_state->view_auto_complete);
+
           int64_t auto_complete_view_height = config_state->view_auto_complete->buffer->line_count;
           auto_complete_top_left = (Point_t){config_state->tab_current->view_current->top_left.x,
                                              (config_state->tab_current->view_current->bottom_right.y - auto_complete_view_height) - 1};
@@ -4526,7 +4533,6 @@ void view_drawer(void* user_data)
                              config_state->vim_state.recording_macro, config_state->terminal_current);
      }
 
-     // TODO: re-enable
      // draw auto complete
      if(auto_completing(&config_state->auto_complete) && config_state->auto_complete.current){
           move(terminal_cursor.y, terminal_cursor.x);

@@ -1133,6 +1133,16 @@ void view_follow_cursor(BufferView_t* current_view, LineNumberType_t line_number
                       line_number_type, current_view->buffer->line_count);
 }
 
+void view_follow_highlight(BufferView_t* current_view)
+{
+     ce_follow_cursor(current_view->buffer->highlight_start, &current_view->left_column, &current_view->top_row,
+                      current_view->bottom_right.x - current_view->top_left.x,
+                      current_view->bottom_right.y - current_view->top_left.y,
+                      current_view->bottom_right.x == (g_terminal_dimensions->x - 1),
+                      current_view->bottom_right.y == (g_terminal_dimensions->y - 2),
+                      LNT_NONE, current_view->buffer->line_count);
+}
+
 // NOTE: stderr is redirected to stdout
 pid_t bidirectional_popen(const char* cmd, int* in_fd, int* out_fd)
 {
@@ -1158,10 +1168,6 @@ pid_t bidirectional_popen(const char* cmd, int* in_fd, int* out_fd)
      }else{
          close(input_fds[0]);
          close(output_fds[1]);
-
-         // set stdin to be non-blocking
-         int fd_flags = fcntl(input_fds[1], F_GETFL, 0);
-         fcntl(input_fds[1], F_SETFL, fd_flags | O_NONBLOCK);
 
          *in_fd = input_fds[1];
          *out_fd = output_fds[0];
@@ -1271,11 +1277,49 @@ void* clang_complete_thread(void* data)
 
      pthread_cleanup_push(clang_complete_thread_cleanup, data);
 
+     // NOTE: extend to fit more flags
+     char bytes[BUFSIZ];
+     bytes[0] = 0;
+
+     char base_include[PATH_MAX];
+     base_include[0] = 0;
+
+     // build flags filepath
+     if(thread_data->buffer_to_complete->name[0] == '/'){
+          const char* last_slash = strrchr(thread_data->buffer_to_complete->name, '/');
+          int path_len = last_slash - thread_data->buffer_to_complete->name;
+          snprintf(bytes, BUFSIZ, "%.*s/.clang_complete", path_len, thread_data->buffer_to_complete->name);
+          snprintf(base_include, PATH_MAX, "-I%.*s", path_len, thread_data->buffer_to_complete->name);
+     }else{
+          strncpy(bytes, ".clang_complete", BUFSIZ);
+     }
+
+     // load flags, each flag is on its own line
+     {
+          FILE* flags_file = fopen(bytes, "r");
+          bytes[0] = 0;
+          if(flags_file){
+               char line[BUFSIZ];
+               size_t line_len;
+               size_t written = 0;
+               while(fgets(line, BUFSIZ, flags_file)){
+                    line_len = strlen(line);
+                    line[line_len - 1] = ' ';
+                    if(written + line_len > BUFSIZ) break;
+                    // filter out linker flags
+                    if(strncmp(line, "-Wl", 3) == 0) continue;
+                    strncpy(bytes + written, line, line_len);
+                    written += line_len;
+               }
+               bytes[written - 1] = 0;
+               fclose(flags_file);
+          }
+     }
+
      // run command
-     const char* flags = "-Wall -std=c11 -ggdb3 -D_GNU_SOURCE";
      char command[BUFSIZ];
-     snprintf(command, BUFSIZ, "clang %s -fsyntax-only -ferror-limit=1 -x c - -Xclang -code-completion-at=-:%ld:%ld",
-              flags, thread_data->cursor.y + 1, thread_data->cursor.x + 1);
+     snprintf(command, BUFSIZ, "clang %s %s -fsyntax-only -ferror-limit=1 -x c - -Xclang -code-completion-at=-:%ld:%ld",
+              bytes, base_include, thread_data->cursor.y + 1, thread_data->cursor.x + 1);
 
      int input_fd = 0;
      int output_fd = 0;
@@ -1284,11 +1328,6 @@ void* clang_complete_thread(void* data)
           ce_message("failed to do bidirectional_popen() with clang command\n");
           pthread_exit(NULL);
      }
-
-     struct pollfd poll_fd;
-     memset(&poll_fd, 0, sizeof(poll_fd));
-     poll_fd.events = POLLOUT;
-     poll_fd.fd = input_fd;
 
      // write buffer data to stdin
      char* contents = ce_dupe_buffer(thread_data->buffer_to_complete);
@@ -1302,28 +1341,9 @@ void* clang_complete_thread(void* data)
                pthread_exit(NULL);
           }
           written += bytes_written;
-
-          int rc = poll(&poll_fd, 1, 10000);
-          if(rc == 0){
-               ce_message("timed out waiting to write to clang input fd");
-               pthread_exit(NULL);
-          }else if(rc < 0){
-               ce_message("polling failed: '%s'", strerror(errno));
-               pthread_exit(NULL);
-          }
      }
 
      close(input_fd);
-
-#if 0
-     char newline = '\n';
-     FILE* f = fopen("completion_file.c", "wb");
-     if(f){
-          fwrite(contents, len, 1, f);
-          fwrite(&newline, 1, 1, f);
-          fclose(f);
-     }
-#endif
 
      free(contents);
 
@@ -1332,8 +1352,6 @@ void* clang_complete_thread(void* data)
      // collect output
      int status = 0;
      pid_t w;
-     char bytes[BUFSIZ];
-     bytes[0] = 0;
      ssize_t byte_count = 1;
 
      do{
@@ -1350,8 +1368,7 @@ void* clang_complete_thread(void* data)
 
           w = waitpid(pid, &status, WNOHANG);
           if(w == -1){
-               perror("waitpid");
-               exit(EXIT_FAILURE);
+               pthread_exit(NULL);
           }
 
           if(WIFEXITED(status)){
@@ -3427,8 +3444,14 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               if(end.x < 0) end.x = 0;
                               char* match = "";
                               match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
-                              auto_complete_next(&config_state->auto_complete, match);
-                              update_completion_buffer(config_state->completion_buffer, &config_state->auto_complete, match);
+                              size_t match_len = strlen(match);
+                              if(config_state->auto_complete.current && strncmp(config_state->auto_complete.current->option, match, match_len) == 0){
+                                   // pass
+                              }else{
+                                   auto_complete_next(&config_state->auto_complete, match);
+                                   update_completion_buffer(config_state->completion_buffer, &config_state->auto_complete, match);
+                              }
+
                               free(match);
                          }
 
@@ -4374,6 +4397,7 @@ void view_drawer(void* user_data)
           terminal_cursor = get_cursor_on_terminal(cursor, buffer_view, line_number_type);
 
           if(auto_completing(&config_state->auto_complete)){
+               view_follow_highlight(config_state->view_auto_complete);
                int64_t auto_complete_view_height = config_state->view_auto_complete->buffer->line_count;
                auto_complete_top_left = (Point_t){input_top_left.x, (input_top_left.y - auto_complete_view_height) - 1};
                if(auto_complete_top_left.y < 0) auto_complete_top_left.y = 0; // account for separator line
@@ -4384,12 +4408,13 @@ void view_drawer(void* user_data)
           view_follow_cursor(buffer_view, line_number_type);
           terminal_cursor = get_cursor_on_terminal(cursor, buffer_view, line_number_type);
 
+          view_follow_highlight(config_state->view_auto_complete);
           int64_t auto_complete_view_height = config_state->view_auto_complete->buffer->line_count;
           auto_complete_top_left = (Point_t){config_state->tab_current->view_current->top_left.x,
                                              (config_state->tab_current->view_current->bottom_right.y - auto_complete_view_height) - 1};
           if(auto_complete_top_left.y < terminal_cursor.y) auto_complete_top_left.y = terminal_cursor.y + 2;
           auto_complete_bottom_right = (Point_t){config_state->tab_current->view_current->bottom_right.x,
-                                                 config_state->tab_current->view_current->bottom_right.y - 1};
+                                                 config_state->tab_current->view_current->bottom_right.y};
           ce_calc_views(config_state->view_auto_complete, auto_complete_top_left, auto_complete_bottom_right);
      }else{
           view_follow_cursor(buffer_view, line_number_type);
@@ -4449,10 +4474,6 @@ void view_drawer(void* user_data)
      // NOTE: always draw from the head
      ce_draw_views(config_state->tab_current->view_head, highlight_regex, config_state->line_number_type, highlight_line_type);
 
-     draw_view_statuses(config_state->tab_current->view_head, config_state->tab_current->view_current,
-                        config_state->tab_current->view_overrideable, config_state->vim_state.mode, config_state->last_key,
-                        config_state->vim_state.recording_macro, config_state->terminal_current);
-
      // draw input status
      if(auto_completing(&config_state->auto_complete)){
           move(auto_complete_top_left.y - 1, auto_complete_top_left.x);
@@ -4472,6 +4493,10 @@ void view_drawer(void* user_data)
 
           ce_draw_views(config_state->view_auto_complete, NULL, LNT_NONE, HLT_NONE);
      }
+
+     draw_view_statuses(config_state->tab_current->view_head, config_state->tab_current->view_current,
+                        config_state->tab_current->view_overrideable, config_state->vim_state.mode, config_state->last_key,
+                        config_state->vim_state.recording_macro, config_state->terminal_current);
 
      if(config_state->input){
           if(config_state->view_input == config_state->tab_current->view_current){

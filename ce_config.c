@@ -3185,9 +3185,12 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     strncpy(command, "make clean", BUFSIZ);
                     run_command_on_terminal_in_view(config_state->terminal_head, config_state->tab_current->view_head, command);
                } break;
+#if 0
+               // NOTE: useful for debugging
                case 'a':
                     config_state->tab_current->view_current->buffer = &config_state->clang_completion_buffer;
                     break;
+#endif
                case 'v':
                     config_state->tab_current->view_overrideable = config_state->tab_current->view_current;
                     config_state->tab_current->overriden_buffer = NULL;

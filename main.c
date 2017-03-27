@@ -33,8 +33,7 @@ LITTLE:
 -crash when deleting newly created buffer when trying to free user_data, ce.c in ce_change_buffer_in_views() at line 2291
 -crash when building eg, color_node invalid pointer in ce_terminal.c:603
 -'gf' or 'goto file under cursor' is often wrong
--searching now can be off the screen by 1 character :(
--matching paren's and braces for indentation doesn't work anymore
+-re-fix matching pairs
 */
 
 #include <assert.h>

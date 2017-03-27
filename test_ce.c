@@ -999,7 +999,7 @@ TEST(sanity_find_matching_pair_match_in_quotes_with_parens_in_quote)
      buffer.lines = malloc(1 * sizeof(char*));
      buffer.lines[0] = strdup("error(\"function(arg()) has failed\")");
 
-     Point_t point = {8, 0};
+     Point_t point = {5, 0};
      ce_move_cursor_to_matching_pair(&buffer, &point, '(');
 
      EXPECT(point.x == 34);

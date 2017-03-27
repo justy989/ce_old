@@ -630,6 +630,8 @@ void input_start(ConfigState_t* config_state, const char* input_message, int inp
      ce_alloc_lines(config_state->view_input->buffer, 1);
      config_state->input = true;
      config_state->view_input->cursor = (Point_t){0, 0};
+     config_state->view_input->left_column = 0;
+     config_state->view_input->top_row = 0;
      config_state->input_message = input_message;
      config_state->input_key = input_key;
      pthread_mutex_lock(&view_input_save_lock);
@@ -1411,8 +1413,12 @@ void* clang_complete_thread(void* data)
      // if any elements existed, let us know
      if(thread_data->auto_complete->head){
           auto_complete_start(thread_data->auto_complete, thread_data->start);
-          if(!ce_points_equal(thread_data->start, thread_data->cursor)){
-               char* match = ce_dupe_string(thread_data->completion_buffer, thread_data->start, thread_data->cursor);
+          Point_t end = thread_data->cursor;
+          end.x--;
+          if(end.x < 0) end.x = 0;
+          if(!ce_points_equal(thread_data->start, end)){
+               char* match = ce_dupe_string(thread_data->buffer_to_complete, thread_data->start, end);
+               auto_complete_next(thread_data->auto_complete, match);
                update_completion_buffer(thread_data->completion_buffer, thread_data->auto_complete, match);
                free(match);
           }else{
@@ -4222,7 +4228,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          Point_t beginning_of_word = *cursor;
                          char cur_char = 0;
                          if(ce_get_char(buffer, (Point_t){cursor->x - 1, cursor->y}, &cur_char)){
-                              if(isalpha(cur_char)){
+                              if(isalpha(cur_char) || cur_char == '_'){
                                    ce_move_cursor_to_beginning_of_word(buffer, &beginning_of_word, true);
                               }
                          }
@@ -4336,8 +4342,7 @@ void view_drawer(void* user_data)
           line_number_type = LNT_NONE;
      }
 
-     view_follow_cursor(buffer_view, config_state->line_number_type);
-     Point_t terminal_cursor = get_cursor_on_terminal(cursor, buffer_view, line_number_type);
+     Point_t terminal_cursor = {};
 
      Point_t input_top_left = {};
      Point_t input_bottom_right = {};
@@ -4361,6 +4366,10 @@ void view_drawer(void* user_data)
           config_state->tab_current->view_input_save->bottom_right.y = input_top_left.y - 1;
           pthread_mutex_unlock(&view_input_save_lock);
 
+          // update cursor based on view size changing
+          view_follow_cursor(buffer_view, line_number_type);
+          terminal_cursor = get_cursor_on_terminal(cursor, buffer_view, line_number_type);
+
           if(auto_completing(&config_state->auto_complete)){
                int64_t auto_complete_view_height = config_state->view_auto_complete->buffer->line_count;
                auto_complete_top_left = (Point_t){input_top_left.x, (input_top_left.y - auto_complete_view_height) - 1};
@@ -4369,6 +4378,9 @@ void view_drawer(void* user_data)
                ce_calc_views(config_state->view_auto_complete, auto_complete_top_left, auto_complete_bottom_right);
           }
      }else if(auto_completing(&config_state->auto_complete)){
+          view_follow_cursor(buffer_view, line_number_type);
+          terminal_cursor = get_cursor_on_terminal(cursor, buffer_view, line_number_type);
+
           int64_t auto_complete_view_height = config_state->view_auto_complete->buffer->line_count;
           auto_complete_top_left = (Point_t){config_state->tab_current->view_current->top_left.x,
                                              (config_state->tab_current->view_current->bottom_right.y - auto_complete_view_height) - 1};
@@ -4376,6 +4388,9 @@ void view_drawer(void* user_data)
           auto_complete_bottom_right = (Point_t){config_state->tab_current->view_current->bottom_right.x,
                                                  config_state->tab_current->view_current->bottom_right.y - 1};
           ce_calc_views(config_state->view_auto_complete, auto_complete_top_left, auto_complete_bottom_right);
+     }else{
+          view_follow_cursor(buffer_view, line_number_type);
+          terminal_cursor = get_cursor_on_terminal(cursor, buffer_view, line_number_type);
      }
 
      // setup highlight

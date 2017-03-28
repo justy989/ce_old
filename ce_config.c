@@ -2423,7 +2423,7 @@ void command_reload_buffer(Command_t* command, void* user_data)
 static void command_syntax_help()
 {
      ce_message("usage: syntax [string]");
-     ce_message(" supported styles: 'c', 'python', 'config', 'diff', 'plain'");
+     ce_message(" supported styles: 'c', 'cpp', 'python', 'config', 'diff', 'plain'");
 }
 
 void command_syntax(Command_t* command, void* user_data)
@@ -2448,6 +2448,12 @@ void command_syntax(Command_t* command, void* user_data)
           free(buffer->syntax_user_data);
           buffer->syntax_user_data = malloc(sizeof(SyntaxC_t));
           buffer->type = BFT_C;
+     }else if(strcmp(command->args[0].string, "cpp") == 0){
+          ce_message("syntax 'cpp' now on %s", buffer->filename);
+          buffer->syntax_fn = syntax_highlight_cpp;
+          free(buffer->syntax_user_data);
+          buffer->syntax_user_data = malloc(sizeof(SyntaxCpp_t));
+          buffer->type = BFT_CPP;
      }else if(strcmp(command->args[0].string, "python") == 0){
           ce_message("syntax 'python' now on %s", buffer->filename);
           buffer->syntax_fn = syntax_highlight_python;

@@ -521,7 +521,13 @@ char* str_from_file_stream(FILE* file){
      return str;
 }
 
+// NOTE: we should return a BufferNode_t to be consistent with new_buffer_from_file?
 Buffer_t* new_buffer_from_string(BufferNode_t* head, const char* name, const char* str){
+     if(access(name, F_OK) == 0){
+          ce_message("failed to create new buffer named '%s', file already exists.", name);
+          return NULL;
+     }
+
      Buffer_t* buffer = calloc(1, sizeof(*buffer));
      if(!buffer){
           ce_message("failed to allocate buffer");
@@ -541,9 +547,7 @@ Buffer_t* new_buffer_from_string(BufferNode_t* head, const char* name, const cha
           return NULL;
      }
 
-     if(str){
-          ce_load_string(buffer, str);
-     }
+     if(str) ce_load_string(buffer, str);
 
      BufferNode_t* new_buffer_node = ce_append_buffer_to_list(head, buffer);
      if(!new_buffer_node){
@@ -2551,20 +2555,30 @@ void command_highlight_line(Command_t* command, void* user_data)
      }
 }
 
-#define NEW_BUFFER_HELP "usage: new_buffer"
+#define NEW_BUFFER_HELP "usage: new_buffer [optional filename]"
 
 void command_new_buffer(Command_t* command, void* user_data)
 {
-     if(command->arg_count != 0){
+     ConfigState_t* config_state = (ConfigState_t*)(user_data);
+
+     if(command->arg_count == 0){
+          Buffer_t* new_buffer = new_buffer_from_string(*config_state->save_buffer_head, "unnamed", NULL);
+          if(new_buffer){
+               ce_alloc_lines(new_buffer, 1);
+               config_state->tab_current->view_current->buffer = new_buffer;
+               config_state->tab_current->view_current->cursor = (Point_t){0, 0};
+          }
+     }else if(command->arg_count == 1){
+          Buffer_t* new_buffer = new_buffer_from_string(*config_state->save_buffer_head, command->args[0].string, NULL);
+          if(new_buffer){
+               ce_alloc_lines(new_buffer, 1);
+               config_state->tab_current->view_current->buffer = new_buffer;
+               config_state->tab_current->view_current->cursor = (Point_t){0, 0};
+          }
+     }else{
           ce_message(NEW_BUFFER_HELP);
           return;
      }
-
-     ConfigState_t* config_state = (ConfigState_t*)(user_data);
-     Buffer_t* new_buffer = new_buffer_from_string(*config_state->save_buffer_head, "unnamed", NULL);
-     ce_alloc_lines(new_buffer, 1);
-     config_state->tab_current->view_current->buffer = new_buffer;
-     config_state->tab_current->view_current->cursor = (Point_t){0, 0};
 }
 
 #define RENAME_HELP "usage: rename [string]"
@@ -4254,7 +4268,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                           cursor->y - config_state->tab_current->view_current->top_row + config_state->tab_current->view_current->top_left.y};
                          switch_to_view_at_point(config_state, point);
                     } break;
-                    case 7: // Ctrl + g
+                    case 19: // Ctrl + s
                     {
                          split_view(config_state->tab_current->view_head, config_state->tab_current->view_current, false, config_state->line_number_type);
                          resize_terminal_if_in_view(config_state->tab_current->view_head, config_state->terminal_head);

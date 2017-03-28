@@ -333,7 +333,7 @@ static int64_t syntax_is_cpp_keyword(const char* line, int64_t start_offset)
           "Asm",
           "auto",
           "bool",
-          "case"
+          "case",
           "char",
           "class",
           "const_cast",
@@ -341,31 +341,31 @@ static int64_t syntax_is_cpp_keyword(const char* line, int64_t start_offset)
           "delete",
           "do",
           "double",
-          "else"
+          "else",
           "enum",
           "dynamic_cast",
           "extern",
           "false",
-          "float"
+          "float",
           "for",
           "union",
           "unsigned",
           "using",
-          "friend"
+          "friend",
           "if",
           "inline",
           "int",
-          "long"
+          "long",
           "mutable",
           "virtual",
           "namespace",
           "new",
-          "operator"
+          "operator",
           "private",
           "protected",
           "public",
           "register",
-          "void"
+          "void",
           "reinterpret_cast",
           "short",
           "signed",
@@ -374,11 +374,10 @@ static int64_t syntax_is_cpp_keyword(const char* line, int64_t start_offset)
           "static_cast",
           "volatile",
           "struct",
-          "switch"
+          "switch",
           "template",
           "this",
           "true",
-          "try"
           "typedef",
           "typeid",
           "unsigned",
@@ -401,6 +400,7 @@ static int64_t syntax_is_cpp_control(const char* line, int64_t start_offset)
           "goto",
           "return",
           "throw",
+          "try",
      };
 
      static const int keyword_count = sizeof(keywords) / sizeof(keywords[0]);

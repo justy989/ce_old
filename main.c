@@ -35,6 +35,7 @@ LITTLE:
 -'gf' or 'goto file under cursor' is often wrong
 -re-fix matching pairs
 -ce terminal needs to resize, when real terminal resizes
+-return isn't captured correctly in macro recording
 */
 
 #include <assert.h>

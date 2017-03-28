@@ -55,7 +55,7 @@ Key Sequence|Action
 `Ctrl+b`|view buffer list (confirm on the cursor selected buffer to open it)
 `Ctrl+r`|redo edit
 `Ctrl+v`|vertical split
-`Ctrl+g`|horizontal split
+`Ctrl+s`|horizontal split
 `Ctrl+h`|move cursor to the view to the left
 `Ctrl+j`|move cursor to the view to the below
 `Ctrl+k`|move cursor to the view to the above

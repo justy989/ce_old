@@ -34,8 +34,6 @@ LITTLE:
 -crash when building eg, color_node invalid pointer in ce_terminal.c:603
 -'gf' or 'goto file under cursor' is often wrong
 -re-fix matching pairs
--ce terminal needs to resize, when real terminal resizes
--return isn't captured correctly in macro recording
 */
 
 #include <assert.h>

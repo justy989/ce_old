@@ -3140,6 +3140,14 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
      bool handled_key = false;
 
+     if(key == KEY_RESIZE){
+          Point_t top_left = {0, 0};
+          Point_t bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 1};
+          ce_calc_views(config_state->tab_current->view_head, top_left, bottom_right);
+          resize_terminal_if_in_view(buffer_view, config_state->terminal_head);
+          handled_key = true;
+     }
+
      config_state->save_buffer_head = head;
 
      if(config_state->vim_state.mode != VM_INSERT){

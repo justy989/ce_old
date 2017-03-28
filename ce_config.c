@@ -999,10 +999,11 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
 
           if(!string_all_digits(line_number_str)) return false;
      }else{
-          // handle grep and cscope formats
+          // handle grep, and gcc formats
           // 'ce_config.c:1983:15'
           char* file_end = strpbrk(buffer->lines[line], ": ");
           if(!file_end) return false;
+          if(buffer->lines[line][0] == '/') filename_start = 0; // if the buffer line starts with a '/', then overwrite the initial path
           int64_t filename_len = file_end - buffer->lines[line];
           if(filename_len > (BUFSIZ - filename_start)) return false;
           strncpy(filename + filename_start, buffer->lines[line], filename_len);
@@ -3229,7 +3230,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     char command[BUFSIZ];
                     snprintf(command, BUFSIZ, "cscope -L1%*.*s", len, len, buffer->lines[cursor->y] + word_start.x);
                     run_command_on_terminal_in_view(config_state->terminal_head, config_state->tab_current->view_head, command);
-                    jump_to_next_shell_command_file_destination(*head, config_state, true);
                } break;
                case 'b':
                {

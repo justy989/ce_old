@@ -4461,7 +4461,7 @@ void view_drawer(void* user_data)
           int64_t auto_complete_view_height = config_state->view_auto_complete->buffer->line_count;
           auto_complete_top_left = (Point_t){config_state->tab_current->view_current->top_left.x,
                                              (config_state->tab_current->view_current->bottom_right.y - auto_complete_view_height) - 1};
-          if(auto_complete_top_left.y <= terminal_cursor.y) auto_complete_top_left.y = terminal_cursor.y + 2;
+          if(auto_complete_top_left.y <= (terminal_cursor.y + 1)) auto_complete_top_left.y = terminal_cursor.y + 2;
           auto_complete_bottom_right = (Point_t){config_state->tab_current->view_current->bottom_right.x,
                                                  config_state->tab_current->view_current->bottom_right.y};
           ce_calc_views(config_state->view_auto_complete, auto_complete_top_left, auto_complete_bottom_right);

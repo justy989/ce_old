@@ -295,16 +295,16 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
           } break;
           case KEY_ENTER:
           {
-               key = NEWLINE;
+               char translated_key = NEWLINE;
 
                Point_t save_cursor = *cursor;
                int64_t indent_len = ce_get_indentation_for_line(buffer, *cursor, strlen(TAB_STRING));
 
-               if(ce_insert_char(buffer, *cursor, key)){
+               if(ce_insert_char(buffer, *cursor, translated_key)){
                     cursor->y++;
                     cursor->x = 0;
 
-                    ce_commit_insert_char(commit_tail, insert_start, undo_cursor, *cursor, key, BCC_KEEP_GOING);
+                    ce_commit_insert_char(commit_tail, insert_start, undo_cursor, *cursor, translated_key, BCC_KEEP_GOING);
                     ce_keys_push(&vim_state->command_head, KEY_ENTER);
 
                     // indent if necessary

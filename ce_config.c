@@ -3211,21 +3211,65 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                case 'f':
                {
                     if(!buffer->lines[cursor->y]) break;
-                    // TODO: get word under the cursor and unify with '*' impl
-                    Point_t word_end = *cursor;
-                    ce_move_cursor_to_end_of_word(buffer, &word_end, true);
-                    int64_t word_len = (word_end.x - cursor->x) + 1;
-                    if(buffer->lines[word_end.y][word_end.x] == '.'){
-                         Point_t ext_end = {cursor->x + word_len, cursor->y};
-                         ce_move_cursor_to_end_of_word(buffer, &ext_end, true);
-                         word_len += ext_end.x - word_end.x;
-                    }
-                    char* filename = alloca(word_len+1);
-                    strncpy(filename, &buffer->lines[cursor->y][cursor->x], word_len);
-                    filename[word_len] = '\0';
+                    Point_t word_start;
+                    Point_t word_end;
+                    if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) break;
 
-                    Buffer_t* file_buffer = open_file_buffer(*head, filename);
-                    if(file_buffer) buffer_view->buffer = file_buffer;
+                    // expand left to pick up the beginning of a path
+                    char check_word_char = 0;
+                    while(true){
+                         Point_t save_word_start = word_start;
+
+                         if(!ce_move_cursor_to_beginning_of_word(buffer, &word_start, true)) break;
+                         if(!ce_get_char(buffer, word_start, &check_word_char)) break;
+                         // TODO: probably need more rules for matching filepaths
+                         if(isalpha(check_word_char) || isdigit(check_word_char) || check_word_char == '/'){
+                              continue;
+                         }else{
+                              word_start = save_word_start;
+                              break;
+                         }
+                    }
+
+                    // expand right to pick up the full path
+                    while(true){
+                         Point_t save_word_end = word_end;
+
+                         if(!ce_move_cursor_to_end_of_word(buffer, &word_end, true)) break;
+                         if(!ce_get_char(buffer, word_end, &check_word_char)) break;
+                         // TODO: probably need more rules for matching filepaths
+                         if(isalpha(check_word_char) || isdigit(check_word_char) || check_word_char == '/'){
+                              continue;
+                         }else{
+                              word_end = save_word_end;
+                              break;
+                         }
+                    }
+
+                    word_end.x++;
+
+                    char period = 0;
+                    if(!ce_get_char(buffer, word_end, &period)) break;
+                    if(period != '.') break;
+                    Point_t extension_start;
+                    Point_t extension_end;
+                    if(!ce_get_word_at_location(buffer, (Point_t){word_end.x + 1, word_end.y}, &extension_start, &extension_end)) break;
+                    extension_end.x++;
+                    char filename[PATH_MAX];
+                    snprintf(filename, PATH_MAX, "%.*s.%.*s",
+                             (int)(word_end.x - word_start.x), buffer->lines[word_start.y] + word_start.x,
+                             (int)(extension_end.x - extension_start.x), buffer->lines[extension_start.y] + extension_start.x);
+
+                    if(access(filename, F_OK) != 0){
+                         ce_message("no such file: '%s' to go to", filename);
+                         break;
+                    }
+
+                    BufferNode_t* node = new_buffer_from_file(*head, filename);
+                    if(node){
+                         buffer_view->buffer = node->buffer;
+                         buffer_view->cursor = (Point_t){0, 0};
+                    }
                } break;
                case 'd':
                {
@@ -4461,7 +4505,7 @@ void view_drawer(void* user_data)
           int64_t auto_complete_view_height = config_state->view_auto_complete->buffer->line_count;
           auto_complete_top_left = (Point_t){config_state->tab_current->view_current->top_left.x,
                                              (config_state->tab_current->view_current->bottom_right.y - auto_complete_view_height) - 1};
-          if(auto_complete_top_left.y <= (terminal_cursor.y + 1)) auto_complete_top_left.y = terminal_cursor.y + 2;
+          if(auto_complete_top_left.y <= terminal_cursor.y) auto_complete_top_left.y = terminal_cursor.y + 2;
           auto_complete_bottom_right = (Point_t){config_state->tab_current->view_current->bottom_right.x,
                                                  config_state->tab_current->view_current->bottom_right.y};
           ce_calc_views(config_state->view_auto_complete, auto_complete_top_left, auto_complete_bottom_right);

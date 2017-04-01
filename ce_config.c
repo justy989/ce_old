@@ -649,9 +649,6 @@ InputHistory_t* history_from_input_key(ConfigState_t* config_state)
      case '?':
           history = &config_state->search_history;
           break;
-     case 6: // Ctrl + f
-          history = &config_state->load_file_history;
-          break;
      }
 
      return history;
@@ -2039,40 +2036,67 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                     config_state->quit = true;
                }
                return true;
+          case 2: // Ctrl + b
+          {
+               if(!config_state->view_input->buffer->line_count) break;
+
+               // if auto complete has a current matching value, overwrite what the user wrote with that completion
+               if(auto_completing(&config_state->auto_complete) && config_state->auto_complete.current){
+                    char* last_slash = strrchr(config_state->view_input->buffer->lines[0], '/');
+                    int64_t offset = 0;
+                    if(last_slash) offset = (last_slash - config_state->view_input->buffer->lines[0]) + 1;
+
+                    int64_t len = strlen(config_state->view_input->buffer->lines[0] + offset);
+                    if(!ce_remove_string(config_state->view_input->buffer, (Point_t){offset, 0}, len)) break;
+                    if(!ce_insert_string(config_state->view_input->buffer, (Point_t){offset, 0}, config_state->auto_complete.current->option)) break;
+               }
+
+               BufferNode_t* itr = head;
+
+               while(itr){
+                    if(strcmp(itr->buffer->name, config_state->view_input->buffer->lines[0]) == 0){
+                         config_state->tab_current->view_current->buffer = itr->buffer;
+                         config_state->tab_current->view_current->cursor = itr->buffer->cursor;
+                         center_view(config_state->tab_current->view_current);
+                         break;
+                    }
+                    itr = itr->next;
+               }
+
+               // return whether we switched to a buffer or not
+               return itr != NULL;
+          } break;
           case 6: // Ctrl + f
           {
-               commit_input_to_history(config_state->view_input->buffer, &config_state->load_file_history);
+               if(!config_state->view_input->buffer->line_count) break;
+
                bool switched_to_open_file = false;
 
+               // if auto complete has a current matching value, overwrite what the user wrote with that completion
+               if(auto_completing(&config_state->auto_complete) && config_state->auto_complete.current){
+                    char* last_slash = strrchr(config_state->view_input->buffer->lines[0], '/');
+                    int64_t offset = 0;
+                    if(last_slash) offset = (last_slash - config_state->view_input->buffer->lines[0]) + 1;
 
-               for(int64_t i = 0; i < config_state->view_input->buffer->line_count; ++i){
+                    int64_t len = strlen(config_state->view_input->buffer->lines[0] + offset);
+                    if(!ce_remove_string(config_state->view_input->buffer, (Point_t){offset, 0}, len)) break;
+                    if(!ce_insert_string(config_state->view_input->buffer, (Point_t){offset, 0}, config_state->auto_complete.current->option)) break;
+               }
 
-                    // if auto complete has a current matching value, overwrite what the user wrote with that completion
-                    if(auto_completing(&config_state->auto_complete) && config_state->auto_complete.current){
-                         char* last_slash = strrchr(config_state->view_input->buffer->lines[i], '/');
-                         int64_t offset = 0;
-                         if(last_slash) offset = (last_slash - config_state->view_input->buffer->lines[i]) + 1;
+               // load the buffer, either from the current working dir, or from another base filepath
+               Buffer_t* new_buffer = NULL;
+               if(config_state->load_file_search_path && config_state->view_input->buffer->lines[0][0] != '/'){
+                    char path[BUFSIZ];
+                    snprintf(path, BUFSIZ, "%s/%s", config_state->load_file_search_path, config_state->view_input->buffer->lines[0]);
+                    new_buffer = open_file_buffer(head, path);
+               }else{
+                    new_buffer = open_file_buffer(head, config_state->view_input->buffer->lines[0]);
+               }
 
-                         int64_t len = strlen(config_state->view_input->buffer->lines[i] + offset);
-                         if(!ce_remove_string(config_state->view_input->buffer, (Point_t){offset, i}, len)) break;
-                         if(!ce_insert_string(config_state->view_input->buffer, (Point_t){offset, i}, config_state->auto_complete.current->option)) break;
-                    }
-
-                    // load the buffer, either from the current working dir, or from another base filepath
-                    Buffer_t* new_buffer = NULL;
-                    if(config_state->load_file_search_path && config_state->view_input->buffer->lines[i][0] != '/'){
-                         char path[BUFSIZ];
-                         snprintf(path, BUFSIZ, "%s/%s", config_state->load_file_search_path, config_state->view_input->buffer->lines[i]);
-                         new_buffer = open_file_buffer(head, path);
-                    }else{
-                         new_buffer = open_file_buffer(head, config_state->view_input->buffer->lines[i]);
-                    }
-
-                    if(!switched_to_open_file && new_buffer){
-                         config_state->tab_current->view_current->buffer = new_buffer;
-                         config_state->tab_current->view_current->cursor = (Point_t){0, 0};
-                         switched_to_open_file = true;
-                    }
+               if(!switched_to_open_file && new_buffer){
+                    config_state->tab_current->view_current->buffer = new_buffer;
+                    config_state->tab_current->view_current->cursor = (Point_t){0, 0};
+                    switched_to_open_file = true;
                }
 
                // free the search path so we can re-use it
@@ -2888,7 +2912,6 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
 #endif
 
      input_history_init(&config_state->search_history);
-     input_history_init(&config_state->load_file_history);
 
      // setup colors for syntax highlighting
      init_pair(S_NORMAL, COLOR_FOREGROUND, COLOR_BACKGROUND);
@@ -3194,7 +3217,6 @@ bool destroyer(BufferNode_t** head, void* user_data)
 
      // history
      input_history_free(&config_state->search_history);
-     input_history_free(&config_state->load_file_history);
 
      pthread_mutex_destroy(&draw_lock);
 
@@ -3612,6 +3634,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               if(end.x < 0) end.x = 0;
                               char* match = "";
 
+                              pthread_mutex_lock(&completion_lock);
                               if(auto_completing(&config_state->auto_complete)){
                                    if(!ce_points_equal(config_state->auto_complete.start, *cursor)) match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
                                    auto_complete_next(&config_state->auto_complete, match);
@@ -3622,6 +3645,27 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               }
 
                               update_completion_buffer(config_state->completion_buffer, &config_state->auto_complete, match);
+                              pthread_mutex_unlock(&completion_lock);
+                              if(!ce_points_equal(config_state->auto_complete.start, end))free(match);
+                         } break;
+                         case 2: // Ctrl + b
+                         {
+                              Point_t end = {cursor->x - 1, cursor->y};
+                              if(end.x < 0) end.x = 0;
+                              char* match = "";
+
+                              pthread_mutex_lock(&completion_lock);
+                              if(auto_completing(&config_state->auto_complete)){
+                                   if(!ce_points_equal(config_state->auto_complete.start, *cursor)) match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
+                                   if(strstr(config_state->auto_complete.current->option, match) == NULL) auto_complete_next(&config_state->auto_complete, match);
+                              }else{
+                                   auto_complete_start(&config_state->auto_complete, ACT_OCCURANCE, (Point_t){0, cursor->y});
+                                   if(!ce_points_equal(config_state->auto_complete.start, *cursor)) match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
+                                   auto_complete_next(&config_state->auto_complete, match);
+                              }
+
+                              update_completion_buffer(config_state->completion_buffer, &config_state->auto_complete, match);
+                              pthread_mutex_unlock(&completion_lock);
                               if(!ce_points_equal(config_state->auto_complete.start, end))free(match);
                          } break;
                          }
@@ -3636,8 +3680,10 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               if(config_state->auto_complete.current && strncmp(config_state->auto_complete.current->option, match, match_len) == 0){
                                    // pass
                               }else{
+                                   pthread_mutex_lock(&completion_lock);
                                    auto_complete_next(&config_state->auto_complete, match);
                                    update_completion_buffer(config_state->completion_buffer, &config_state->auto_complete, match);
+                                   pthread_mutex_unlock(&completion_lock);
                               }
 
                               free(match);
@@ -3888,55 +3934,20 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     } break;
                     case 2: // Ctrl + b
                          if(config_state->input && config_state->tab_current->view_current == config_state->view_input){
-                              // dump input history on cursor line
-                              InputHistory_t* cur_hist = history_from_input_key(config_state);
-                              if(!cur_hist){
-                                   ce_message("no history to dump");
-                                   break;
-                              }
-
-                              // start the insertions after the cursor, unless the buffer is empty
-                              assert(config_state->view_input->buffer->line_count);
-                              int lines_added = 1;
-                              bool empty_first_line = !config_state->view_input->buffer->lines[0][0];
-
-                              // insert each line in history
-                              InputHistoryNode_t* node = cur_hist->head;
-                              while(node && node->entry){
-                                   if(ce_insert_line(config_state->view_input->buffer,
-                                                     config_state->view_input->cursor.y + lines_added,
-                                                     node->entry)){
-                                        lines_added += ce_count_string_lines(node->entry);
-                                   }else{
-                                        break;
-                                   }
-                                   node = node->next;
-                              }
-
-                              if(empty_first_line) ce_remove_line(config_state->view_input->buffer, 0);
+                              // pass
                          }else{
-                              view_jump_insert(buffer_view->user_data, buffer->filename, *cursor);
-
-                              buffer->cursor = config_state->tab_current->view_current->cursor;
-
-                              // try to find a better place to put the cursor to start
+                              pthread_mutex_lock(&completion_lock);
+                              auto_complete_free(&config_state->auto_complete);
                               BufferNode_t* itr = *head;
-                              int64_t buffer_index = 1;
-                              bool found_good_buffer_index = false;
                               while(itr){
-                                   if(itr->buffer->status != BS_READONLY && !ce_buffer_in_view(config_state->tab_current->view_head, itr->buffer)){
-                                        found_good_buffer_index = true;
-                                        break;
-                                   }
+                                   auto_complete_insert(&config_state->auto_complete, itr->buffer->name, NULL);
                                    itr = itr->next;
-                                   buffer_index++;
                               }
+                              auto_complete_start(&config_state->auto_complete, ACT_OCCURANCE, (Point_t){0, 0});
+                              update_completion_buffer(config_state->completion_buffer, &config_state->auto_complete, NULL);
+                              pthread_mutex_unlock(&completion_lock);
 
-                              update_buffer_list_buffer(config_state, *head);
-                              config_state->tab_current->view_current->buffer->cursor = *cursor;
-                              config_state->tab_current->view_current->buffer = &config_state->buffer_list_buffer;
-                              config_state->tab_current->view_current->top_row = 0;
-                              config_state->tab_current->view_current->cursor = (Point_t){0, found_good_buffer_index ? buffer_index : 1};
+                              input_start(config_state, "Switch Buffer", key);
                          }
                          break;
                     case 'u':
@@ -4715,7 +4726,7 @@ void view_drawer(void* user_data)
      }
 
      // draw auto complete
-     if(auto_completing(&config_state->auto_complete) && config_state->auto_complete.current){
+     if(auto_completing(&config_state->auto_complete) && config_state->auto_complete.current && config_state->auto_complete.type == ACT_EXACT){
           move(terminal_cursor.y, terminal_cursor.x);
           int64_t offset = cursor->x - config_state->auto_complete.start.x;
           if(offset >= 0){

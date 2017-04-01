@@ -110,7 +110,6 @@ typedef struct{
      BufferView_t* view_auto_complete;
 
      InputHistory_t search_history;
-     InputHistory_t load_file_history;
 
      pthread_t clang_complete_thread;
 

@@ -2503,7 +2503,8 @@ void command_syntax(Command_t* command, void* user_data)
           return;
      }
 
-     ConfigState_t* config_state = (ConfigState_t*)(user_data);
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
      BufferView_t* buffer_view = config_state->tab_current->view_current;
      Buffer_t* buffer = buffer_view->buffer;
 

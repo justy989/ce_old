@@ -3199,6 +3199,10 @@ bool destroyer(BufferNode_t** head, void* user_data)
           free(config_state->view_auto_complete);
      }
 
+     free_buffer_state(config_state->clang_completion_buffer.user_data);
+     free(config_state->clang_completion_buffer.syntax_user_data);
+     ce_free_buffer(&config_state->clang_completion_buffer);
+
      free_buffer_state(config_state->buffer_list_buffer.user_data);
      free(config_state->buffer_list_buffer.syntax_user_data);
      ce_free_buffer(&config_state->buffer_list_buffer);
@@ -3570,10 +3574,13 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                    if(ce_insert_string(buffer, config_state->auto_complete.start, config_state->auto_complete.current->option)){
                                         Point_t save_cursor = *cursor;
                                         cursor->x = config_state->auto_complete.start.x + complete_len;
-                                        ce_commit_insert_string(&buffer_state->commit_tail, config_state->auto_complete.start, save_cursor, *cursor, config_state->auto_complete.current->option, BCC_KEEP_GOING);
+                                        char* inserted = strdup(config_state->auto_complete.current->option);
+                                        ce_commit_insert_string(&buffer_state->commit_tail, config_state->auto_complete.start, save_cursor, *cursor, inserted, BCC_KEEP_GOING);
                                    }
                               }
                          }
+
+                         update_completion_buffer(config_state->completion_buffer, &config_state->auto_complete, buffer->lines[config_state->auto_complete.start.y]);
 
                          if(config_state->input){
                               switch(config_state->input_key){

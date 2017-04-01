@@ -202,7 +202,7 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
      char recording_macro = vim_state->recording_macro;
      VimMode_t vim_mode = vim_state->mode;
 
-     VimKeyHandlerResult_t result;
+     VimKeyHandlerResult_t result = {};
      result.type = VKH_UNHANDLED_KEY;
 
      switch(vim_state->mode){
@@ -1872,7 +1872,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                ce_commit_insert_string(commit_tail,
                                        insert_loc, *cursor, cursor_loc,
                                        save_str, chain);
-               *cursor = cursor_loc;
+               cursor->y = cursor_loc.y;
           } break;
           }
      } break;

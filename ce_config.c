@@ -2065,8 +2065,8 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                }
 
                // return whether we switched to a buffer or not
-               return itr != NULL;
-          } break;
+               return true;
+          }
           case 6: // Ctrl + f
           {
                if(!config_state->view_input->buffer->line_count) break;
@@ -2934,6 +2934,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      init_pair(S_MATCHING_PARENS, COLOR_BRIGHT_WHITE, COLOR_BACKGROUND);
      init_pair(S_PREPROCESSOR, COLOR_BRIGHT_MAGENTA, COLOR_BACKGROUND);
      init_pair(S_FILEPATH, COLOR_BLUE, COLOR_BACKGROUND);
+     init_pair(S_BLINK, COLOR_BRIGHT_WHITE, COLOR_BACKGROUND);
      init_pair(S_DIFF_ADDED, COLOR_GREEN, COLOR_BACKGROUND);
      init_pair(S_DIFF_REMOVED, COLOR_RED, COLOR_BACKGROUND);
      init_pair(S_DIFF_HEADER, COLOR_BRIGHT_WHITE, COLOR_BACKGROUND);
@@ -2949,6 +2950,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      init_pair(S_MATCHING_PARENS_HIGHLIGHTED, COLOR_BRIGHT_WHITE, COLOR_WHITE);
      init_pair(S_PREPROCESSOR_HIGHLIGHTED, COLOR_BRIGHT_MAGENTA, COLOR_WHITE);
      init_pair(S_FILEPATH_HIGHLIGHTED, COLOR_BLUE, COLOR_WHITE);
+     init_pair(S_BLINK_HIGHLIGHTED, COLOR_BRIGHT_WHITE, COLOR_WHITE);
      init_pair(S_DIFF_ADDED_HIGHLIGHTED, COLOR_GREEN, COLOR_WHITE);
      init_pair(S_DIFF_REMOVED_HIGHLIGHTED, COLOR_RED, COLOR_WHITE);
      init_pair(S_DIFF_HEADER_HIGHLIGHTED, COLOR_BRIGHT_WHITE, COLOR_WHITE);
@@ -2964,6 +2966,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      init_pair(S_MATCHING_PARENS_CURRENT_LINE, COLOR_BRIGHT_WHITE, COLOR_BRIGHT_BLACK);
      init_pair(S_PREPROCESSOR_CURRENT_LINE, COLOR_BRIGHT_MAGENTA, COLOR_BRIGHT_BLACK);
      init_pair(S_FILEPATH_CURRENT_LINE, COLOR_BLUE, COLOR_BRIGHT_BLACK);
+     init_pair(S_BLINK_CURRENT_LINE, COLOR_BRIGHT_WHITE, COLOR_BRIGHT_BLACK);
      init_pair(S_DIFF_ADDED_CURRENT_LINE, COLOR_GREEN, COLOR_BRIGHT_BLACK);
      init_pair(S_DIFF_REMOVED_CURRENT_LINE, COLOR_RED, COLOR_BRIGHT_BLACK);
      init_pair(S_DIFF_HEADER_CURRENT_LINE, COLOR_BRIGHT_WHITE, COLOR_BRIGHT_BLACK);
@@ -3631,8 +3634,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           if(key == KEY_ENTER){
                if(confirm_action(config_state, *head)){
                     ce_keys_free(&config_state->vim_state.command_head);
-                    handled_key = true;
                     key = 0;
+                    handled_key = true;
                }
           }
      }
@@ -3805,6 +3808,77 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                }else if(vkh_result.completed_action.motion.type == VMT_BEGINNING_OF_FILE ||
                         vkh_result.completed_action.motion.type == VMT_END_OF_FILE){
                     view_jump_insert(buffer_view->user_data, buffer_view->buffer->filename, save_cursor);
+               }else if(vkh_result.completed_action.change.type == VCT_YANK){
+                    VimActionRange_t action_range;
+                    if(vim_action_get_range(&vkh_result.completed_action, buffer, cursor, &config_state->vim_state,
+                                            &buffer_state->vim_buffer_state, &action_range)){
+                         buffer->blink = true;
+                         buffer->highlight_start = *action_range.sorted_start;
+                         buffer->highlight_end = *action_range.sorted_end;
+                    }
+               }else if(vkh_result.completed_action.change.type == VCT_SUBSTITUTE){
+                    VimYankNode_t* yank = vim_yank_find(config_state->vim_state.yank_head,
+                                                        vkh_result.completed_action.change.reg ? vkh_result.completed_action.change.reg : '"');
+                    if(yank){
+                         VimActionRange_t action_range;
+                         if(vim_action_get_range(&vkh_result.completed_action, buffer, cursor, &config_state->vim_state,
+                                                 &buffer_state->vim_buffer_state, &action_range)){
+                              buffer->blink = true;
+                              buffer->highlight_start = *action_range.sorted_start;
+                              buffer->highlight_end = buffer->highlight_start;
+                              int64_t len = strlen(yank->text) - 1;
+                              ce_advance_cursor(buffer, &buffer->highlight_end, len);
+                         }
+                    }
+               }else if(vkh_result.completed_action.change.type == VCT_PASTE_BEFORE){
+                    VimYankNode_t* yank = vim_yank_find(config_state->vim_state.yank_head,
+                                                        vkh_result.completed_action.change.reg ? vkh_result.completed_action.change.reg : '"');
+                    if(yank){
+                         switch(yank->mode){
+                         default:
+                              break;
+                         case YANK_NORMAL:
+                         {
+                              buffer->blink = true;
+                              buffer->highlight_start = *cursor;
+                              buffer->highlight_end = buffer->highlight_start;
+                              int64_t len = strlen(yank->text) - 1;
+                              ce_advance_cursor(buffer, &buffer->highlight_end, len);
+                         } break;
+                         case YANK_LINE:
+                         {
+                              buffer->blink = true;
+                              buffer->highlight_start = (Point_t){0, cursor->y};
+                              buffer->highlight_end = buffer->highlight_start;
+                              int64_t len = strlen(yank->text) - 1;
+                              ce_advance_cursor(buffer, &buffer->highlight_end, len);
+                         } break;
+                         }
+                    }
+               }else if(vkh_result.completed_action.change.type == VCT_PASTE_AFTER){
+                    VimYankNode_t* yank = vim_yank_find(config_state->vim_state.yank_head,
+                                                        vkh_result.completed_action.change.reg ? vkh_result.completed_action.change.reg : '"');
+
+                    switch(yank->mode){
+                    default:
+                         break;
+                    case YANK_NORMAL:
+                    {
+                         buffer->blink = true;
+                         buffer->highlight_end = *cursor;
+                         buffer->highlight_start = buffer->highlight_end;
+                         int64_t len = strlen(yank->text) - 1;
+                         ce_advance_cursor(buffer, &buffer->highlight_start, -len);
+                    } break;
+                    case YANK_LINE:
+                    {
+                         buffer->blink = true;
+                         buffer->highlight_start = (Point_t){0, cursor->y};
+                         buffer->highlight_end = buffer->highlight_start;
+                         int64_t len = strlen(yank->text) - 1;
+                         ce_advance_cursor(buffer, &buffer->highlight_end, len);
+                    } break;
+                    }
                }
 
                // don't save 'g' if we completed an action with it, this ensures we don't use it in the next update
@@ -4669,7 +4743,7 @@ void view_drawer(void* user_data)
 
           buffer->highlight_start = (Point_t){0, start_line};
           buffer->highlight_end = (Point_t){strlen(config_state->tab_current->view_current->buffer->lines[end_line]), end_line};
-     }else{
+     }else if(!buffer->blink){
           buffer->highlight_start = (Point_t){0, 0};
           buffer->highlight_end = (Point_t){-1, 0};
      }
@@ -4814,6 +4888,7 @@ void view_drawer(void* user_data)
 
      // clear mark if one existed
      if(vim_mark) buffer->mark = (Point_t){-1, -1};
+     if(buffer->blink) buffer->blink = false;
 
      gettimeofday(&config_state->last_draw_time, NULL);
 }

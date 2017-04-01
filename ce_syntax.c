@@ -685,7 +685,6 @@ void syntax_highlight_c_like(SyntaxHighlighterData_t* data, void* user_data, syn
                syntax->current_color = S_COMMENT;
           }
 
-          syntax_determine_highlight(data, &syntax->highlight);
           syntax->current_color = syntax_set_color(syntax->current_color, syntax->highlight.type);
      } break;
      case SS_CHARACTER:

@@ -39,8 +39,14 @@ typedef struct TabView_t{
      struct TabView_t* next;
 }TabView_t;
 
+typedef enum{
+     ACT_EXACT,
+     ACT_OCCURANCE,
+}AutoCompleteType_t;
+
 typedef struct CompleteNode_t{
      char* option;
+     char* description;
      struct CompleteNode_t* next;
      struct CompleteNode_t* prev;
 }CompleteNode_t;
@@ -50,6 +56,7 @@ typedef struct{
      CompleteNode_t* tail;
      CompleteNode_t* current;
      Point_t start;
+     AutoCompleteType_t type;
 }AutoComplete_t;
 
 typedef struct TerminalNode_t{
@@ -85,6 +92,7 @@ typedef struct{
      Buffer_t* completion_buffer;
 
      Buffer_t input_buffer;
+     Buffer_t clang_completion_buffer;
      Buffer_t buffer_list_buffer;
      Buffer_t mark_list_buffer;
      Buffer_t yank_list_buffer;
@@ -102,7 +110,9 @@ typedef struct{
      BufferView_t* view_auto_complete;
 
      InputHistory_t search_history;
-     InputHistory_t load_file_history;
+     InputHistory_t command_history;
+
+     pthread_t clang_complete_thread;
 
      TerminalNode_t* terminal_head;
      TerminalNode_t* terminal_current; // most recent terminal in focus
@@ -127,5 +137,10 @@ typedef struct{
 
      BufferNode_t** save_buffer_head;
 }ConfigState_t;
+
+typedef struct{
+     ConfigState_t* config_state;
+     BufferNode_t* head;
+}CommandData_t;
 
 #endif

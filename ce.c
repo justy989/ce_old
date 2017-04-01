@@ -693,6 +693,14 @@ bool find_matching_pair_forward(const Buffer_t* buffer, Point_t* location, char 
                     }
                }else if(curr == matchee && !ce_points_equal(*location, itr)){
                     count++;
+               }else if(curr == '"'){
+                    if(!find_matching_string_forward(buffer, &itr, '"')){
+                         return false;
+                    }
+               }else if(curr == '\''){
+                    if(!find_matching_string_forward(buffer, &itr, '\'')){
+                         return false;
+                    }
                }else if(curr == '/' && prev == '/'){
                     // this is a comment, ignore the rest of the line
                     itr.x = 0;
@@ -714,7 +722,7 @@ bool find_matching_pair_forward(const Buffer_t* buffer, Point_t* location, char 
           }
      }
 
-     return false;
+	return false;
 }
 
 int64_t last_index_before_comment(const Buffer_t* buffer, int64_t line)
@@ -824,6 +832,14 @@ bool find_matching_pair_backward(const Buffer_t* buffer, Point_t* location, char
                     }
                }else if(curr == matchee && !ce_points_equal(*location, itr)){
                     count++;
+               }else if(curr == '"'){
+                    if(!find_matching_string_backward(buffer, &itr, '"')){
+                         return false;
+                    }
+               }else if(curr == '\''){
+                    if(!find_matching_string_backward(buffer, &itr, '\'')){
+                         return false;
+                    }
                }else if(curr == '/' && prev == '*'){
                     inside_multiline_comment = true;
                }
@@ -837,7 +853,7 @@ bool find_matching_pair_backward(const Buffer_t* buffer, Point_t* location, char
           }
      }
 
-     return false;
+	return false;
 }
 
 // returns the delta to the matching character; return success

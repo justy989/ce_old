@@ -55,7 +55,7 @@ Key Sequence|Action
 `Ctrl+b`|view buffer list (confirm on the cursor selected buffer to open it)
 `Ctrl+r`|redo edit
 `Ctrl+v`|vertical split
-`Ctrl+g`|horizontal split
+`Ctrl+s`|horizontal split
 `Ctrl+h`|move cursor to the view to the left
 `Ctrl+j`|move cursor to the view to the below
 `Ctrl+k`|move cursor to the view to the above
@@ -108,6 +108,7 @@ Key Sequence|Action
 `zz`|scroll view so cursor is in the middle
 `zb`|scroll view so cursor is at the bottom
 `gq`|quit editor
+`gr`|redraw from clear screen
 `gf`|goto file under cursor
 `gt`|goto next tab
 `gT`|goto previous tab

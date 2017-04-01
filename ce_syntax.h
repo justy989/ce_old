@@ -100,6 +100,8 @@ typedef struct{
      SyntaxHighlight_t highlight;
 }SyntaxC_t;
 
+typedef SyntaxC_t SyntaxCpp_t;
+
 typedef struct{
      char inside_docstring;
      char inside_string;
@@ -163,6 +165,7 @@ typedef struct{
 
 void syntax_highlight_plain(SyntaxHighlighterData_t* data, void* user_data);
 void syntax_highlight_c(SyntaxHighlighterData_t* data, void* user_data);
+void syntax_highlight_cpp(SyntaxHighlighterData_t* data, void* user_data);
 void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data);
 void syntax_highlight_java(SyntaxHighlighterData_t* data, void* user_data);
 void syntax_highlight_bash(SyntaxHighlighterData_t* data, void* user_data);

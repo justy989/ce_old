@@ -33,6 +33,9 @@ LITTLE:
 -crash when deleting newly created buffer when trying to free user_data, ce.c in ce_change_buffer_in_views() at line 2291
 -crash when building eg, color_node invalid pointer in ce_terminal.c:603
 -'gf' or 'goto file under cursor' is often wrong
+-re-fix matching pairs
+-add history for running commands
+-detect file type from #!/bin/python3 header thing
 */
 
 #include <assert.h>

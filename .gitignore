@@ -9,6 +9,8 @@ tags
 *.gcno
 default.profraw
 
+.clang_complete
+
 #cscope
 *.out
 *.files

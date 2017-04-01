@@ -651,6 +651,9 @@ InputHistory_t* history_from_input_key(ConfigState_t* config_state)
      case '?':
           history = &config_state->search_history;
           break;
+     case ':':
+          history = &config_state->command_history;
+          break;
      }
 
      return history;
@@ -2217,6 +2220,8 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
 
                if(!config_state->view_input->buffer->line_count) break;
 
+               commit_input_to_history(config_state->view_input->buffer, &config_state->command_history);
+
                bool alldigits = true;
                const char* itr = config_state->view_input->buffer->lines[0];
                while(*itr){
@@ -2915,6 +2920,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
 #endif
 
      input_history_init(&config_state->search_history);
+     input_history_init(&config_state->command_history);
 
      // setup colors for syntax highlighting
      init_pair(S_NORMAL, COLOR_FOREGROUND, COLOR_BACKGROUND);
@@ -3224,6 +3230,7 @@ bool destroyer(BufferNode_t** head, void* user_data)
 
      // history
      input_history_free(&config_state->search_history);
+     input_history_free(&config_state->command_history);
 
      pthread_mutex_destroy(&draw_lock);
 
@@ -3641,6 +3648,21 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           case VKH_HANDLED_KEY:
                if(config_state->vim_state.mode == VM_INSERT){
                     if(config_state->input){
+                         switch(key){
+                         default:
+                              break;
+                         case KEY_UP:
+                              if(iterate_history_input(config_state, true)){
+                                   if(buffer->line_count && buffer->lines[cursor->y][0]) cursor->x++;
+                              }
+                              break;
+                         case KEY_DOWN:
+                              if(iterate_history_input(config_state, false)){
+                                   if(buffer->line_count && buffer->lines[cursor->y][0]) cursor->x++;
+                              }
+                              break;
+                         }
+
                          switch(config_state->input_key){
                          default:
                               break;

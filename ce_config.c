@@ -292,10 +292,12 @@ char* auto_complete_get_completion(AutoComplete_t* auto_complete, int64_t x)
           int64_t option_len = strlen(itr->option);
 
           if(option_len <= offset) continue;
-          if(strncmp(auto_complete->current->option, itr->option, offset) != 0) continue;
+          if(auto_complete->type == ACT_EXACT){
+               if(strncmp(auto_complete->current->option, itr->option, offset) != 0) continue;
 
-          int64_t check_complete_len = string_common_beginning(auto_complete->current->option + offset, itr->option + offset);
-          if(check_complete_len < min_complete_len) min_complete_len = check_complete_len;
+               int64_t check_complete_len = string_common_beginning(auto_complete->current->option + offset, itr->option + offset);
+               if(check_complete_len < min_complete_len) min_complete_len = check_complete_len;
+          }
      }while(itr != auto_complete->current);
 
      if(min_complete_len) complete_len = min_complete_len;
@@ -2042,13 +2044,9 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
 
                // if auto complete has a current matching value, overwrite what the user wrote with that completion
                if(auto_completing(&config_state->auto_complete) && config_state->auto_complete.current){
-                    char* last_slash = strrchr(config_state->view_input->buffer->lines[0], '/');
-                    int64_t offset = 0;
-                    if(last_slash) offset = (last_slash - config_state->view_input->buffer->lines[0]) + 1;
-
-                    int64_t len = strlen(config_state->view_input->buffer->lines[0] + offset);
-                    if(!ce_remove_string(config_state->view_input->buffer, (Point_t){offset, 0}, len)) break;
-                    if(!ce_insert_string(config_state->view_input->buffer, (Point_t){offset, 0}, config_state->auto_complete.current->option)) break;
+                    int64_t len = strlen(config_state->view_input->buffer->lines[0]);
+                    if(!ce_remove_string(config_state->view_input->buffer, (Point_t){0, 0}, len)) break;
+                    if(!ce_insert_string(config_state->view_input->buffer, (Point_t){0, 0}, config_state->auto_complete.current->option)) break;
                }
 
                BufferNode_t* itr = head;
@@ -2239,28 +2237,32 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                          view_jump_insert(buffer_view->user_data, buffer_view->buffer->filename, buffer_view->cursor);
                     }
                }else{
+                    // if auto complete has a current matching value, overwrite what the user wrote with that completion
+                    if(auto_completing(&config_state->auto_complete) && config_state->auto_complete.current){
+                         int64_t len = strlen(config_state->view_input->buffer->lines[0]);
+                         if(!ce_remove_string(config_state->view_input->buffer, (Point_t){0, 0}, len)) break;
+                         if(!ce_insert_string(config_state->view_input->buffer, (Point_t){0, 0}, config_state->auto_complete.current->option)) break;
+                    }
+
                     // run all commands in the input buffer
-                    for(int64_t l = 0; l < config_state->view_input->buffer->line_count; ++l){
-                         Command_t command = {};
-                         if(!command_parse(&command, config_state->view_input->buffer->lines[l])){
-                              ce_message("failed to parse command: '%s'", config_state->view_input->buffer->lines[0]);
+                    Command_t command = {};
+                    if(!command_parse(&command, config_state->view_input->buffer->lines[0])){
+                         ce_message("failed to parse command: '%s'", config_state->view_input->buffer->lines[0]);
+                    }else{
+                         ce_command* command_func = NULL;
+                         for(int64_t i = 0; i < config_state->command_entry_count; ++i){
+                              CommandEntry_t* entry = config_state->command_entries + i;
+                              if(strcmp(entry->name, command.name) == 0){
+                                   command_func = entry->func;
+                                   break;
+                              }
+                         }
+
+                         if(command_func){
+                              CommandData_t command_data = {config_state, head};
+                              command_func(&command, &command_data);
                          }else{
-                              ce_command* command_func = NULL;
-                              for(int64_t i = 0; i < config_state->command_entry_count; ++i){
-                                   CommandEntry_t* entry = config_state->command_entries + i;
-                                   if(strcmp(entry->name, command.name) == 0){
-                                        command_func = entry->func;
-                                        break;
-                                   }
-                              }
-
-
-                              if(command_func){
-                                   CommandData_t command_data = {config_state, head};
-                                   command_func(&command, &command_data);
-                              }else{
-                                   ce_message("unknown command: '%s'", command.name);
-                              }
+                              ce_message("unknown command: '%s'", command.name);
                          }
                     }
                }
@@ -3547,8 +3549,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     break;
                case KEY_TAB:
                     if(auto_completing(&config_state->auto_complete)){
-                         char* complete = auto_complete_get_completion(&config_state->auto_complete, cursor->x);
-                         if(complete){
+                         if(config_state->auto_complete.type == ACT_EXACT){
+                              char* complete = auto_complete_get_completion(&config_state->auto_complete, cursor->x);
                               int64_t complete_len = strlen(complete);
                               if(ce_insert_string(buffer, *cursor, complete)){
                                    Point_t save_cursor = *cursor;
@@ -3558,19 +3560,32 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               }else{
                                    free(complete);
                               }
-
-                              if(config_state->input){
-                                   switch(config_state->input_key){
-                                   default:
-                                        break;
-                                   case 6: // Ctrl + f
-                                        calc_auto_complete_start_and_path(&config_state->auto_complete,
-                                                                          buffer->lines[cursor->y],
-                                                                          *cursor,
-                                                                          config_state->completion_buffer,
-                                                                          config_state->load_file_search_path);
-                                        break;
+                         }else if(config_state->auto_complete.type == ACT_OCCURANCE){
+                              int64_t complete_len = strlen(config_state->auto_complete.current->option);
+                              int64_t line_len = strlen(buffer->lines[config_state->auto_complete.start.y]);
+                              char* removed = ce_dupe_string(buffer, config_state->auto_complete.start,
+                                                             (Point_t){config_state->auto_complete.start.x + line_len - 1, config_state->auto_complete.start.y});
+                              if(ce_remove_string(buffer, config_state->auto_complete.start, line_len)){
+                                   ce_commit_remove_string(&buffer_state->commit_tail, config_state->auto_complete.start, *cursor, *cursor, removed, BCC_KEEP_GOING);
+                                   if(ce_insert_string(buffer, config_state->auto_complete.start, config_state->auto_complete.current->option)){
+                                        Point_t save_cursor = *cursor;
+                                        cursor->x = config_state->auto_complete.start.x + complete_len;
+                                        ce_commit_insert_string(&buffer_state->commit_tail, config_state->auto_complete.start, save_cursor, *cursor, config_state->auto_complete.current->option, BCC_KEEP_GOING);
                                    }
+                              }
+                         }
+
+                         if(config_state->input){
+                              switch(config_state->input_key){
+                              default:
+                                   break;
+                              case 6: // Ctrl + f
+                                   calc_auto_complete_start_and_path(&config_state->auto_complete,
+                                                                     buffer->lines[cursor->y],
+                                                                     *cursor,
+                                                                     config_state->completion_buffer,
+                                                                     config_state->load_file_search_path);
+                                   break;
                               }
                          }
 
@@ -3639,7 +3654,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                    if(!ce_points_equal(config_state->auto_complete.start, *cursor)) match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
                                    auto_complete_next(&config_state->auto_complete, match);
                               }else{
-                                   auto_complete_start(&config_state->auto_complete, ACT_EXACT, (Point_t){0, cursor->y});
+                                   auto_complete_start(&config_state->auto_complete, ACT_OCCURANCE, (Point_t){0, cursor->y});
                                    if(!ce_points_equal(config_state->auto_complete.start, *cursor)) match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
                                    auto_complete_next(&config_state->auto_complete, match);
                               }
@@ -4059,7 +4074,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          for(int64_t i = 0; i < config_state->command_entry_count; ++i){
                               auto_complete_insert(&config_state->auto_complete, config_state->command_entries[i].name, NULL);
                          }
-                         auto_complete_start(&config_state->auto_complete, ACT_EXACT, (Point_t){0, 0});
+                         auto_complete_start(&config_state->auto_complete, ACT_OCCURANCE, (Point_t){0, 0});
                          update_completion_buffer(config_state->completion_buffer, &config_state->auto_complete, NULL);
                          pthread_mutex_unlock(&completion_lock);
                          input_start(config_state, "Command", key);

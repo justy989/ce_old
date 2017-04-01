@@ -35,6 +35,7 @@ LITTLE:
 -'gf' or 'goto file under cursor' is often wrong
 -re-fix matching pairs
 -add history for running commands
+-detect file type from #!/bin/python3 header thing
 */
 
 #include <assert.h>

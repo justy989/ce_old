@@ -2065,7 +2065,7 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                }
 
                // return whether we switched to a buffer or not
-               return itr != NULL;
+               return true;
           }
           case 6: // Ctrl + f
           {
@@ -3632,10 +3632,11 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
      if(!handled_key){
           if(key == KEY_ENTER){
-               confirm_action(config_state, *head);
-               ce_keys_free(&config_state->vim_state.command_head);
-               key = 0;
-               handled_key = true;
+               if(confirm_action(config_state, *head)){
+                    ce_keys_free(&config_state->vim_state.command_head);
+                    key = 0;
+                    handled_key = true;
+               }
           }
      }
 

@@ -624,6 +624,17 @@ static void highlight_current_line_emptiness_until_end_of_line(int64_t cursor_li
      }
 }
 
+static void buffer_blink(HighlightType_t highlight_type, bool blink, int64_t loc_y, int64_t cursor_y)
+{
+     if(highlight_type == HL_VISUAL && blink){
+          if(loc_y == cursor_y){
+               syntax_set_color(S_BLINK, HL_CURRENT_LINE);
+          }else{
+               syntax_set_color(S_BLINK, HL_OFF);
+          }
+     }
+}
+
 typedef int64_t syntax_highlight_elem_fn (const char*, int64_t);
 
 void syntax_highlight_c_like(SyntaxHighlighterData_t* data, void* user_data, syntax_highlight_elem_fn highlight_typename_fn,
@@ -772,13 +783,7 @@ void syntax_highlight_c_like(SyntaxHighlighterData_t* data, void* user_data, syn
                }
           }
 
-          if(syntax->highlight.type == HL_VISUAL && data->buffer->blink){
-               if(data->loc.y == data->cursor.y){
-                    syntax_set_color(S_BLINK, HL_CURRENT_LINE);
-               }else{
-                    syntax_set_color(S_BLINK, HL_OFF);
-               }
-          }
+          buffer_blink(syntax->highlight.type, data->buffer->blink, data->loc.y, data->cursor.y);
 
           // highlight trailing whitespace
           if(syntax->trailing_whitespace_begin >= 0 && data->loc.x >= syntax->trailing_whitespace_begin){
@@ -1174,6 +1179,8 @@ void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data)
                }
           }
 
+          buffer_blink(syntax->highlight.type, data->buffer->blink, data->loc.y, data->cursor.y);
+
           if(syntax->trailing_whitespace_begin >= 0 && data->loc.x >= syntax->trailing_whitespace_begin){
                syntax_set_color(S_TRAILING_WHITESPACE, HL_OFF);
           }
@@ -1282,6 +1289,8 @@ void syntax_highlight_bash(SyntaxHighlighterData_t* data, void* user_data)
                     syntax->current_color = syntax_set_color(S_NORMAL, syntax->highlight.type);
                }
           }
+
+          buffer_blink(syntax->highlight.type, data->buffer->blink, data->loc.y, data->cursor.y);
 
           if(syntax->trailing_whitespace_begin >= 0 && data->loc.x >= syntax->trailing_whitespace_begin){
                syntax_set_color(S_TRAILING_WHITESPACE, HL_OFF);
@@ -1400,6 +1409,8 @@ void syntax_highlight_config(SyntaxHighlighterData_t* data, void* user_data)
                }
           }
 
+          buffer_blink(syntax->highlight.type, data->buffer->blink, data->loc.y, data->cursor.y);
+
           if(syntax->trailing_whitespace_begin >= 0 && data->loc.x >= syntax->trailing_whitespace_begin){
                syntax_set_color(S_TRAILING_WHITESPACE, HL_OFF);
           }
@@ -1444,6 +1455,7 @@ void syntax_highlight_plain(SyntaxHighlighterData_t* data, void* user_data)
      {
           syntax_determine_highlight(data, &syntax->highlight);
           syntax_set_color(S_NORMAL, syntax->highlight.type);
+          buffer_blink(syntax->highlight.type, data->buffer->blink, data->loc.y, data->cursor.y);
      } break;
      case SS_END_OF_LINE:
           highlight_current_line_emptiness_until_end_of_line(data->cursor.y, data->loc.y, data->highlight_line_type, data->bottom_right.x - data->loc.x);
@@ -1495,6 +1507,7 @@ void syntax_highlight_diff(SyntaxHighlighterData_t* data, void* user_data)
      {
           syntax_determine_highlight(data, &syntax->highlight);
           syntax_set_color(syntax->current_color, syntax->highlight.type);
+          buffer_blink(syntax->highlight.type, data->buffer->blink, data->loc.y, data->cursor.y);
      } break;
      case SS_END_OF_LINE:
           highlight_current_line_emptiness_until_end_of_line(data->cursor.y, data->loc.y, data->highlight_line_type, data->bottom_right.x - data->loc.x);

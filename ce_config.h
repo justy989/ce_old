@@ -138,4 +138,9 @@ typedef struct{
      BufferNode_t** save_buffer_head;
 }ConfigState_t;
 
+typedef struct{
+     ConfigState_t* config_state;
+     BufferNode_t* head;
+}CommandData_t;
+
 #endif

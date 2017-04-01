@@ -2230,8 +2230,10 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                                    }
                               }
 
+
                               if(command_func){
-                                   command_func(&command, config_state);
+                                   CommandData_t command_data = {config_state, head};
+                                   command_func(&command, &command_data);
                               }else{
                                    ce_message("unknown command: '%s'", command.name);
                               }
@@ -2435,7 +2437,8 @@ void command_reload_buffer(Command_t* command, void* user_data)
           return;
      }
 
-     ConfigState_t* config_state = (ConfigState_t*)(user_data);
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
      BufferView_t* buffer_view = config_state->tab_current->view_current;
      Buffer_t* buffer = buffer_view->buffer;
 
@@ -2534,7 +2537,9 @@ void command_noh(Command_t* command, void* user_data)
           return;
      }
 
-     ConfigState_t* config_state = (ConfigState_t*)(user_data);
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+
      config_state->do_not_highlight_search = true;
 }
 
@@ -2556,7 +2561,8 @@ void command_line_number(Command_t* command, void* user_data)
           return;
      }
 
-     ConfigState_t* config_state = (ConfigState_t*)(user_data);
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
 
      if(strcmp(command->args[0].string, "none") == 0){
           config_state->line_number_type = LNT_NONE;
@@ -2587,7 +2593,8 @@ void command_highlight_line(Command_t* command, void* user_data)
           return;
      }
 
-     ConfigState_t* config_state = (ConfigState_t*)(user_data);
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
 
      if(strcmp(command->args[0].string, "none") == 0){
           config_state->highlight_line_type = HLT_NONE;
@@ -2602,7 +2609,8 @@ void command_highlight_line(Command_t* command, void* user_data)
 
 void command_new_buffer(Command_t* command, void* user_data)
 {
-     ConfigState_t* config_state = (ConfigState_t*)(user_data);
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
 
      if(command->arg_count == 0){
           Buffer_t* new_buffer = new_buffer_from_string(*config_state->save_buffer_head, "unnamed", NULL);
@@ -2638,7 +2646,8 @@ void command_rename(Command_t* command, void* user_data)
           return;
      }
 
-     ConfigState_t* config_state = (ConfigState_t*)(user_data);
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
      BufferView_t* buffer_view = config_state->tab_current->view_current;
      Buffer_t* buffer = buffer_view->buffer;
 
@@ -2647,6 +2656,45 @@ void command_rename(Command_t* command, void* user_data)
      if(buffer->status != BS_READONLY){
           buffer->status = BS_MODIFIED;
      }
+}
+
+#define BUFFERS_HELP "usage: buffers"
+
+void command_buffers(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message(BUFFERS_HELP);
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Buffer_t* buffer = buffer_view->buffer;
+     Point_t* cursor = &buffer_view->cursor;
+
+     view_jump_insert(buffer_view->user_data, buffer->filename, *cursor);
+
+     buffer->cursor = config_state->tab_current->view_current->cursor;
+
+     // try to find a better place to put the cursor to start
+     BufferNode_t* itr = command_data->head;
+     int64_t buffer_index = 1;
+     bool found_good_buffer_index = false;
+     while(itr){
+          if(itr->buffer->status != BS_READONLY && !ce_buffer_in_view(config_state->tab_current->view_head, itr->buffer)){
+               found_good_buffer_index = true;
+               break;
+          }
+          itr = itr->next;
+          buffer_index++;
+     }
+
+     update_buffer_list_buffer(config_state, command_data->head);
+     config_state->tab_current->view_current->buffer->cursor = *cursor;
+     config_state->tab_current->view_current->buffer = &config_state->buffer_list_buffer;
+     config_state->tab_current->view_current->top_row = 0;
+     config_state->tab_current->view_current->cursor = (Point_t){0, found_good_buffer_index ? buffer_index : 1};
 }
 
 void clang_completion(ConfigState_t* config_state, Point_t start_completion)
@@ -2920,13 +2968,14 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      {
           // create a stack array so we can have the compiler track the number of elements
           CommandEntry_t command_entries[] = {
-               {command_reload_buffer, "reload_buffer"},
-               {command_syntax, "syntax"},
-               {command_noh, "noh"},
-               {command_line_number, "line_number"},
+               {command_buffers, "buffers"},
                {command_highlight_line, "highlight_line"},
+               {command_line_number, "line_number"},
                {command_new_buffer, "new_buffer"},
+               {command_noh, "noh"},
+               {command_reload_buffer, "reload_buffer"},
                {command_rename, "rename"},
+               {command_syntax, "syntax"},
           };
 
           // init and copy from our stack array

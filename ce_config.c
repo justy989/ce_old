@@ -515,6 +515,20 @@ bool initialize_buffer(Buffer_t* buffer){
                     free(buffer_state);
                     return false;
                }
+          }else if(buffer->line_count > 0){
+               // check for '#!/bin/bash/python' type of file header
+               if(strlen(buffer->lines[0]) > 1 && buffer->lines[0][0] == '#' && buffer->lines[0][1] == '!'){
+                    if(strstr(buffer->lines[0], "python")){
+                         buffer->syntax_fn = syntax_highlight_python;
+                         buffer->syntax_user_data = malloc(sizeof(SyntaxPython_t));
+                         buffer->type = BFT_PYTHON;
+                         if(!buffer->syntax_user_data){
+                              ce_message("failed to allocate syntax user data for buffer");
+                              free(buffer_state);
+                              return false;
+                         }
+                    }
+               }
           }
      }
 

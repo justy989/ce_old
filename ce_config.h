@@ -39,6 +39,11 @@ typedef struct TabView_t{
      struct TabView_t* next;
 }TabView_t;
 
+typedef enum{
+     ACT_EXACT,
+     ACT_OCCURANCE,
+}AutoCompleteType_t;
+
 typedef struct CompleteNode_t{
      char* option;
      char* description;
@@ -51,6 +56,7 @@ typedef struct{
      CompleteNode_t* tail;
      CompleteNode_t* current;
      Point_t start;
+     AutoCompleteType_t type;
 }AutoComplete_t;
 
 typedef struct TerminalNode_t{

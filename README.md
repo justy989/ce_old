@@ -108,6 +108,7 @@ Key Sequence|Action
 `zz`|scroll view so cursor is in the middle
 `zb`|scroll view so cursor is at the bottom
 `gq`|quit editor
+`gr`|redraw from clear screen
 `gf`|goto file under cursor
 `gt`|goto next tab
 `gT`|goto previous tab

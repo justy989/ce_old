@@ -240,10 +240,11 @@ bool auto_complete_insert(AutoComplete_t* auto_complete, const char* option, con
      return true;
 }
 
-void auto_complete_start(AutoComplete_t* auto_complete, Point_t start)
+void auto_complete_start(AutoComplete_t* auto_complete, AutoCompleteType_t type, Point_t start)
 {
      assert(start.x >= 0);
      auto_complete->start = start;
+     auto_complete->type = type;
      auto_complete->current = auto_complete->head;
 }
 
@@ -337,7 +338,11 @@ bool auto_complete_next(AutoComplete_t* auto_complete, const char* match)
      do{
           auto_complete->current = auto_complete->current->next;
           if(!auto_complete->current) auto_complete->current = auto_complete->head;
-          if(strncmp(auto_complete->current->option, match, match_len) == 0) return true;
+          if(auto_complete->type == ACT_EXACT){
+               if(strncmp(auto_complete->current->option, match, match_len) == 0) return true;
+          }else if(auto_complete->type == ACT_OCCURANCE){
+               if(strstr(auto_complete->current->option, match)) return true;
+          }
      }while(auto_complete->current != initial_node);
 
      auto_complete_end(auto_complete);
@@ -357,7 +362,11 @@ bool auto_complete_prev(AutoComplete_t* auto_complete, const char* match)
      do{
           auto_complete->current = auto_complete->current->prev;
           if(!auto_complete->current) auto_complete->current = auto_complete->tail;
-          if(strncmp(auto_complete->current->option, match, match_len) == 0) return true;
+          if(auto_complete->type == ACT_EXACT){
+               if(strncmp(auto_complete->current->option, match, match_len) == 0) return true;
+          }else if(auto_complete->type == ACT_OCCURANCE){
+               if(strstr(auto_complete->current->option, match)) return true;
+          }
      }while(auto_complete->current != initial_node);
 
      auto_complete_end(auto_complete);
@@ -370,12 +379,24 @@ void update_completion_buffer(Buffer_t* completion_buffer, AutoComplete_t* auto_
      ce_clear_lines_readonly(completion_buffer);
 
      int64_t match_len = 0;
-     if(match) match_len = strlen(match);
+     if(match){
+          match_len = strlen(match);
+     }else{
+          match = "";
+     }
      int64_t line_count = 0;
      CompleteNode_t* itr = auto_complete->head;
      char line[256];
      while(itr){
-          if(strncmp(itr->option, match, match_len) == 0 || match_len == 0){
+          bool matches = false;
+
+          if(auto_complete->type == ACT_EXACT){
+               matches = (strncmp(itr->option, match, match_len) == 0 || match_len == 0);
+          }else if(auto_complete->type == ACT_OCCURANCE){
+               matches = (strstr(itr->option, match) || match_len == 0);
+          }
+
+          if(matches){
                if(itr->description){
                     snprintf(line, 256, "%s %s", itr->option, itr->description);
                }else{
@@ -1340,6 +1361,8 @@ void* clang_complete_thread(void* data)
                }
                bytes[written - 1] = 0;
                fclose(flags_file);
+          }else{
+               pthread_exit(NULL);
           }
      }
 
@@ -1347,7 +1370,6 @@ void* clang_complete_thread(void* data)
      char command[BUFSIZ];
      snprintf(command, BUFSIZ, "%s %s %s -fsyntax-only -ferror-limit=1 %s - -Xclang -code-completion-at=-:%ld:%ld",
               compiler, bytes, base_include, language_flag, thread_data->cursor.y + 1, thread_data->cursor.x + 1);
-     //ce_message("%s", command);
 
      int input_fd = 0;
      int output_fd = 0;
@@ -1457,7 +1479,7 @@ void* clang_complete_thread(void* data)
 
      // if any elements existed, let us know
      if(thread_data->auto_complete->head){
-          auto_complete_start(thread_data->auto_complete, thread_data->start);
+          auto_complete_start(thread_data->auto_complete, ACT_EXACT, thread_data->start);
           Point_t end = thread_data->cursor;
           end.x--;
           if(end.x < 0) end.x = 0;
@@ -1977,11 +1999,11 @@ bool calc_auto_complete_start_and_path(AutoComplete_t* auto_complete, const char
      if(rc){
           if(last_slash){
                const char* completion = last_slash + 1;
-               auto_complete_start(auto_complete, (Point_t){(last_slash - line) + 1, cursor.y});
+               auto_complete_start(auto_complete, ACT_OCCURANCE, (Point_t){(last_slash - line) + 1, cursor.y});
                auto_complete_next(auto_complete, completion);
                update_completion_buffer(completion_buffer, auto_complete, completion);
           }else{
-               auto_complete_start(auto_complete, (Point_t){(path_begin - line), cursor.y});
+               auto_complete_start(auto_complete, ACT_OCCURANCE, (Point_t){(path_begin - line), cursor.y});
                auto_complete_next(auto_complete, path_begin);
                update_completion_buffer(completion_buffer, auto_complete, path_begin);
           }
@@ -2022,7 +2044,21 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                commit_input_to_history(config_state->view_input->buffer, &config_state->load_file_history);
                bool switched_to_open_file = false;
 
+
                for(int64_t i = 0; i < config_state->view_input->buffer->line_count; ++i){
+
+                    // if auto complete has a current matching value, overwrite what the user wrote with that completion
+                    if(auto_completing(&config_state->auto_complete) && config_state->auto_complete.current){
+                         char* last_slash = strrchr(config_state->view_input->buffer->lines[i], '/');
+                         int64_t offset = 0;
+                         if(last_slash) offset = (last_slash - config_state->view_input->buffer->lines[i]) + 1;
+
+                         int64_t len = strlen(config_state->view_input->buffer->lines[i] + offset);
+                         if(!ce_remove_string(config_state->view_input->buffer, (Point_t){offset, i}, len)) break;
+                         if(!ce_insert_string(config_state->view_input->buffer, (Point_t){offset, i}, config_state->auto_complete.current->option)) break;
+                    }
+
+                    // load the buffer, either from the current working dir, or from another base filepath
                     Buffer_t* new_buffer = NULL;
                     if(config_state->load_file_search_path && config_state->view_input->buffer->lines[i][0] != '/'){
                          char path[BUFSIZ];
@@ -3301,12 +3337,15 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     strncpy(command, "make clean", BUFSIZ);
                     run_command_on_terminal_in_view(config_state->terminal_head, config_state->tab_current->view_head, command);
                } break;
-#if 1
+#if 0
                // NOTE: useful for debugging
                case 'a':
                     config_state->tab_current->view_current->buffer = &config_state->clang_completion_buffer;
                     break;
 #endif
+               case 'r':
+                    clear();
+                    break;
                case 'v':
                     config_state->tab_current->view_overrideable = config_state->tab_current->view_current;
                     config_state->tab_current->overriden_buffer = NULL;
@@ -3528,7 +3567,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                    if(!ce_points_equal(config_state->auto_complete.start, *cursor)) match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
                                    auto_complete_next(&config_state->auto_complete, match);
                               }else{
-                                   auto_complete_start(&config_state->auto_complete, (Point_t){0, cursor->y});
+                                   auto_complete_start(&config_state->auto_complete, ACT_EXACT, (Point_t){0, cursor->y});
                                    if(!ce_points_equal(config_state->auto_complete.start, *cursor)) match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
                                    auto_complete_next(&config_state->auto_complete, match);
                               }
@@ -3960,7 +3999,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          for(int64_t i = 0; i < config_state->command_entry_count; ++i){
                               auto_complete_insert(&config_state->auto_complete, config_state->command_entries[i].name, NULL);
                          }
-                         auto_complete_start(&config_state->auto_complete, (Point_t){0, 0});
+                         auto_complete_start(&config_state->auto_complete, ACT_EXACT, (Point_t){0, 0});
                          update_completion_buffer(config_state->completion_buffer, &config_state->auto_complete, NULL);
                          pthread_mutex_unlock(&completion_lock);
                          input_start(config_state, "Command", key);

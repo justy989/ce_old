@@ -233,27 +233,29 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                break;
           case '#':
           {
-               if(buffer->type == BFT_C && cursor->y < buffer->line_count){
-                    bool all_whitespace = true;
+               if(buffer->type == BFT_C || buffer->type == BFT_CPP){
+                    if(cursor->y < buffer->line_count){
+                         bool all_whitespace = true;
 
-                    for(int64_t i = 0; i < cursor->x; ++i){
-                         if(ce_get_char_raw(buffer, (Point_t){i, cursor->y}) != ' '){
-                              all_whitespace = false;
-                              break;
+                         for(int64_t i = 0; i < cursor->x; ++i){
+                              if(ce_get_char_raw(buffer, (Point_t){i, cursor->y}) != ' '){
+                                   all_whitespace = false;
+                                   break;
+                              }
                          }
-                    }
 
-                    if(all_whitespace && cursor->x > 0){
-                         Point_t start = {0, cursor->y};
-                         Point_t end = {cursor->x - 1, cursor->y};
-                         char* removed_str = ce_dupe_string(buffer, start, end);
-                         if(ce_remove_string(buffer, start, cursor->x)){
-                              ce_commit_remove_string(commit_tail, start, *cursor, start, removed_str, BCC_KEEP_GOING);
-                              *cursor = start;
-                              insert_start = start;
-                              undo_cursor = insert_start;
-                         }else{
-                              free(removed_str);
+                         if(all_whitespace && cursor->x > 0){
+                              Point_t start = {0, cursor->y};
+                              Point_t end = {cursor->x - 1, cursor->y};
+                              char* removed_str = ce_dupe_string(buffer, start, end);
+                              if(ce_remove_string(buffer, start, cursor->x)){
+                                   ce_commit_remove_string(commit_tail, start, *cursor, start, removed_str, BCC_KEEP_GOING);
+                                   *cursor = start;
+                                   insert_start = start;
+                                   undo_cursor = insert_start;
+                              }else{
+                                   free(removed_str);
+                              }
                          }
                     }
                }
@@ -1711,6 +1713,8 @@ const char* get_comment_string(BufferFileType_t type)
      default:
           break;
      case BFT_C:
+     case BFT_CPP:
+     case BFT_JAVA:
           return VIM_C_COMMENT_STRING;
      case BFT_PYTHON:
           return VIM_PYTHON_COMMENT_STRING;

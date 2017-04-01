@@ -117,6 +117,8 @@ static int syntax_set_color(Syntax_t syntax, HighlightType_t highlight_type)
                attron(COLOR_PAIR(syntax));
                break;
           case HL_VISUAL:
+          case HL_MATCH:
+          case HL_MARK:
                attron(COLOR_PAIR(syntax + S_NORMAL_HIGHLIGHTED - 1));
                break;
           case HL_CURRENT_LINE:
@@ -499,7 +501,7 @@ static void syntax_determine_highlight(SyntaxHighlighterData_t* data, SyntaxHigh
 
           if(highlight->highlight_left <= 0){
                if(ce_points_equal(data->loc, data->buffer->mark)){
-                    highlight->type = HL_VISUAL;
+                    highlight->type = HL_MARK;
                     highlight->highlight_left = 1;
                }else if(data->highlight_line_type && data->loc.y == data->cursor.y){
                     highlight->type = HL_CURRENT_LINE;
@@ -526,7 +528,7 @@ static void syntax_determine_highlight(SyntaxHighlighterData_t* data, SyntaxHigh
                     if(ce_point_in_range(data->buffer->highlight_start, data->loc, end_match)){
                          // pass
                     }else{
-                         highlight->type = HL_VISUAL;
+                         highlight->type = HL_MATCH;
                          highlight->highlight_left = highlight_left;
                     }
                }
@@ -683,6 +685,7 @@ void syntax_highlight_c_like(SyntaxHighlighterData_t* data, void* user_data, syn
                syntax->current_color = S_COMMENT;
           }
 
+          syntax_determine_highlight(data, &syntax->highlight);
           syntax->current_color = syntax_set_color(syntax->current_color, syntax->highlight.type);
      } break;
      case SS_CHARACTER:
@@ -767,6 +770,14 @@ void syntax_highlight_c_like(SyntaxHighlighterData_t* data, void* user_data, syn
                               syntax->current_color = syntax_set_color(S_MATCHING_PARENS, syntax->highlight.type);
                          }
                     }
+               }
+          }
+
+          if(syntax->highlight.type == HL_VISUAL && data->buffer->blink){
+               if(data->loc.y == data->cursor.y){
+                    syntax_set_color(S_BLINK, HL_CURRENT_LINE);
+               }else{
+                    syntax_set_color(S_BLINK, HL_OFF);
                }
           }
 

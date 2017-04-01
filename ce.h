@@ -90,7 +90,7 @@ typedef void syntax_highlighter(SyntaxHighlighterData_t*, void*);
 typedef enum{
      CE_UP = -1,
      CE_DOWN = 1
-} Direction_t;
+}Direction_t;
 
 Direction_t ce_reverse_direction(Direction_t to_reverse);
 
@@ -99,7 +99,7 @@ typedef enum{
      BS_MODIFIED,
      BS_READONLY,
      BS_NEW_FILE,
-} BufferStatus_t;
+}BufferStatus_t;
 
 typedef enum{
      BFT_PLAIN,
@@ -111,7 +111,7 @@ typedef enum{
      BFT_CONFIG,
      BFT_DIFF,
      BFT_TERMINAL,
-} BufferFileType_t;
+}BufferFileType_t;
 
 typedef struct Buffer_t{
      char** lines; // '\0' terminated, does not contain newlines, NULL if empty
@@ -126,6 +126,7 @@ typedef struct Buffer_t{
      Point_t highlight_start;
      Point_t highlight_end;
      Point_t mark;
+     bool blink; // used to show highlight using blink colors
 
      union {
           char* filename;
@@ -138,12 +139,12 @@ typedef struct Buffer_t{
      void* syntax_user_data;
 
      bool absolutely_no_line_numbers_under_any_circumstances; // NOTE: I can't stop laughing
-} Buffer_t;
+}Buffer_t;
 
 typedef struct BufferNode_t {
      Buffer_t* buffer;
      struct BufferNode_t* next;
-} BufferNode_t;
+}BufferNode_t;
 
 typedef enum {
      BCT_NONE,
@@ -153,12 +154,12 @@ typedef enum {
      BCT_REMOVE_STRING,
      BCT_CHANGE_CHAR,
      BCT_CHANGE_STRING,
-} BufferCommitType_t;
+}BufferCommitType_t;
 
 typedef enum {
      BCC_STOP,
      BCC_KEEP_GOING,
-} BufferCommitChain_t;
+}BufferCommitChain_t;
 
 typedef struct {
      BufferCommitType_t type;
@@ -178,13 +179,13 @@ typedef struct {
           char prev_c;
           char* prev_str;
      };
-} BufferCommit_t;
+}BufferCommit_t;
 
 typedef struct BufferCommitNode_t {
      BufferCommit_t commit;
      struct BufferCommitNode_t* prev;
      struct BufferCommitNode_t* next;
-} BufferCommitNode_t;
+}BufferCommitNode_t;
 
 // horizontal split []|[]
 
@@ -207,26 +208,26 @@ typedef struct BufferView_t {
 
      struct BufferView_t* next_horizontal;
      struct BufferView_t* next_vertical;
-} BufferView_t;
+}BufferView_t;
 
 typedef enum {
      CT_NONE,
      CT_SINGLE_LINE,
      CT_BEGIN_MULTILINE,
      CT_END_MULTILINE,
-} CommentType_t;
+}CommentType_t;
 
 // NOTE: temporary, we probably want something like CeRC_t type of thing?
 typedef enum {
      LF_DOES_NOT_EXIST,
      LF_IS_DIRECTORY,
      LF_SUCCESS,
-} LoadFileResult_t;
+}LoadFileResult_t;
 
 typedef struct KeyNode_t{
      int key;
      struct KeyNode_t* next;
-} KeyNode_t;
+}KeyNode_t;
 
 typedef enum{
      CAT_INTEGER,

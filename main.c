@@ -34,8 +34,8 @@ LITTLE:
 -crash when building eg, color_node invalid pointer in ce_terminal.c:603
 -'gf' or 'goto file under cursor' is often wrong
 -re-fix matching pairs
--add history for running commands
 -detect file type from #!/bin/python3 header thing
+-we made un-undoable changes when you switch to a non-existant buffer
 */
 
 #include <assert.h>

@@ -3652,25 +3652,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                                                 config_state->load_file_search_path);
                               break;
                          case ':': // command
-                         {
-                              Point_t end = {cursor->x - 1, cursor->y};
-                              if(end.x < 0) end.x = 0;
-                              char* match = "";
-
-                              pthread_mutex_lock(&completion_lock);
-                              if(auto_completing(&config_state->auto_complete)){
-                                   if(!ce_points_equal(config_state->auto_complete.start, *cursor)) match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
-                                   auto_complete_next(&config_state->auto_complete, match);
-                              }else{
-                                   auto_complete_start(&config_state->auto_complete, ACT_OCCURANCE, (Point_t){0, cursor->y});
-                                   if(!ce_points_equal(config_state->auto_complete.start, *cursor)) match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
-                                   auto_complete_next(&config_state->auto_complete, match);
-                              }
-
-                              update_completion_buffer(config_state->completion_buffer, &config_state->auto_complete, match);
-                              pthread_mutex_unlock(&completion_lock);
-                              if(!ce_points_equal(config_state->auto_complete.start, end))free(match);
-                         } break;
                          case 2: // Ctrl + b
                          {
                               Point_t end = {cursor->x - 1, cursor->y};
@@ -3680,7 +3661,9 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               pthread_mutex_lock(&completion_lock);
                               if(auto_completing(&config_state->auto_complete)){
                                    if(!ce_points_equal(config_state->auto_complete.start, *cursor)) match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
-                                   if(strstr(config_state->auto_complete.current->option, match) == NULL) auto_complete_next(&config_state->auto_complete, match);
+                                   if(strstr(config_state->auto_complete.current->option, match) == NULL){
+                                        auto_complete_next(&config_state->auto_complete, match);
+                                   }
                               }else{
                                    auto_complete_start(&config_state->auto_complete, ACT_OCCURANCE, (Point_t){0, cursor->y});
                                    if(!ce_points_equal(config_state->auto_complete.start, *cursor)) match = ce_dupe_string(buffer, config_state->auto_complete.start, end);

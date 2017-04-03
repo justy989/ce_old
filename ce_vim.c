@@ -805,12 +805,20 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           }
      } break;
      case 'p':
-          built_action.change.type = VCT_PASTE_AFTER;
-          get_motion = false;
+          if(vim_mode == VM_VISUAL_RANGE || vim_mode == VM_VISUAL_LINE){
+               built_action.change.type = VCT_SUBSTITUTE;
+          }else{
+               built_action.change.type = VCT_PASTE_AFTER;
+               get_motion = false;
+          }
           break;
      case 'P':
-          built_action.change.type = VCT_PASTE_BEFORE;
-          get_motion = false;
+          if(vim_mode == VM_VISUAL_RANGE || vim_mode == VM_VISUAL_LINE){
+               built_action.change.type = VCT_SUBSTITUTE;
+          }else{
+               built_action.change.type = VCT_PASTE_BEFORE;
+               get_motion = false;
+          }
           break;
      case 'y':
           built_action.change.type = VCT_YANK;

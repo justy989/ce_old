@@ -1623,6 +1623,8 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                     }
                }
           }
+     }else{
+          attron(COLOR_PAIR(S_LINE_NUMBERS));
      }
 
      if(!buffer->absolutely_no_line_numbers_under_any_circumstances){
@@ -2744,6 +2746,8 @@ int64_t ce_get_indentation_for_line(const Buffer_t* buffer, Point_t location, in
 
           break;
      case BFT_C:
+     case BFT_CPP:
+     case BFT_JAVA:
      case BFT_CONFIG:
      {
           // first, match this line's indentation
@@ -2967,8 +2971,15 @@ static bool parse_arg(CommandArg_t* arg, const char* string)
                arg->integer = atoi(string);
           }
      }else{
+          // skip over the first quote if one is there
+          if(string[0] == '"') string++;
+
           arg->type = CAT_STRING;
           arg->string = strdup(string);
+          int64_t len = strlen(arg->string);
+
+          // overwrite last quote with null terminator
+          if(arg->string[len - 1] == '"') arg->string[len - 1] = 0;
      }
 
      return true;

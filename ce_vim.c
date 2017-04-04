@@ -805,12 +805,20 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           }
      } break;
      case 'p':
-          built_action.change.type = VCT_PASTE_AFTER;
-          get_motion = false;
+          if(vim_mode == VM_VISUAL_RANGE || vim_mode == VM_VISUAL_LINE){
+               built_action.change.type = VCT_SUBSTITUTE;
+          }else{
+               built_action.change.type = VCT_PASTE_AFTER;
+               get_motion = false;
+          }
           break;
      case 'P':
-          built_action.change.type = VCT_PASTE_BEFORE;
-          get_motion = false;
+          if(vim_mode == VM_VISUAL_RANGE || vim_mode == VM_VISUAL_LINE){
+               built_action.change.type = VCT_SUBSTITUTE;
+          }else{
+               built_action.change.type = VCT_PASTE_BEFORE;
+               get_motion = false;
+          }
           break;
      case 'y':
           built_action.change.type = VCT_YANK;
@@ -2196,13 +2204,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
 
           ce_commit_remove_string(commit_tail, *action_range.sorted_start, *cursor, *action_range.sorted_start, commit_string, BCC_KEEP_GOING);
 
-          // paste
-          // TODO: consolidate with paste before
-          switch(yank->mode){
-          default:
-               return false;
-          case YANK_NORMAL:
-          {
+          if(yank->mode == YANK_NORMAL || vim_state->mode == VM_VISUAL_RANGE){
                if(!ce_insert_string(buffer, *action_range.sorted_start, yank->text)){
                     return false;
                }
@@ -2210,9 +2212,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                ce_commit_insert_string(commit_tail,
                                        *action_range.sorted_start, *action_range.sorted_start, *action_range.sorted_start,
                                        strdup(yank->text), chain);
-          } break;
-          case YANK_LINE:
-          {
+          }else if(yank->mode == YANK_LINE){
                size_t len = strlen(yank->text);
                char* save_str = malloc(len + 2); // newline and '\0'
                Point_t insert_loc = {0, cursor->y};
@@ -2229,7 +2229,6 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                ce_commit_insert_string(commit_tail,
                                        insert_loc, *cursor, cursor_loc,
                                        save_str, chain);
-          } break;
           }
      } break;
      }

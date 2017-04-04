@@ -3820,10 +3820,11 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
                          switch(key){
                          default:
-                              if(isalpha(key) && !auto_completing(&config_state->auto_complete)){
+                              // check if key is a valid c identifier
+                              if((isalnum(key) || key == '_' ) && !auto_completing(&config_state->auto_complete)){
                                    char prev_char = 0;
                                    if(cursor->x > 1 && ce_get_char(buffer, (Point_t){cursor->x - 2, cursor->y}, &prev_char)){
-                                        if(!isalpha(prev_char)){
+                                        if(!isalnum(prev_char) && prev_char != '_'){
                                              clang_completion(config_state, (Point_t){cursor->x - 1, cursor->y});
                                         }
                                    }

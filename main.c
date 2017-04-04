@@ -37,6 +37,8 @@ LITTLE:
 -paste blink is incorrectly displaying when you substitute in visual line mode
 -investigate VMT_SEARCH led to location off of the buffer, but in the line range
 -buffer view of jump list
+-show matching parens/braces after typing it in insert mode
+-'cc' should doesn't work like vim on empty lines
 */
 
 #include <assert.h>

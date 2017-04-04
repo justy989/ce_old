@@ -88,6 +88,8 @@ typedef struct{
      bool input;
      const char* input_message;
      int input_key;
+     VimMode_t input_mode_save;
+     Point_t input_visual_save;
 
      Buffer_t* completion_buffer;
 
@@ -132,6 +134,7 @@ typedef struct{
 
      CommandEntry_t* command_entries;
      int64_t command_entry_count;
+     int64_t max_auto_complete_height;
 
      bool quit;
 

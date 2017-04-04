@@ -693,6 +693,10 @@ void input_start(ConfigState_t* config_state, const char* input_message, int inp
      config_state->view_input->top_row = 0;
      config_state->input_message = input_message;
      config_state->input_key = input_key;
+     config_state->input_mode_save = config_state->vim_state.mode;
+     if(config_state->vim_state.mode == VM_VISUAL_LINE || config_state->vim_state.mode == VM_VISUAL_RANGE){
+          config_state->input_visual_save = config_state->vim_state.visual_start;
+     }
      pthread_mutex_lock(&view_input_save_lock);
      config_state->tab_current->view_input_save = config_state->tab_current->view_current;
      pthread_mutex_unlock(&view_input_save_lock);
@@ -709,7 +713,19 @@ void input_end(ConfigState_t* config_state)
 {
      config_state->input = false;
      config_state->tab_current->view_current = config_state->tab_current->view_input_save;
-     vim_enter_normal_mode(&config_state->vim_state);
+
+     switch(config_state->input_mode_save){
+     default:
+     case VM_NORMAL:
+          vim_enter_normal_mode(&config_state->vim_state);
+          break;
+     case VM_VISUAL_RANGE:
+          vim_enter_visual_range_mode(&config_state->vim_state, config_state->input_visual_save);
+          break;
+     case VM_VISUAL_LINE:
+          vim_enter_visual_line_mode(&config_state->vim_state, config_state->input_visual_save);
+          break;
+     }
 }
 
 void input_cancel(ConfigState_t* config_state)
@@ -2753,6 +2769,61 @@ void command_buffers(Command_t* command, void* user_data)
      config_state->tab_current->view_current->cursor = (Point_t){0, found_good_buffer_index ? buffer_index : 1};
 }
 
+#define MACRO_BACKSLASHES_HELP "usage: macro_backslashes"
+
+void command_macro_backslashes(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message(MACRO_BACKSLASHES_HELP);
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Buffer_t* buffer = buffer_view->buffer;
+     BufferState_t* buffer_state = buffer->user_data;
+     Point_t* cursor = &buffer_view->cursor;
+
+     if(config_state->vim_state.mode != VM_VISUAL_LINE) return;
+
+     int64_t start_line = 0;
+     int64_t end_line = 0;
+
+     // sort points
+     if(cursor->y > config_state->vim_state.visual_start.y){
+          start_line = config_state->vim_state.visual_start.y;
+          end_line = cursor->y;
+     }else{
+          start_line = cursor->y;
+          end_line = config_state->vim_state.visual_start.y;
+     }
+
+     // figure out longest line TODO: after slurping spaces and backslashes
+     int64_t line_count = end_line - start_line + 1;
+     int64_t longest_line = 0;
+
+     for(int64_t i = 0; i < line_count; ++i){
+          int64_t line_len = strlen(buffer->lines[i + start_line]);
+          if(line_len > longest_line) longest_line = line_len;
+     }
+
+     // insert whitespace and backslash on every line to make it the same length
+     for(int64_t i = 0; i < line_count; ++i){
+          int64_t line = i + start_line;
+          int64_t line_len = strlen(buffer->lines[line]);
+          int64_t space_len = longest_line - line_len + 1;
+          Point_t loc = {line_len, line};
+          for(int64_t s = 0; s < space_len; ++s){
+               ce_insert_char(buffer, loc, ' ');
+               ce_commit_insert_string(&buffer_state->commit_tail, loc, *cursor, *cursor, strdup(" "), BCC_KEEP_GOING);
+               loc.x++;
+          }
+          ce_insert_char(buffer, loc, '\\');
+          ce_commit_insert_string(&buffer_state->commit_tail, loc, *cursor, *cursor, strdup("\\"), BCC_KEEP_GOING);
+     }
+}
+
 void clang_completion(ConfigState_t* config_state, Point_t start_completion)
 {
      if(config_state->clang_complete_thread){
@@ -2937,6 +3008,8 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      config_state->line_number_type = LNT_NONE;
      config_state->highlight_line_type = HLT_ENTIRE_LINE;
 
+     config_state->max_auto_complete_height = 10;
+
 #if 0
      // enable mouse events
      mousemask(~((mmask_t)0), NULL);
@@ -3030,6 +3103,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
                {command_buffers, "buffers"},
                {command_highlight_line, "highlight_line"},
                {command_line_number, "line_number"},
+               {command_macro_backslashes, "macro_backslashes"},
                {command_new_buffer, "new_buffer"},
                {command_noh, "noh"},
                {command_reload_buffer, "reload_buffer"},
@@ -3746,6 +3820,14 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
                          switch(key){
                          default:
+                              if(isalpha(key) && !auto_completing(&config_state->auto_complete)){
+                                   char prev_char = 0;
+                                   if(cursor->x > 1 && ce_get_char(buffer, (Point_t){cursor->x - 2, cursor->y}, &prev_char)){
+                                        if(!isalpha(prev_char)){
+                                             clang_completion(config_state, (Point_t){cursor->x - 1, cursor->y});
+                                        }
+                                   }
+                              }
                               break;
                          case '>':
                          {
@@ -4723,6 +4805,7 @@ void view_drawer(void* user_data)
 
           if(auto_completing(&config_state->auto_complete)){
                int64_t auto_complete_view_height = config_state->view_auto_complete->buffer->line_count;
+               if(auto_complete_view_height > config_state->max_auto_complete_height) auto_complete_view_height = config_state->max_auto_complete_height;
                auto_complete_top_left = (Point_t){input_top_left.x, (input_top_left.y - auto_complete_view_height) - 1};
                if(auto_complete_top_left.y < 0) auto_complete_top_left.y = 0; // account for separator line
                auto_complete_bottom_right = (Point_t){input_bottom_right.x, input_top_left.y - 1};
@@ -4734,6 +4817,7 @@ void view_drawer(void* user_data)
           terminal_cursor = get_cursor_on_terminal(cursor, buffer_view, line_number_type);
 
           int64_t auto_complete_view_height = config_state->view_auto_complete->buffer->line_count;
+          if(auto_complete_view_height > config_state->max_auto_complete_height) auto_complete_view_height = config_state->max_auto_complete_height;
           auto_complete_top_left = (Point_t){config_state->tab_current->view_current->top_left.x,
                                              (config_state->tab_current->view_current->bottom_right.y - auto_complete_view_height) - 1};
           if(auto_complete_top_left.y <= terminal_cursor.y) auto_complete_top_left.y = terminal_cursor.y + 2;

@@ -527,6 +527,16 @@ bool initialize_buffer(Buffer_t* buffer){
                               free(buffer_state);
                               return false;
                          }
+                    }else if(strstr(buffer->lines[0], "/sh") ||
+                             strstr(buffer->lines[0], "/bash")){
+                         buffer->syntax_fn = syntax_highlight_bash;
+                         buffer->syntax_user_data = malloc(sizeof(SyntaxBash_t));
+                         buffer->type = BFT_BASH;
+                         if(!buffer->syntax_user_data){
+                              ce_message("failed to allocate syntax user data for buffer");
+                              free(buffer_state);
+                              return false;
+                         }
                     }
                }
           }

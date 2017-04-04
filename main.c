@@ -35,6 +35,8 @@ LITTLE:
 -'gf' or 'goto file under cursor' is often wrong
 -re-fix matching pairs
 -paste blink is incorrectly displaying when you substitute in visual line mode
+-investigate VMT_SEARCH led to location off of the buffer, but in the line range
+-buffer view of jump list
 */
 
 #include <assert.h>

@@ -39,6 +39,14 @@ LITTLE:
 -buffer view of jump list
 -show matching parens/braces after typing it in insert mode
 -'cc' should doesn't work like vim on empty lines
+-long filenames spill into other views
+-kill clang complete thread without blocking
+-calculating indentation of brace with aligned function arguments is wrong.
+if(collide_with_wall(player_relative_pos.x, player_relative_pos.y, player_vel.x, player_vel.y, block_quad.left,
+                     block_quad.bottom, block_quad.top, time_min)){
+                     ^ ce thinks it's here
+^ it should be here
+-if you use . after a yank, highlight new yank? Or don't repeat yank action?
 */
 
 #include <assert.h>

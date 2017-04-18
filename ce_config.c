@@ -459,6 +459,7 @@ bool initialize_buffer(Buffer_t* buffer){
                     return false;
                }
           }else if(string_ends_in_substring(buffer->name, name_len, ".cpp") ||
+                   string_ends_in_substring(buffer->name, name_len, ".cc") ||
                    string_ends_in_substring(buffer->name, name_len, ".hpp")){
                buffer->syntax_fn = syntax_highlight_cpp;
                buffer->syntax_user_data = malloc(sizeof(SyntaxCpp_t));
@@ -933,6 +934,7 @@ void view_jump_insert(BufferViewState_t* view_state, const char* filepath, Point
 void view_jump_to_previous(BufferView_t* view, BufferNode_t* buffer_head)
 {
      BufferViewState_t* view_state = view->user_data;
+     if(!view_state) return;
 
      if(view_state->jump_current == 0) return; // history is empty
 
@@ -959,6 +961,7 @@ void view_jump_to_previous(BufferView_t* view, BufferNode_t* buffer_head)
 void view_jump_to_next(BufferView_t* view, BufferNode_t* buffer_head)
 {
      BufferViewState_t* view_state = view->user_data;
+     if(!view_state) return;
 
      if(view_state->jump_current >= JUMP_LIST_MAX - 1) return;
 
@@ -1943,6 +1946,21 @@ void get_terminal_view_rect(TabView_t* tab_head, Point_t* top_left, Point_t* bot
      }
 }
 
+void resize_terminal_if_in_view(BufferView_t* view_head, TerminalNode_t* terminal_head)
+{
+     while(terminal_head){
+          BufferView_t* term_view = ce_buffer_in_view(view_head, terminal_head->buffer);
+          if(term_view){
+               int64_t new_width = term_view->bottom_right.x - term_view->top_left.x;
+               int64_t new_height = term_view->bottom_right.y - term_view->top_left.y;
+               terminal_resize(&terminal_head->terminal, new_width, new_height);
+          }
+
+          terminal_head = terminal_head->next;
+     }
+}
+
+
 bool generate_auto_complete_files_in_dir(AutoComplete_t* auto_complete, const char* dir)
 {
      struct dirent *node;
@@ -2103,6 +2121,8 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                     }
                     itr = itr->next;
                }
+
+               resize_terminal_if_in_view(config_state->tab_current->view_head, config_state->terminal_head);
 
                // return whether we switched to a buffer or not
                return true;
@@ -2463,20 +2483,6 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferVi
      digits_in_line += count_digits(column);
      mvprintw(view->bottom_right.y, (view->bottom_right.x - (digits_in_line + 5)) + right_status_offset,
               " %"PRId64", %"PRId64" ", column, row);
-}
-
-void resize_terminal_if_in_view(BufferView_t* view_head, TerminalNode_t* terminal_head)
-{
-     while(terminal_head){
-          BufferView_t* term_view = ce_buffer_in_view(view_head, terminal_head->buffer);
-          if(term_view){
-               int64_t new_width = term_view->bottom_right.x - term_view->top_left.x;
-               int64_t new_height = term_view->bottom_right.y - term_view->top_left.y;
-               terminal_resize(&terminal_head->terminal, new_width, new_height);
-          }
-
-          terminal_head = terminal_head->next;
-     }
 }
 
 bool run_command_on_terminal_in_view(TerminalNode_t* terminal_head, BufferView_t* view_head, const char* command)

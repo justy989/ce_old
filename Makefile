@@ -1,4 +1,4 @@
-CC?=clang
+CC=clang
 CFLAGS+=-Wall -Werror -Wextra -std=c11 -ggdb3 -fdiagnostics-color -D_GNU_SOURCE $(SCROLL_FLAG)
 LINK=-lncurses -lutil -lm
 

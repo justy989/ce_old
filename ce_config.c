@@ -2191,6 +2191,7 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           case 'R':
           {
                if(!config_state->view_input->buffer->line_count) break; // NOTE: unsure if this is correct
+               if(!config_state->vim_state.search.valid_regex) break;
 
                VimYankNode_t* yank = vim_yank_find(config_state->vim_state.yank_head, '/');
                if(!yank) break;

@@ -3393,6 +3393,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
      }
 
      config_state->save_buffer_head = head;
+     buffer->check_left_for_pair = false;
 
      if(config_state->vim_state.mode != VM_INSERT){
           switch(config_state->last_key){
@@ -3764,6 +3765,21 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                break;
           case VKH_HANDLED_KEY:
                if(config_state->vim_state.mode == VM_INSERT){
+                    switch(key){
+                    default:
+                         break;
+                    case '{':
+                    case '}':
+                    case '(':
+                    case ')':
+                    case '[':
+                    case ']':
+                    case '<':
+                    case '>':
+                    {
+                         buffer->check_left_for_pair = true;
+                    } break;
+                    }
                     if(config_state->input){
                          switch(key){
                          default:

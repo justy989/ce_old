@@ -135,6 +135,7 @@ typedef struct Buffer_t{
 
      void* user_data;
 
+     bool check_left_for_pair;
      syntax_highlighter* syntax_fn;
      void* syntax_user_data;
 

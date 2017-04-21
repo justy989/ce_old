@@ -43,7 +43,7 @@ pthread_mutex_t completion_lock;
 
 int64_t count_digits(int64_t n)
 {
-     int count = 0;
+     int64_t count = 0;
      while(n > 0){
           n /= 10;
           count++;
@@ -1413,7 +1413,7 @@ void* clang_complete_thread(void* data)
 
      // run command
      char command[BUFSIZ];
-     snprintf(command, BUFSIZ, "%s %s %s -fsyntax-only -ferror-limit=1 %s - -Xclang -code-completion-at=-:%ld:%ld",
+     snprintf(command, BUFSIZ, "%s %s %s -fsyntax-only -ferror-limit=1 %s - -Xclang -code-completion-macros -Xclang -code-completion-at=-:%ld:%ld",
               compiler, bytes, base_include, language_flag, thread_data->cursor.y + 1, thread_data->cursor.x + 1);
 
      int input_fd = 0;
@@ -2835,7 +2835,8 @@ void clang_completion(ConfigState_t* config_state, Point_t start_completion)
 {
      if(config_state->clang_complete_thread){
           pthread_cancel(config_state->clang_complete_thread);
-          pthread_join(config_state->clang_complete_thread, NULL);
+          pthread_detach(config_state->clang_complete_thread);
+          config_state->clang_complete_thread = 0;
      }
 
      if(auto_completing(&config_state->auto_complete)){

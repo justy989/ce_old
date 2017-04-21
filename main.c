@@ -32,21 +32,17 @@ LITTLE:
 -when pasting into terminal in insert mode, we get garbage *like* every time
 -crash when deleting newly created buffer when trying to free user_data, ce.c in ce_change_buffer_in_views() at line 2291
 -crash when building eg, color_node invalid pointer in ce_terminal.c:603
--'gf' or 'goto file under cursor' is often wrong
 -re-fix matching pairs
 -paste blink is incorrectly displaying when you substitute in visual line mode
 -investigate VMT_SEARCH led to location off of the buffer, but in the line range
 -buffer view of jump list
 -show matching parens/braces after typing it in insert mode
--'cc' should doesn't work like vim on empty lines
 -long filenames spill into other views
--kill clang complete thread without blocking
 -calculating indentation of brace with aligned function arguments is wrong.
 if(collide_with_wall(player_relative_pos.x, player_relative_pos.y, player_vel.x, player_vel.y, block_quad.left,
                      block_quad.bottom, block_quad.top, time_min)){
                      ^ ce thinks it's here
 ^ it should be here
--if you use . after a yank, highlight new yank? Or don't repeat yank action?
 */
 
 #include <assert.h>

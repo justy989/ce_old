@@ -1578,6 +1578,7 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                }
 
                const char* buffer_line = buffer->lines[i];
+               if(!buffer_line) continue;
                int64_t line_length = strlen(buffer_line);
 
                const char* line_to_print = buffer_line + buffer_top_left->x;

@@ -552,7 +552,7 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                     }
                }
 
-               if(vim_action.change.type != VCT_MOTION || vim_action.end_in_vim_mode == VM_INSERT){
+               if((vim_action.change.type != VCT_MOTION && vim_action.change.type != VCT_YANK) || vim_action.end_in_vim_mode == VM_INSERT){
                     if(!vim_state->playing_macro && successful_action){
                          vim_state->last_action = vim_action;
 
@@ -1767,6 +1767,23 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                      vim_state->visual_start = *action_range.sorted_start;
                }
           }
+
+          if(action->motion.type == VMT_BEGINNING_OF_LINE_SOFT){
+               if(ce_points_equal(*action_range.sorted_start, *action_range.sorted_end) && strcmp(buffer->lines[action_range.sorted_start->y], "") == 0){
+                    int64_t indent_len = ce_get_indentation_for_line(buffer, *action_range.sorted_start, strlen(TAB_STRING));
+                    if(indent_len){
+                         char* indent = malloc(indent_len + 1);
+                         memset(indent, ' ', indent_len);
+                         indent[indent_len] = 0;
+                         if(!ce_insert_string(buffer, *action_range.sorted_start, indent)){
+                              return false;
+                         }
+
+                         *cursor = (Point_t){indent_len, cursor->y};
+                         ce_commit_insert_string(commit_tail, *action_range.sorted_start, *cursor, *cursor, indent, BCC_KEEP_GOING);
+                    }
+               }
+          }
           break;
      case VCT_DELETE:
      {
@@ -1775,20 +1792,36 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
           char* commit_string = ce_dupe_string(buffer, *action_range.sorted_start, *action_range.sorted_end);
           if(!commit_string) return false;
 
-          int64_t len = ce_compute_length(buffer, *action_range.sorted_start, *action_range.sorted_end);
+          if(action->motion.type == VMT_LINE_SOFT && strcmp(commit_string, "\n") == 0){
+               int64_t indent_len = ce_get_indentation_for_line(buffer, *action_range.sorted_start, strlen(TAB_STRING));
+               if(indent_len){
+                    char* indent = malloc(indent_len + 1);
+                    memset(indent, ' ', indent_len);
+                    indent[indent_len] = 0;
+                    if(!ce_insert_string(buffer, *action_range.sorted_start, indent)){
+                         return false;
+                    }
+                    *cursor = (Point_t){indent_len, cursor->y};
+                    ce_commit_insert_string(commit_tail, *action_range.sorted_start, *cursor, *cursor, indent, BCC_KEEP_GOING);
+               }else{
+                    *cursor = (Point_t){indent_len, cursor->y};
+               }
+          }else{
+               int64_t len = ce_compute_length(buffer, *action_range.sorted_start, *action_range.sorted_end);
 
-          if(!ce_remove_string(buffer, *action_range.sorted_start, len)){
-               free(commit_string);
-               return false;
+               if(!ce_remove_string(buffer, *action_range.sorted_start, len)){
+                    free(commit_string);
+                    return false;
+               }
+
+               if(action->yank){
+                    char* yank_string = strdup(commit_string);
+                    if(action_range.yank_mode == YANK_LINE && yank_string[len-1] == NEWLINE) yank_string[len-1] = 0;
+                    vim_yank_add(&vim_state->yank_head, action->change.reg ? action->change.reg : '"', yank_string, action_range.yank_mode);
+               }
+
+               ce_commit_remove_string(commit_tail, *action_range.sorted_start, *cursor, *action_range.sorted_start, commit_string, chain);
           }
-
-          if(action->yank){
-               char* yank_string = strdup(commit_string);
-               if(action_range.yank_mode == YANK_LINE && yank_string[len-1] == NEWLINE) yank_string[len-1] = 0;
-               vim_yank_add(&vim_state->yank_head, action->change.reg ? action->change.reg : '"', yank_string, action_range.yank_mode);
-          }
-
-          ce_commit_remove_string(commit_tail, *action_range.sorted_start, *cursor, *action_range.sorted_start, commit_string, chain);
      } break;
      case VCT_PASTE_BEFORE:
      {

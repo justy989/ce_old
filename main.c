@@ -37,7 +37,6 @@ LITTLE:
 -investigate VMT_SEARCH led to location off of the buffer, but in the line range
 -buffer view of jump list
 -show matching parens/braces after typing it in insert mode
--long filenames spill into other views
 -calculating indentation of brace with aligned function arguments is wrong.
 if(collide_with_wall(player_relative_pos.x, player_relative_pos.y, player_vel.x, player_vel.y, block_quad.left,
                      block_quad.bottom, block_quad.top, time_min)){

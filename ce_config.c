@@ -2470,8 +2470,10 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferVi
 
      // TODO: handle case where filename is too long to fit in the status bar
      attron(COLOR_PAIR(S_VIEW_STATUS));
-     mvprintw(view->bottom_right.y, view->top_left.x + 1, " %s%s%s ",
-              view == current_view ? mode_names[vim_mode] : "", buffer_flag_string(buffer), buffer->filename);
+     mvprintw(view->bottom_right.y, view->top_left.x + 1, " %s%s",
+              view == current_view ? mode_names[vim_mode] : "", buffer_flag_string(buffer));
+     int save_title_y, save_title_x;
+     getyx(stdscr, save_title_y, save_title_x);
 #if 0 // NOTE: useful to show key presses when debugging
      if(view == current_view) printw("%s %d ", keyname(last_key), last_key);
 #endif
@@ -2482,8 +2484,14 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferVi
      int64_t column = view->cursor.x + 1;
      int64_t digits_in_line = count_digits(row);
      digits_in_line += count_digits(column);
-     mvprintw(view->bottom_right.y, (view->bottom_right.x - (digits_in_line + 5)) + right_status_offset,
-              " %"PRId64", %"PRId64" ", column, row);
+     int position_info_x = (view->bottom_right.x - (digits_in_line + 5)) + right_status_offset;
+     mvprintw(view->bottom_right.y, position_info_x, " %"PRId64", %"PRId64" ", column, row);
+
+     int space_for_filename = (position_info_x - save_title_x) - 2; // account for separator and space
+     int filename_len = strlen(buffer->filename);
+     int filename_offset = 0;
+     if(filename_len > space_for_filename) filename_offset = filename_len - space_for_filename;
+     mvprintw(save_title_y, save_title_x, "%s ", buffer->filename + filename_offset);
 }
 
 bool run_command_on_terminal_in_view(TerminalNode_t* terminal_head, BufferView_t* view_head, const char* command)

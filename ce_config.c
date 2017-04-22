@@ -2615,6 +2615,31 @@ void command_syntax(Command_t* command, void* user_data)
      }
 }
 
+#define QUIT_ALL_HELP "usage: quitall"
+
+void command_quit_all(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message(QUIT_ALL_HELP);
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     uint64_t unsaved_buffers = 0;
+     BufferNode_t* itr = command_data->head;
+     while(itr){
+          if(itr->buffer->status == BS_MODIFIED) unsaved_buffers++;
+          itr = itr->next;
+     }
+
+     if(unsaved_buffers){
+          input_start(config_state, "Unsaved buffers... Quit anyway? (y/n)", 'q');
+     }else{
+          config_state->quit = true;
+     }
+}
+
 #define NOH_HELP "usage: noh"
 
 void command_noh(Command_t* command, void* user_data)
@@ -3125,6 +3150,8 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
                {command_reload_buffer, "reload_buffer"},
                {command_rename, "rename"},
                {command_syntax, "syntax"},
+               {command_quit_all, "quitall"},
+               {command_quit_all, "qa"},
           };
 
           // init and copy from our stack array

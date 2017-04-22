@@ -36,12 +36,12 @@ LITTLE:
 -paste blink is incorrectly displaying when you substitute in visual line mode
 -investigate VMT_SEARCH led to location off of the buffer, but in the line range
 -buffer view of jump list
--show matching parens/braces after typing it in insert mode
 -calculating indentation of brace with aligned function arguments is wrong.
 if(collide_with_wall(player_relative_pos.x, player_relative_pos.y, player_vel.x, player_vel.y, block_quad.left,
                      block_quad.bottom, block_quad.top, time_min)){
                      ^ ce thinks it's here
 ^ it should be here
+-auto complete gets in the way when there is text after the cursor
 */
 
 #include <assert.h>
@@ -65,7 +65,7 @@ typedef struct Config_t{
      ce_initializer* initializer;
      ce_destroyer* destroyer;
      ce_key_handler* key_handler;
-} Config_t;
+}Config_t;
 
 bool config_open(Config_t* config, const char* path)
 {

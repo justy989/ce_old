@@ -2180,7 +2180,6 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
 
                commit_input_to_history(config_state->view_input->buffer, &config_state->search_history);
                vim_yank_add(&config_state->vim_state.yank_head, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
-               view_jump_insert(buffer_view->user_data, buffer->filename, *cursor);
                return true;
           case '?':
                if(!config_state->view_input->buffer->line_count) break;
@@ -3757,6 +3756,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
      if(!handled_key){
           Point_t save_cursor = *cursor;
+          Buffer_t* save_buffer = buffer_view->buffer;
           VimKeyHandlerResult_t vkh_result = vim_key_handler(key, &config_state->vim_state, config_state->tab_current->view_current->buffer,
                                                              &config_state->tab_current->view_current->cursor, &buffer_state->commit_tail,
                                                              &buffer_state->vim_buffer_state, false);
@@ -3946,7 +3946,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     view_jump_insert(buffer_view->user_data, buffer_view->buffer->filename, save_cursor);
                }else if(vkh_result.completed_action.motion.type == VMT_BEGINNING_OF_FILE ||
                         vkh_result.completed_action.motion.type == VMT_END_OF_FILE){
-                    view_jump_insert(buffer_view->user_data, buffer_view->buffer->filename, save_cursor);
+                    view_jump_insert(buffer_view->user_data, save_buffer->filename, save_cursor);
                }else if(vkh_result.completed_action.change.type == VCT_YANK){
                     VimActionRange_t action_range;
                     if(vim_action_get_range(&vkh_result.completed_action, buffer, cursor, &config_state->vim_state,
@@ -4310,6 +4310,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          input_start(config_state, "Regex Search", key);
                          config_state->vim_state.search.direction = CE_DOWN;
                          config_state->vim_state.search.start = *cursor;
+                         view_jump_insert(buffer_view->user_data, buffer->filename, *cursor);
                          break;
                     }
                     case '?':
@@ -4684,6 +4685,18 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          view_jump_to_next(buffer_view, *head);
                          handled_key = true;
                          break;
+                    case 'K':
+                    {
+                         Point_t word_start;
+                         Point_t word_end;
+                         if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) break;
+                         assert(word_start.y == word_end.y);
+                         int len = (word_end.x - word_start.x) + 1;
+
+                         char command[BUFSIZ];
+                         snprintf(command, BUFSIZ, "man --pager=cat %*.*s", len, len, buffer->lines[cursor->y] + word_start.x);
+                         run_command_on_terminal_in_view(config_state->terminal_head, config_state->tab_current->view_head, command);
+                    } break;
                     }
                }else{
                     switch(key){

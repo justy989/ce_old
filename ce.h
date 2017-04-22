@@ -288,6 +288,7 @@ BufferView_t* ce_buffer_in_view     (BufferView_t* head, const Buffer_t* buffer)
 void ce_free_buffer             (Buffer_t* buffer);
 
 bool ce_alloc_lines             (Buffer_t* buffer, int64_t line_count);
+void ce_clear_line              (Buffer_t* buffer, int64_t line);
 void ce_clear_lines             (Buffer_t* buffer);
 void ce_clear_lines_readonly    (Buffer_t* buffer);
 

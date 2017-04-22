@@ -397,6 +397,11 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                     Point_t next_cursor = {cursor->x + 1, cursor->y};
                     ce_commit_insert_char(commit_tail, *cursor, *cursor, next_cursor, key, BCC_KEEP_GOING);
 
+                    if(buffer->type != BFT_C && buffer->type != BFT_CPP){
+                         cursor->x = next_cursor.x;
+                         break;
+                    }
+
                     bool do_indentation = true;
                     for(int i = 0; i < cursor->x; i++){
                          char blank_c;
@@ -411,52 +416,40 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                          else assert(0);
                     }
 
-                    if(do_indentation){
-                         Point_t match = *cursor;
+                    if(!do_indentation) break;
 
-                         char matchee;
-                         if(!ce_get_char(buffer, match, &matchee)) break;
+                    int64_t tab_len = strlen(TAB_STRING);
+                    int64_t indentation = ce_get_indentation_for_line(buffer, *cursor, tab_len);
+                    if(indentation >= tab_len) indentation -= tab_len;
 
-                         if(ce_move_cursor_to_matching_pair(buffer, &match, matchee) && match.y != cursor->y){
-                              // get the match's sbol (that's the indentation we're matching)
-                              Point_t sbol_match = {0, match.y};
-                              ce_move_cursor_to_soft_beginning_of_line(buffer, &sbol_match);
+                    // remove everything from the line
+                    Point_t sol = {0, cursor->y};
+                    char* duped_line = ce_dupe_line(buffer, cursor->y);
+                    int64_t duped_line_len = strlen(duped_line);
 
-                              if(cursor->x < sbol_match.x){
-                                   // we are adding spaces
-                                   int64_t n_spaces = sbol_match.x - cursor->x;
-                                   for(int64_t i = 0; i < n_spaces; i++){
-                                        Point_t itr = {cursor->x + i, cursor->y};
-                                        if(!ce_insert_char(buffer, itr, ' ')) assert(0);
-                                        ce_commit_insert_char(commit_tail, itr, *cursor, itr, ' ', BCC_KEEP_GOING);
-                                   }
-                                   cursor->x = sbol_match.x;
-                              }else{
-                                   int64_t n_deletes = CE_MIN((int64_t) strlen(TAB_STRING), cursor->x - sbol_match.x);
-
-                                   bool can_unindent = true;
-                                   for(Point_t iter = {0, cursor->y}; ce_point_on_buffer(buffer, iter) && iter.x < n_deletes; iter.x++){
-                                        if(!isblank(ce_get_char_raw(buffer, iter))){
-                                             can_unindent = false;
-                                             break;
-                                        }
-                                   }
-
-                                   if(can_unindent){
-                                        Point_t end_of_delete = *cursor;
-                                        end_of_delete.x--;
-                                        if(end_of_delete.x < 0) end_of_delete.x = 0;
-                                        cursor->x -= n_deletes;
-                                        char* duped_str = ce_dupe_string(buffer, *cursor, end_of_delete);
-                                        if(ce_remove_string(buffer, *cursor, n_deletes)){
-                                             ce_commit_remove_string(commit_tail, *cursor, end_of_delete, *cursor, duped_str, BCC_KEEP_GOING);
-                                        }
-                                   }
-                              }
+                    if(duped_line_len){
+                         if(duped_line[duped_line_len - 1] == '\n'){
+                              duped_line[duped_line_len - 1] = 0;
+                              duped_line_len--;
                          }
+
+                         ce_clear_line(buffer, cursor->y);
+                         ce_commit_remove_string(commit_tail, sol, *cursor, sol, duped_line, BCC_KEEP_GOING);
                     }
 
-                    cursor->x++;
+                    // insert whitespace and indented brace
+                    int64_t insertion_len = indentation + 2; // account for brace and null terminator
+                    char* insertion = malloc(indentation);
+                    if(insertion){
+                         memset(insertion, ' ', insertion_len);
+                         insertion[insertion_len - 2] = '}';
+                         insertion[insertion_len - 1] = 0;
+                         if(ce_insert_string(buffer, sol, insertion)){
+                              ce_commit_insert_string(commit_tail, sol, *cursor, sol, insertion, BCC_KEEP_GOING);
+                         }
+
+                         cursor->x = insertion_len - 1;
+                    }
                }
           } break;
           }

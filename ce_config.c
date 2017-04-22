@@ -995,6 +995,29 @@ void reset_buffer_commits(BufferCommitNode_t** tail)
      *tail = new_tail;
 }
 
+bool open_file_destination(BufferNode_t* head, BufferView_t* view,
+                           const char* filename, int line, int column){
+     Buffer_t* new_buffer = open_file_buffer(head, filename);
+     if(new_buffer){
+          view_jump_insert(view->user_data, view->buffer->filename, view->cursor);
+          view->buffer = new_buffer;
+          Point_t dst = {0, line - 1}; // line numbers are 1 indexed
+          ce_set_cursor(new_buffer, &view->cursor, dst);
+
+          // check for optional column number
+          if(column > 0){
+               dst.x = column - 1; // column numbers are 1 indexed
+               ce_set_cursor(new_buffer, &view->cursor, dst);
+          }else{
+               ce_move_cursor_to_soft_beginning_of_line(new_buffer, &view->cursor);
+          }
+
+          center_view(view);
+          return true;
+     }
+     return false;
+}
+
 // NOTE: modify last_jump if we succeed
 bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64_t line, BufferView_t* head_view,
                                      BufferView_t* view, int64_t* last_jump, char* terminal_current_directory)
@@ -1113,23 +1136,10 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
      }
 
      if(line_number_str[0]){
-          Buffer_t* new_buffer = open_file_buffer(head, filename);
-          if(new_buffer){
-               view_jump_insert(view->user_data, view->buffer->filename, view->cursor);
-               view->buffer = new_buffer;
-               Point_t dst = {0, atoi(line_number_str) - 1}; // line numbers are 1 indexed
-               ce_set_cursor(new_buffer, &view->cursor, dst);
-
-               // check for optional column number
-               if(column_number_str[0]){
-                    dst.x = atoi(column_number_str) - 1; // column numbers are 1 indexed
-                    assert(dst.x >= 0);
-                    ce_set_cursor(new_buffer, &view->cursor, dst);
-               }else{
-                    ce_move_cursor_to_soft_beginning_of_line(new_buffer, &view->cursor);
-               }
-
-               center_view(view);
+          int line_number = atoi(line_number_str);
+          int column = (*column_number_str) ? atoi(column_number_str) : 0;
+          bool opened_file = open_file_destination(head, view, filename, line_number, column);
+          if(opened_file){
                BufferView_t* command_view = ce_buffer_in_view(head_view, buffer);
                if(command_view) command_view->top_row = line;
                *last_jump = line;
@@ -1972,15 +1982,15 @@ bool generate_auto_complete_files_in_dir(AutoComplete_t* auto_complete, const ch
 
      auto_complete_free(auto_complete);
 
-     char tmp[BUFSIZ];
+     char tmp[PATH_MAX];
      struct stat info;
      while((node = readdir(os_dir)) != NULL){
-          snprintf(tmp, BUFSIZ, "%s/%s", dir, node->d_name);
+          snprintf(tmp, PATH_MAX, "%s/%s", dir, node->d_name);
           stat(tmp, &info);
           if(S_ISDIR(info.st_mode)){
-               snprintf(tmp, BUFSIZ, "%s/", node->d_name);
+               snprintf(tmp, PATH_MAX, "%s/", node->d_name);
           }else{
-               strncpy(tmp, node->d_name, BUFSIZ);
+               strncpy(tmp, node->d_name, PATH_MAX);
           }
           auto_complete_insert(auto_complete, tmp, NULL);
      }
@@ -2076,6 +2086,87 @@ bool calc_auto_complete_start_and_path(AutoComplete_t* auto_complete, const char
      return rc;
 }
 
+void quit(ConfigState_t* config_state)
+{
+     config_state->quit = true;
+}
+
+void quit_and_prompt_if_unsaved(ConfigState_t* config_state, BufferNode_t* head)
+{
+     uint64_t unsaved_buffers = 0;
+     BufferNode_t* itr = head;
+     while(itr){
+          if(itr->buffer->status == BS_MODIFIED) unsaved_buffers++;
+          itr = itr->next;
+     }
+
+     if(unsaved_buffers){
+          input_start(config_state, "Unsaved buffers... Quit anyway? (y/n)", 'q');
+     }else{
+          quit(config_state);
+     }
+}
+
+void cscope_goto_definition(ConfigState_t* config_state, BufferNode_t* head, const char* search_word)
+{
+
+     char command[BUFSIZ];
+     snprintf(command, BUFSIZ, "cscope -L1%s", search_word);
+     FILE* cscope_output_file = popen(command, "r");
+     if(cscope_output_file == NULL){
+          ce_message("popen(%s) failed: %s", command, strerror(errno));
+          return;
+     }
+
+     char cscope_output[BUFSIZ];
+     if(fgets(cscope_output, sizeof(cscope_output), cscope_output_file) == NULL){
+          ce_message("fgets() failed to obtain cscope output for %s", command);
+     }else{
+          // parse cscope output and jump to destination
+          char* file_end = strpbrk(cscope_output, ": ");
+          if(!file_end) {
+               ce_message("unsupported cscope output %s", cscope_output);
+               goto pclose_cscope;
+          }
+          int64_t filename_len = file_end - cscope_output;
+          char* filename = strndupa(cscope_output, filename_len);
+          if(access(filename, F_OK) == -1){
+               ce_message("cscope file %s not found", filename);
+               goto pclose_cscope;
+          }
+
+          char* line_number_begin_delim = NULL;
+          char* line_number_end_delim = NULL;
+          if(*file_end == ' '){
+               // format: 'filepath search_symbol line '
+               char* second_space = strchr(file_end + 1, ' ');
+               if(!second_space){
+                    ce_message("cscope line number not found in %s", cscope_output);
+                    goto pclose_cscope;
+               }
+               line_number_begin_delim = second_space;
+               line_number_end_delim = strchr(second_space + 1, ' ');
+               if(!line_number_end_delim){
+                    ce_message("cscope output in unexpected format %s", cscope_output);
+                    goto pclose_cscope;
+               }
+               *line_number_end_delim = '\0';
+               int line_number = atoi(line_number_begin_delim + 1);
+               open_file_destination(head, config_state->tab_current->view_current,
+                                     filename, line_number, 0);
+          }else{
+               ce_message("unexpected cscope output %s", cscope_output);
+          }
+     }
+
+pclose_cscope:
+     if(pclose(cscope_output_file) == -1){
+          ce_message("pclose(%s) failed: %s", command, strerror(errno));
+     }
+
+}
+
+
 bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
 {
      BufferView_t* buffer_view = config_state->tab_current->view_current;
@@ -2099,7 +2190,7 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                if(!config_state->view_input->buffer->line_count) break;
 
                if(tolower(config_state->view_input->buffer->lines[0][0]) == 'y'){
-                    config_state->quit = true;
+                    quit(config_state);
                }
                return true;
           case 2: // Ctrl + b
@@ -2617,6 +2708,63 @@ void command_syntax(Command_t* command, void* user_data)
      }
 }
 
+#define QUIT_ALL_HELP "usage: quit_all"
+
+void command_quit_all(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message(QUIT_ALL_HELP);
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     if(strchr(command->name, '!')) {
+          quit(config_state);
+     }else{
+          quit_and_prompt_if_unsaved(config_state, command_data->head);
+     }
+}
+
+
+#define SPLIT_HELP "usage: [v]split"
+
+void command_split(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message(SPLIT_HELP);
+          return;
+     }
+
+     bool vertical;
+     if(command->name[0] == 'v'){
+          vertical = true;
+     }else{
+          vertical = false;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+
+     split_view(config_state->tab_current->view_head, config_state->tab_current->view_current, vertical, config_state->line_number_type);
+     resize_terminal_if_in_view(config_state->tab_current->view_head, config_state->terminal_head);
+
+     // TODO: open file if specified as an argument
+}
+
+#define CSCOPE_GOTO_DEFINITION_HELP "usage: cscope_goto_definition <symbol>"
+void command_cscope_goto_definition(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 1 || command->args[0].type != CAT_STRING){
+          ce_message(CSCOPE_GOTO_DEFINITION_HELP);
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     cscope_goto_definition(config_state, command_data->head, command->args[0].string);
+}
+
 #define NOH_HELP "usage: noh"
 
 void command_noh(Command_t* command, void* user_data)
@@ -2747,17 +2895,7 @@ void command_rename(Command_t* command, void* user_data)
      }
 }
 
-#define BUFFERS_HELP "usage: buffers"
-
-void command_buffers(Command_t* command, void* user_data)
-{
-     if(command->arg_count != 0){
-          ce_message(BUFFERS_HELP);
-          return;
-     }
-
-     CommandData_t* command_data = (CommandData_t*)(user_data);
-     ConfigState_t* config_state = command_data->config_state;
+void switch_to_buffer_list_buffer(ConfigState_t* config_state, BufferNode_t* head) {
      BufferView_t* buffer_view = config_state->tab_current->view_current;
      Buffer_t* buffer = buffer_view->buffer;
      Point_t* cursor = &buffer_view->cursor;
@@ -2767,7 +2905,7 @@ void command_buffers(Command_t* command, void* user_data)
      buffer->cursor = config_state->tab_current->view_current->cursor;
 
      // try to find a better place to put the cursor to start
-     BufferNode_t* itr = command_data->head;
+     BufferNode_t* itr = head;
      int64_t buffer_index = 1;
      bool found_good_buffer_index = false;
      while(itr){
@@ -2779,11 +2917,24 @@ void command_buffers(Command_t* command, void* user_data)
           buffer_index++;
      }
 
-     update_buffer_list_buffer(config_state, command_data->head);
+     update_buffer_list_buffer(config_state, head);
      config_state->tab_current->view_current->buffer->cursor = *cursor;
      config_state->tab_current->view_current->buffer = &config_state->buffer_list_buffer;
      config_state->tab_current->view_current->top_row = 0;
      config_state->tab_current->view_current->cursor = (Point_t){0, found_good_buffer_index ? buffer_index : 1};
+}
+
+#define BUFFERS_HELP "usage: buffers"
+
+void command_buffers(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message(BUFFERS_HELP);
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     switch_to_buffer_list_buffer(command_data->config_state, command_data->head);
 }
 
 #define MACRO_BACKSLASHES_HELP "usage: macro_backslashes"
@@ -3109,6 +3260,9 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      define_key(NULL, KEY_ENTER);       // Blow away enter
      define_key("\x0D", KEY_ENTER);     // Enter       (13) (0x0D) ASCII "CR"  NL Carriage Return
 
+     // default vim "leader" key
+     #define KEY_LEADER '\\'
+
      pthread_mutex_init(&draw_lock, NULL);
 
      auto_complete_end(&config_state->auto_complete);
@@ -3118,15 +3272,21 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      {
           // create a stack array so we can have the compiler track the number of elements
           CommandEntry_t command_entries[] = {
-               {command_buffers, "buffers"},
-               {command_highlight_line, "highlight_line"},
-               {command_line_number, "line_number"},
-               {command_macro_backslashes, "macro_backslashes"},
-               {command_new_buffer, "new_buffer"},
-               {command_noh, "noh"},
-               {command_reload_buffer, "reload_buffer"},
-               {command_rename, "rename"},
-               {command_syntax, "syntax"},
+               {command_buffers, "buffers", false},
+               {command_highlight_line, "highlight_line", false},
+               {command_line_number, "line_number", false},
+               {command_macro_backslashes, "macro_backslashes", false},
+               {command_new_buffer, "new_buffer", false},
+               {command_noh, "noh", false},
+               {command_reload_buffer, "reload_buffer", false},
+               {command_rename, "rename", false},
+               {command_syntax, "syntax", false},
+               {command_quit_all, "quit_all", false},
+               {command_quit_all, "qa", true}, // hidden vim-compatible shortcut
+               {command_quit_all, "qa!", true}, // hidden vim-compatible shortcut
+               {command_split, "split", false},
+               {command_split, "vsplit", false},
+               {command_cscope_goto_definition, "cscope_goto_definition", false},
           };
 
           // init and copy from our stack array
@@ -3401,6 +3561,19 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           switch(config_state->last_key){
           default:
                break;
+          case KEY_LEADER:
+          {
+               handled_key = true;
+
+               switch(key){
+               default:
+                    handled_key = false;
+                    break;
+               case 'e':
+                    switch_to_buffer_list_buffer(config_state, *head);
+                    break;
+               }
+          } break;
           case 'z':
           {
                Point_t location;
@@ -3520,28 +3693,19 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                } break;
                case 'd':
                {
-                    Point_t word_start;
-                    Point_t word_end;
+                    Point_t word_start, word_end;
                     if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) break;
                     assert(word_start.y == word_end.y);
                     int len = (word_end.x - word_start.x) + 1;
-
-                    char command[BUFSIZ];
-                    snprintf(command, BUFSIZ, "cscope -L1%*.*s", len, len, buffer->lines[cursor->y] + word_start.x);
-                    run_command_on_terminal_in_view(config_state->terminal_head, config_state->tab_current->view_head, command);
+                    char* search_word = strndupa(buffer->lines[cursor->y] + word_start.x, len);
+                    cscope_goto_definition(config_state, *head, search_word);
                } break;
                case 'b':
-               {
-                    char command[BUFSIZ];
-                    strncpy(command, "make", BUFSIZ);
-                    run_command_on_terminal_in_view(config_state->terminal_head, config_state->tab_current->view_head, command);
-               } break;
+                    run_command_on_terminal_in_view(config_state->terminal_head, config_state->tab_current->view_head, "make");
+                    break;
                case 'm':
-               {
-                    char command[BUFSIZ];
-                    strncpy(command, "make clean", BUFSIZ);
-                    run_command_on_terminal_in_view(config_state->terminal_head, config_state->tab_current->view_head, command);
-               } break;
+                    run_command_on_terminal_in_view(config_state->terminal_head, config_state->tab_current->view_head, "make clean");
+                    break;
 #if 0
                // NOTE: useful for debugging
                case 'a':
@@ -3557,20 +3721,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     break;
                case 'q':
                {
-                    uint64_t unsaved_buffers = 0;
-                    BufferNode_t* itr = *head;
-                    while(itr){
-                         if(itr->buffer->status == BS_MODIFIED) unsaved_buffers++;
-                         itr = itr->next;
-                    }
-
-                    if(unsaved_buffers){
-                         input_start(config_state, "Unsaved buffers... Quit anyway? (y/n)", key);
-                         break;
-                    }
-
-                    // quit !
-                    return false;
+                    quit_and_prompt_if_unsaved(config_state, *head);
                }
                }
 
@@ -4301,6 +4452,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          pthread_mutex_lock(&completion_lock);
                          auto_complete_free(&config_state->auto_complete);
                          for(int64_t i = 0; i < config_state->command_entry_count; ++i){
+                              if(config_state->command_entries[i].hidden) continue;
                               auto_complete_insert(&config_state->auto_complete, config_state->command_entries[i].name, NULL);
                          }
                          auto_complete_start(&config_state->auto_complete, ACT_OCCURANCE, (Point_t){0, 0});
@@ -4688,6 +4840,15 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          view_jump_to_next(buffer_view, *head);
                          handled_key = true;
                          break;
+                    case 29: // Ctrl + ]
+                    {
+                         Point_t word_start, word_end;
+                         if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) break;
+                         assert(word_start.y == word_end.y);
+                         int len = (word_end.x - word_start.x) + 1;
+                         char* search_word = strndupa(buffer->lines[cursor->y] + word_start.x, len);
+                         cscope_goto_definition(config_state, *head, search_word);
+                    } break;
                     case 'K':
                     {
                          Point_t word_start;

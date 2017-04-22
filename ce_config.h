@@ -84,6 +84,7 @@ typedef struct{
 typedef struct{
      ce_command* func;
      const char* name;
+     bool hidden;
 }CommandEntry_t;
 
 typedef struct{

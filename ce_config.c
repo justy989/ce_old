@@ -992,6 +992,29 @@ void reset_buffer_commits(BufferCommitNode_t** tail)
      *tail = new_tail;
 }
 
+bool open_file_destination(BufferNode_t* head, BufferView_t* view,
+                           const char* filename, int line, int column){
+     Buffer_t* new_buffer = open_file_buffer(head, filename);
+     if(new_buffer){
+          view_jump_insert(view->user_data, view->buffer->filename, view->cursor);
+          view->buffer = new_buffer;
+          Point_t dst = {0, line - 1}; // line numbers are 1 indexed
+          ce_set_cursor(new_buffer, &view->cursor, dst);
+
+          // check for optional column number
+          if(column > 0){
+               dst.x = column - 1; // column numbers are 1 indexed
+               ce_set_cursor(new_buffer, &view->cursor, dst);
+          }else{
+               ce_move_cursor_to_soft_beginning_of_line(new_buffer, &view->cursor);
+          }
+
+          center_view(view);
+          return true;
+     }
+     return false;
+}
+
 // NOTE: modify last_jump if we succeed
 bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64_t line, BufferView_t* head_view,
                                      BufferView_t* view, int64_t* last_jump, char* terminal_current_directory)
@@ -1110,23 +1133,10 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
      }
 
      if(line_number_str[0]){
-          Buffer_t* new_buffer = open_file_buffer(head, filename);
-          if(new_buffer){
-               view_jump_insert(view->user_data, view->buffer->filename, view->cursor);
-               view->buffer = new_buffer;
-               Point_t dst = {0, atoi(line_number_str) - 1}; // line numbers are 1 indexed
-               ce_set_cursor(new_buffer, &view->cursor, dst);
-
-               // check for optional column number
-               if(column_number_str[0]){
-                    dst.x = atoi(column_number_str) - 1; // column numbers are 1 indexed
-                    assert(dst.x >= 0);
-                    ce_set_cursor(new_buffer, &view->cursor, dst);
-               }else{
-                    ce_move_cursor_to_soft_beginning_of_line(new_buffer, &view->cursor);
-               }
-
-               center_view(view);
+          int line_number = atoi(line_number_str);
+          int column = (*column_number_str) ? atoi(column_number_str) : 0;
+          bool opened_file = open_file_destination(head, view, filename, line_number, column);
+          if(opened_file){
                BufferView_t* command_view = ce_buffer_in_view(head_view, buffer);
                if(command_view) command_view->top_row = line;
                *last_jump = line;
@@ -3617,7 +3627,60 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
                     char command[BUFSIZ];
                     snprintf(command, BUFSIZ, "cscope -L1%*.*s", len, len, buffer->lines[cursor->y] + word_start.x);
-                    run_command_on_terminal_in_view(config_state->terminal_head, config_state->tab_current->view_head, command);
+                    FILE* cscope_output_file = popen(command, "r");
+                    if(cscope_output_file == NULL){
+                         ce_message("popen(%s) failed: %s", command, strerror(errno));
+                         break;
+                    }
+
+                    char cscope_output[BUFSIZ];
+                    if(fgets(cscope_output, sizeof(cscope_output), cscope_output_file) == NULL){
+                         ce_message("fgets() failed to obtain cscope output for %s", command);
+                    }else{
+                         // parse cscope output and jump to destination
+                         char* file_end = strpbrk(cscope_output, ": ");
+                         if(!file_end) {
+                              ce_message("unsupported cscope output %s", cscope_output);
+                              goto pclose_cscope;
+                         }
+                         int64_t filename_len = file_end - cscope_output;
+                         char filename[BUFSIZ];
+                         strncpy(filename, cscope_output, filename_len);
+                         filename[filename_len] = 0;
+                         if(access(filename, F_OK) == -1){
+                              ce_message("cscope file %s not found", filename);
+                              goto pclose_cscope;
+                         }
+
+                         char* line_number_begin_delim = NULL;
+                         char* line_number_end_delim = NULL;
+                         if(*file_end == ' '){
+                              // format: 'filepath search_symbol line '
+                              char* second_space = strchr(file_end + 1, ' ');
+                              if(!second_space){
+                                   ce_message("cscope line number not found in %s", cscope_output);
+                                   goto pclose_cscope;
+                              }
+                              line_number_begin_delim = second_space;
+                              line_number_end_delim = strchr(second_space + 1, ' ');
+                              if(!line_number_end_delim){
+                                   ce_message("cscope output in unexpected format %s", cscope_output);
+                                   goto pclose_cscope;
+                              }
+                              *line_number_end_delim = '\0';
+                              int line_number = atoi(line_number_begin_delim + 1);
+                              open_file_destination(*head, config_state->tab_current->view_current,
+                                                    filename, line_number, 0);
+                         }else{
+                              ce_message("unexpected cscope output %s", cscope_output);
+                         }
+                    }
+
+pclose_cscope:
+                    if(pclose(cscope_output_file) == -1){
+                         ce_message("pclose(%s) failed: %s", command, strerror(errno));
+                    }
+
                } break;
                case 'b':
                {

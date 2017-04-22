@@ -2505,9 +2505,6 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferVi
               view == current_view ? mode_names[vim_mode] : "", buffer_flag_string(buffer));
      int save_title_y, save_title_x;
      getyx(stdscr, save_title_y, save_title_x);
-#if 0 // NOTE: useful to show key presses when debugging
-     if(view == current_view) printw("%s %d ", keyname(last_key), last_key);
-#endif
      if(view == overrideable_view) printw("^ ");
      if(terminal_current && view->buffer == terminal_current->buffer) printw("$ ");
      if(view == current_view && recording_macro) printw("RECORDING %c ", recording_macro);
@@ -2523,6 +2520,9 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferVi
      int filename_offset = 0;
      if(filename_len > space_for_filename) filename_offset = filename_len - space_for_filename;
      mvprintw(save_title_y, save_title_x, "%s ", buffer->filename + filename_offset);
+#if 0 // NOTE: useful to show key presses when debugging
+     if(view == current_view) printw("%s %d ", keyname(last_key), last_key);
+#endif
 }
 
 bool run_command_on_terminal_in_view(TerminalNode_t* terminal_head, BufferView_t* view_head, const char* command)
@@ -3462,6 +3462,72 @@ bool destroyer(BufferNode_t** head, void* user_data)
      return true;
 }
 
+void cscope_goto_definition(ConfigState_t* config_state, BufferNode_t* head, Point_t* cursor, Buffer_t* buffer)
+{
+     Point_t word_start;
+     Point_t word_end;
+     if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) return;
+     assert(word_start.y == word_end.y);
+     int len = (word_end.x - word_start.x) + 1;
+
+     char command[BUFSIZ];
+     snprintf(command, BUFSIZ, "cscope -L1%*.*s", len, len, buffer->lines[cursor->y] + word_start.x);
+     FILE* cscope_output_file = popen(command, "r");
+     if(cscope_output_file == NULL){
+          ce_message("popen(%s) failed: %s", command, strerror(errno));
+          return;
+     }
+
+     char cscope_output[BUFSIZ];
+     if(fgets(cscope_output, sizeof(cscope_output), cscope_output_file) == NULL){
+          ce_message("fgets() failed to obtain cscope output for %s", command);
+     }else{
+          // parse cscope output and jump to destination
+          char* file_end = strpbrk(cscope_output, ": ");
+          if(!file_end) {
+               ce_message("unsupported cscope output %s", cscope_output);
+               goto pclose_cscope;
+          }
+          int64_t filename_len = file_end - cscope_output;
+          char filename[BUFSIZ];
+          strncpy(filename, cscope_output, filename_len);
+          filename[filename_len] = 0;
+          if(access(filename, F_OK) == -1){
+               ce_message("cscope file %s not found", filename);
+               goto pclose_cscope;
+          }
+
+          char* line_number_begin_delim = NULL;
+          char* line_number_end_delim = NULL;
+          if(*file_end == ' '){
+               // format: 'filepath search_symbol line '
+               char* second_space = strchr(file_end + 1, ' ');
+               if(!second_space){
+                    ce_message("cscope line number not found in %s", cscope_output);
+                    goto pclose_cscope;
+               }
+               line_number_begin_delim = second_space;
+               line_number_end_delim = strchr(second_space + 1, ' ');
+               if(!line_number_end_delim){
+                    ce_message("cscope output in unexpected format %s", cscope_output);
+                    goto pclose_cscope;
+               }
+               *line_number_end_delim = '\0';
+               int line_number = atoi(line_number_begin_delim + 1);
+               open_file_destination(head, config_state->tab_current->view_current,
+                                     filename, line_number, 0);
+          }else{
+               ce_message("unexpected cscope output %s", cscope_output);
+          }
+     }
+
+pclose_cscope:
+     if(pclose(cscope_output_file) == -1){
+          ce_message("pclose(%s) failed: %s", command, strerror(errno));
+     }
+
+}
+
 bool key_handler(int key, BufferNode_t** head, void* user_data)
 {
      ConfigState_t* config_state = user_data;
@@ -3619,68 +3685,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                } break;
                case 'd':
                {
-                    Point_t word_start;
-                    Point_t word_end;
-                    if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) break;
-                    assert(word_start.y == word_end.y);
-                    int len = (word_end.x - word_start.x) + 1;
-
-                    char command[BUFSIZ];
-                    snprintf(command, BUFSIZ, "cscope -L1%*.*s", len, len, buffer->lines[cursor->y] + word_start.x);
-                    FILE* cscope_output_file = popen(command, "r");
-                    if(cscope_output_file == NULL){
-                         ce_message("popen(%s) failed: %s", command, strerror(errno));
-                         break;
-                    }
-
-                    char cscope_output[BUFSIZ];
-                    if(fgets(cscope_output, sizeof(cscope_output), cscope_output_file) == NULL){
-                         ce_message("fgets() failed to obtain cscope output for %s", command);
-                    }else{
-                         // parse cscope output and jump to destination
-                         char* file_end = strpbrk(cscope_output, ": ");
-                         if(!file_end) {
-                              ce_message("unsupported cscope output %s", cscope_output);
-                              goto pclose_cscope;
-                         }
-                         int64_t filename_len = file_end - cscope_output;
-                         char filename[BUFSIZ];
-                         strncpy(filename, cscope_output, filename_len);
-                         filename[filename_len] = 0;
-                         if(access(filename, F_OK) == -1){
-                              ce_message("cscope file %s not found", filename);
-                              goto pclose_cscope;
-                         }
-
-                         char* line_number_begin_delim = NULL;
-                         char* line_number_end_delim = NULL;
-                         if(*file_end == ' '){
-                              // format: 'filepath search_symbol line '
-                              char* second_space = strchr(file_end + 1, ' ');
-                              if(!second_space){
-                                   ce_message("cscope line number not found in %s", cscope_output);
-                                   goto pclose_cscope;
-                              }
-                              line_number_begin_delim = second_space;
-                              line_number_end_delim = strchr(second_space + 1, ' ');
-                              if(!line_number_end_delim){
-                                   ce_message("cscope output in unexpected format %s", cscope_output);
-                                   goto pclose_cscope;
-                              }
-                              *line_number_end_delim = '\0';
-                              int line_number = atoi(line_number_begin_delim + 1);
-                              open_file_destination(*head, config_state->tab_current->view_current,
-                                                    filename, line_number, 0);
-                         }else{
-                              ce_message("unexpected cscope output %s", cscope_output);
-                         }
-                    }
-
-pclose_cscope:
-                    if(pclose(cscope_output_file) == -1){
-                         ce_message("pclose(%s) failed: %s", command, strerror(errno));
-                    }
-
+                    cscope_goto_definition(config_state, *head, cursor, buffer);
                } break;
                case 'b':
                {
@@ -4826,6 +4831,9 @@ pclose_cscope:
                          view_jump_to_next(buffer_view, *head);
                          handled_key = true;
                          break;
+                    case 29: // Ctrl + ]
+                         cscope_goto_definition(config_state, *head, cursor, buffer);
+                    break;
                     }
                }else{
                     switch(key){

@@ -1954,9 +1954,7 @@ void get_terminal_view_rect(TabView_t* tab_head, Point_t* top_left, Point_t* bot
      *bottom_right = (Point_t){g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 1};
 
      // if we have multiple tabs
-     if(tab_head->next){
-          top_left->y++;
-     }
+     if(tab_head->next) top_left->y++;
 }
 
 void resize_terminal_if_in_view(BufferView_t* view_head, TerminalNode_t* terminal_head)
@@ -2109,7 +2107,6 @@ void quit_and_prompt_if_unsaved(ConfigState_t* config_state, BufferNode_t* head)
 
 void cscope_goto_definition(ConfigState_t* config_state, BufferNode_t* head, const char* search_word)
 {
-
      char command[BUFSIZ];
      snprintf(command, BUFSIZ, "cscope -L1%s", search_word);
      FILE* cscope_output_file = popen(command, "r");
@@ -2163,7 +2160,6 @@ pclose_cscope:
      if(pclose(cscope_output_file) == -1){
           ce_message("pclose(%s) failed: %s", command, strerror(errno));
      }
-
 }
 
 

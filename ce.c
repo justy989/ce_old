@@ -730,7 +730,30 @@ bool find_matching_pair_forward(const Buffer_t* buffer, Point_t* location, char 
           }
      }
 
-	return false;
+     return false;
+}
+
+bool index_inside_string_literal(const char* string, int64_t index)
+{
+     bool inside_double_quote_string = false;
+     char prev = 0;
+
+     for(int64_t i = 0; i <= index; ++i){
+          char c = string[i];
+          switch(c){
+          default:
+               break;
+          case '"':
+               if(prev != '\\'){
+                    inside_double_quote_string = !inside_double_quote_string;
+               }
+               break;
+          }
+
+          prev = c;
+     }
+
+     return inside_double_quote_string;
 }
 
 int64_t last_index_before_comment(const Buffer_t* buffer, int64_t line)
@@ -743,7 +766,9 @@ int64_t last_index_before_comment(const Buffer_t* buffer, int64_t line)
 
      while(*line_string){
           if(*line_string == '/' && prev_char == '/'){
-               break;
+               if(!index_inside_string_literal(buffer->lines[line], line_string - buffer->lines[line])){
+                    break;
+               }
           }
 
           prev_char = *line_string;
@@ -2801,7 +2826,8 @@ int64_t ce_get_indentation_for_line(const Buffer_t* buffer, Point_t location, in
                               Point_t end = bol;
                               ce_move_cursor_to_matching_pair(buffer, &start, ')');
                               ce_move_cursor_to_matching_pair(buffer, &end, '(');
-                              if(start.y != end.y && start.x > 0){
+
+                              if((start.y == bol.y || end.y == bol.y) && start.y != end.y && start.x > 0){
                                    start.x = 0;
                                    return ce_get_indentation_for_line(buffer, start, tab_len) + tab_len;
                               }else{

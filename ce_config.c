@@ -2636,7 +2636,7 @@ void command_syntax(Command_t* command, void* user_data)
      }
 }
 
-#define QUIT_ALL_HELP "usage: quitall"
+#define QUIT_ALL_HELP "usage: quit_all"
 
 void command_quit_all(Command_t* command, void* user_data)
 {
@@ -3164,10 +3164,9 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
                {command_reload_buffer, "reload_buffer", false},
                {command_rename, "rename", false},
                {command_syntax, "syntax", false},
-               {command_quit_all, "quitall", false},
-               {command_quit_all, "quitall!", true},
-               {command_quit_all, "qa", true},
-               {command_quit_all, "qa!", true},
+               {command_quit_all, "quit_all", false},
+               {command_quit_all, "qa", true}, // hidden vim-compatible shortcut
+               {command_quit_all, "qa!", true}, // hidden vim-compatible shortcut
           };
 
           // init and copy from our stack array

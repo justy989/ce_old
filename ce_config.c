@@ -2647,7 +2647,11 @@ void command_quit_all(Command_t* command, void* user_data)
 
      CommandData_t* command_data = (CommandData_t*)(user_data);
      ConfigState_t* config_state = command_data->config_state;
-     quit_and_prompt_if_unsaved(config_state, command_data->head);
+     if(strchr(command->name, '!')) {
+          quit(config_state);
+     }else{
+          quit_and_prompt_if_unsaved(config_state, command_data->head);
+     }
 }
 
 #define NOH_HELP "usage: noh"
@@ -3151,17 +3155,19 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      {
           // create a stack array so we can have the compiler track the number of elements
           CommandEntry_t command_entries[] = {
-               {command_buffers, "buffers"},
-               {command_highlight_line, "highlight_line"},
-               {command_line_number, "line_number"},
-               {command_macro_backslashes, "macro_backslashes"},
-               {command_new_buffer, "new_buffer"},
-               {command_noh, "noh"},
-               {command_reload_buffer, "reload_buffer"},
-               {command_rename, "rename"},
-               {command_syntax, "syntax"},
-               {command_quit_all, "quitall"},
-               {command_quit_all, "qa"},
+               {command_buffers, "buffers", false},
+               {command_highlight_line, "highlight_line", false},
+               {command_line_number, "line_number", false},
+               {command_macro_backslashes, "macro_backslashes", false},
+               {command_new_buffer, "new_buffer", false},
+               {command_noh, "noh", false},
+               {command_reload_buffer, "reload_buffer", false},
+               {command_rename, "rename", false},
+               {command_syntax, "syntax", false},
+               {command_quit_all, "quitall", false},
+               {command_quit_all, "quitall!", true},
+               {command_quit_all, "qa", true},
+               {command_quit_all, "qa!", true},
           };
 
           // init and copy from our stack array
@@ -4322,6 +4328,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          pthread_mutex_lock(&completion_lock);
                          auto_complete_free(&config_state->auto_complete);
                          for(int64_t i = 0; i < config_state->command_entry_count; ++i){
+                              if(config_state->command_entries[i].hidden) continue;
                               auto_complete_insert(&config_state->auto_complete, config_state->command_entries[i].name, NULL);
                          }
                          auto_complete_start(&config_state->auto_complete, ACT_OCCURANCE, (Point_t){0, 0});

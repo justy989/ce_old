@@ -2654,6 +2654,32 @@ void command_quit_all(Command_t* command, void* user_data)
      }
 }
 
+
+#define SPLIT_HELP "usage: [v]split"
+
+void command_split(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message(SPLIT_HELP);
+          return;
+     }
+
+     bool vertical;
+     if(command->name[0] == 'v'){
+          vertical = true;
+     }else{
+          vertical = false;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+
+     split_view(config_state->tab_current->view_head, config_state->tab_current->view_current, vertical, config_state->line_number_type);
+     resize_terminal_if_in_view(config_state->tab_current->view_head, config_state->terminal_head);
+
+     // TODO: open file if specified as an argument
+}
+
 #define NOH_HELP "usage: noh"
 
 void command_noh(Command_t* command, void* user_data)
@@ -3173,6 +3199,10 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
                {command_quit_all, "quit_all", false},
                {command_quit_all, "qa", true}, // hidden vim-compatible shortcut
                {command_quit_all, "qa!", true}, // hidden vim-compatible shortcut
+               {command_split, "split", false},
+               {command_split, "sp", true}, // hidden vim-compatible shortcut
+               {command_split, "vsplit", false}, // hidden vim-compatible shortcut
+               {command_split, "vsp", true}, // hidden vim-compatible shortcut
           };
 
           // init and copy from our stack array

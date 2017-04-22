@@ -1979,15 +1979,15 @@ bool generate_auto_complete_files_in_dir(AutoComplete_t* auto_complete, const ch
 
      auto_complete_free(auto_complete);
 
-     char tmp[BUFSIZ];
+     char tmp[PATH_MAX];
      struct stat info;
      while((node = readdir(os_dir)) != NULL){
-          snprintf(tmp, BUFSIZ, "%s/%s", dir, node->d_name);
+          snprintf(tmp, PATH_MAX, "%s/%s", dir, node->d_name);
           stat(tmp, &info);
           if(S_ISDIR(info.st_mode)){
-               snprintf(tmp, BUFSIZ, "%s/", node->d_name);
+               snprintf(tmp, PATH_MAX, "%s/", node->d_name);
           }else{
-               strncpy(tmp, node->d_name, BUFSIZ);
+               strncpy(tmp, node->d_name, PATH_MAX);
           }
           auto_complete_insert(auto_complete, tmp, NULL);
      }
@@ -2126,9 +2126,7 @@ void cscope_goto_definition(ConfigState_t* config_state, BufferNode_t* head, con
                goto pclose_cscope;
           }
           int64_t filename_len = file_end - cscope_output;
-          char filename[BUFSIZ];
-          strncpy(filename, cscope_output, filename_len);
-          filename[filename_len] = 0;
+          char* filename = strndupa(cscope_output, filename_len);
           if(access(filename, F_OK) == -1){
                ce_message("cscope file %s not found", filename);
                goto pclose_cscope;
@@ -3703,17 +3701,11 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     cscope_goto_definition(config_state, *head, search_word);
                } break;
                case 'b':
-               {
-                    char command[BUFSIZ];
-                    strncpy(command, "make", BUFSIZ);
-                    run_command_on_terminal_in_view(config_state->terminal_head, config_state->tab_current->view_head, command);
-               } break;
+                    run_command_on_terminal_in_view(config_state->terminal_head, config_state->tab_current->view_head, "make");
+                    break;
                case 'm':
-               {
-                    char command[BUFSIZ];
-                    strncpy(command, "make clean", BUFSIZ);
-                    run_command_on_terminal_in_view(config_state->terminal_head, config_state->tab_current->view_head, command);
-               } break;
+                    run_command_on_terminal_in_view(config_state->terminal_head, config_state->tab_current->view_head, "make clean");
+                    break;
 #if 0
                // NOTE: useful for debugging
                case 'a':

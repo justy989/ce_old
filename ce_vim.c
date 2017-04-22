@@ -423,8 +423,8 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                     if(indentation >= tab_len) indentation -= tab_len;
 
                     // remove everything from the line
-                    Point_t sol = {0, cursor->y};
-                    char* duped_line = ce_dupe_line(buffer, cursor->y);
+                    Point_t bol = {0, cursor->y};
+                    char* duped_line = ce_dupe_string(buffer, bol, *cursor);
                     int64_t duped_line_len = strlen(duped_line);
 
                     if(duped_line_len){
@@ -433,8 +433,8 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                               duped_line_len--;
                          }
 
-                         ce_clear_line(buffer, cursor->y);
-                         ce_commit_remove_string(commit_tail, sol, *cursor, sol, duped_line, BCC_KEEP_GOING);
+                         ce_remove_string(buffer, bol, duped_line_len);
+                         ce_commit_remove_string(commit_tail, bol, *cursor, bol, duped_line, BCC_KEEP_GOING);
                     }
 
                     // insert whitespace and indented brace
@@ -444,8 +444,8 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                          memset(insertion, ' ', insertion_len);
                          insertion[insertion_len - 2] = '}';
                          insertion[insertion_len - 1] = 0;
-                         if(ce_insert_string(buffer, sol, insertion)){
-                              ce_commit_insert_string(commit_tail, sol, *cursor, sol, insertion, BCC_KEEP_GOING);
+                         if(ce_insert_string(buffer, bol, insertion)){
+                              ce_commit_insert_string(commit_tail, bol, *cursor, bol, insertion, BCC_KEEP_GOING);
                          }
 
                          cursor->x = insertion_len - 1;

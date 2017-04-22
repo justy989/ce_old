@@ -172,14 +172,6 @@ void ce_clear_lines_readonly(Buffer_t* buffer)
      clear_lines_impl(buffer);
 }
 
-void ce_clear_line(Buffer_t* buffer, int64_t line)
-{
-     if(buffer->status == BS_READONLY) return;
-
-     free(buffer->lines[line]);
-     buffer->lines[line] = calloc(1, 1);
-}
-
 bool ce_point_on_buffer(const Buffer_t* buffer, Point_t location)
 {
      if(location.y < 0 || location.x < 0){

@@ -2073,6 +2073,27 @@ bool calc_auto_complete_start_and_path(AutoComplete_t* auto_complete, const char
      return rc;
 }
 
+void quit(ConfigState_t* config_state)
+{
+     config_state->quit = true;
+}
+
+void quit_and_prompt_if_unsaved(ConfigState_t* config_state, BufferNode_t* head)
+{
+     uint64_t unsaved_buffers = 0;
+     BufferNode_t* itr = head;
+     while(itr){
+          if(itr->buffer->status == BS_MODIFIED) unsaved_buffers++;
+          itr = itr->next;
+     }
+
+     if(unsaved_buffers){
+          input_start(config_state, "Unsaved buffers... Quit anyway? (y/n)", 'q');
+     }else{
+          quit(config_state);
+     }
+}
+
 bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
 {
      BufferView_t* buffer_view = config_state->tab_current->view_current;
@@ -2096,7 +2117,7 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                if(!config_state->view_input->buffer->line_count) break;
 
                if(tolower(config_state->view_input->buffer->lines[0][0]) == 'y'){
-                    config_state->quit = true;
+                    quit(config_state);
                }
                return true;
           case 2: // Ctrl + b
@@ -2626,18 +2647,7 @@ void command_quit_all(Command_t* command, void* user_data)
 
      CommandData_t* command_data = (CommandData_t*)(user_data);
      ConfigState_t* config_state = command_data->config_state;
-     uint64_t unsaved_buffers = 0;
-     BufferNode_t* itr = command_data->head;
-     while(itr){
-          if(itr->buffer->status == BS_MODIFIED) unsaved_buffers++;
-          itr = itr->next;
-     }
-
-     if(unsaved_buffers){
-          input_start(config_state, "Unsaved buffers... Quit anyway? (y/n)", 'q');
-     }else{
-          config_state->quit = true;
-     }
+     quit_and_prompt_if_unsaved(config_state, command_data->head);
 }
 
 #define NOH_HELP "usage: noh"
@@ -3582,20 +3592,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     break;
                case 'q':
                {
-                    uint64_t unsaved_buffers = 0;
-                    BufferNode_t* itr = *head;
-                    while(itr){
-                         if(itr->buffer->status == BS_MODIFIED) unsaved_buffers++;
-                         itr = itr->next;
-                    }
-
-                    if(unsaved_buffers){
-                         input_start(config_state, "Unsaved buffers... Quit anyway? (y/n)", key);
-                         break;
-                    }
-
-                    // quit !
-                    return false;
+                    quit_and_prompt_if_unsaved(config_state, *head);
                }
                }
 

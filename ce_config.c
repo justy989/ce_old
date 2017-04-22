@@ -2119,6 +2119,8 @@ void cscope_goto_definition(ConfigState_t* config_state, BufferNode_t* head, con
      }
 
      char cscope_output[BUFSIZ];
+     // TODO: if there is more than one option, loop with fgets()
+     // and populate an autocomplete buffer to select a definition
      if(fgets(cscope_output, sizeof(cscope_output), cscope_output_file) == NULL){
           ce_message("fgets() failed to obtain cscope output for %s", command);
      }else{

@@ -700,6 +700,8 @@ void input_start(ConfigState_t* config_state, const char* input_message, int inp
      }
      pthread_mutex_lock(&view_input_save_lock);
      config_state->tab_current->view_input_save = config_state->tab_current->view_current;
+     config_state->tab_current->view_input_save_top_row = config_state->tab_current->view_current->top_row;
+     config_state->tab_current->view_input_save_left_column = config_state->tab_current->view_current->left_column;
      pthread_mutex_unlock(&view_input_save_lock);
      config_state->tab_current->view_current = config_state->view_input;
 
@@ -735,7 +737,8 @@ void input_cancel(ConfigState_t* config_state)
           pthread_mutex_lock(&view_input_save_lock);
           config_state->tab_current->view_input_save->cursor = config_state->vim_state.search.start;
           pthread_mutex_unlock(&view_input_save_lock);
-          center_view(config_state->tab_current->view_input_save);
+          config_state->tab_current->view_input_save->top_row = config_state->tab_current->view_input_save_top_row;
+          config_state->tab_current->view_input_save->left_column = config_state->tab_current->view_input_save_left_column;
      }else if(config_state->input_key == 6 ||
               config_state->input_key == ':'){
           if(config_state->tab_current->view_overrideable){

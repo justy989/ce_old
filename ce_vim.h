@@ -44,8 +44,8 @@ typedef struct{
      VimChangeType_t type;
      union{
           char* insert_string;
-          char reg;
-          char change_char;
+          int reg;
+          int change_char;
           char* change_string;
      };
 } VimChange_t;

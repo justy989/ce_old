@@ -88,6 +88,7 @@ Key Sequence|Action
 `y`|yank
 `p`|paste after cursor
 `P`|paste before cursor
+`K`|goto man page for word under cursor
 `~`|flip alphabetical character's case
 `u`|undo edit
 `/`|incremental search forward

@@ -34,6 +34,8 @@ typedef struct TabView_t{
      BufferView_t* view_current;
      BufferView_t* view_previous;
      BufferView_t* view_input_save;
+     int64_t view_input_save_top_row;
+     int64_t view_input_save_left_column;
      BufferView_t* view_overrideable;
      Buffer_t* overriden_buffer;
      struct TabView_t* next;

@@ -776,7 +776,11 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
                return VCS_CONTINUE;
           }
           if(!isprint(built_action.change.change_char)){
-               return VCS_INVALID;
+               if(built_action.change.change_char == KEY_ENTER){
+                    built_action.change.change_char = NEWLINE;
+               }else{
+                    return VCS_INVALID;
+               }
           }
           get_motion = false;
           break;
@@ -1915,10 +1919,49 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
           char prev_char;
 
           if(!ce_get_char(buffer, *action_range.sorted_start, &prev_char)) return false;
-          if(!ce_set_char(buffer, *action_range.sorted_start, action->change.change_char)) return false;
 
-          ce_commit_change_char(commit_tail, *action_range.sorted_start, *cursor, *action_range.sorted_start,
-                                action->change.change_char, prev_char, chain);
+          if(action->change.change_char == NEWLINE){
+               // remove the current char
+               ce_remove_char(buffer, *cursor);
+               ce_commit_remove_char(commit_tail, *cursor, *cursor, *cursor, prev_char, BCC_KEEP_GOING);
+
+               // remove to the end of the line
+               Point_t eol = *cursor;
+               ce_move_cursor_to_end_of_line(buffer, &eol);
+               char* duped = ce_dupe_string(buffer, *cursor, eol);
+               if(!duped) break;
+               int64_t duped_len = strlen(duped);
+               ce_remove_string(buffer, *cursor, (eol.x - cursor->x) + 1);
+               ce_commit_remove_string(commit_tail, *cursor, *cursor, *cursor, duped, BCC_KEEP_GOING);
+
+               // insert prepended with newline
+               int64_t insertion_len = duped_len + 1;
+               char* insertion = malloc(insertion_len + 1);
+               strncpy(insertion + 1, duped, duped_len);
+               insertion[0] = '\n';
+               insertion[insertion_len] = 0;
+               ce_insert_string(buffer, *cursor, insertion);
+
+               if(buffer->type == BFT_C || buffer->type == BFT_CPP){
+                    ce_commit_insert_string(commit_tail, *cursor, *cursor, *cursor, insertion, BCC_KEEP_GOING);
+                    Point_t indentation_start = {0, cursor->y + 1};
+                    int64_t tab_len = strlen(TAB_STRING);
+                    int64_t indentation = ce_get_indentation_for_line(buffer, indentation_start, tab_len);
+                    int64_t insertion_len = indentation + 1; // account for brace and null terminator
+                    char* insertion = malloc(indentation);
+                    memset(insertion, ' ', insertion_len);
+                    insertion[insertion_len - 1] = 0;
+                    ce_insert_string(buffer, indentation_start, insertion);
+                    ce_commit_insert_string(commit_tail, indentation_start, *cursor, *cursor, insertion, chain);
+               }else{
+                    ce_commit_insert_string(commit_tail, *cursor, *cursor, *cursor, insertion, chain);
+               }
+          }else{
+               if(!ce_set_char(buffer, *action_range.sorted_start, action->change.change_char)) return false;
+
+               ce_commit_change_char(commit_tail, *action_range.sorted_start, *cursor, *action_range.sorted_start,
+                                     action->change.change_char, prev_char, chain);
+          }
      } break;
      case VCT_YANK:
      {

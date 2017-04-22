@@ -16,7 +16,6 @@ BIG:
 -visual block mode
 
 LITTLE:
--r<enter>
 -do searching inside macro
 -step through macro one change at a time
 -separate dot for input buffer
@@ -38,6 +37,10 @@ LITTLE:
 -buffer view of jump list
 -auto complete gets in the way when there is text after the cursor
 */
+#if 0
+error in string syntax highlighting for <tacos>"
+""""""""""""""""""""""""""""""""""""
+#endif
 
 #include <assert.h>
 #include <dlfcn.h>

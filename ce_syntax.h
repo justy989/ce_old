@@ -98,7 +98,8 @@ typedef struct{
      int current_color;
      int64_t current_color_left;
 
-     Point_t matched_pair;
+     Point_t matched_pair_start;
+     Point_t matched_pair_end;
 
      int64_t trailing_whitespace_begin;
 
@@ -114,7 +115,8 @@ typedef struct{
      int current_color;
      int64_t current_color_left;
 
-     Point_t matched_pair;
+     Point_t matched_pair_start;
+     Point_t matched_pair_end;
 
      int64_t trailing_whitespace_begin;
 
@@ -130,7 +132,8 @@ typedef struct{
      int current_color;
      int64_t current_color_left;
 
-     Point_t matched_pair;
+     Point_t matched_pair_start;
+     Point_t matched_pair_end;
 
      int64_t trailing_whitespace_begin;
 
@@ -143,7 +146,8 @@ typedef struct{
      int current_color;
      int64_t current_color_left;
 
-     Point_t matched_pair;
+     Point_t matched_pair_start;
+     Point_t matched_pair_end;
 
      int64_t trailing_whitespace_begin;
 
@@ -156,7 +160,8 @@ typedef struct{
      int current_color;
      int64_t current_color_left;
 
-     Point_t matched_pair;
+     Point_t matched_pair_start;
+     Point_t matched_pair_end;
 
      int64_t trailing_whitespace_begin;
 

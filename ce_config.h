@@ -34,6 +34,8 @@ typedef struct TabView_t{
      BufferView_t* view_current;
      BufferView_t* view_previous;
      BufferView_t* view_input_save;
+     int64_t view_input_save_top_row;
+     int64_t view_input_save_left_column;
      BufferView_t* view_overrideable;
      Buffer_t* overriden_buffer;
      struct TabView_t* next;
@@ -88,6 +90,8 @@ typedef struct{
      bool input;
      const char* input_message;
      int input_key;
+     VimMode_t input_mode_save;
+     Point_t input_visual_save;
 
      Buffer_t* completion_buffer;
 
@@ -132,6 +136,7 @@ typedef struct{
 
      CommandEntry_t* command_entries;
      int64_t command_entry_count;
+     int64_t max_auto_complete_height;
 
      bool quit;
 

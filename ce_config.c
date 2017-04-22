@@ -43,7 +43,7 @@ pthread_mutex_t completion_lock;
 
 int64_t count_digits(int64_t n)
 {
-     int count = 0;
+     int64_t count = 0;
      while(n > 0){
           n /= 10;
           count++;
@@ -459,6 +459,7 @@ bool initialize_buffer(Buffer_t* buffer){
                     return false;
                }
           }else if(string_ends_in_substring(buffer->name, name_len, ".cpp") ||
+                   string_ends_in_substring(buffer->name, name_len, ".cc") ||
                    string_ends_in_substring(buffer->name, name_len, ".hpp")){
                buffer->syntax_fn = syntax_highlight_cpp;
                buffer->syntax_user_data = malloc(sizeof(SyntaxCpp_t));
@@ -693,8 +694,14 @@ void input_start(ConfigState_t* config_state, const char* input_message, int inp
      config_state->view_input->top_row = 0;
      config_state->input_message = input_message;
      config_state->input_key = input_key;
+     config_state->input_mode_save = config_state->vim_state.mode;
+     if(config_state->vim_state.mode == VM_VISUAL_LINE || config_state->vim_state.mode == VM_VISUAL_RANGE){
+          config_state->input_visual_save = config_state->vim_state.visual_start;
+     }
      pthread_mutex_lock(&view_input_save_lock);
      config_state->tab_current->view_input_save = config_state->tab_current->view_current;
+     config_state->tab_current->view_input_save_top_row = config_state->tab_current->view_current->top_row;
+     config_state->tab_current->view_input_save_left_column = config_state->tab_current->view_current->left_column;
      pthread_mutex_unlock(&view_input_save_lock);
      config_state->tab_current->view_current = config_state->view_input;
 
@@ -709,7 +716,19 @@ void input_end(ConfigState_t* config_state)
 {
      config_state->input = false;
      config_state->tab_current->view_current = config_state->tab_current->view_input_save;
-     vim_enter_normal_mode(&config_state->vim_state);
+
+     switch(config_state->input_mode_save){
+     default:
+     case VM_NORMAL:
+          vim_enter_normal_mode(&config_state->vim_state);
+          break;
+     case VM_VISUAL_RANGE:
+          vim_enter_visual_range_mode(&config_state->vim_state, config_state->input_visual_save);
+          break;
+     case VM_VISUAL_LINE:
+          vim_enter_visual_line_mode(&config_state->vim_state, config_state->input_visual_save);
+          break;
+     }
 }
 
 void input_cancel(ConfigState_t* config_state)
@@ -718,7 +737,8 @@ void input_cancel(ConfigState_t* config_state)
           pthread_mutex_lock(&view_input_save_lock);
           config_state->tab_current->view_input_save->cursor = config_state->vim_state.search.start;
           pthread_mutex_unlock(&view_input_save_lock);
-          center_view(config_state->tab_current->view_input_save);
+          config_state->tab_current->view_input_save->top_row = config_state->tab_current->view_input_save_top_row;
+          config_state->tab_current->view_input_save->left_column = config_state->tab_current->view_input_save_left_column;
      }else if(config_state->input_key == 6 ||
               config_state->input_key == ':'){
           if(config_state->tab_current->view_overrideable){
@@ -917,6 +937,7 @@ void view_jump_insert(BufferViewState_t* view_state, const char* filepath, Point
 void view_jump_to_previous(BufferView_t* view, BufferNode_t* buffer_head)
 {
      BufferViewState_t* view_state = view->user_data;
+     if(!view_state) return;
 
      if(view_state->jump_current == 0) return; // history is empty
 
@@ -943,6 +964,7 @@ void view_jump_to_previous(BufferView_t* view, BufferNode_t* buffer_head)
 void view_jump_to_next(BufferView_t* view, BufferNode_t* buffer_head)
 {
      BufferViewState_t* view_state = view->user_data;
+     if(!view_state) return;
 
      if(view_state->jump_current >= JUMP_LIST_MAX - 1) return;
 
@@ -1394,7 +1416,7 @@ void* clang_complete_thread(void* data)
 
      // run command
      char command[BUFSIZ];
-     snprintf(command, BUFSIZ, "%s %s %s -fsyntax-only -ferror-limit=1 %s - -Xclang -code-completion-at=-:%ld:%ld",
+     snprintf(command, BUFSIZ, "%s %s %s -fsyntax-only -ferror-limit=1 %s - -Xclang -code-completion-macros -Xclang -code-completion-at=-:%ld:%ld",
               compiler, bytes, base_include, language_flag, thread_data->cursor.y + 1, thread_data->cursor.x + 1);
 
      int input_fd = 0;
@@ -1927,6 +1949,21 @@ void get_terminal_view_rect(TabView_t* tab_head, Point_t* top_left, Point_t* bot
      }
 }
 
+void resize_terminal_if_in_view(BufferView_t* view_head, TerminalNode_t* terminal_head)
+{
+     while(terminal_head){
+          BufferView_t* term_view = ce_buffer_in_view(view_head, terminal_head->buffer);
+          if(term_view){
+               int64_t new_width = term_view->bottom_right.x - term_view->top_left.x;
+               int64_t new_height = term_view->bottom_right.y - term_view->top_left.y;
+               terminal_resize(&terminal_head->terminal, new_width, new_height);
+          }
+
+          terminal_head = terminal_head->next;
+     }
+}
+
+
 bool generate_auto_complete_files_in_dir(AutoComplete_t* auto_complete, const char* dir)
 {
      struct dirent *node;
@@ -2088,6 +2125,8 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                     itr = itr->next;
                }
 
+               resize_terminal_if_in_view(config_state->tab_current->view_head, config_state->terminal_head);
+
                // return whether we switched to a buffer or not
                return true;
           }
@@ -2144,7 +2183,6 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
 
                commit_input_to_history(config_state->view_input->buffer, &config_state->search_history);
                vim_yank_add(&config_state->vim_state.yank_head, '/', strdup(config_state->view_input->buffer->lines[0]), YANK_NORMAL);
-               view_jump_insert(buffer_view->user_data, buffer->filename, *cursor);
                return true;
           case '?':
                if(!config_state->view_input->buffer->line_count) break;
@@ -2155,6 +2193,7 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           case 'R':
           {
                if(!config_state->view_input->buffer->line_count) break; // NOTE: unsure if this is correct
+               if(!config_state->vim_state.search.valid_regex) break;
 
                VimYankNode_t* yank = vim_yank_find(config_state->vim_state.yank_head, '/');
                if(!yank) break;
@@ -2433,11 +2472,10 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferVi
 
      // TODO: handle case where filename is too long to fit in the status bar
      attron(COLOR_PAIR(S_VIEW_STATUS));
-     mvprintw(view->bottom_right.y, view->top_left.x + 1, " %s%s%s ",
-              view == current_view ? mode_names[vim_mode] : "", buffer_flag_string(buffer), buffer->filename);
-#if 0 // NOTE: useful to show key presses when debugging
-     if(view == current_view) printw("%s %d ", keyname(last_key), last_key);
-#endif
+     mvprintw(view->bottom_right.y, view->top_left.x + 1, " %s%s",
+              view == current_view ? mode_names[vim_mode] : "", buffer_flag_string(buffer));
+     int save_title_y, save_title_x;
+     getyx(stdscr, save_title_y, save_title_x);
      if(view == overrideable_view) printw("^ ");
      if(terminal_current && view->buffer == terminal_current->buffer) printw("$ ");
      if(view == current_view && recording_macro) printw("RECORDING %c ", recording_macro);
@@ -2445,22 +2483,17 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferVi
      int64_t column = view->cursor.x + 1;
      int64_t digits_in_line = count_digits(row);
      digits_in_line += count_digits(column);
-     mvprintw(view->bottom_right.y, (view->bottom_right.x - (digits_in_line + 5)) + right_status_offset,
-              " %"PRId64", %"PRId64" ", column, row);
-}
+     int position_info_x = (view->bottom_right.x - (digits_in_line + 5)) + right_status_offset;
+     mvprintw(view->bottom_right.y, position_info_x, " %"PRId64", %"PRId64" ", column, row);
 
-void resize_terminal_if_in_view(BufferView_t* view_head, TerminalNode_t* terminal_head)
-{
-     while(terminal_head){
-          BufferView_t* term_view = ce_buffer_in_view(view_head, terminal_head->buffer);
-          if(term_view){
-               int64_t new_width = term_view->bottom_right.x - term_view->top_left.x;
-               int64_t new_height = term_view->bottom_right.y - term_view->top_left.y;
-               terminal_resize(&terminal_head->terminal, new_width, new_height);
-          }
-
-          terminal_head = terminal_head->next;
-     }
+     int space_for_filename = (position_info_x - save_title_x) - 2; // account for separator and space
+     int filename_len = strlen(buffer->filename);
+     int filename_offset = 0;
+     if(filename_len > space_for_filename) filename_offset = filename_len - space_for_filename;
+     mvprintw(save_title_y, save_title_x, "%s ", buffer->filename + filename_offset);
+#if 0 // NOTE: useful to show key presses when debugging
+     if(view == current_view) printw("%s %d ", keyname(last_key), last_key);
+#endif
 }
 
 bool run_command_on_terminal_in_view(TerminalNode_t* terminal_head, BufferView_t* view_head, const char* command)
@@ -2753,11 +2786,67 @@ void command_buffers(Command_t* command, void* user_data)
      config_state->tab_current->view_current->cursor = (Point_t){0, found_good_buffer_index ? buffer_index : 1};
 }
 
+#define MACRO_BACKSLASHES_HELP "usage: macro_backslashes"
+
+void command_macro_backslashes(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message(MACRO_BACKSLASHES_HELP);
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Buffer_t* buffer = buffer_view->buffer;
+     BufferState_t* buffer_state = buffer->user_data;
+     Point_t* cursor = &buffer_view->cursor;
+
+     if(config_state->vim_state.mode != VM_VISUAL_LINE) return;
+
+     int64_t start_line = 0;
+     int64_t end_line = 0;
+
+     // sort points
+     if(cursor->y > config_state->vim_state.visual_start.y){
+          start_line = config_state->vim_state.visual_start.y;
+          end_line = cursor->y;
+     }else{
+          start_line = cursor->y;
+          end_line = config_state->vim_state.visual_start.y;
+     }
+
+     // figure out longest line TODO: after slurping spaces and backslashes
+     int64_t line_count = end_line - start_line + 1;
+     int64_t longest_line = 0;
+
+     for(int64_t i = 0; i < line_count; ++i){
+          int64_t line_len = strlen(buffer->lines[i + start_line]);
+          if(line_len > longest_line) longest_line = line_len;
+     }
+
+     // insert whitespace and backslash on every line to make it the same length
+     for(int64_t i = 0; i < line_count; ++i){
+          int64_t line = i + start_line;
+          int64_t line_len = strlen(buffer->lines[line]);
+          int64_t space_len = longest_line - line_len + 1;
+          Point_t loc = {line_len, line};
+          for(int64_t s = 0; s < space_len; ++s){
+               ce_insert_char(buffer, loc, ' ');
+               ce_commit_insert_string(&buffer_state->commit_tail, loc, *cursor, *cursor, strdup(" "), BCC_KEEP_GOING);
+               loc.x++;
+          }
+          ce_insert_char(buffer, loc, '\\');
+          ce_commit_insert_string(&buffer_state->commit_tail, loc, *cursor, *cursor, strdup("\\"), BCC_KEEP_GOING);
+     }
+}
+
 void clang_completion(ConfigState_t* config_state, Point_t start_completion)
 {
      if(config_state->clang_complete_thread){
           pthread_cancel(config_state->clang_complete_thread);
-          pthread_join(config_state->clang_complete_thread, NULL);
+          pthread_detach(config_state->clang_complete_thread);
+          config_state->clang_complete_thread = 0;
      }
 
      if(auto_completing(&config_state->auto_complete)){
@@ -2937,6 +3026,8 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      config_state->line_number_type = LNT_NONE;
      config_state->highlight_line_type = HLT_ENTIRE_LINE;
 
+     config_state->max_auto_complete_height = 10;
+
 #if 0
      // enable mouse events
      mousemask(~((mmask_t)0), NULL);
@@ -3030,6 +3121,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
                {command_buffers, "buffers"},
                {command_highlight_line, "highlight_line"},
                {command_line_number, "line_number"},
+               {command_macro_backslashes, "macro_backslashes"},
                {command_new_buffer, "new_buffer"},
                {command_noh, "noh"},
                {command_reload_buffer, "reload_buffer"},
@@ -3303,6 +3395,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
      }
 
      config_state->save_buffer_head = head;
+     buffer->check_left_for_pair = false;
 
      if(config_state->vim_state.mode != VM_INSERT){
           switch(config_state->last_key){
@@ -3666,6 +3759,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
      if(!handled_key){
           Point_t save_cursor = *cursor;
+          Buffer_t* save_buffer = buffer_view->buffer;
           VimKeyHandlerResult_t vkh_result = vim_key_handler(key, &config_state->vim_state, config_state->tab_current->view_current->buffer,
                                                              &config_state->tab_current->view_current->cursor, &buffer_state->commit_tail,
                                                              &buffer_state->vim_buffer_state, false);
@@ -3674,6 +3768,21 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                break;
           case VKH_HANDLED_KEY:
                if(config_state->vim_state.mode == VM_INSERT){
+                    switch(key){
+                    default:
+                         break;
+                    case '{':
+                    case '}':
+                    case '(':
+                    case ')':
+                    case '[':
+                    case ']':
+                    case '<':
+                    case '>':
+                    {
+                         buffer->check_left_for_pair = true;
+                    } break;
+                    }
                     if(config_state->input){
                          switch(key){
                          default:
@@ -3746,6 +3855,15 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
                          switch(key){
                          default:
+                              // check if key is a valid c identifier
+                              if((isalnum(key) || key == '_' ) && !auto_completing(&config_state->auto_complete)){
+                                   char prev_char = 0;
+                                   if(cursor->x > 1 && ce_get_char(buffer, (Point_t){cursor->x - 2, cursor->y}, &prev_char)){
+                                        if(!isalnum(prev_char) && prev_char != '_'){
+                                             clang_completion(config_state, (Point_t){cursor->x - 1, cursor->y});
+                                        }
+                                   }
+                              }
                               break;
                          case '>':
                          {
@@ -3831,7 +3949,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     view_jump_insert(buffer_view->user_data, buffer_view->buffer->filename, save_cursor);
                }else if(vkh_result.completed_action.motion.type == VMT_BEGINNING_OF_FILE ||
                         vkh_result.completed_action.motion.type == VMT_END_OF_FILE){
-                    view_jump_insert(buffer_view->user_data, buffer_view->buffer->filename, save_cursor);
+                    view_jump_insert(buffer_view->user_data, save_buffer->filename, save_cursor);
                }else if(vkh_result.completed_action.change.type == VCT_YANK){
                     VimActionRange_t action_range;
                     if(vim_action_get_range(&vkh_result.completed_action, buffer, cursor, &config_state->vim_state,
@@ -4195,6 +4313,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          input_start(config_state, "Regex Search", key);
                          config_state->vim_state.search.direction = CE_DOWN;
                          config_state->vim_state.search.start = *cursor;
+                         view_jump_insert(buffer_view->user_data, buffer->filename, *cursor);
                          break;
                     }
                     case '?':
@@ -4569,6 +4688,18 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          view_jump_to_next(buffer_view, *head);
                          handled_key = true;
                          break;
+                    case 'K':
+                    {
+                         Point_t word_start;
+                         Point_t word_end;
+                         if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) break;
+                         assert(word_start.y == word_end.y);
+                         int len = (word_end.x - word_start.x) + 1;
+
+                         char command[BUFSIZ];
+                         snprintf(command, BUFSIZ, "man --pager=cat %*.*s", len, len, buffer->lines[cursor->y] + word_start.x);
+                         run_command_on_terminal_in_view(config_state->terminal_head, config_state->tab_current->view_head, command);
+                    } break;
                     }
                }else{
                     switch(key){
@@ -4723,6 +4854,7 @@ void view_drawer(void* user_data)
 
           if(auto_completing(&config_state->auto_complete)){
                int64_t auto_complete_view_height = config_state->view_auto_complete->buffer->line_count;
+               if(auto_complete_view_height > config_state->max_auto_complete_height) auto_complete_view_height = config_state->max_auto_complete_height;
                auto_complete_top_left = (Point_t){input_top_left.x, (input_top_left.y - auto_complete_view_height) - 1};
                if(auto_complete_top_left.y < 0) auto_complete_top_left.y = 0; // account for separator line
                auto_complete_bottom_right = (Point_t){input_bottom_right.x, input_top_left.y - 1};
@@ -4734,6 +4866,7 @@ void view_drawer(void* user_data)
           terminal_cursor = get_cursor_on_terminal(cursor, buffer_view, line_number_type);
 
           int64_t auto_complete_view_height = config_state->view_auto_complete->buffer->line_count;
+          if(auto_complete_view_height > config_state->max_auto_complete_height) auto_complete_view_height = config_state->max_auto_complete_height;
           auto_complete_top_left = (Point_t){config_state->tab_current->view_current->top_left.x,
                                              (config_state->tab_current->view_current->bottom_right.y - auto_complete_view_height) - 1};
           if(auto_complete_top_left.y <= terminal_cursor.y) auto_complete_top_left.y = terminal_cursor.y + 2;

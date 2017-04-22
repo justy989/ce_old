@@ -560,13 +560,15 @@ static void syntax_calc_trailing_whitespace(SyntaxHighlighterData_t* data, int64
      }
 }
 
-static void syntax_calc_matching_pair(SyntaxHighlighterData_t* data, Point_t* matched_pair)
+static void syntax_calc_matching_pair(SyntaxHighlighterData_t* data, Point_t* matched_pair_start, Point_t* matched_pair_end, bool check_left_for_pair)
 {
      // is our cursor on something we can match?
-     *matched_pair = (Point_t){-1, -1};
-     if(ce_point_on_buffer(data->buffer, data->cursor)){
+     *matched_pair_start = (Point_t){-1, -1};
+     Point_t check = data->cursor;
+     if(check_left_for_pair && check.x > 0) check.x--;
+     if(ce_point_on_buffer(data->buffer, check)){
           char ch = 0;
-          ch = ce_get_char_raw(data->buffer, data->cursor);
+          ch = ce_get_char_raw(data->buffer, check);
           switch(ch){
           default:
                break;
@@ -578,8 +580,9 @@ static void syntax_calc_matching_pair(SyntaxHighlighterData_t* data, Point_t* ma
           case ']':
           case '<':
           case '>':
-               *matched_pair = data->cursor;
-               ce_move_cursor_to_matching_pair(data->buffer, matched_pair, ch);
+               *matched_pair_start = check;
+               *matched_pair_end = *matched_pair_start;
+               ce_move_cursor_to_matching_pair(data->buffer, matched_pair_end, ch);
                break;
           }
      }
@@ -653,7 +656,7 @@ void syntax_highlight_c_like(SyntaxHighlighterData_t* data, void* user_data, syn
           memset(syntax, 0, sizeof(*syntax));
 
           // is our cursor on something we can match?
-          syntax_calc_matching_pair(data, &syntax->matched_pair);
+          syntax_calc_matching_pair(data, &syntax->matched_pair_start, &syntax->matched_pair_end, data->buffer->check_left_for_pair);
 
           syntax->inside_multiline_comment = inside_multiline_c_comment_offscreen(data->loc.y, data->bottom_right.y, data->buffer);
           syntax->highlight.chars_til_highlight = -1;
@@ -724,8 +727,8 @@ void syntax_highlight_c_like(SyntaxHighlighterData_t* data, void* user_data, syn
                               syntax->current_color = syntax_set_color(S_KEYWORD, syntax->highlight.type);
                          }else if((syntax->current_color_left = syntax_is_c_preprocessor(line_to_print, data->loc.x))){
                               syntax->current_color = syntax_set_color(S_PREPROCESSOR, syntax->highlight.type);
-                         }else if(syntax->matched_pair.x >= 0){
-                              if(ce_points_equal(data->loc, data->cursor) || ce_points_equal(data->loc, syntax->matched_pair)){
+                         }else if(syntax->matched_pair_start.x >= 0){
+                              if(ce_points_equal(data->loc, syntax->matched_pair_start) || ce_points_equal(data->loc, syntax->matched_pair_end)){
                                    syntax->current_color = syntax_set_color(S_MATCHING_PARENS, syntax->highlight.type);
                               }else if(syntax->current_color == S_MATCHING_PARENS){
                                    syntax->current_color = syntax_set_color(S_NORMAL, syntax->highlight.type);
@@ -775,8 +778,9 @@ void syntax_highlight_c_like(SyntaxHighlighterData_t* data, void* user_data, syn
                          syntax->current_color = syntax_set_color(S_COMMENT, syntax->highlight.type);
                     }else if(syntax->inside_string){
                          syntax->current_color = syntax_set_color(S_STRING, syntax->highlight.type);
-                    }else if(syntax->matched_pair.x >= 0){
-                         if(ce_points_equal(data->loc, data->cursor) || ce_points_equal(data->loc, syntax->matched_pair)){
+                    // TODO: compress with other matching pair syntax code
+                    }else if(syntax->matched_pair_start.x >= 0){
+                         if(ce_points_equal(data->loc, syntax->matched_pair_start) || ce_points_equal(data->loc, syntax->matched_pair_end)){
                               syntax->current_color = syntax_set_color(S_MATCHING_PARENS, syntax->highlight.type);
                          }
                     }
@@ -1093,7 +1097,7 @@ void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data)
           }
 
           // is our cursor on something we can match?
-          syntax_calc_matching_pair(data, &syntax->matched_pair);
+          syntax_calc_matching_pair(data, &syntax->matched_pair_start, &syntax->matched_pair_end, data->buffer->check_left_for_pair);
 
           if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
      } break;
@@ -1147,8 +1151,8 @@ void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data)
                          syntax->current_color = syntax_set_color(S_CONSTANT, syntax->highlight.type);
                     }else if((syntax->current_color_left = syntax_is_python_comment(buffer_line, data->loc.x))){
                          syntax->current_color = syntax_set_color(S_COMMENT, syntax->highlight.type);
-                    }else if(syntax->matched_pair.x >= 0){
-                         if(ce_points_equal(data->loc, data->cursor) || ce_points_equal(data->loc, syntax->matched_pair)){
+                    }else if(syntax->matched_pair_start.x >= 0){
+                         if(ce_points_equal(data->loc, syntax->matched_pair_start) || ce_points_equal(data->loc, syntax->matched_pair_end)){
                               syntax->current_color = syntax_set_color(S_MATCHING_PARENS, syntax->highlight.type);
                          }
                     }
@@ -1167,8 +1171,8 @@ void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data)
 
                     if(inside_string || syntax->inside_string){
                          syntax->current_color = syntax_set_color(S_STRING, syntax->highlight.type);
-                    }else if(syntax->matched_pair.x >= 0){
-                         if(ce_points_equal(data->loc, data->cursor) || ce_points_equal(data->loc, syntax->matched_pair)){
+                    }else if(syntax->matched_pair_start.x >= 0){
+                         if(ce_points_equal(data->loc, syntax->matched_pair_start) || ce_points_equal(data->loc, syntax->matched_pair_end)){
                               syntax->current_color = syntax_set_color(S_MATCHING_PARENS, syntax->highlight.type);
                          }else{
                               syntax->current_color = syntax_set_color(S_NORMAL, syntax->highlight.type);
@@ -1218,7 +1222,7 @@ void syntax_highlight_bash(SyntaxHighlighterData_t* data, void* user_data)
           syntax->highlight.type = HL_OFF;
 
           // is our cursor on something we can match?
-          syntax_calc_matching_pair(data, &syntax->matched_pair);
+          syntax_calc_matching_pair(data, &syntax->matched_pair_start, &syntax->matched_pair_end, data->buffer->check_left_for_pair);
 
           if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
      } break;
@@ -1270,8 +1274,8 @@ void syntax_highlight_bash(SyntaxHighlighterData_t* data, void* user_data)
                          syntax->current_color = syntax_set_color(S_CONSTANT, syntax->highlight.type);
                     }else if((syntax->current_color_left = syntax_is_python_comment(buffer_line, data->loc.x))){
                          syntax->current_color = syntax_set_color(S_COMMENT, syntax->highlight.type);
-                    }else if(syntax->matched_pair.x >= 0){
-                         if(ce_points_equal(data->loc, data->cursor) || ce_points_equal(data->loc, syntax->matched_pair)){
+                    }else if(syntax->matched_pair_start.x >= 0){
+                         if(ce_points_equal(data->loc, syntax->matched_pair_start) || ce_points_equal(data->loc, syntax->matched_pair_end)){
                               syntax->current_color = syntax_set_color(S_MATCHING_PARENS, syntax->highlight.type);
                          }
                     }
@@ -1279,8 +1283,8 @@ void syntax_highlight_bash(SyntaxHighlighterData_t* data, void* user_data)
           }
 
           if(syntax->current_color_left <= 0){
-               if(syntax->matched_pair.x >= 0){
-                    if(ce_points_equal(data->loc, data->cursor) || ce_points_equal(data->loc, syntax->matched_pair)){
+               if(syntax->matched_pair_start.x >= 0){
+                    if(ce_points_equal(data->loc, syntax->matched_pair_start) || ce_points_equal(data->loc, syntax->matched_pair_end)){
                          syntax->current_color = syntax_set_color(S_MATCHING_PARENS, syntax->highlight.type);
                     }else{
                          syntax->current_color = syntax_set_color(S_NORMAL, syntax->highlight.type);
@@ -1332,7 +1336,7 @@ void syntax_highlight_config(SyntaxHighlighterData_t* data, void* user_data)
           syntax->highlight.type = HL_OFF;
 
           // is our cursor on something we can match?
-          syntax_calc_matching_pair(data, &syntax->matched_pair);
+          syntax_calc_matching_pair(data, &syntax->matched_pair_start, &syntax->matched_pair_end, data->buffer->check_left_for_pair);
 
           if(data->line_number_type) syntax_set_color(S_LINE_NUMBERS, HL_OFF);
      } break;
@@ -1384,8 +1388,8 @@ void syntax_highlight_config(SyntaxHighlighterData_t* data, void* user_data)
                          syntax->current_color = syntax_set_color(S_CONSTANT, syntax->highlight.type);
                     }else if((syntax->current_color_left = syntax_is_python_comment(buffer_line, data->loc.x))){
                          syntax->current_color = syntax_set_color(S_COMMENT, syntax->highlight.type);
-                    }else if(syntax->matched_pair.x >= 0){
-                         if(ce_points_equal(data->loc, data->cursor) || ce_points_equal(data->loc, syntax->matched_pair)){
+                    }else if(syntax->matched_pair_start.x >= 0){
+                         if(ce_points_equal(data->loc, syntax->matched_pair_start) || ce_points_equal(data->loc, syntax->matched_pair_end)){
                               syntax->current_color = syntax_set_color(S_MATCHING_PARENS, syntax->highlight.type);
                          }
                     }
@@ -1398,8 +1402,8 @@ void syntax_highlight_config(SyntaxHighlighterData_t* data, void* user_data)
 
                if(inside_string || syntax->inside_string){
                     syntax->current_color = syntax_set_color(S_STRING, syntax->highlight.type);
-               }else if(syntax->matched_pair.x >= 0){
-                    if(ce_points_equal(data->loc, data->cursor) || ce_points_equal(data->loc, syntax->matched_pair)){
+               }else if(syntax->matched_pair_start.x >= 0){
+                    if(ce_points_equal(data->loc, syntax->matched_pair_start) || ce_points_equal(data->loc, syntax->matched_pair_end)){
                          syntax->current_color = syntax_set_color(S_MATCHING_PARENS, syntax->highlight.type);
                     }else{
                          syntax->current_color = syntax_set_color(S_NORMAL, syntax->highlight.type);

@@ -75,6 +75,9 @@ Key Sequence|Action
 `w`|move by word
 `e`|move to end of word
 `b`|move to beginning of word
+`^`|move to soft beginning of line (on an empty line insert whitespace to get to indentation level)
+`0`|move to hard beginning of line
+`$`|move to hard end of line
 `c`|change action
 `d`|delete action
 `r`|replace character
@@ -85,6 +88,7 @@ Key Sequence|Action
 `y`|yank
 `p`|paste after cursor
 `P`|paste before cursor
+`K`|goto man page for word under cursor
 `~`|flip alphabetical character's case
 `u`|undo edit
 `/`|incremental search forward

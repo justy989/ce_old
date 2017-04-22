@@ -16,7 +16,6 @@ BIG:
 -visual block mode
 
 LITTLE:
--r<enter>
 -do searching inside macro
 -step through macro one change at a time
 -separate dot for input buffer
@@ -32,12 +31,16 @@ LITTLE:
 -when pasting into terminal in insert mode, we get garbage *like* every time
 -crash when deleting newly created buffer when trying to free user_data, ce.c in ce_change_buffer_in_views() at line 2291
 -crash when building eg, color_node invalid pointer in ce_terminal.c:603
--'gf' or 'goto file under cursor' is often wrong
 -re-fix matching pairs
 -paste blink is incorrectly displaying when you substitute in visual line mode
 -investigate VMT_SEARCH led to location off of the buffer, but in the line range
 -buffer view of jump list
+-auto complete gets in the way when there is text after the cursor
 */
+#if 0
+error in string syntax highlighting for <tacos>"
+""""""""""""""""""""""""""""""""""""
+#endif
 
 #include <assert.h>
 #include <dlfcn.h>
@@ -60,7 +63,7 @@ typedef struct Config_t{
      ce_initializer* initializer;
      ce_destroyer* destroyer;
      ce_key_handler* key_handler;
-} Config_t;
+}Config_t;
 
 bool config_open(Config_t* config, const char* path)
 {

@@ -172,6 +172,14 @@ void ce_clear_lines_readonly(Buffer_t* buffer)
      clear_lines_impl(buffer);
 }
 
+void ce_clear_line(Buffer_t* buffer, int64_t line)
+{
+     if(buffer->status == BS_READONLY) return;
+
+     free(buffer->lines[line]);
+     buffer->lines[line] = calloc(1, 1);
+}
+
 bool ce_point_on_buffer(const Buffer_t* buffer, Point_t location)
 {
      if(location.y < 0 || location.x < 0){
@@ -1578,6 +1586,7 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
                }
 
                const char* buffer_line = buffer->lines[i];
+               if(!buffer_line) continue;
                int64_t line_length = strlen(buffer_line);
 
                const char* line_to_print = buffer_line + buffer_top_left->x;
@@ -2788,7 +2797,16 @@ int64_t ce_get_indentation_for_line(const Buffer_t* buffer, Point_t location, in
                               // '{' is globally unmatched, or unmatched on our line
                               Point_t bol = {0, y};
                               ce_move_cursor_to_soft_beginning_of_line(buffer, &bol);
-                              return bol.x + tab_len; // if a line has "{{", we don't want to double tab the next line!
+                              Point_t start = bol;
+                              Point_t end = bol;
+                              ce_move_cursor_to_matching_pair(buffer, &start, ')');
+                              ce_move_cursor_to_matching_pair(buffer, &end, '(');
+                              if(start.y != end.y && start.x > 0){
+                                   start.x = 0;
+                                   return ce_get_indentation_for_line(buffer, start, tab_len) + tab_len;
+                              }else{
+                                   return bol.x + tab_len; // if a line has "{{", we don't want to double tab the next line!
+                              }
                          }
                     } break;
                     case '(':

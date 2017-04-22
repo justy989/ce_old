@@ -2784,17 +2784,7 @@ void command_rename(Command_t* command, void* user_data)
      }
 }
 
-#define BUFFERS_HELP "usage: buffers"
-
-void command_buffers(Command_t* command, void* user_data)
-{
-     if(command->arg_count != 0){
-          ce_message(BUFFERS_HELP);
-          return;
-     }
-
-     CommandData_t* command_data = (CommandData_t*)(user_data);
-     ConfigState_t* config_state = command_data->config_state;
+void switch_to_buffer_list_buffer(ConfigState_t* config_state, BufferNode_t* head) {
      BufferView_t* buffer_view = config_state->tab_current->view_current;
      Buffer_t* buffer = buffer_view->buffer;
      Point_t* cursor = &buffer_view->cursor;
@@ -2804,7 +2794,7 @@ void command_buffers(Command_t* command, void* user_data)
      buffer->cursor = config_state->tab_current->view_current->cursor;
 
      // try to find a better place to put the cursor to start
-     BufferNode_t* itr = command_data->head;
+     BufferNode_t* itr = head;
      int64_t buffer_index = 1;
      bool found_good_buffer_index = false;
      while(itr){
@@ -2816,11 +2806,24 @@ void command_buffers(Command_t* command, void* user_data)
           buffer_index++;
      }
 
-     update_buffer_list_buffer(config_state, command_data->head);
+     update_buffer_list_buffer(config_state, head);
      config_state->tab_current->view_current->buffer->cursor = *cursor;
      config_state->tab_current->view_current->buffer = &config_state->buffer_list_buffer;
      config_state->tab_current->view_current->top_row = 0;
      config_state->tab_current->view_current->cursor = (Point_t){0, found_good_buffer_index ? buffer_index : 1};
+}
+
+#define BUFFERS_HELP "usage: buffers"
+
+void command_buffers(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message(BUFFERS_HELP);
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     switch_to_buffer_list_buffer(command_data->config_state, command_data->head);
 }
 
 #define MACRO_BACKSLASHES_HELP "usage: macro_backslashes"
@@ -3146,6 +3149,9 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      define_key(NULL, KEY_ENTER);       // Blow away enter
      define_key("\x0D", KEY_ENTER);     // Enter       (13) (0x0D) ASCII "CR"  NL Carriage Return
 
+     // default vim "leader" key
+     #define KEY_LEADER '\\'
+
      pthread_mutex_init(&draw_lock, NULL);
 
      auto_complete_end(&config_state->auto_complete);
@@ -3441,6 +3447,19 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           switch(config_state->last_key){
           default:
                break;
+          case KEY_LEADER:
+          {
+               handled_key = true;
+
+               switch(key){
+               default:
+                    handled_key = false;
+                    break;
+               case 'e':
+                    switch_to_buffer_list_buffer(config_state, *head);
+                    break;
+               }
+          } break;
           case 'z':
           {
                Point_t location;

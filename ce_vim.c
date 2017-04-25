@@ -1789,6 +1789,52 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
      {
           *cursor = *action_range.sorted_start;
 
+          bool nothing_after_open_brace = false;
+          bool nothing_before_close_brace = false;
+          Point_t save_start = *action_range.sorted_start;
+
+          if(action->motion.type == VMT_INSIDE_PAIR && (action->motion.inside_pair == '}' || action->motion.inside_pair == '{') &&
+             action_range.sorted_start->y != action_range.sorted_end->y){
+               nothing_after_open_brace = true;
+               nothing_before_close_brace = true;
+               ce_message("%ld, %ld -> %ld, %ld\n", action_range.sorted_start->x, action_range.sorted_start->y,
+                          action_range.sorted_end->x, action_range.sorted_end->y);
+
+               const char* line = buffer->lines[action_range.sorted_start->y];
+               int64_t open_brace_len = strlen(line);
+               for(int64_t i = action_range.sorted_start->x; i < open_brace_len; ++i){
+                    nothing_after_open_brace &= (line[i] == ' ');
+               }
+
+               line = buffer->lines[action_range.sorted_end->y];
+               for(int64_t i = 0; i < action_range.sorted_end->x; ++i){
+                    nothing_before_close_brace &= (line[i] == ' ');
+               }
+
+               if(nothing_after_open_brace){
+                    if(action_range.sorted_start == &action_range.start){
+                         action_range.start.x = 0;
+                         action_range.start.y++;
+                    }else{
+                         action_range.end.x = 0;
+                         action_range.end.y++;
+                    }
+               }
+
+               if(nothing_before_close_brace){
+                    if(action_range.sorted_end == &action_range.end){
+                         action_range.end.y--;
+                         action_range.end.x = strlen(buffer->lines[action_range.end.y]);
+                    }else{
+                         action_range.start.y--;
+                         action_range.start.x = strlen(buffer->lines[action_range.start.y]);
+                    }
+               }
+
+               ce_message(" to %ld, %ld -> %ld, %ld\n", action_range.sorted_start->x, action_range.sorted_start->y,
+                          action_range.sorted_end->x, action_range.sorted_end->y);
+          }
+
           char* commit_string = ce_dupe_string(buffer, *action_range.sorted_start, *action_range.sorted_end);
           if(!commit_string) return false;
 
@@ -1820,7 +1866,30 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                     vim_yank_add(&vim_state->yank_head, action->change.reg ? action->change.reg : '"', yank_string, action_range.yank_mode);
                }
 
-               ce_commit_remove_string(commit_tail, *action_range.sorted_start, *cursor, *action_range.sorted_start, commit_string, chain);
+               if(action->end_in_vim_mode == VM_INSERT && (nothing_after_open_brace || nothing_before_close_brace)){
+                    ce_message("%d || %d", nothing_after_open_brace, nothing_before_close_brace);
+                    ce_commit_remove_string(commit_tail, *action_range.sorted_start, *cursor, *action_range.sorted_start, commit_string, BCC_KEEP_GOING);
+
+                    Point_t start_eol = save_start;
+                    ce_move_cursor_to_end_of_line(buffer, &start_eol);
+                    start_eol.x++;
+                    ce_insert_char(buffer, start_eol, '\n');
+
+                    ce_commit_insert_char(commit_tail, start_eol, *cursor, *cursor, '\n', BCC_KEEP_GOING);
+
+                    Point_t insert_line = {0, start_eol.y + 1};
+                    int64_t indentation = ce_get_indentation_for_line(buffer, insert_line, strlen(TAB_STRING));
+                    char* indentation_str = malloc(indentation + 1);
+                    memset(indentation_str, ' ', indentation);
+                    indentation_str[indentation] = 0;
+
+                    ce_insert_string(buffer, insert_line, indentation_str);
+                    ce_commit_insert_string(commit_tail, insert_line, *cursor, *cursor, indentation_str, chain);
+                    cursor->x = indentation;
+                    cursor->y = insert_line.y;
+               }else{
+                    ce_commit_remove_string(commit_tail, *action_range.sorted_start, *cursor, *action_range.sorted_start, commit_string, chain);
+               }
           }
      } break;
      case VCT_PASTE_BEFORE:

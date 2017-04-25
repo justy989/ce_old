@@ -22,7 +22,6 @@ LITTLE:
 -when there are 3 lines in a file and you do 'dj', you still have 2 lines...
 -user code can infinite loop if you call ce_advance_cursor(buffer, &a, 1) and rely on
  ce_points_equal(a, b) being false when b is at the end of a line.
--vim's 'ci}' and 'di}' behave differently in a nice way, emulate that
 -syntax highlight printf formatters: '%s'
 -we can still hit the drawing bug where config_state->tab_current->view_input_save is null
 -'idea for move action' while in visual mode
@@ -31,7 +30,6 @@ LITTLE:
 -when pasting into terminal in insert mode, we get garbage *like* every time
 -crash when deleting newly created buffer when trying to free user_data, ce.c in ce_change_buffer_in_views() at line 2291
 -crash when building eg, color_node invalid pointer in ce_terminal.c:603
--re-fix matching pairs
 -paste blink is incorrectly displaying when you substitute in visual line mode
 -investigate VMT_SEARCH led to location off of the buffer, but in the line range
 -buffer view of jump list
@@ -107,6 +105,7 @@ bool config_revert(Config_t* config, const char* filepath, const char* stable_co
           ce_message("failed to open '%s': %s", filepath, strerror(errno));
           return false;
      }
+
      fwrite(stable_config_contents, stable_config_size, 1, file);
      fclose(file);
 

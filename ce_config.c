@@ -13,6 +13,7 @@
 
 #include "ce_config.h"
 #include "ce_syntax.h"
+#include "text_history.h"
 
 #define SCROLL_LINES 1
 
@@ -62,72 +63,6 @@ bool string_all_digits(const char* string)
 }
 
 void view_drawer(void* user_data);
-
-bool input_history_init(InputHistory_t* history)
-{
-     InputHistoryNode_t* node = calloc(1, sizeof(*node));
-     if(!node){
-          ce_message("%s() failed to malloc input history node", __FUNCTION__);
-          return false;
-     }
-
-     history->head = node;
-     history->tail = node;
-     history->cur = node;
-
-     return true;
-}
-
-bool input_history_commit_current(InputHistory_t* history)
-{
-     assert(history->tail);
-     assert(history->cur);
-
-     InputHistoryNode_t* node = calloc(1, sizeof(*node));
-     if(!node){
-          ce_message("%s() failed to malloc input history node", __FUNCTION__);
-          return false;
-     }
-
-     history->tail->next = node;
-     node->prev = history->tail;
-
-     history->tail = node;
-     history->cur = node;
-
-     return true;
-}
-
-void input_history_free(InputHistory_t* history)
-{
-     while(history->head){
-          free(history->head->entry);
-          InputHistoryNode_t* tmp = history->head;
-          history->head = history->head->next;
-          free(tmp);
-     }
-
-     history->tail = NULL;
-     history->cur = NULL;
-}
-
-bool input_history_next(InputHistory_t* history)
-{
-     if(!history->cur) return false;
-     if(!history->cur->next) return false;
-
-     history->cur = history->cur->next;
-     return true;
-}
-
-bool input_history_prev(InputHistory_t* history)
-{
-     if(!history->cur) return false;
-     if(!history->cur->prev) return false;
-
-     history->cur = history->cur->prev;
-     return true;
-}
 
 // location is {left_column, top_line} for the view
 void scroll_view_to_location(BufferView_t* buffer_view, const Point_t* location){
@@ -665,9 +600,9 @@ BufferNode_t* new_buffer_from_file(BufferNode_t* head, const char* filename)
      return new_buffer_node;
 }
 
-InputHistory_t* history_from_input_key(ConfigState_t* config_state)
+TextHistory_t* history_from_input_key(ConfigState_t* config_state)
 {
-     InputHistory_t* history = NULL;
+     TextHistory_t* history = NULL;
 
      switch(config_state->input_key){
      default:
@@ -708,7 +643,7 @@ void input_start(ConfigState_t* config_state, const char* input_message, int inp
      vim_enter_insert_mode(&config_state->vim_state, config_state->tab_current->view_current->buffer);
 
      // reset input history back to tail
-     InputHistory_t* history = history_from_input_key(config_state);
+     TextHistory_t* history = history_from_input_key(config_state);
      if(history) history->cur = history->tail;
 }
 
@@ -1203,7 +1138,7 @@ void move_jump_location_to_end_of_output(TerminalNode_t* terminal_node)
      terminal_node->last_jump_location = terminal_node->buffer->line_count - 1;
 }
 
-void commit_input_to_history(Buffer_t* input_buffer, InputHistory_t* history)
+void commit_input_to_history(Buffer_t* input_buffer, TextHistory_t* history)
 {
      if(!input_buffer->line_count) return;
 
@@ -1211,7 +1146,7 @@ void commit_input_to_history(Buffer_t* input_buffer, InputHistory_t* history)
 
      if(!history->tail->prev || (history->tail->prev && strcmp(saved, history->tail->prev->entry) != 0)){
           history->tail->entry = saved;
-          input_history_commit_current(history);
+          text_history_commit_current(history);
      }
 }
 
@@ -1775,15 +1710,15 @@ void half_page_down(BufferView_t* view)
 bool iterate_history_input(ConfigState_t* config_state, bool previous)
 {
      BufferState_t* buffer_state = config_state->view_input->buffer->user_data;
-     InputHistory_t* history = history_from_input_key(config_state);
+     TextHistory_t* history = history_from_input_key(config_state);
      if(!history) return false;
 
      bool success = false;
 
      if(previous){
-          success = input_history_prev(history);
+          success = text_history_prev(history);
      }else{
-          success = input_history_next(history);
+          success = text_history_next(history);
      }
 
      if(success){
@@ -3181,8 +3116,8 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      mouseinterval(0);
 #endif
 
-     input_history_init(&config_state->search_history);
-     input_history_init(&config_state->command_history);
+     text_history_init(&config_state->search_history);
+     text_history_init(&config_state->command_history);
 
      // setup colors for syntax highlighting
      init_pair(S_NORMAL, COLOR_FOREGROUND, COLOR_BACKGROUND);
@@ -3504,8 +3439,8 @@ bool destroyer(BufferNode_t** head, void* user_data)
      free(config_state->command_entries);
 
      // history
-     input_history_free(&config_state->search_history);
-     input_history_free(&config_state->command_history);
+     text_history_free(&config_state->search_history);
+     text_history_free(&config_state->command_history);
 
      pthread_mutex_destroy(&draw_lock);
 

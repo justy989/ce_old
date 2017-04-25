@@ -8,21 +8,10 @@
 #include "ce.h"
 #include "ce_vim.h"
 #include "ce_terminal.h"
+#include "text_history.h"
 
 // NOTE: 60 fps limit
 #define DRAW_USEC_LIMIT 16666
-
-typedef struct InputHistoryNode_t{
-     char* entry;
-     struct InputHistoryNode_t* next;
-     struct InputHistoryNode_t* prev;
-}InputHistoryNode_t;
-
-typedef struct{
-     InputHistoryNode_t* head;
-     InputHistoryNode_t* tail;
-     InputHistoryNode_t* cur;
-}InputHistory_t;
 
 typedef struct{
      BufferCommitNode_t* commit_tail;
@@ -114,8 +103,8 @@ typedef struct{
      BufferView_t* view_input;
      BufferView_t* view_auto_complete;
 
-     InputHistory_t search_history;
-     InputHistory_t command_history;
+     TextHistory_t search_history;
+     TextHistory_t command_history;
 
      pthread_t clang_complete_thread;
 

@@ -416,7 +416,10 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                          else assert(0);
                     }
 
-                    if(!do_indentation) break;
+                    if(!do_indentation){
+                         cursor->x = next_cursor.x;
+                         break;
+                    }
 
                     int64_t tab_len = strlen(TAB_STRING);
                     int64_t indentation = ce_get_indentation_for_line(buffer, *cursor, tab_len);

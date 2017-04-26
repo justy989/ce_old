@@ -11,6 +11,7 @@
 #include "tab_view.h"
 #include "text_history.h"
 #include "auto_complete.h"
+#include "jump.h"
 
 // NOTE: 60 fps limit
 #define DRAW_USEC_LIMIT 16666
@@ -29,15 +30,7 @@ typedef struct TerminalNode_t{
 }TerminalNode_t;
 
 typedef struct{
-     char filepath[PATH_MAX];
-     Point_t location;
-}Jump_t;
-
-#define JUMP_LIST_MAX 32
-
-typedef struct{
-     Jump_t jumps[JUMP_LIST_MAX];
-     int64_t jump_current;
+     JumpArray_t jump_array;
 }BufferViewState_t;
 
 typedef struct{

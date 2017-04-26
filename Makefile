@@ -1,5 +1,5 @@
 CC=clang
-CFLAGS+=-Wall -Werror -Wextra -std=c11 -ggdb3 -fdiagnostics-color -D_GNU_SOURCE $(SCROLL_FLAG)
+CFLAGS+=-Wall -Werror -Wextra -std=c11 -ggdb3 -D_GNU_SOURCE $(SCROLL_FLAG)
 LINK=-lncurses -lutil -lm
 
 all: LINK += -lpthread
@@ -34,7 +34,7 @@ ce: main.c ce.o
 %.test.o: %.c
 	$(CC) -c -fpic $(CFLAGS) $^ -o $@
 
-ce_config.so: ce_config.o ce.o ce_vim.o ce_terminal.o ce_syntax.o text_history.o auto_complete.o tab_view.o
+ce_config.so: ce_config.o ce.o ce_vim.o ce_terminal.o ce_syntax.o text_history.o auto_complete.o tab_view.o jump.o
 	$(CC) -shared $(CFLAGS) $^ -o $@ $(LINK)
 
 clean: clean_config clean_test

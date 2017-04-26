@@ -604,79 +604,6 @@ void scroll_view_to_last_line(BufferView_t* view)
      if(view->top_row < 0) view->top_row = 0;
 }
 
-void view_jump_insert(BufferViewState_t* view_state, const char* filepath, Point_t location)
-{
-     if(view_state == NULL) return;
-
-     // update data
-     int64_t next_index = view_state->jump_current + 1;
-
-     if(next_index < JUMP_LIST_MAX - 1){
-          strncpy(view_state->jumps[view_state->jump_current].filepath, filepath, PATH_MAX);
-          view_state->jumps[view_state->jump_current].location = location;
-
-          // clear all jumps afterwards
-          for(int64_t i = next_index; i < JUMP_LIST_MAX; ++i){
-               view_state->jumps[i].filepath[0] = 0;
-          }
-
-          // advance jump index
-          view_state->jump_current = next_index;
-     }else{
-          for(int64_t i = 0; i < JUMP_LIST_MAX; ++i){
-               view_state->jumps[i] = view_state->jumps[i + 1];
-          }
-
-          strncpy(view_state->jumps[view_state->jump_current].filepath, filepath, PATH_MAX);
-          view_state->jumps[view_state->jump_current].location = location;
-     }
-}
-
-void view_jump_to_previous(BufferView_t* view, BufferNode_t* buffer_head)
-{
-     BufferViewState_t* view_state = view->user_data;
-     if(!view_state) return;
-
-     if(view_state->jump_current == 0) return; // history is empty
-
-     int jump_index = view_state->jump_current - 1;
-     Jump_t* jump = view_state->jumps + jump_index;
-     if(!jump->filepath[0]) return; // the jump is empty
-
-     // if this is our first jump, insert our current location
-     if(view_state->jump_current < (JUMP_LIST_MAX)){
-          Jump_t* forward_jump = view_state->jumps + view_state->jump_current + 1;
-
-          if(!forward_jump->filepath[0]){
-               view_jump_insert(view_state, view->buffer->filename, view->cursor);
-          }
-     }
-
-     view_state->jump_current = jump_index;
-
-     view->buffer = open_file_buffer(buffer_head, jump->filepath);
-     view->cursor = jump->location;
-     center_view(view);
-}
-
-void view_jump_to_next(BufferView_t* view, BufferNode_t* buffer_head)
-{
-     BufferViewState_t* view_state = view->user_data;
-     if(!view_state) return;
-
-     if(view_state->jump_current >= JUMP_LIST_MAX - 1) return;
-
-     int jump_index = view_state->jump_current + 1;
-     Jump_t* jump = view_state->jumps + jump_index;
-     if(!jump->filepath[0]) return; // the jump is empty
-
-     view_state->jump_current = jump_index;
-
-     view->buffer = open_file_buffer(buffer_head, jump->filepath);
-     view->cursor = jump->location;
-     center_view(view);
-}
-
 // NOTE: clear commits then create the initial required entry to restart
 void reset_buffer_commits(BufferCommitNode_t** tail)
 {
@@ -697,7 +624,10 @@ bool open_file_destination(BufferNode_t* head, BufferView_t* view,
                            const char* filename, int line, int column){
      Buffer_t* new_buffer = open_file_buffer(head, filename);
      if(new_buffer){
-          view_jump_insert(view->user_data, view->buffer->filename, view->cursor);
+          if(view->user_data){
+               JumpArray_t* jump_array = &((BufferViewState_t*)(view->user_data))->jump_array;
+               jump_insert(jump_array, view->buffer->filename, view->cursor);
+          }
           view->buffer = new_buffer;
           Point_t dst = {0, line - 1}; // line numbers are 1 indexed
           ce_set_cursor(new_buffer, &view->cursor, dst);
@@ -1943,7 +1873,10 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                     new_buffer = open_file_buffer(head, config_state->view_input->buffer->lines[0]);
                }
 
-               if(!switched_to_open_file && new_buffer){
+               if(new_buffer){
+                    JumpArray_t* jump_array = &((BufferViewState_t*)(config_state->tab_current->view_current->user_data))->jump_array;
+                    jump_insert(jump_array, config_state->tab_current->view_current->buffer->filename,
+                                config_state->tab_current->view_current->buffer->cursor);
                     config_state->tab_current->view_current->buffer = new_buffer;
                     config_state->tab_current->view_current->cursor = (Point_t){0, 0};
                     switched_to_open_file = true;
@@ -2080,7 +2013,8 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                          *cursor = (Point_t){0, line - 1};
                          ce_move_cursor_to_soft_beginning_of_line(buffer, cursor);
                          center_view(buffer_view);
-                         view_jump_insert(buffer_view->user_data, buffer_view->buffer->filename, buffer_view->cursor);
+                         JumpArray_t* jump_array = &((BufferViewState_t*)(buffer_view->user_data))->jump_array;
+                         jump_insert(jump_array, buffer_view->buffer->filename, buffer_view->cursor);
                     }
                }else{
                     // if auto complete has a current matching value, overwrite what the user wrote with that completion
@@ -2582,7 +2516,8 @@ void switch_to_buffer_list_buffer(ConfigState_t* config_state, BufferNode_t* hea
      Buffer_t* buffer = buffer_view->buffer;
      Point_t* cursor = &buffer_view->cursor;
 
-     view_jump_insert(buffer_view->user_data, buffer->filename, *cursor);
+     JumpArray_t* jump_array = &((BufferViewState_t*)(buffer_view->user_data))->jump_array;
+     jump_insert(jump_array, buffer->filename, *cursor);
 
      buffer->cursor = config_state->tab_current->view_current->cursor;
 
@@ -3774,14 +3709,17 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                         vkh_result.completed_action.motion.type == VMT_SEARCH_WORD_UNDER_CURSOR){
                     config_state->do_not_highlight_search = false;
                     center_view_when_cursor_outside_portion(buffer_view, 0.15f, 0.85f);
-                    view_jump_insert(buffer_view->user_data, buffer_view->buffer->filename, save_cursor);
+                    JumpArray_t* jump_array = &((BufferViewState_t*)(buffer_view->user_data))->jump_array;
+                    jump_insert(jump_array, buffer_view->buffer->filename, save_cursor);
                }else if(vkh_result.completed_action.motion.type == VMT_GOTO_MARK){
                     config_state->do_not_highlight_search = false;
                     center_view_when_cursor_outside_portion(buffer_view, 0.15f, 0.85f);
-                    view_jump_insert(buffer_view->user_data, buffer_view->buffer->filename, save_cursor);
+                    JumpArray_t* jump_array = &((BufferViewState_t*)(buffer_view->user_data))->jump_array;
+                    jump_insert(jump_array, buffer_view->buffer->filename, save_cursor);
                }else if(vkh_result.completed_action.motion.type == VMT_BEGINNING_OF_FILE ||
                         vkh_result.completed_action.motion.type == VMT_END_OF_FILE){
-                    view_jump_insert(buffer_view->user_data, save_buffer->filename, save_cursor);
+                    JumpArray_t* jump_array = &((BufferViewState_t*)(buffer_view->user_data))->jump_array;
+                    jump_insert(jump_array, save_buffer->filename, save_cursor);
                }else if(vkh_result.completed_action.change.type == VCT_YANK){
                     VimActionRange_t action_range;
                     if(vim_action_get_range(&vkh_result.completed_action, buffer, cursor, &config_state->vim_state,
@@ -4142,7 +4080,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          input_start(config_state, "Regex Search", key);
                          config_state->vim_state.search.direction = CE_DOWN;
                          config_state->vim_state.search.start = *cursor;
-                         view_jump_insert(buffer_view->user_data, buffer->filename, *cursor);
+                         JumpArray_t* jump_array = &((BufferViewState_t*)(buffer_view->user_data))->jump_array;
+                         jump_insert(jump_array, buffer->filename, *cursor);
                          break;
                     }
                     case '?':
@@ -4489,14 +4428,34 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          split_view(config_state->tab_current->view_head, config_state->tab_current->view_current, true, config_state->line_number_type);
                          resize_terminal_if_in_view(config_state->tab_current->view_head, config_state->terminal_head);
                     } break;
-                    case 15: // ctrl + o
-                         view_jump_to_previous(buffer_view, *head);
+                    case 15: // Ctrl + o
+                    {
+                         JumpArray_t* jump_array = &((BufferViewState_t*)(buffer_view->user_data))->jump_array;
+                         if(jump_array->jump_current){
+                              if(!jump_array->jumps[jump_array->jump_current].filepath[0]){
+                                   jump_insert(jump_array, buffer->filename, *cursor);
+                                   jump_to_previous(jump_array);
+                              }
+                              const Jump_t* jump = jump_to_previous(jump_array);
+                              if(jump){
+                                   buffer_view->buffer = open_file_buffer(*head, jump->filepath);
+                                   buffer_view->cursor = jump->location;
+                                   center_view(buffer_view);
+                              }
+                         }
                          handled_key = true;
-                         break;
-                    case 9: // ctrl + i (also tab)
-                         view_jump_to_next(buffer_view, *head);
+                    } break;
+                    case 9: // Ctrl + i (also tab)
+                    {
+                         JumpArray_t* jump_array = &((BufferViewState_t*)(buffer_view->user_data))->jump_array;
+                         const Jump_t* jump = jump_to_next(jump_array);
+                         if(jump){
+                              buffer_view->buffer = open_file_buffer(*head, jump->filepath);
+                              buffer_view->cursor = jump->location;
+                              center_view(buffer_view);
+                         }
                          handled_key = true;
-                         break;
+                    } break;
                     case 29: // Ctrl + ]
                     {
                          Point_t word_start, word_end;

@@ -27,7 +27,7 @@ pthread_mutex_t view_input_save_lock;
 pthread_mutex_t completion_lock;
 
 TerminalNode_t* is_terminal_buffer(TerminalNode_t* terminal_head, Buffer_t* buffer);
-void update_buffer_list_buffer(ConfigState_t* config_state, const BufferNode_t* head);
+void update_buffer_list_buffer(Buffer_t* buffer_list_buffer, const BufferNode_t* head);
 
 // section utils
 const char* buffer_flag_string(Buffer_t* buffer)
@@ -57,7 +57,7 @@ int64_t count_digits(int64_t n)
      return count;
 }
 
-bool string_all_digits(const char* string)
+bool str_all_digits(const char* string)
 {
      for(const char* c = string; *c; c++){
           if(!isdigit(*c)) return false;
@@ -66,7 +66,7 @@ bool string_all_digits(const char* string)
      return true;
 }
 
-static bool string_ends_in_substring(const char* string, size_t string_len, const char* substring)
+static bool str_ends_in_substr(const char* string, size_t string_len, const char* substring)
 {
      size_t substring_len = strlen(substring);
      return string_len > substring_len && strcmp(string + (string_len - substring_len), substring) == 0;
@@ -166,7 +166,8 @@ void split_view(BufferView_t* head_view, BufferView_t* current_view, bool horizo
      }
 }
 
-void switch_to_view_at_point(ConfigState_t* config_state, Point_t point)
+void switch_to_view_at_point(bool input, BufferView_t* view_input, VimState_t* vim_state, TabView_t* tab,
+                             TerminalNode_t* terminal_head, TerminalNode_t** terminal_current, Point_t point)
 {
      BufferView_t* next_view = NULL;
 
@@ -175,38 +176,37 @@ void switch_to_view_at_point(ConfigState_t* config_state, Point_t point)
      if(point.x >= g_terminal_dimensions->x) point.x = 0;
      if(point.y >= g_terminal_dimensions->y) point.y = 0;
 
-     if(config_state->input) next_view = ce_find_view_at_point(config_state->view_input, point);
-     vim_stop_recording_macro(&config_state->vim_state);
-     if(!next_view) next_view = ce_find_view_at_point(config_state->tab_current->view_head, point);
+     if(input) next_view = ce_find_view_at_point(view_input, point);
+     vim_stop_recording_macro(vim_state);
+     if(!next_view) next_view = ce_find_view_at_point(tab->view_head, point);
 
      if(next_view){
           // save view and cursor
-          config_state->tab_current->view_previous = config_state->tab_current->view_current;
-          config_state->tab_current->view_current->buffer->cursor = config_state->tab_current->view_current->cursor;
-          config_state->tab_current->view_current = next_view;
-          vim_enter_normal_mode(&config_state->vim_state);
+          tab->view_previous = tab->view_current;
+          tab->view_current->buffer->cursor = tab->view_current->cursor;
+          tab->view_current = next_view;
+          vim_enter_normal_mode(vim_state);
 
-          TerminalNode_t* terminal_node = is_terminal_buffer(config_state->terminal_head, next_view->buffer);
-          if(terminal_node) config_state->terminal_current = terminal_node;
+          TerminalNode_t* terminal_node = is_terminal_buffer(terminal_head, next_view->buffer);
+          if(terminal_node) *terminal_current = terminal_node;
      }
 }
 
-void switch_to_buffer_list_buffer(ConfigState_t* config_state, BufferNode_t* head) {
-     BufferView_t* buffer_view = config_state->tab_current->view_current;
+void switch_to_buffer_list_buffer(Buffer_t* buffer_list_buffer, BufferView_t* buffer_view, BufferView_t* view_head, const BufferNode_t* buffer_head) {
      Buffer_t* buffer = buffer_view->buffer;
      Point_t* cursor = &buffer_view->cursor;
 
      JumpArray_t* jump_array = &((BufferViewState_t*)(buffer_view->user_data))->jump_array;
      jump_insert(jump_array, buffer->filename, *cursor);
 
-     buffer->cursor = config_state->tab_current->view_current->cursor;
+     buffer->cursor = buffer_view->cursor;
 
      // try to find a better place to put the cursor to start
-     BufferNode_t* itr = head;
+     const BufferNode_t* itr = buffer_head;
      int64_t buffer_index = 1;
      bool found_good_buffer_index = false;
      while(itr){
-          if(itr->buffer->status != BS_READONLY && !ce_buffer_in_view(config_state->tab_current->view_head, itr->buffer)){
+          if(itr->buffer->status != BS_READONLY && !ce_buffer_in_view(view_head, itr->buffer)){
                found_good_buffer_index = true;
                break;
           }
@@ -214,11 +214,11 @@ void switch_to_buffer_list_buffer(ConfigState_t* config_state, BufferNode_t* hea
           buffer_index++;
      }
 
-     update_buffer_list_buffer(config_state, head);
-     config_state->tab_current->view_current->buffer->cursor = *cursor;
-     config_state->tab_current->view_current->buffer = &config_state->buffer_list_buffer;
-     config_state->tab_current->view_current->top_row = 0;
-     config_state->tab_current->view_current->cursor = (Point_t){0, found_good_buffer_index ? buffer_index : 1};
+     update_buffer_list_buffer(buffer_list_buffer, buffer_head);
+     buffer_view->buffer->cursor = *cursor;
+     buffer_view->buffer = buffer_list_buffer;
+     buffer_view->top_row = 0;
+     buffer_view->cursor = (Point_t){0, found_good_buffer_index ? buffer_index : 1};
 }
 
 // section buffer
@@ -243,8 +243,8 @@ bool initialize_buffer(Buffer_t* buffer){
 
      if(buffer->name){
           int64_t name_len = strlen(buffer->name);
-          if(string_ends_in_substring(buffer->name, name_len, ".c") ||
-             string_ends_in_substring(buffer->name, name_len, ".h")){
+          if(str_ends_in_substr(buffer->name, name_len, ".c") ||
+             str_ends_in_substr(buffer->name, name_len, ".h")){
                buffer->syntax_fn = syntax_highlight_c;
                buffer->syntax_user_data = malloc(sizeof(SyntaxC_t));
                buffer->type = BFT_C;
@@ -253,9 +253,9 @@ bool initialize_buffer(Buffer_t* buffer){
                     free(buffer_state);
                     return false;
                }
-          }else if(string_ends_in_substring(buffer->name, name_len, ".cpp") ||
-                   string_ends_in_substring(buffer->name, name_len, ".cc") ||
-                   string_ends_in_substring(buffer->name, name_len, ".hpp")){
+          }else if(str_ends_in_substr(buffer->name, name_len, ".cpp") ||
+                   str_ends_in_substr(buffer->name, name_len, ".cc") ||
+                   str_ends_in_substr(buffer->name, name_len, ".hpp")){
                buffer->syntax_fn = syntax_highlight_cpp;
                buffer->syntax_user_data = malloc(sizeof(SyntaxCpp_t));
                buffer->type = BFT_CPP;
@@ -264,7 +264,7 @@ bool initialize_buffer(Buffer_t* buffer){
                     free(buffer_state);
                     return false;
                }
-          }else if(string_ends_in_substring(buffer->name, name_len, ".py")){
+          }else if(str_ends_in_substr(buffer->name, name_len, ".py")){
                buffer->syntax_fn = syntax_highlight_python;
                buffer->syntax_user_data = malloc(sizeof(SyntaxPython_t));
                buffer->type = BFT_PYTHON;
@@ -273,7 +273,7 @@ bool initialize_buffer(Buffer_t* buffer){
                     free(buffer_state);
                     return false;
                }
-          }else if(string_ends_in_substring(buffer->name, name_len, ".java")){
+          }else if(str_ends_in_substr(buffer->name, name_len, ".java")){
                buffer->syntax_fn = syntax_highlight_java;
                buffer->syntax_user_data = malloc(sizeof(SyntaxJava_t));
                buffer->type = BFT_JAVA;
@@ -282,7 +282,7 @@ bool initialize_buffer(Buffer_t* buffer){
                     free(buffer_state);
                     return false;
                }
-          }else if(string_ends_in_substring(buffer->name, name_len, ".sh")){
+          }else if(str_ends_in_substr(buffer->name, name_len, ".sh")){
                buffer->syntax_fn = syntax_highlight_bash;
                buffer->syntax_user_data = malloc(sizeof(SyntaxBash_t));
                buffer->type = BFT_BASH;
@@ -291,7 +291,7 @@ bool initialize_buffer(Buffer_t* buffer){
                     free(buffer_state);
                     return false;
                }
-          }else if(string_ends_in_substring(buffer->name, name_len, ".cfg")){
+          }else if(str_ends_in_substr(buffer->name, name_len, ".cfg")){
                buffer->syntax_fn = syntax_highlight_config;
                buffer->syntax_user_data = malloc(sizeof(SyntaxConfig_t));
                buffer->type = BFT_CONFIG;
@@ -300,9 +300,9 @@ bool initialize_buffer(Buffer_t* buffer){
                     free(buffer_state);
                     return false;
                }
-          }else if(string_ends_in_substring(buffer->name, name_len, "COMMIT_EDITMSG") ||
-                   string_ends_in_substring(buffer->name, name_len, ".patch") ||
-                   string_ends_in_substring(buffer->name, name_len, ".diff")){
+          }else if(str_ends_in_substr(buffer->name, name_len, "COMMIT_EDITMSG") ||
+                   str_ends_in_substr(buffer->name, name_len, ".patch") ||
+                   str_ends_in_substr(buffer->name, name_len, ".diff")){
                buffer->syntax_fn = syntax_highlight_diff;
                buffer->syntax_user_data = malloc(sizeof(SyntaxDiff_t));
                buffer->type = BFT_DIFF;
@@ -809,7 +809,7 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
           int64_t line_number_len = (close_paren - file_end) - 1;
           strncpy(line_number_str, file_end + 1, line_number_len);
 
-          if(!string_all_digits(line_number_str)) return false;
+          if(!str_all_digits(line_number_str)) return false;
      }else{
           // handle grep, and gcc formats
           // 'ce_config.c:1983:15'
@@ -843,7 +843,7 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
           strncpy(line_number_str, line_number_begin_delim + 1, line_number_len);
           line_number_str[line_number_len] = 0;
 
-          if(!string_all_digits(line_number_str)) return false;
+          if(!str_all_digits(line_number_str)) return false;
 
           char* third_colon = strchr(line_number_end_delim + 1, ':');
           if(third_colon){
@@ -851,7 +851,7 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
                strncpy(column_number_str, line_number_end_delim + 1, line_number_len);
                column_number_str[line_number_len] = 0;
 
-               if(!string_all_digits(column_number_str)) column_number_str[0] = 0;
+               if(!str_all_digits(column_number_str)) column_number_str[0] = 0;
           }
      }
 
@@ -1635,7 +1635,7 @@ void handle_mouse_event(ConfigState_t* config_state, Buffer_t* buffer, BufferVie
 #endif
           if(event.bstate & BUTTON1_PRESSED){ // Left click OSX
                Point_t click = {event.x, event.y};
-               switch_to_view_at_point(config_state, click);
+               switch_to_view_at_point(config_state->input, config_state->view_input, &config_state->vim_state, config_state->tab_current, config_state->terminal_head, &config_state->terminal_current, click);
                click = (Point_t) {event.x - (config_state->tab_current->view_current->top_left.x - config_state->tab_current->view_current->left_column),
                                   event.y - (config_state->tab_current->view_current->top_left.y - config_state->tab_current->view_current->top_row)};
                click.x -= ce_get_line_number_column_width(config_state->line_number_type, buffer->line_count, buffer_view->top_left.y, buffer_view->bottom_right.y);
@@ -1690,11 +1690,11 @@ void move_cursor_half_page_down(BufferView_t* view)
 }
 
 // section info buffers
-void update_buffer_list_buffer(ConfigState_t* config_state, const BufferNode_t* head)
+void update_buffer_list_buffer(Buffer_t* buffer_list_buffer, const BufferNode_t* head)
 {
      char buffer_info[BUFSIZ];
-     config_state->buffer_list_buffer.status = BS_NONE;
-     ce_clear_lines(&config_state->buffer_list_buffer);
+     buffer_list_buffer->status = BS_NONE;
+     ce_clear_lines(buffer_list_buffer);
 
      // calc maxes of things we care about for formatting
      int64_t max_buffer_lines = 0;
@@ -1719,7 +1719,7 @@ void update_buffer_list_buffer(ConfigState_t* config_state, const BufferNode_t* 
      snprintf(format_string, BUFSIZ, "// %%5s %%-%"PRId64"s %%-%"PRId64"s", max_name_len,
               max_buffer_lines_digits);
      snprintf(buffer_info, BUFSIZ, format_string, "flags", "buffer name", "lines");
-     ce_append_line(&config_state->buffer_list_buffer, buffer_info);
+     ce_append_line(buffer_list_buffer, buffer_info);
 
      // build buffer info
      snprintf(format_string, BUFSIZ, "   %%5s %%-%"PRId64"s %%%"PRId64 PRId64, max_name_len, max_buffer_lines_digits);
@@ -1729,11 +1729,11 @@ void update_buffer_list_buffer(ConfigState_t* config_state, const BufferNode_t* 
           const char* buffer_flag_str = buffer_flag_string(itr->buffer);
           snprintf(buffer_info, BUFSIZ, format_string, buffer_flag_str, itr->buffer->name,
                    itr->buffer->line_count);
-          ce_append_line(&config_state->buffer_list_buffer, buffer_info);
+          ce_append_line(buffer_list_buffer, buffer_info);
           itr = itr->next;
      }
 
-     config_state->buffer_list_buffer.status = BS_READONLY;
+     buffer_list_buffer->status = BS_READONLY;
 }
 
 void update_mark_list_buffer(ConfigState_t* config_state, const Buffer_t* buffer)
@@ -2567,7 +2567,10 @@ void command_buffers(Command_t* command, void* user_data)
      }
 
      CommandData_t* command_data = (CommandData_t*)(user_data);
-     switch_to_buffer_list_buffer(command_data->config_state, command_data->head);
+     switch_to_buffer_list_buffer(&command_data->config_state->buffer_list_buffer,
+                                  command_data->config_state->tab_current->view_current,
+                                  command_data->config_state->tab_current->view_head,
+                                  command_data->head);
 }
 
 #define MACRO_BACKSLASHES_HELP "usage: macro_backslashes"
@@ -3177,7 +3180,10 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     handled_key = false;
                     break;
                case 'e':
-                    switch_to_buffer_list_buffer(config_state, *head);
+                    switch_to_buffer_list_buffer(&config_state->buffer_list_buffer,
+                                                 config_state->tab_current->view_current,
+                                                 config_state->tab_current->view_head,
+                                                 *head);
                     break;
                }
           } break;
@@ -3661,7 +3667,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               }
                          }
 
-                         update_buffer_list_buffer(config_state, *head);
+                         update_buffer_list_buffer(&config_state->buffer_list_buffer, *head);
 
                          if(cursor->y >= config_state->buffer_list_buffer.line_count){
                               cursor->y = config_state->buffer_list_buffer.line_count - 1;
@@ -4388,25 +4394,25 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     {
                          Point_t point = {config_state->tab_current->view_current->top_left.x - 2, // account for window separator
                                          cursor->y - config_state->tab_current->view_current->top_row + config_state->tab_current->view_current->top_left.y};
-                         switch_to_view_at_point(config_state, point);
+                         switch_to_view_at_point(config_state->input, config_state->view_input, &config_state->vim_state, config_state->tab_current, config_state->terminal_head, &config_state->terminal_current, point);
                     } break;
                     case 10: // Ctrl + j
                     {
                          Point_t point = {cursor->x - config_state->tab_current->view_current->left_column + config_state->tab_current->view_current->top_left.x,
                                           config_state->tab_current->view_current->bottom_right.y + 2}; // account for window separator
-                         switch_to_view_at_point(config_state, point);
+                         switch_to_view_at_point(config_state->input, config_state->view_input, &config_state->vim_state, config_state->tab_current, config_state->terminal_head, &config_state->terminal_current, point);
                     } break;
                     case 11: // Ctrl + k
                     {
                          Point_t point = {cursor->x - config_state->tab_current->view_current->left_column + config_state->tab_current->view_current->top_left.x,
                                           config_state->tab_current->view_current->top_left.y - 2};
-                         switch_to_view_at_point(config_state, point);
+                         switch_to_view_at_point(config_state->input, config_state->view_input, &config_state->vim_state, config_state->tab_current, config_state->terminal_head, &config_state->terminal_current, point);
                     } break;
                     case 12: // Ctrl + l
                     {
                          Point_t point = {config_state->tab_current->view_current->bottom_right.x + 2, // account for window separator
                                           cursor->y - config_state->tab_current->view_current->top_row + config_state->tab_current->view_current->top_left.y};
-                         switch_to_view_at_point(config_state, point);
+                         switch_to_view_at_point(config_state->input, config_state->view_input, &config_state->vim_state, config_state->tab_current, config_state->terminal_head, &config_state->terminal_current, point);
                     } break;
                     case 19: // Ctrl + s
                     {
@@ -4544,7 +4550,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
      config_state->last_key = key;
 
      if(ce_buffer_in_view(config_state->tab_current->view_head, &config_state->buffer_list_buffer)){
-          update_buffer_list_buffer(config_state, *head);
+          update_buffer_list_buffer(&config_state->buffer_list_buffer, *head);
      }
 
      if(config_state->tab_current->view_current->buffer != &config_state->mark_list_buffer &&

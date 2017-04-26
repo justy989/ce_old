@@ -4,12 +4,8 @@
 #include <inttypes.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <pthread.h>
-#include <fcntl.h>
 #include <dirent.h>
-#include <sys/ioctl.h>
 #include <signal.h>
-#include <poll.h>
 
 #include "ce_config.h"
 #include "syntax.h"

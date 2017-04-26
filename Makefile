@@ -12,7 +12,7 @@ cov: coverage
 coverage: CFLAGS += -fprofile-arcs -ftest-coverage
 coverage: clean_test test
 	llvm-cov gcov ce.test.o
-	llvm-cov gcov ce_vim.test.o
+	llvm-cov gcov vim.test.o
 
 test: LINK += -rdynamic
 test: clean_test test_ce test_vim
@@ -21,7 +21,7 @@ test_ce: test_ce.c ce.test.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LINK)
 	./$@ 2> test_ce_output.txt || (cat test_ce_output.txt && false)
 
-test_vim: test_vim.c ce.test.o ce_vim.test.o
+test_vim: test_vim.c ce.test.o vim.test.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LINK)
 	./$@ 2> test_vim_output.txt || (cat test_vim_output.txt && false)
 
@@ -34,7 +34,7 @@ ce: main.c ce.o
 %.test.o: %.c
 	$(CC) -c -fpic $(CFLAGS) $^ -o $@
 
-ce_config.so: ce_config.o ce.o ce_vim.o ce_terminal.o ce_syntax.o text_history.o auto_complete.o tab_view.o jump.o
+ce_config.so: ce_config.o ce.o vim.o ce_terminal.o ce_syntax.o text_history.o auto_complete.o tab_view.o jump.o
 	$(CC) -shared $(CFLAGS) $^ -o $@ $(LINK)
 
 clean: clean_config clean_test

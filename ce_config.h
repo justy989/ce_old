@@ -6,7 +6,7 @@
 #include <sys/time.h>
 
 #include "ce.h"
-#include "ce_vim.h"
+#include "vim.h"
 #include "ce_terminal.h"
 #include "tab_view.h"
 #include "text_history.h"

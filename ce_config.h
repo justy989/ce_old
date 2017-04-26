@@ -7,7 +7,7 @@
 
 #include "ce.h"
 #include "vim.h"
-#include "ce_terminal.h"
+#include "terminal.h"
 #include "tab_view.h"
 #include "text_history.h"
 #include "auto_complete.h"

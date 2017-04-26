@@ -12,7 +12,7 @@
 #include <poll.h>
 
 #include "ce_config.h"
-#include "ce_syntax.h"
+#include "syntax.h"
 #include "text_history.h"
 
 #define SCROLL_LINES 1

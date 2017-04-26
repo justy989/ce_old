@@ -1,4 +1,4 @@
-#include "ce_syntax.h"
+#include "syntax.h"
 
 #include <ctype.h>
 

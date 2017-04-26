@@ -43,6 +43,8 @@ void tab_view_remove(TabView_t** head, TabView_t* view)
      free(view);
 }
 
+// TODO: remove
+#if 0
 void tab_view_input_save(TabView_t* view)
 {
      view->view_input_save = view->view_current;
@@ -58,3 +60,4 @@ void tab_view_input_restore(TabView_t* view)
      view->view_current->top_row = view->view_input_save_top_row;
      view->view_current->left_column = view->view_input_save_left_column;
 }
+#endif

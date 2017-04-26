@@ -40,21 +40,38 @@ typedef struct{
 }CommandEntry_t;
 
 typedef struct{
-     bool input;
-     const char* input_message;
-     int input_key;
-     VimMode_t input_mode_save;
-     Point_t input_visual_save;
+     int key;
+     const char* message;
 
-     Buffer_t* completion_buffer;
+     VimMode_t vim_mode_save;
+     Point_t visual_save;
+     Point_t cursor_save;
+     int64_t scroll_top_row_save;
+     int64_t scroll_left_column_save;
+     BufferView_t* view_save;
 
-     Buffer_t input_buffer;
-     Buffer_t clang_completion_buffer;
+     BufferView_t* view;
+     Buffer_t buffer;
+
+     TextHistory_t search_history;
+     TextHistory_t command_history;
+
+     char* load_file_search_path;
+}Input_t;
+
+typedef struct{
+
      Buffer_t buffer_list_buffer;
      Buffer_t mark_list_buffer;
      Buffer_t yank_list_buffer;
      Buffer_t macro_list_buffer;
+     Buffer_t clang_completion_buffer;
+
+     Buffer_t* completion_buffer;
+
      Buffer_t* buffer_before_query;
+
+     Input_t input;
 
      VimState_t vim_state;
 
@@ -63,11 +80,7 @@ typedef struct{
      TabView_t* tab_head;
      TabView_t* tab_current;
 
-     BufferView_t* view_input;
      BufferView_t* view_auto_complete;
-
-     TextHistory_t search_history;
-     TextHistory_t command_history;
 
      pthread_t clang_complete_thread;
 
@@ -82,8 +95,6 @@ typedef struct{
      char editting_register;
 
      bool do_not_highlight_search;
-
-     char* load_file_search_path;
 
      struct timeval last_draw_time;
 

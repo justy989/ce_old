@@ -34,6 +34,7 @@ LITTLE:
 -investigate VMT_SEARCH led to location off of the buffer, but in the line range
 -buffer view of jump list
 -auto complete gets in the way when there is text after the cursor
+-terminal cursor sticks and doesn't allow scrolling up after some commands
 */
 #if 0
 error in string syntax highlighting for <tacos>"

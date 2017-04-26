@@ -17,6 +17,19 @@
 
 #define SCROLL_LINES 1
 
+void sigint_handler(int signal)
+{
+     ce_message("recieved signal %d", signal);
+}
+
+pthread_mutex_t draw_lock;
+pthread_mutex_t view_input_save_lock;
+pthread_mutex_t completion_lock;
+
+TerminalNode_t* is_terminal_buffer(TerminalNode_t* terminal_head, Buffer_t* buffer);
+void update_buffer_list_buffer(ConfigState_t* config_state, const BufferNode_t* head);
+
+// section utils
 const char* buffer_flag_string(Buffer_t* buffer)
 {
      switch(buffer->status){
@@ -32,15 +45,6 @@ const char* buffer_flag_string(Buffer_t* buffer)
 
      return "";
 }
-
-void sigint_handler(int signal)
-{
-     ce_message("recieved signal %d", signal);
-}
-
-pthread_mutex_t draw_lock;
-pthread_mutex_t view_input_save_lock;
-pthread_mutex_t completion_lock;
 
 int64_t count_digits(int64_t n)
 {
@@ -62,6 +66,36 @@ bool string_all_digits(const char* string)
      return true;
 }
 
+static bool string_ends_in_substring(const char* string, size_t string_len, const char* substring)
+{
+     size_t substring_len = strlen(substring);
+     return string_len > substring_len && strcmp(string + (string_len - substring_len), substring) == 0;
+}
+
+static void str_collapse_chars(char* string, char* collapseable_chars)
+{
+     char* src = string;
+     char* dst = string;
+
+     while(*dst){
+          bool collapseable = false;
+          for(char* collapse_itr = collapseable_chars; *collapse_itr != 0; ++collapse_itr){
+               if(*dst == *collapse_itr){
+                    collapseable = true;
+                    break;
+               }
+          }
+
+          *src = *dst;
+          if(!collapseable) src++;
+          dst++;
+     }
+
+     // append the null byte to the end
+     *src = 0;
+}
+
+// section view/scroll
 void view_drawer(void* user_data);
 
 // location is {left_column, top_line} for the view
@@ -91,58 +125,103 @@ void center_view_when_cursor_outside_portion(BufferView_t* view, float portion_s
      }
 }
 
-void update_completion_buffer(Buffer_t* completion_buffer, AutoComplete_t* auto_complete, const char* match)
+void view_follow_cursor(BufferView_t* current_view, LineNumberType_t line_number_type)
 {
-     assert(completion_buffer->status == BS_READONLY);
-     ce_clear_lines_readonly(completion_buffer);
+     ce_follow_cursor(current_view->cursor, &current_view->left_column, &current_view->top_row,
+                      current_view->bottom_right.x - current_view->top_left.x,
+                      current_view->bottom_right.y - current_view->top_left.y,
+                      current_view->bottom_right.x == (g_terminal_dimensions->x - 1),
+                      current_view->bottom_right.y == (g_terminal_dimensions->y - 2),
+                      line_number_type, current_view->buffer->line_count);
+}
 
-     int64_t match_len = 0;
-     if(match){
-          match_len = strlen(match);
-     }else{
-          match = "";
+void view_follow_highlight(BufferView_t* current_view)
+{
+     ce_follow_cursor(current_view->buffer->highlight_start, &current_view->left_column, &current_view->top_row,
+                      current_view->bottom_right.x - current_view->top_left.x,
+                      current_view->bottom_right.y - current_view->top_left.y,
+                      current_view->bottom_right.x == (g_terminal_dimensions->x - 1),
+                      current_view->bottom_right.y == (g_terminal_dimensions->y - 2),
+                      LNT_NONE, current_view->buffer->line_count);
+}
+
+void split_view(BufferView_t* head_view, BufferView_t* current_view, bool horizontal, LineNumberType_t line_number_type)
+{
+     BufferView_t* new_view = ce_split_view(current_view, current_view->buffer, horizontal);
+     if(new_view){
+          Point_t top_left = {0, 0};
+          Point_t bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 1};
+          ce_calc_views(head_view, top_left, bottom_right);
+          view_follow_cursor(current_view, line_number_type);
+          new_view->cursor = current_view->cursor;
+          new_view->top_row = current_view->top_row;
+          new_view->left_column = current_view->left_column;
+
+          BufferViewState_t* buffer_view_state = calloc(1, sizeof(*buffer_view_state));
+          if(!buffer_view_state){
+               ce_message("failed to allocate buffer view state");
+          }else{
+               new_view->user_data = buffer_view_state;
+          }
      }
-     int64_t line_count = 0;
-     CompleteNode_t* itr = auto_complete->head;
-     char line[256];
+}
+
+void switch_to_view_at_point(ConfigState_t* config_state, Point_t point)
+{
+     BufferView_t* next_view = NULL;
+
+     if(point.x < 0) point.x = g_terminal_dimensions->x - 1;
+     if(point.y < 0) point.y = g_terminal_dimensions->y - 1;
+     if(point.x >= g_terminal_dimensions->x) point.x = 0;
+     if(point.y >= g_terminal_dimensions->y) point.y = 0;
+
+     if(config_state->input) next_view = ce_find_view_at_point(config_state->view_input, point);
+     vim_stop_recording_macro(&config_state->vim_state);
+     if(!next_view) next_view = ce_find_view_at_point(config_state->tab_current->view_head, point);
+
+     if(next_view){
+          // save view and cursor
+          config_state->tab_current->view_previous = config_state->tab_current->view_current;
+          config_state->tab_current->view_current->buffer->cursor = config_state->tab_current->view_current->cursor;
+          config_state->tab_current->view_current = next_view;
+          vim_enter_normal_mode(&config_state->vim_state);
+
+          TerminalNode_t* terminal_node = is_terminal_buffer(config_state->terminal_head, next_view->buffer);
+          if(terminal_node) config_state->terminal_current = terminal_node;
+     }
+}
+
+void switch_to_buffer_list_buffer(ConfigState_t* config_state, BufferNode_t* head) {
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Buffer_t* buffer = buffer_view->buffer;
+     Point_t* cursor = &buffer_view->cursor;
+
+     JumpArray_t* jump_array = &((BufferViewState_t*)(buffer_view->user_data))->jump_array;
+     jump_insert(jump_array, buffer->filename, *cursor);
+
+     buffer->cursor = config_state->tab_current->view_current->cursor;
+
+     // try to find a better place to put the cursor to start
+     BufferNode_t* itr = head;
+     int64_t buffer_index = 1;
+     bool found_good_buffer_index = false;
      while(itr){
-          bool matches = false;
-
-          if(auto_complete->type == ACT_EXACT){
-               matches = (strncmp(itr->option, match, match_len) == 0 || match_len == 0);
-          }else if(auto_complete->type == ACT_OCCURANCE){
-               matches = (strstr(itr->option, match) || match_len == 0);
+          if(itr->buffer->status != BS_READONLY && !ce_buffer_in_view(config_state->tab_current->view_head, itr->buffer)){
+               found_good_buffer_index = true;
+               break;
           }
-
-          if(matches){
-               if(itr->description){
-                    snprintf(line, 256, "%s %s", itr->option, itr->description);
-               }else{
-                    snprintf(line, 256, "%s", itr->option);
-               }
-
-               ce_append_line_readonly(completion_buffer, line);
-               line_count++;
-
-               if(itr == auto_complete->current){
-                    int64_t last_index = line_count - 1;
-                    completion_buffer->highlight_start = (Point_t){0, last_index};
-                    completion_buffer->highlight_end = (Point_t){strlen(completion_buffer->lines[last_index]), last_index};
-               }
-          }
-
           itr = itr->next;
+          buffer_index++;
      }
 
+     update_buffer_list_buffer(config_state, head);
+     config_state->tab_current->view_current->buffer->cursor = *cursor;
+     config_state->tab_current->view_current->buffer = &config_state->buffer_list_buffer;
+     config_state->tab_current->view_current->top_row = 0;
+     config_state->tab_current->view_current->cursor = (Point_t){0, found_good_buffer_index ? buffer_index : 1};
 }
 
-
-static bool string_ends_in_substring(const char* string, size_t string_len, const char* substring)
-{
-     size_t substring_len = strlen(substring);
-     return string_len > substring_len && strcmp(string + (string_len - substring_len), substring) == 0;
-}
-
+// section buffer
 bool initialize_buffer(Buffer_t* buffer){
      BufferState_t* buffer_state = calloc(1, sizeof(*buffer_state));
      if(!buffer_state){
@@ -273,18 +352,6 @@ bool initialize_buffer(Buffer_t* buffer){
      return true;
 }
 
-// NOTE: need to free the allocated str
-char* str_from_file_stream(FILE* file){
-     fseek(file, 0, SEEK_END);
-     size_t file_size = ftell(file);
-     fseek(file, 0, SEEK_SET);
-
-     char* str = malloc(file_size + 1);
-     fread(str, file_size, 1, file);
-     str[file_size] = 0;
-     return str;
-}
-
 // NOTE: we should return a BufferNode_t to be consistent with new_buffer_from_file?
 Buffer_t* new_buffer_from_string(BufferNode_t* head, const char* name, const char* str){
      if(access(name, F_OK) == 0){
@@ -381,6 +448,7 @@ BufferNode_t* new_buffer_from_file(BufferNode_t* head, const char* filename)
      return new_buffer_node;
 }
 
+// section input
 TextHistory_t* history_from_input_key(ConfigState_t* config_state)
 {
      TextHistory_t* history = NULL;
@@ -457,6 +525,52 @@ void input_cancel(ConfigState_t* config_state)
      }
 
      input_end(config_state);
+}
+
+void commit_input_to_history(Buffer_t* input_buffer, TextHistory_t* history)
+{
+     if(!input_buffer->line_count) return;
+
+     char* saved = ce_dupe_buffer(input_buffer);
+
+     if(!history->tail->prev || (history->tail->prev && strcmp(saved, history->tail->prev->entry) != 0)){
+          history->tail->entry = saved;
+          text_history_commit_current(history);
+     }
+}
+
+bool iterate_history_input(ConfigState_t* config_state, bool previous)
+{
+     BufferState_t* buffer_state = config_state->view_input->buffer->user_data;
+     TextHistory_t* history = history_from_input_key(config_state);
+     if(!history) return false;
+
+     bool success = false;
+
+     if(previous){
+          success = text_history_prev(history);
+     }else{
+          success = text_history_next(history);
+     }
+
+     if(success){
+          ce_clear_lines(config_state->view_input->buffer);
+          if(history->cur->entry) ce_append_string(config_state->view_input->buffer, 0, history->cur->entry);
+          config_state->view_input->cursor = (Point_t){0, 0};
+          ce_move_cursor_to_end_of_file(config_state->view_input->buffer, &config_state->view_input->cursor);
+
+          BufferCommitNode_t* node = buffer_state->commit_tail;
+          while(node->prev) node = node->prev;
+          ce_commits_free(node);
+
+          buffer_state->commit_tail = calloc(1, sizeof(*buffer_state->commit_tail));
+          if(!buffer_state->commit_tail){
+               ce_message("failed to allocate commit history for buffer");
+               return false;
+          }
+     }
+
+     return success;
 }
 
 void override_buffer_in_view(TabView_t* tab_current, BufferView_t* view, Buffer_t* new_buffer, Buffer_t** buffer_before_override)
@@ -598,30 +712,8 @@ bool delete_buffer_at_index(BufferNode_t** head, TabView_t* tab_head, int64_t bu
      return true;
 }
 
-void scroll_view_to_last_line(BufferView_t* view)
-{
-     view->top_row = view->buffer->line_count - (view->bottom_right.y - view->top_left.y);
-     if(view->top_row < 0) view->top_row = 0;
-}
-
-// NOTE: clear commits then create the initial required entry to restart
-void reset_buffer_commits(BufferCommitNode_t** tail)
-{
-     BufferCommitNode_t* node = *tail;
-     while(node->prev) node = node->prev;
-     ce_commits_free(node);
-
-     BufferCommitNode_t* new_tail = calloc(1, sizeof(*new_tail));
-     if(!new_tail){
-          ce_message("failed to allocate commit history for buffer");
-          return;
-     }
-
-     *tail = new_tail;
-}
-
-bool open_file_destination(BufferNode_t* head, BufferView_t* view,
-                           const char* filename, int line, int column){
+// section destination
+bool open_file_destination(BufferNode_t* head, BufferView_t* view, const char* filename, int line, int column){
      Buffer_t* new_buffer = open_file_buffer(head, filename);
      if(new_buffer){
           if(view->user_data){
@@ -831,37 +923,63 @@ void move_jump_location_to_end_of_output(TerminalNode_t* terminal_node)
      terminal_node->last_jump_location = terminal_node->buffer->line_count - 1;
 }
 
-void commit_input_to_history(Buffer_t* input_buffer, TextHistory_t* history)
+void cscope_goto_definition(ConfigState_t* config_state, BufferNode_t* head, const char* search_word)
 {
-     if(!input_buffer->line_count) return;
+     char command[BUFSIZ];
+     snprintf(command, BUFSIZ, "cscope -L1%s", search_word);
+     FILE* cscope_output_file = popen(command, "r");
+     if(cscope_output_file == NULL){
+          ce_message("popen(%s) failed: %s", command, strerror(errno));
+          return;
+     }
 
-     char* saved = ce_dupe_buffer(input_buffer);
+     char cscope_output[BUFSIZ];
+     if(fgets(cscope_output, sizeof(cscope_output), cscope_output_file) == NULL){
+          ce_message("fgets() failed to obtain cscope output for %s", command);
+     }else{
+          // parse cscope output and jump to destination
+          char* file_end = strpbrk(cscope_output, ": ");
+          if(!file_end) {
+               ce_message("unsupported cscope output %s", cscope_output);
+               goto pclose_cscope;
+          }
+          int64_t filename_len = file_end - cscope_output;
+          char* filename = strndupa(cscope_output, filename_len);
+          if(access(filename, F_OK) == -1){
+               ce_message("cscope file %s not found", filename);
+               goto pclose_cscope;
+          }
 
-     if(!history->tail->prev || (history->tail->prev && strcmp(saved, history->tail->prev->entry) != 0)){
-          history->tail->entry = saved;
-          text_history_commit_current(history);
+          char* line_number_begin_delim = NULL;
+          char* line_number_end_delim = NULL;
+          if(*file_end == ' '){
+               // format: 'filepath search_symbol line '
+               char* second_space = strchr(file_end + 1, ' ');
+               if(!second_space){
+                    ce_message("cscope line number not found in %s", cscope_output);
+                    goto pclose_cscope;
+               }
+               line_number_begin_delim = second_space;
+               line_number_end_delim = strchr(second_space + 1, ' ');
+               if(!line_number_end_delim){
+                    ce_message("cscope output in unexpected format %s", cscope_output);
+                    goto pclose_cscope;
+               }
+               *line_number_end_delim = '\0';
+               int line_number = atoi(line_number_begin_delim + 1);
+               open_file_destination(head, config_state->tab_current->view_current,
+                                     filename, line_number, 0);
+          }else{
+               ce_message("unexpected cscope output %s", cscope_output);
+          }
+     }
+
+pclose_cscope:
+     if(pclose(cscope_output_file) == -1){
+          ce_message("pclose(%s) failed: %s", command, strerror(errno));
      }
 }
 
-void view_follow_cursor(BufferView_t* current_view, LineNumberType_t line_number_type)
-{
-     ce_follow_cursor(current_view->cursor, &current_view->left_column, &current_view->top_row,
-                      current_view->bottom_right.x - current_view->top_left.x,
-                      current_view->bottom_right.y - current_view->top_left.y,
-                      current_view->bottom_right.x == (g_terminal_dimensions->x - 1),
-                      current_view->bottom_right.y == (g_terminal_dimensions->y - 2),
-                      line_number_type, current_view->buffer->line_count);
-}
-
-void view_follow_highlight(BufferView_t* current_view)
-{
-     ce_follow_cursor(current_view->buffer->highlight_start, &current_view->left_column, &current_view->top_row,
-                      current_view->bottom_right.x - current_view->top_left.x,
-                      current_view->bottom_right.y - current_view->top_left.y,
-                      current_view->bottom_right.x == (g_terminal_dimensions->x - 1),
-                      current_view->bottom_right.y == (g_terminal_dimensions->y - 2),
-                      LNT_NONE, current_view->buffer->line_count);
-}
 
 // NOTE: stderr is redirected to stdout
 pid_t bidirectional_popen(const char* cmd, int* in_fd, int* out_fd)
@@ -896,7 +1014,7 @@ pid_t bidirectional_popen(const char* cmd, int* in_fd, int* out_fd)
      return pid;
 }
 
-
+// section terminal
 typedef struct{
      ConfigState_t* config_state;
      TerminalNode_t* terminal_node;
@@ -953,27 +1071,136 @@ void* terminal_check_update(void* data)
      return NULL;
 }
 
-static void str_collapse_chars(char* string, char* collapseable_chars)
+TerminalNode_t* is_terminal_buffer(TerminalNode_t* terminal_head, Buffer_t* buffer)
 {
-     char* src = string;
-     char* dst = string;
+     while(terminal_head){
+          if(terminal_head->buffer == buffer) return terminal_head;
 
-     while(*dst){
-          bool collapseable = false;
-          for(char* collapse_itr = collapseable_chars; *collapse_itr != 0; ++collapse_itr){
-               if(*dst == *collapse_itr){
-                    collapseable = true;
-                    break;
+          terminal_head = terminal_head->next;
+     }
+
+     return NULL;
+}
+
+bool start_terminal_in_view(BufferView_t* buffer_view, TerminalNode_t* node, ConfigState_t* config_state)
+{
+     // TODO: create buffer_view_width() and buffer_view_height()
+     int64_t width = buffer_view->bottom_right.x - buffer_view->top_left.x;
+     int64_t height = buffer_view->bottom_right.y - buffer_view->top_left.y;
+
+     if(!terminal_init(&node->terminal, width, height, node->buffer)){
+          return false;
+     }
+
+     TerminalCheckUpdateData_t* check_update_data = calloc(1, sizeof(*check_update_data));
+     check_update_data->config_state = config_state;
+     check_update_data->terminal_node = node;
+
+     int rc = pthread_create(&node->check_update_thread, NULL, terminal_check_update, check_update_data);
+     if(rc != 0){
+          ce_message("pthread_create() for terminal_check_update() failed");
+          return false;
+     }
+
+     return true;
+}
+
+Point_t get_cursor_on_terminal(const Point_t* cursor, const BufferView_t* buffer_view, LineNumberType_t line_number_type)
+{
+     Point_t p = {cursor->x - buffer_view->left_column + buffer_view->top_left.x,
+                  cursor->y - buffer_view->top_row + buffer_view->top_left.y};
+     p.x += ce_get_line_number_column_width(line_number_type, buffer_view->buffer->line_count, buffer_view->top_left.y,
+                                            buffer_view->bottom_right.y);
+     return p;
+}
+
+void get_terminal_view_rect(TabView_t* tab_head, Point_t* top_left, Point_t* bottom_right)
+{
+     *top_left = (Point_t){0, 0};
+     *bottom_right = (Point_t){g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 1};
+
+     // if we have multiple tabs
+     if(tab_head->next) top_left->y++;
+}
+
+void resize_terminal_if_in_view(BufferView_t* view_head, TerminalNode_t* terminal_head)
+{
+     while(terminal_head){
+          BufferView_t* term_view = ce_buffer_in_view(view_head, terminal_head->buffer);
+          if(term_view){
+               int64_t new_width = term_view->bottom_right.x - term_view->top_left.x;
+               int64_t new_height = term_view->bottom_right.y - term_view->top_left.y;
+               terminal_resize(&terminal_head->terminal, new_width, new_height);
+          }
+
+          terminal_head = terminal_head->next;
+     }
+}
+
+bool run_command_on_terminal_in_view(TerminalNode_t* terminal_head, BufferView_t* view_head, const char* command)
+{
+     TerminalNode_t* term_itr = terminal_head;
+     while(term_itr){
+          if(ce_buffer_in_view(view_head, term_itr->buffer)){
+               while(*command){
+                    terminal_send_key(&term_itr->terminal, *command);
+                    command++;
+               }
+
+               move_jump_location_to_end_of_output(term_itr);
+               terminal_send_key(&term_itr->terminal, KEY_ENTER);
+               return true;
+          }
+
+          term_itr = term_itr->next;
+     }
+
+     return false;
+}
+
+// section completion
+void update_completion_buffer(Buffer_t* completion_buffer, AutoComplete_t* auto_complete, const char* match)
+{
+     assert(completion_buffer->status == BS_READONLY);
+     ce_clear_lines_readonly(completion_buffer);
+
+     int64_t match_len = 0;
+     if(match){
+          match_len = strlen(match);
+     }else{
+          match = "";
+     }
+     int64_t line_count = 0;
+     CompleteNode_t* itr = auto_complete->head;
+     char line[256];
+     while(itr){
+          bool matches = false;
+
+          if(auto_complete->type == ACT_EXACT){
+               matches = (strncmp(itr->option, match, match_len) == 0 || match_len == 0);
+          }else if(auto_complete->type == ACT_OCCURANCE){
+               matches = (strstr(itr->option, match) || match_len == 0);
+          }
+
+          if(matches){
+               if(itr->description){
+                    snprintf(line, 256, "%s %s", itr->option, itr->description);
+               }else{
+                    snprintf(line, 256, "%s", itr->option);
+               }
+
+               ce_append_line_readonly(completion_buffer, line);
+               line_count++;
+
+               if(itr == auto_complete->current){
+                    int64_t last_index = line_count - 1;
+                    completion_buffer->highlight_start = (Point_t){0, last_index};
+                    completion_buffer->highlight_end = (Point_t){strlen(completion_buffer->lines[last_index]), last_index};
                }
           }
 
-          *src = *dst;
-          if(!collapseable) src++;
-          dst++;
+          itr = itr->next;
      }
-
-     // append the null byte to the end
-     *src = 0;
 }
 
 typedef struct{
@@ -1203,86 +1430,147 @@ void* clang_complete_thread(void* data)
      return NULL;
 }
 
-TerminalNode_t* is_terminal_buffer(TerminalNode_t* terminal_head, Buffer_t* buffer)
+bool generate_auto_complete_files_in_dir(AutoComplete_t* auto_complete, const char* dir)
 {
-     while(terminal_head){
-          if(terminal_head->buffer == buffer) return terminal_head;
+     struct dirent *node;
+     DIR* os_dir = opendir(dir);
+     if(!os_dir) return false;
 
-          terminal_head = terminal_head->next;
+     auto_complete_free(auto_complete);
+
+     char tmp[PATH_MAX];
+     struct stat info;
+     while((node = readdir(os_dir)) != NULL){
+          snprintf(tmp, PATH_MAX, "%s/%s", dir, node->d_name);
+          stat(tmp, &info);
+          if(S_ISDIR(info.st_mode)){
+               snprintf(tmp, PATH_MAX, "%s/", node->d_name);
+          }else{
+               strncpy(tmp, node->d_name, PATH_MAX);
+          }
+          auto_complete_insert(auto_complete, tmp, NULL);
      }
 
-     return NULL;
-}
+     closedir(os_dir);
 
-bool start_terminal_in_view(BufferView_t* buffer_view, TerminalNode_t* node, ConfigState_t* config_state)
-{
-     // TODO: create buffer_view_width() and buffer_view_height()
-     int64_t width = buffer_view->bottom_right.x - buffer_view->top_left.x;
-     int64_t height = buffer_view->bottom_right.y - buffer_view->top_left.y;
-
-     if(!terminal_init(&node->terminal, width, height, node->buffer)){
-          return false;
-     }
-
-     TerminalCheckUpdateData_t* check_update_data = calloc(1, sizeof(*check_update_data));
-     check_update_data->config_state = config_state;
-     check_update_data->terminal_node = node;
-
-     int rc = pthread_create(&node->check_update_thread, NULL, terminal_check_update, check_update_data);
-     if(rc != 0){
-          ce_message("pthread_create() for terminal_check_update() failed");
-          return false;
-     }
-
+     if(!auto_complete->head) return false;
      return true;
 }
 
-void split_view(BufferView_t* head_view, BufferView_t* current_view, bool horizontal, LineNumberType_t line_number_type)
+bool calc_auto_complete_start_and_path(AutoComplete_t* auto_complete, const char* line, Point_t cursor,
+                                       Buffer_t* completion_buffer, const char* start_path)
 {
-     BufferView_t* new_view = ce_split_view(current_view, current_view->buffer, horizontal);
-     if(new_view){
-          Point_t top_left = {0, 0};
-          Point_t bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 1};
-          ce_calc_views(head_view, top_left, bottom_right);
-          view_follow_cursor(current_view, line_number_type);
-          new_view->cursor = current_view->cursor;
-          new_view->top_row = current_view->top_row;
-          new_view->left_column = current_view->left_column;
+     // we only auto complete in the case where the cursor is up against path with directories
+     // -pat|
+     // -/dir/pat|
+     // -/base/dir/pat|
+     const char* path_begin = line + cursor.x;
+     const char* last_slash = NULL;
 
-          BufferViewState_t* buffer_view_state = calloc(1, sizeof(*buffer_view_state));
-          if(!buffer_view_state){
-               ce_message("failed to allocate buffer view state");
+     // if the cursor is not on the null terminator, skip
+     if(cursor.x > 0){
+          if(*path_begin != '\0') return false;
+
+          while(path_begin >= line){
+               if(!last_slash && *path_begin == '/') last_slash = path_begin;
+               if(isblank(*path_begin)) break;
+               path_begin--;
+          }
+
+          path_begin++; // account for iterating 1 too far
+     }
+
+     if(!start_path) start_path = ".";
+
+     pthread_mutex_lock(&completion_lock);
+
+     // generate based on the path
+     bool rc = false;
+     if(last_slash){
+          int64_t user_path_len = (last_slash - path_begin) + 1;
+
+          if(*path_begin != '/'){
+               int64_t start_path_len = strlen(start_path) + 1;
+               int64_t path_len = user_path_len + start_path_len;
+
+               char* path = malloc(path_len + 1);
+               if(!path){
+                    ce_message("failed to alloc path");
+                    return false;
+               }
+
+               memcpy(path, start_path, start_path_len - 1);
+               path[start_path_len - 1] = '/'; // add a slash between, since start_path doesn't come with one
+               memcpy(path + start_path_len, path_begin, user_path_len);
+               path[path_len] = 0;
+
+               rc = generate_auto_complete_files_in_dir(auto_complete, path);
+               free(path);
           }else{
-               new_view->user_data = buffer_view_state;
+               char* path = malloc(user_path_len + 1);
+               if(!path){
+                    ce_message("failed to alloc path");
+                    return false;
+               }
+
+               memcpy(path, path_begin, user_path_len);
+
+               path[user_path_len] = 0;
+
+               rc = generate_auto_complete_files_in_dir(auto_complete, path);
+               free(path);
+          }
+     }else{
+          rc = generate_auto_complete_files_in_dir(auto_complete, start_path);
+     }
+
+     // set the start point if we generated files
+     if(rc){
+          if(last_slash){
+               const char* completion = last_slash + 1;
+               auto_complete_start(auto_complete, ACT_OCCURANCE, (Point_t){(last_slash - line) + 1, cursor.y});
+               auto_complete_next(auto_complete, completion);
+               update_completion_buffer(completion_buffer, auto_complete, completion);
+          }else{
+               auto_complete_start(auto_complete, ACT_OCCURANCE, (Point_t){(path_begin - line), cursor.y});
+               auto_complete_next(auto_complete, path_begin);
+               update_completion_buffer(completion_buffer, auto_complete, path_begin);
           }
      }
+
+     pthread_mutex_unlock(&completion_lock);
+     return rc;
 }
 
-void switch_to_view_at_point(ConfigState_t* config_state, Point_t point)
+void clang_completion(ConfigState_t* config_state, Point_t start_completion)
 {
-     BufferView_t* next_view = NULL;
+     if(config_state->clang_complete_thread){
+          pthread_cancel(config_state->clang_complete_thread);
+          pthread_detach(config_state->clang_complete_thread);
+          config_state->clang_complete_thread = 0;
+     }
 
-     if(point.x < 0) point.x = g_terminal_dimensions->x - 1;
-     if(point.y < 0) point.y = g_terminal_dimensions->y - 1;
-     if(point.x >= g_terminal_dimensions->x) point.x = 0;
-     if(point.y >= g_terminal_dimensions->y) point.y = 0;
+     if(auto_completing(&config_state->auto_complete)){
+          auto_complete_end(&config_state->auto_complete);
+     }
 
-     if(config_state->input) next_view = ce_find_view_at_point(config_state->view_input, point);
-     vim_stop_recording_macro(&config_state->vim_state);
-     if(!next_view) next_view = ce_find_view_at_point(config_state->tab_current->view_head, point);
-
-     if(next_view){
-          // save view and cursor
-          config_state->tab_current->view_previous = config_state->tab_current->view_current;
-          config_state->tab_current->view_current->buffer->cursor = config_state->tab_current->view_current->cursor;
-          config_state->tab_current->view_current = next_view;
-          vim_enter_normal_mode(&config_state->vim_state);
-
-          TerminalNode_t* terminal_node = is_terminal_buffer(config_state->terminal_head, next_view->buffer);
-          if(terminal_node) config_state->terminal_current = terminal_node;
+     ClangCompleteThreadData_t* thread_data = malloc(sizeof(*thread_data));
+     if(!thread_data) return;
+     thread_data->buffer_to_complete = config_state->tab_current->view_current->buffer;
+     thread_data->start = start_completion;
+     thread_data->cursor = config_state->tab_current->view_current->cursor;
+     thread_data->clang_output_buffer = &config_state->clang_completion_buffer;
+     thread_data->completion_buffer = config_state->completion_buffer;
+     thread_data->auto_complete = &config_state->auto_complete;
+     thread_data->config_state = config_state;
+     int rc = pthread_create(&config_state->clang_complete_thread, NULL, clang_complete_thread, thread_data);
+     if(rc != 0){
+          ce_message("pthread_create() for clang auto complete failed");
      }
 }
 
+
+// section mouse
 void handle_mouse_event(ConfigState_t* config_state, Buffer_t* buffer, BufferView_t* buffer_view, Point_t* cursor)
 {
      MEVENT event;
@@ -1386,45 +1674,22 @@ void handle_mouse_event(ConfigState_t* config_state, Buffer_t* buffer, BufferVie
      }
 }
 
-void half_page_up(BufferView_t* view)
+// section actions
+void move_cursor_half_page_up(BufferView_t* view)
 {
      int64_t view_height = view->bottom_right.y - view->top_left.y;
      Point_t delta = { 0, -view_height / 2 };
      ce_move_cursor(view->buffer, &view->cursor, delta);
 }
 
-void half_page_down(BufferView_t* view)
+void move_cursor_half_page_down(BufferView_t* view)
 {
      int64_t view_height = view->bottom_right.y - view->top_left.y;
      Point_t delta = { 0, view_height / 2 };
      ce_move_cursor(view->buffer, &view->cursor, delta);
 }
 
-bool iterate_history_input(ConfigState_t* config_state, bool previous)
-{
-     BufferState_t* buffer_state = config_state->view_input->buffer->user_data;
-     TextHistory_t* history = history_from_input_key(config_state);
-     if(!history) return false;
-
-     bool success = false;
-
-     if(previous){
-          success = text_history_prev(history);
-     }else{
-          success = text_history_next(history);
-     }
-
-     if(success){
-          ce_clear_lines(config_state->view_input->buffer);
-          if(history->cur->entry) ce_append_string(config_state->view_input->buffer, 0, history->cur->entry);
-          config_state->view_input->cursor = (Point_t){0, 0};
-          ce_move_cursor_to_end_of_file(config_state->view_input->buffer, &config_state->view_input->cursor);
-          reset_buffer_commits(&buffer_state->commit_tail);
-     }
-
-     return success;
-}
-
+// section info buffers
 void update_buffer_list_buffer(ConfigState_t* config_state, const BufferNode_t* head)
 {
      char buffer_info[BUFSIZ];
@@ -1567,151 +1832,7 @@ void update_macro_list_buffer(ConfigState_t* config_state)
      config_state->macro_list_buffer.status = BS_READONLY;
 }
 
-Point_t get_cursor_on_terminal(const Point_t* cursor, const BufferView_t* buffer_view, LineNumberType_t line_number_type)
-{
-     Point_t p = {cursor->x - buffer_view->left_column + buffer_view->top_left.x,
-                  cursor->y - buffer_view->top_row + buffer_view->top_left.y};
-     p.x += ce_get_line_number_column_width(line_number_type, buffer_view->buffer->line_count, buffer_view->top_left.y,
-                                            buffer_view->bottom_right.y);
-     return p;
-}
-
-void get_terminal_view_rect(TabView_t* tab_head, Point_t* top_left, Point_t* bottom_right)
-{
-     *top_left = (Point_t){0, 0};
-     *bottom_right = (Point_t){g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 1};
-
-     // if we have multiple tabs
-     if(tab_head->next) top_left->y++;
-}
-
-void resize_terminal_if_in_view(BufferView_t* view_head, TerminalNode_t* terminal_head)
-{
-     while(terminal_head){
-          BufferView_t* term_view = ce_buffer_in_view(view_head, terminal_head->buffer);
-          if(term_view){
-               int64_t new_width = term_view->bottom_right.x - term_view->top_left.x;
-               int64_t new_height = term_view->bottom_right.y - term_view->top_left.y;
-               terminal_resize(&terminal_head->terminal, new_width, new_height);
-          }
-
-          terminal_head = terminal_head->next;
-     }
-}
-
-
-bool generate_auto_complete_files_in_dir(AutoComplete_t* auto_complete, const char* dir)
-{
-     struct dirent *node;
-     DIR* os_dir = opendir(dir);
-     if(!os_dir) return false;
-
-     auto_complete_free(auto_complete);
-
-     char tmp[PATH_MAX];
-     struct stat info;
-     while((node = readdir(os_dir)) != NULL){
-          snprintf(tmp, PATH_MAX, "%s/%s", dir, node->d_name);
-          stat(tmp, &info);
-          if(S_ISDIR(info.st_mode)){
-               snprintf(tmp, PATH_MAX, "%s/", node->d_name);
-          }else{
-               strncpy(tmp, node->d_name, PATH_MAX);
-          }
-          auto_complete_insert(auto_complete, tmp, NULL);
-     }
-
-     closedir(os_dir);
-
-     if(!auto_complete->head) return false;
-     return true;
-}
-
-bool calc_auto_complete_start_and_path(AutoComplete_t* auto_complete, const char* line, Point_t cursor,
-                                       Buffer_t* completion_buffer, const char* start_path)
-{
-     // we only auto complete in the case where the cursor is up against path with directories
-     // -pat|
-     // -/dir/pat|
-     // -/base/dir/pat|
-     const char* path_begin = line + cursor.x;
-     const char* last_slash = NULL;
-
-     // if the cursor is not on the null terminator, skip
-     if(cursor.x > 0){
-          if(*path_begin != '\0') return false;
-
-          while(path_begin >= line){
-               if(!last_slash && *path_begin == '/') last_slash = path_begin;
-               if(isblank(*path_begin)) break;
-               path_begin--;
-          }
-
-          path_begin++; // account for iterating 1 too far
-     }
-
-     if(!start_path) start_path = ".";
-
-     pthread_mutex_lock(&completion_lock);
-
-     // generate based on the path
-     bool rc = false;
-     if(last_slash){
-          int64_t user_path_len = (last_slash - path_begin) + 1;
-
-          if(*path_begin != '/'){
-               int64_t start_path_len = strlen(start_path) + 1;
-               int64_t path_len = user_path_len + start_path_len;
-
-               char* path = malloc(path_len + 1);
-               if(!path){
-                    ce_message("failed to alloc path");
-                    return false;
-               }
-
-               memcpy(path, start_path, start_path_len - 1);
-               path[start_path_len - 1] = '/'; // add a slash between, since start_path doesn't come with one
-               memcpy(path + start_path_len, path_begin, user_path_len);
-               path[path_len] = 0;
-
-               rc = generate_auto_complete_files_in_dir(auto_complete, path);
-               free(path);
-          }else{
-               char* path = malloc(user_path_len + 1);
-               if(!path){
-                    ce_message("failed to alloc path");
-                    return false;
-               }
-
-               memcpy(path, path_begin, user_path_len);
-
-               path[user_path_len] = 0;
-
-               rc = generate_auto_complete_files_in_dir(auto_complete, path);
-               free(path);
-          }
-     }else{
-          rc = generate_auto_complete_files_in_dir(auto_complete, start_path);
-     }
-
-     // set the start point if we generated files
-     if(rc){
-          if(last_slash){
-               const char* completion = last_slash + 1;
-               auto_complete_start(auto_complete, ACT_OCCURANCE, (Point_t){(last_slash - line) + 1, cursor.y});
-               auto_complete_next(auto_complete, completion);
-               update_completion_buffer(completion_buffer, auto_complete, completion);
-          }else{
-               auto_complete_start(auto_complete, ACT_OCCURANCE, (Point_t){(path_begin - line), cursor.y});
-               auto_complete_next(auto_complete, path_begin);
-               update_completion_buffer(completion_buffer, auto_complete, path_begin);
-          }
-     }
-
-     pthread_mutex_unlock(&completion_lock);
-     return rc;
-}
-
+// section quit
 void quit(ConfigState_t* config_state)
 {
      config_state->quit = true;
@@ -1733,64 +1854,7 @@ void quit_and_prompt_if_unsaved(ConfigState_t* config_state, BufferNode_t* head)
      }
 }
 
-void cscope_goto_definition(ConfigState_t* config_state, BufferNode_t* head, const char* search_word)
-{
-     char command[BUFSIZ];
-     snprintf(command, BUFSIZ, "cscope -L1%s", search_word);
-     FILE* cscope_output_file = popen(command, "r");
-     if(cscope_output_file == NULL){
-          ce_message("popen(%s) failed: %s", command, strerror(errno));
-          return;
-     }
-
-     char cscope_output[BUFSIZ];
-     if(fgets(cscope_output, sizeof(cscope_output), cscope_output_file) == NULL){
-          ce_message("fgets() failed to obtain cscope output for %s", command);
-     }else{
-          // parse cscope output and jump to destination
-          char* file_end = strpbrk(cscope_output, ": ");
-          if(!file_end) {
-               ce_message("unsupported cscope output %s", cscope_output);
-               goto pclose_cscope;
-          }
-          int64_t filename_len = file_end - cscope_output;
-          char* filename = strndupa(cscope_output, filename_len);
-          if(access(filename, F_OK) == -1){
-               ce_message("cscope file %s not found", filename);
-               goto pclose_cscope;
-          }
-
-          char* line_number_begin_delim = NULL;
-          char* line_number_end_delim = NULL;
-          if(*file_end == ' '){
-               // format: 'filepath search_symbol line '
-               char* second_space = strchr(file_end + 1, ' ');
-               if(!second_space){
-                    ce_message("cscope line number not found in %s", cscope_output);
-                    goto pclose_cscope;
-               }
-               line_number_begin_delim = second_space;
-               line_number_end_delim = strchr(second_space + 1, ' ');
-               if(!line_number_end_delim){
-                    ce_message("cscope output in unexpected format %s", cscope_output);
-                    goto pclose_cscope;
-               }
-               *line_number_end_delim = '\0';
-               int line_number = atoi(line_number_begin_delim + 1);
-               open_file_destination(head, config_state->tab_current->view_current,
-                                     filename, line_number, 0);
-          }else{
-               ce_message("unexpected cscope output %s", cscope_output);
-          }
-     }
-
-pclose_cscope:
-     if(pclose(cscope_output_file) == -1){
-          ce_message("pclose(%s) failed: %s", command, strerror(errno));
-     }
-}
-
-
+// section confirm action
 bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
 {
      BufferView_t* buffer_view = config_state->tab_current->view_current;
@@ -2153,6 +2217,7 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
      return false;
 }
 
+// section draw
 void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, VimMode_t vim_mode, int last_key,
                         char recording_macro, TerminalNode_t* terminal_current)
 {
@@ -2203,26 +2268,6 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, VimMode_
 #endif
 }
 
-bool run_command_on_terminal_in_view(TerminalNode_t* terminal_head, BufferView_t* view_head, const char* command)
-{
-     TerminalNode_t* term_itr = terminal_head;
-     while(term_itr){
-          if(ce_buffer_in_view(view_head, term_itr->buffer)){
-               while(*command){
-                    terminal_send_key(&term_itr->terminal, *command);
-                    command++;
-               }
-               move_jump_location_to_end_of_output(term_itr);
-               terminal_send_key(&term_itr->terminal, KEY_ENTER);
-               return true;
-          }
-
-          term_itr = term_itr->next;
-     }
-
-     return false;
-}
-
 #define RELOAD_BUFFER_HELP "usage: reload_buffer"
 
 void command_reload_buffer(Command_t* command, void* user_data)
@@ -2254,6 +2299,7 @@ void command_reload_buffer(Command_t* command, void* user_data)
      ce_clamp_cursor(buffer, &buffer_view->cursor);
 }
 
+// section command
 static void command_syntax_help()
 {
      ce_message("usage: syntax [string]");
@@ -2511,36 +2557,6 @@ void command_rename(Command_t* command, void* user_data)
      }
 }
 
-void switch_to_buffer_list_buffer(ConfigState_t* config_state, BufferNode_t* head) {
-     BufferView_t* buffer_view = config_state->tab_current->view_current;
-     Buffer_t* buffer = buffer_view->buffer;
-     Point_t* cursor = &buffer_view->cursor;
-
-     JumpArray_t* jump_array = &((BufferViewState_t*)(buffer_view->user_data))->jump_array;
-     jump_insert(jump_array, buffer->filename, *cursor);
-
-     buffer->cursor = config_state->tab_current->view_current->cursor;
-
-     // try to find a better place to put the cursor to start
-     BufferNode_t* itr = head;
-     int64_t buffer_index = 1;
-     bool found_good_buffer_index = false;
-     while(itr){
-          if(itr->buffer->status != BS_READONLY && !ce_buffer_in_view(config_state->tab_current->view_head, itr->buffer)){
-               found_good_buffer_index = true;
-               break;
-          }
-          itr = itr->next;
-          buffer_index++;
-     }
-
-     update_buffer_list_buffer(config_state, head);
-     config_state->tab_current->view_current->buffer->cursor = *cursor;
-     config_state->tab_current->view_current->buffer = &config_state->buffer_list_buffer;
-     config_state->tab_current->view_current->top_row = 0;
-     config_state->tab_current->view_current->cursor = (Point_t){0, found_good_buffer_index ? buffer_index : 1};
-}
-
 #define BUFFERS_HELP "usage: buffers"
 
 void command_buffers(Command_t* command, void* user_data)
@@ -2609,33 +2625,7 @@ void command_macro_backslashes(Command_t* command, void* user_data)
      }
 }
 
-void clang_completion(ConfigState_t* config_state, Point_t start_completion)
-{
-     if(config_state->clang_complete_thread){
-          pthread_cancel(config_state->clang_complete_thread);
-          pthread_detach(config_state->clang_complete_thread);
-          config_state->clang_complete_thread = 0;
-     }
-
-     if(auto_completing(&config_state->auto_complete)){
-          auto_complete_end(&config_state->auto_complete);
-     }
-
-     ClangCompleteThreadData_t* thread_data = malloc(sizeof(*thread_data));
-     if(!thread_data) return;
-     thread_data->buffer_to_complete = config_state->tab_current->view_current->buffer;
-     thread_data->start = start_completion;
-     thread_data->cursor = config_state->tab_current->view_current->cursor;
-     thread_data->clang_output_buffer = &config_state->clang_completion_buffer;
-     thread_data->completion_buffer = config_state->completion_buffer;
-     thread_data->auto_complete = &config_state->auto_complete;
-     thread_data->config_state = config_state;
-     int rc = pthread_create(&config_state->clang_complete_thread, NULL, clang_complete_thread, thread_data);
-     if(rc != 0){
-          ce_message("pthread_create() for clang auto complete failed");
-     }
-}
-
+// section interface
 bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, char** argv, void** user_data)
 {
      // NOTE: need to set these in this module
@@ -4056,11 +4046,11 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     break;
                     case KEY_NPAGE:
                     {
-                         half_page_up(config_state->tab_current->view_current);
+                         move_cursor_half_page_up(config_state->tab_current->view_current);
                     } break;
                     case KEY_PPAGE:
                     {
-                         half_page_down(config_state->tab_current->view_current);
+                         move_cursor_half_page_down(config_state->tab_current->view_current);
                     } break;
                     case ':':
                     {

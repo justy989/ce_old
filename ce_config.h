@@ -8,6 +8,7 @@
 #include "ce.h"
 #include "ce_vim.h"
 #include "ce_terminal.h"
+#include "tab_view.h"
 #include "text_history.h"
 #include "auto_complete.h"
 
@@ -18,18 +19,6 @@ typedef struct{
      BufferCommitNode_t* commit_tail;
      VimBufferState_t vim_buffer_state;
 }BufferState_t;
-
-typedef struct TabView_t{
-     BufferView_t* view_head;
-     BufferView_t* view_current;
-     BufferView_t* view_previous;
-     BufferView_t* view_input_save;
-     int64_t view_input_save_top_row;
-     int64_t view_input_save_left_column;
-     BufferView_t* view_overrideable;
-     Buffer_t* overriden_buffer;
-     struct TabView_t* next;
-}TabView_t;
 
 typedef struct TerminalNode_t{
      Terminal_t terminal;

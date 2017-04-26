@@ -91,66 +91,6 @@ void center_view_when_cursor_outside_portion(BufferView_t* view, float portion_s
      }
 }
 
-TabView_t* tab_view_insert(TabView_t* head)
-{
-     // find the tail
-     TabView_t* itr = head; // if we use tab_current, we *may* be closer to the tail !
-     while(itr->next) itr = itr->next;
-
-     // create the new tab
-     TabView_t* new_tab = calloc(1, sizeof(*new_tab));
-     if(!new_tab){
-          ce_message("failed to allocate tab");
-          return NULL;
-     }
-
-     // attach to the end of the tail
-     itr->next = new_tab;
-
-     // allocate the view
-     new_tab->view_head = calloc(1, sizeof(*new_tab->view_head));
-     if(!new_tab->view_head){
-          ce_message("failed to allocate new view for tab");
-          return NULL;
-     }
-
-     return new_tab;
-}
-
-void tab_view_remove(TabView_t** head, TabView_t* view)
-{
-     if(!*head || !view) return;
-
-     // TODO: free any open views
-     TabView_t* tmp = *head;
-     if(*head == view){
-          *head = view->next;
-          free(tmp);
-          return;
-     }
-
-     while(tmp->next != view) tmp = tmp->next;
-     tmp->next = view->next;
-     free(view);
-}
-
-void tab_view_save_overrideable(TabView_t* tab)
-{
-     if(!tab->view_overrideable) return;
-
-     tab->overriden_buffer = tab->view_overrideable->buffer;
-     tab->overriden_buffer->cursor = tab->view_overrideable->cursor;
-}
-
-void tab_view_restore_overrideable(TabView_t* tab)
-{
-     if(!tab->view_overrideable) return;
-
-     tab->view_overrideable->buffer = tab->overriden_buffer;
-     tab->view_overrideable->cursor = tab->overriden_buffer->cursor;
-     center_view(tab->view_overrideable);
-}
-
 void update_completion_buffer(Buffer_t* completion_buffer, AutoComplete_t* auto_complete, const char* match)
 {
      assert(completion_buffer->status == BS_READONLY);
@@ -475,9 +415,7 @@ void input_start(ConfigState_t* config_state, const char* input_message, int inp
           config_state->input_visual_save = config_state->vim_state.visual_start;
      }
      pthread_mutex_lock(&view_input_save_lock);
-     config_state->tab_current->view_input_save = config_state->tab_current->view_current;
-     config_state->tab_current->view_input_save_top_row = config_state->tab_current->view_current->top_row;
-     config_state->tab_current->view_input_save_left_column = config_state->tab_current->view_current->left_column;
+     tab_view_input_save(config_state->tab_current);
      pthread_mutex_unlock(&view_input_save_lock);
      config_state->tab_current->view_current = config_state->view_input;
 
@@ -491,7 +429,6 @@ void input_start(ConfigState_t* config_state, const char* input_message, int inp
 void input_end(ConfigState_t* config_state)
 {
      config_state->input = false;
-     config_state->tab_current->view_current = config_state->tab_current->view_input_save;
 
      switch(config_state->input_mode_save){
      default:
@@ -509,18 +446,11 @@ void input_end(ConfigState_t* config_state)
 
 void input_cancel(ConfigState_t* config_state)
 {
-     if(config_state->input_key == '/' || config_state->input_key == '?'){
-          pthread_mutex_lock(&view_input_save_lock);
-          config_state->tab_current->view_input_save->cursor = config_state->vim_state.search.start;
-          pthread_mutex_unlock(&view_input_save_lock);
-          config_state->tab_current->view_input_save->top_row = config_state->tab_current->view_input_save_top_row;
-          config_state->tab_current->view_input_save->left_column = config_state->tab_current->view_input_save_left_column;
-     }else if(config_state->input_key == 6 ||
-              config_state->input_key == ':'){
-          if(config_state->tab_current->view_overrideable){
-               tab_view_restore_overrideable(config_state->tab_current);
-          }
+     pthread_mutex_lock(&view_input_save_lock);
+     tab_view_input_restore(config_state->tab_current);
+     pthread_mutex_unlock(&view_input_save_lock);
 
+     if(config_state->input_key == 6 || config_state->input_key == ':'){
           // free the search path so we can re-use it
           free(config_state->load_file_search_path);
           config_state->load_file_search_path = NULL;
@@ -531,20 +461,12 @@ void input_cancel(ConfigState_t* config_state)
 
 void override_buffer_in_view(TabView_t* tab_current, BufferView_t* view, Buffer_t* new_buffer, Buffer_t** buffer_before_override)
 {
-     if(tab_current->view_overrideable){
-          tab_view_save_overrideable(tab_current);
+     *buffer_before_override = view->buffer;
+     (*buffer_before_override)->cursor = view->cursor;
 
-          tab_current->view_overrideable->buffer = new_buffer;
-          tab_current->view_overrideable->cursor = (Point_t){0, 0};
-          center_view(tab_current->view_overrideable);
-     }else{
-          *buffer_before_override = view->buffer;
-          (*buffer_before_override)->cursor = view->cursor;
-
-          tab_current->view_current->buffer = new_buffer;
-          tab_current->view_current->cursor = (Point_t){0, 0};
-          tab_current->view_current->top_row = 0;
-     }
+     tab_current->view_current->buffer = new_buffer;
+     tab_current->view_current->cursor = (Point_t){0, 0};
+     tab_current->view_current->top_row = 0;
 }
 
 #ifndef FTW_STOP
@@ -1948,6 +1870,7 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
 
      if(config_state->input && buffer_view == config_state->view_input){
           input_end(config_state);
+          config_state->tab_current->view_current = config_state->tab_current->view_input_save;
 
           // update convenience vars
           buffer_view = config_state->tab_current->view_current;
@@ -2033,10 +1956,6 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                if(!switched_to_open_file){
                     config_state->tab_current->view_current->buffer = head->buffer; // message buffer
                     config_state->tab_current->view_current->cursor = (Point_t){0, 0};
-               }
-
-               if(config_state->tab_current->overriden_buffer){
-                    tab_view_restore_overrideable(config_state->tab_current);
                }
 
                return true;
@@ -2140,10 +2059,6 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           } break;
           case ':':
           {
-               if(config_state->tab_current->view_overrideable){
-                    tab_view_restore_overrideable(config_state->tab_current);
-               }
-
                if(!config_state->view_input->buffer->line_count) break;
 
                commit_input_to_history(config_state->view_input->buffer, &config_state->command_history);
@@ -2245,10 +2160,6 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
           ce_move_cursor_to_soft_beginning_of_line(buffer_view->buffer, &buffer_view->cursor);
           center_view(buffer_view);
 
-          if(config_state->tab_current->view_overrideable){
-               tab_view_restore_overrideable(config_state->tab_current);
-          }
-
           return true;
      }else if(buffer_view->buffer == &config_state->macro_list_buffer){
           int64_t line = cursor->y - 1; // account for buffer list row header
@@ -2308,12 +2219,12 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
      return false;
 }
 
-void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferView_t* overrideable_view, VimMode_t vim_mode, int last_key,
+void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, VimMode_t vim_mode, int last_key,
                         char recording_macro, TerminalNode_t* terminal_current)
 {
      Buffer_t* buffer = view->buffer;
-     if(view->next_horizontal) draw_view_statuses(view->next_horizontal, current_view, overrideable_view, vim_mode, last_key, recording_macro, terminal_current);
-     if(view->next_vertical) draw_view_statuses(view->next_vertical, current_view, overrideable_view, vim_mode, last_key, recording_macro, terminal_current);
+     if(view->next_horizontal) draw_view_statuses(view->next_horizontal, current_view, vim_mode, last_key, recording_macro, terminal_current);
+     if(view->next_vertical) draw_view_statuses(view->next_vertical, current_view, vim_mode, last_key, recording_macro, terminal_current);
 
      // NOTE: mode names need space at the end for OCD ppl like me
      static const char* mode_names[] = {
@@ -2339,7 +2250,6 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, BufferVi
               view == current_view ? mode_names[vim_mode] : "", buffer_flag_string(buffer));
      int save_title_y, save_title_x;
      getyx(stdscr, save_title_y, save_title_x);
-     if(view == overrideable_view) printw("^ ");
      if(terminal_current && view->buffer == terminal_current->buffer) printw("$ ");
      if(view == current_view && recording_macro) printw("RECORDING %c ", recording_macro);
      int64_t row = view->cursor.y + 1;
@@ -3488,7 +3398,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     clear();
                     break;
                case 'v':
-                    config_state->tab_current->view_overrideable = config_state->tab_current->view_current;
                     config_state->tab_current->overriden_buffer = NULL;
                     break;
                case 'q':
@@ -4056,10 +3965,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          config_state->tab_current->view_current->buffer->cursor = config_state->tab_current->view_current->cursor;
 
                          if(ce_remove_view(&config_state->tab_current->view_head, config_state->tab_current->view_current)){
-                              if(config_state->tab_current->view_current == config_state->tab_current->view_overrideable){
-                                   config_state->tab_current->view_overrideable = NULL;
-                              }
-
                               // if head is NULL, then we have removed the view head, and there were no other views, head is NULL
                               if(!config_state->tab_current->view_head){
                                    if(config_state->tab_current->next){
@@ -4419,12 +4324,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                    config_state->tab_current->view_previous = config_state->tab_current->view_current; // save previous view
                                    config_state->tab_current->view_current = terminal_view;
                                    buffer_view = terminal_view;
-                              }else if(config_state->tab_current->view_overrideable){
-                                   // if an overrideable view exists
-                                   tab_view_save_overrideable(config_state->tab_current);
-                                   config_state->tab_current->view_current = config_state->tab_current->view_overrideable;
-                                   buffer_view = config_state->tab_current->view_current;
-                                   buffer_view->buffer = config_state->terminal_current->buffer;
                               }else{
                                    // otherwise use the current view
                                    buffer->cursor = buffer_view->cursor; // save cursor before switching
@@ -4471,14 +4370,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               break;
                          }
 
-                         if(config_state->tab_current->view_overrideable){
-                              tab_view_save_overrideable(config_state->tab_current);
-                              config_state->tab_current->view_current = config_state->tab_current->view_overrideable;
-                              buffer_view = config_state->tab_current->view_current;
-                         }else{
-                              buffer->cursor = buffer_view->cursor; // save cursor before switching
-                         }
-
+                         buffer->cursor = buffer_view->cursor; // save cursor before switching
                          buffer_view->buffer = node->buffer;
 
                          // append the node to the list
@@ -4542,13 +4434,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                                            *cursor,
                                                            config_state->completion_buffer,
                                                            config_state->load_file_search_path);
-                         if(config_state->tab_current->view_overrideable){
-                              tab_view_save_overrideable(config_state->tab_current);
-
-                              config_state->tab_current->view_overrideable->buffer = config_state->completion_buffer;
-                              config_state->tab_current->view_overrideable->cursor = (Point_t){0, 0};
-                              center_view(config_state->tab_current->view_overrideable);
-                         }
                     } break;
                     case 20: // Ctrl + t
                     {
@@ -4886,7 +4771,7 @@ void view_drawer(void* user_data)
      }
 
      draw_view_statuses(config_state->tab_current->view_head, config_state->tab_current->view_current,
-                        config_state->tab_current->view_overrideable, config_state->vim_state.mode, config_state->last_key,
+                        config_state->vim_state.mode, config_state->last_key,
                         config_state->vim_state.recording_macro, config_state->terminal_current);
 
      if(config_state->input){
@@ -4913,7 +4798,7 @@ void view_drawer(void* user_data)
 
           ce_draw_views(config_state->view_input, NULL, LNT_NONE, HLT_NONE);
           draw_view_statuses(config_state->view_input, config_state->tab_current->view_current,
-                             NULL, config_state->vim_state.mode, config_state->last_key,
+                             config_state->vim_state.mode, config_state->last_key,
                              config_state->vim_state.recording_macro, config_state->terminal_current);
      }
 

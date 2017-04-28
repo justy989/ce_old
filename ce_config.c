@@ -876,22 +876,21 @@ bool goto_file_destination_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64
      return false;
 }
 
-// TODO: rather than taking in config_state, I'd like to take in only the parts it needs, if it's too much, config_state is fine
-void jump_to_next_shell_command_file_destination(BufferNode_t* head, ConfigState_t* config_state, bool forwards)
+void jump_to_next_shell_command_file_destination(BufferNode_t* head, TerminalNode_t* terminal_head, TerminalNode_t** terminal_current,
+                                                 BufferView_t* view_head, BufferView_t* view_current, bool forwards)
 {
-     TerminalNode_t* terminal_node = config_state->terminal_current;
-     if(!terminal_node) return;
+     if(!terminal_current) return;
 
-     Buffer_t* terminal_buffer = config_state->terminal_current->buffer;
-     BufferView_t* terminal_view = ce_buffer_in_view(config_state->tab_current->view_head, terminal_buffer);
+     Buffer_t* terminal_buffer = (*terminal_current)->buffer;
+     BufferView_t* terminal_view = ce_buffer_in_view(view_head, terminal_buffer);
 
      if(!terminal_view){
-          TerminalNode_t* term_itr = config_state->terminal_head;
+          TerminalNode_t* term_itr = terminal_head;
           while(term_itr){
-               terminal_view = ce_buffer_in_view(config_state->tab_current->view_head, term_itr->buffer);
+               terminal_view = ce_buffer_in_view(view_head, term_itr->buffer);
                if(terminal_view){
                     terminal_buffer = term_itr->buffer;
-                    config_state->terminal_current = term_itr;
+                    *terminal_current = term_itr;
                     break;
                }
                term_itr = term_itr->next;
@@ -900,7 +899,7 @@ void jump_to_next_shell_command_file_destination(BufferNode_t* head, ConfigState
 
      int64_t lines_checked = 0;
      int64_t delta = forwards ? 1 : -1;
-     for(int64_t i = config_state->terminal_current->last_jump_location + delta; lines_checked < terminal_buffer->line_count;
+     for(int64_t i = (*terminal_current)->last_jump_location + delta; lines_checked < terminal_buffer->line_count;
          i += delta, lines_checked++){
           if(i == terminal_buffer->line_count && forwards){
                i = 0;
@@ -908,9 +907,9 @@ void jump_to_next_shell_command_file_destination(BufferNode_t* head, ConfigState
                i = terminal_buffer->line_count - 1;
           }
 
-          char* terminal_current_directory = terminal_get_current_directory(&config_state->terminal_current->terminal);
-          if(goto_file_destination_in_buffer(head, terminal_buffer, i, config_state->tab_current->view_head,
-                                             config_state->tab_current->view_current, &config_state->terminal_current->last_jump_location,
+          char* terminal_current_directory = terminal_get_current_directory(&(*terminal_current)->terminal);
+          if(goto_file_destination_in_buffer(head, terminal_buffer, i, view_head,
+                                             view_current, &(*terminal_current)->last_jump_location,
                                              terminal_current_directory)){
                // NOTE: change the cursor, so when you go back to that buffer, your cursor is on the line we last jumped to
                terminal_buffer->cursor.x = 0;
@@ -929,7 +928,7 @@ void move_jump_location_to_end_of_output(TerminalNode_t* terminal_node)
      terminal_node->last_jump_location = terminal_node->buffer->line_count - 1;
 }
 
-void cscope_goto_definition(ConfigState_t* config_state, BufferNode_t* head, const char* search_word)
+void cscope_goto_definition(BufferView_t* view_current, BufferNode_t* head, const char* search_word)
 {
      char command[BUFSIZ];
      snprintf(command, BUFSIZ, "cscope -L1%s", search_word);
@@ -973,8 +972,7 @@ void cscope_goto_definition(ConfigState_t* config_state, BufferNode_t* head, con
                }
                *line_number_end_delim = '\0';
                int line_number = atoi(line_number_begin_delim + 1);
-               open_file_destination(head, config_state->tab_current->view_current,
-                                     filename, line_number, 0);
+               open_file_destination(head, view_current, filename, line_number, 0);
           }else{
                ce_message("unexpected cscope output %s", cscope_output);
           }
@@ -1577,14 +1575,16 @@ void clang_completion(ConfigState_t* config_state, Point_t start_completion)
 
 
 // section mouse
-void handle_mouse_event(ConfigState_t* config_state, Buffer_t* buffer, BufferView_t* buffer_view, Point_t* cursor)
+void handle_mouse_event(BufferView_t* buffer_view, VimState_t* vim_state, Input_t* input, TabView_t* tab_current,
+                        TerminalNode_t* terminal_head, TerminalNode_t** terminal_current,
+                        LineNumberType_t line_number_type)
 {
      MEVENT event;
      if(getmouse(&event) == OK){
-          bool enter_insert;
-          if((enter_insert = config_state->vim_state.mode == VM_INSERT)){
-               ce_clamp_cursor(buffer, cursor);
-               vim_enter_normal_mode(&config_state->vim_state);
+          bool enter_insert = vim_state->mode == VM_INSERT;
+          if(enter_insert){
+               ce_clamp_cursor(buffer_view->buffer, &buffer_view->cursor);
+               vim_enter_normal_mode(vim_state);
           }
 #ifdef MOUSE_DIAG
           ce_message("0x%x", event.bstate);
@@ -1641,15 +1641,13 @@ void handle_mouse_event(ConfigState_t* config_state, Buffer_t* buffer, BufferVie
 #endif
           if(event.bstate & BUTTON1_PRESSED){ // Left click OSX
                Point_t click = {event.x, event.y};
-               switch_to_view_at_point(config_state->input.key > 0, config_state->input.view, &config_state->vim_state,
-                                       config_state->tab_current, config_state->terminal_head, &config_state->terminal_current, click);
-               click = (Point_t) {event.x - (config_state->tab_current->view_current->top_left.x - config_state->tab_current->view_current->left_column),
-                                  event.y - (config_state->tab_current->view_current->top_left.y - config_state->tab_current->view_current->top_row)};
-               click.x -= ce_get_line_number_column_width(config_state->line_number_type, buffer->line_count, buffer_view->top_left.y, buffer_view->bottom_right.y);
+               switch_to_view_at_point(input->key > 0, input->view, vim_state, tab_current, terminal_head, terminal_current, click);
+               click = (Point_t) {event.x - (buffer_view->top_left.x - buffer_view->left_column),
+                                  event.y - (buffer_view->top_left.y - buffer_view->top_row)};
+               click.x -= ce_get_line_number_column_width(line_number_type, buffer_view->buffer->line_count,
+                                                          buffer_view->top_left.y, buffer_view->bottom_right.y);
                if(click.x < 0) click.x = 0;
-               ce_set_cursor(config_state->tab_current->view_current->buffer,
-                             &config_state->tab_current->view_current->cursor,
-                             click);
+               ce_set_cursor(buffer_view->buffer, &buffer_view->cursor, click);
           }
 #ifdef SCROLL_SUPPORT
           // This feature is currently unreliable and is only known to work for Ryan :)
@@ -1671,12 +1669,10 @@ void handle_mouse_event(ConfigState_t* config_state, Buffer_t* buffer, BufferVie
                }
           }
 #else
-          (void) buffer;
-          (void) buffer_view;
 #endif
           // if we left insert and haven't switched views, enter insert mode
-          if(enter_insert && config_state->tab_current->view_current == buffer_view){
-               vim_enter_insert_mode(&config_state->vim_state, config_state->tab_current->view_current->buffer);
+          if(enter_insert){
+               vim_enter_insert_mode(vim_state, buffer_view->buffer);
           }
      }
 }
@@ -2435,7 +2431,7 @@ void command_cscope_goto_definition(Command_t* command, void* user_data)
 
      CommandData_t* command_data = (CommandData_t*)(user_data);
      ConfigState_t* config_state = command_data->config_state;
-     cscope_goto_definition(config_state, command_data->head, command->args[0].string);
+     cscope_goto_definition(config_state->tab_current->view_current, command_data->head, command->args[0].string);
 }
 
 #define NOH_HELP "usage: noh"
@@ -3323,7 +3319,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     assert(word_start.y == word_end.y);
                     int len = (word_end.x - word_start.x) + 1;
                     char* search_word = strndupa(buffer->lines[cursor->y] + word_start.x, len);
-                    cscope_goto_definition(config_state, *head, search_word);
+                    cscope_goto_definition(config_state->tab_current->view_current, *head, search_word);
                } break;
                case 'b':
                     run_command_on_terminal_in_view(config_state->terminal_head, config_state->tab_current->view_head, "make");
@@ -3802,7 +3798,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           case VKH_UNHANDLED_KEY:
                switch(key){
                case KEY_MOUSE:
-                    handle_mouse_event(config_state, buffer, buffer_view, cursor);
+                    handle_mouse_event(buffer_view, &config_state->vim_state, &config_state->input, config_state->tab_current,
+                                       config_state->terminal_head, &config_state->terminal_current, config_state->line_number_type);
                     break;
                case KEY_DC:
                     // TODO: with our current insert mode undo implementation we can't support this
@@ -4344,12 +4341,16 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     case 14: // Ctrl + n
                          if(config_state->input.key > 0) break;
 
-                         jump_to_next_shell_command_file_destination(*head, config_state, true);
+                         jump_to_next_shell_command_file_destination(*head, config_state->terminal_head, &config_state->terminal_current,
+                                                                     config_state->tab_current->view_head, config_state->tab_current->view_current,
+                                                                     true);
                          break;
                     case 16: // Ctrl + p
                          if(config_state->input.key > 0) break;
 
-                         jump_to_next_shell_command_file_destination(*head, config_state, false);
+                         jump_to_next_shell_command_file_destination(*head, config_state->terminal_head, &config_state->terminal_current,
+                                                                     config_state->tab_current->view_head, config_state->tab_current->view_current,
+                                                                     false);
                          break;
                     case 6: // Ctrl + f
                     {
@@ -4477,7 +4478,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          assert(word_start.y == word_end.y);
                          int len = (word_end.x - word_start.x) + 1;
                          char* search_word = strndupa(buffer->lines[cursor->y] + word_start.x, len);
-                         cscope_goto_definition(config_state, *head, search_word);
+                         cscope_goto_definition(config_state->tab_current->view_current, *head, search_word);
                     } break;
                     case 'K':
                     {

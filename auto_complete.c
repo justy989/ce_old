@@ -87,6 +87,7 @@ char* auto_complete_get_completion(AutoComplete_t* auto_complete, int64_t x)
      }while(itr != auto_complete->current);
 
      if(min_complete_len) complete_len = min_complete_len;
+     if(complete_len == 0) return NULL;
 
      char* completion = malloc(complete_len + 1);
      strncpy(completion, auto_complete->current->option + offset, complete_len);
@@ -160,4 +161,3 @@ bool auto_complete_prev(AutoComplete_t* auto_complete, const char* match)
      auto_complete_end(auto_complete);
      return false;
 }
-

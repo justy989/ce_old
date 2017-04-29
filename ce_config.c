@@ -150,35 +150,6 @@ void move_cursor_half_page_down(BufferView_t* view)
 }
 
 
-// section destination
-bool dest_open_file(BufferNode_t* head, BufferView_t* view, const char* filename, int line, int column)
-{
-     BufferNode_t* new_buffer_node = buffer_create_from_file(head, filename);
-     if(new_buffer_node){
-          if(view->user_data){
-               JumpArray_t* jump_array = &((BufferViewState_t*)(view->user_data))->jump_array;
-               jump_insert(jump_array, view->buffer->filename, view->cursor);
-          }
-          view->buffer = new_buffer_node->buffer;
-          Point_t dst = {0, line - 1}; // line numbers are 1 indexed
-          ce_set_cursor(new_buffer_node->buffer, &view->cursor, dst);
-
-          // check for optional column number
-          if(column > 0){
-               dst.x = column - 1; // column numbers are 1 indexed
-               ce_set_cursor(new_buffer_node->buffer, &view->cursor, dst);
-          }else{
-               ce_move_cursor_to_soft_beginning_of_line(new_buffer_node->buffer, &view->cursor);
-          }
-
-          view_center(view);
-          return true;
-     }
-
-     return false;
-}
-
-
 // section terminal
 void view_drawer(void* user_data);
 

@@ -200,6 +200,7 @@ typedef struct BufferView_t {
      Point_t top_left;
      Point_t bottom_right;
 
+     // TODO: turn this into a Point_t
      int64_t top_row;
      int64_t left_column;
 

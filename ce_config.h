@@ -112,4 +112,6 @@ typedef struct{
      BufferNode_t* head;
 }CommandData_t;
 
+TerminalNode_t* is_terminal_buffer(TerminalNode_t* terminal_head, Buffer_t* buffer);
+
 #endif

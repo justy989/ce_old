@@ -10,6 +10,7 @@
 #include "ce_config.h"
 #include "syntax.h"
 #include "text_history.h"
+#include "view.h"
 
 #define SCROLL_LINES 1
 
@@ -22,10 +23,9 @@ pthread_mutex_t draw_lock;
 pthread_mutex_t view_input_save_lock;
 pthread_mutex_t completion_lock;
 
-TerminalNode_t* is_terminal_buffer(TerminalNode_t* terminal_head, Buffer_t* buffer);
 void info_update_buffer_list_buffer(Buffer_t* buffer_list_buffer, const BufferNode_t* head);
 
-// section utils
+// section misc
 const char* buffer_flag_string(Buffer_t* buffer)
 {
      switch(buffer->status){
@@ -91,138 +91,74 @@ static void str_collapse_chars(char* string, char* collapseable_chars)
      *src = 0;
 }
 
-// section view/scroll
-// location is {left_column, top_line} for the view
-void view_scroll_to_location(BufferView_t* buffer_view, const Point_t* location){
-     // TODO: should we be able to scroll the view above our first line?
-     buffer_view->left_column = (location->x >= 0) ? location->x : 0;
-     buffer_view->top_row = (location->y >= 0) ? location->y : 0;
+void move_jump_location_to_end_of_output(TerminalNode_t* terminal_node)
+{
+     terminal_node->last_jump_location = terminal_node->buffer->line_count - 1;
 }
 
-void view_center(BufferView_t* view)
+// NOTE: stderr is redirected to stdout
+pid_t bidirectional_popen(const char* cmd, int* in_fd, int* out_fd)
+{
+     int input_fds[2];
+     int output_fds[2];
+
+     if(pipe(input_fds) != 0) return 0;
+     if(pipe(output_fds) != 0) return 0;
+
+     pid_t pid = fork();
+     if(pid < 0) return 0;
+
+     if(pid == 0){
+          close(input_fds[1]);
+          close(output_fds[0]);
+
+          dup2(input_fds[0], STDIN_FILENO);
+          dup2(output_fds[1], STDOUT_FILENO);
+          dup2(output_fds[1], STDERR_FILENO);
+
+          execl("/bin/sh", "/bin/sh", "-c", cmd, NULL);
+          assert(0);
+     }else{
+         close(input_fds[0]);
+         close(output_fds[1]);
+
+         *in_fd = input_fds[1];
+         *out_fd = output_fds[0];
+     }
+
+     return pid;
+}
+
+Point_t get_cursor_on_user_terminal(const Point_t* cursor, const BufferView_t* buffer_view, LineNumberType_t line_number_type)
+{
+     Point_t p = {cursor->x - buffer_view->left_column + buffer_view->top_left.x,
+                  cursor->y - buffer_view->top_row + buffer_view->top_left.y};
+     p.x += ce_get_line_number_column_width(line_number_type, buffer_view->buffer->line_count, buffer_view->top_left.y,
+                                            buffer_view->bottom_right.y);
+     return p;
+}
+
+void get_user_terminal_view_rect(TabView_t* tab_head, Point_t* top_left, Point_t* bottom_right)
+{
+     *top_left = (Point_t){0, 0};
+     *bottom_right = (Point_t){g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 1};
+
+     // if we have multiple tabs
+     if(tab_head->next) top_left->y++;
+}
+
+void move_cursor_half_page_up(BufferView_t* view)
 {
      int64_t view_height = view->bottom_right.y - view->top_left.y;
-     Point_t location = (Point_t) {0, view->cursor.y - (view_height / 2)};
-     view_scroll_to_location(view, &location);
+     Point_t delta = { 0, -view_height / 2 };
+     ce_move_cursor(view->buffer, &view->cursor, delta);
 }
 
-void view_center_when_cursor_outside_portion(BufferView_t* view, float portion_start, float portion_end)
+void move_cursor_half_page_down(BufferView_t* view)
 {
      int64_t view_height = view->bottom_right.y - view->top_left.y;
-     Point_t location = (Point_t) {0, view->cursor.y - (view_height / 2)};
-
-     int64_t current_scroll_y = view->cursor.y - view->top_row;
-     float y_portion = ((float)(current_scroll_y) / (float)(view_height));
-
-     if(y_portion < portion_start || y_portion > portion_end){
-          view_scroll_to_location(view, &location);
-     }
-}
-
-void view_follow_cursor(BufferView_t* current_view, LineNumberType_t line_number_type)
-{
-     ce_follow_cursor(current_view->cursor, &current_view->left_column, &current_view->top_row,
-                      current_view->bottom_right.x - current_view->top_left.x,
-                      current_view->bottom_right.y - current_view->top_left.y,
-                      current_view->bottom_right.x == (g_terminal_dimensions->x - 1),
-                      current_view->bottom_right.y == (g_terminal_dimensions->y - 2),
-                      line_number_type, current_view->buffer->line_count);
-}
-
-void view_follow_highlight(BufferView_t* current_view)
-{
-     ce_follow_cursor(current_view->buffer->highlight_start, &current_view->left_column, &current_view->top_row,
-                      current_view->bottom_right.x - current_view->top_left.x,
-                      current_view->bottom_right.y - current_view->top_left.y,
-                      current_view->bottom_right.x == (g_terminal_dimensions->x - 1),
-                      current_view->bottom_right.y == (g_terminal_dimensions->y - 2),
-                      LNT_NONE, current_view->buffer->line_count);
-}
-
-void view_split(BufferView_t* head_view, BufferView_t* current_view, bool horizontal, LineNumberType_t line_number_type)
-{
-     BufferView_t* new_view = ce_split_view(current_view, current_view->buffer, horizontal);
-     if(new_view){
-          Point_t top_left = {0, 0};
-          Point_t bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 1};
-          ce_calc_views(head_view, top_left, bottom_right);
-          view_follow_cursor(current_view, line_number_type);
-          new_view->cursor = current_view->cursor;
-          new_view->top_row = current_view->top_row;
-          new_view->left_column = current_view->left_column;
-
-          BufferViewState_t* buffer_view_state = calloc(1, sizeof(*buffer_view_state));
-          if(!buffer_view_state){
-               ce_message("failed to allocate buffer view state");
-          }else{
-               new_view->user_data = buffer_view_state;
-          }
-     }
-}
-
-void view_switch_to_point(bool input, BufferView_t* view_input, VimState_t* vim_state, TabView_t* tab,
-                          TerminalNode_t* terminal_head, TerminalNode_t** terminal_current, Point_t point)
-{
-     BufferView_t* next_view = NULL;
-
-     if(point.x < 0) point.x = g_terminal_dimensions->x - 1;
-     if(point.y < 0) point.y = g_terminal_dimensions->y - 1;
-     if(point.x >= g_terminal_dimensions->x) point.x = 0;
-     if(point.y >= g_terminal_dimensions->y) point.y = 0;
-
-     if(input) next_view = ce_find_view_at_point(view_input, point);
-     vim_stop_recording_macro(vim_state);
-     if(!next_view) next_view = ce_find_view_at_point(tab->view_head, point);
-
-     if(next_view){
-          // save view and cursor
-          tab->view_previous = tab->view_current;
-          tab->view_current->buffer->cursor = tab->view_current->cursor;
-          tab->view_current = next_view;
-          vim_enter_normal_mode(vim_state);
-
-          TerminalNode_t* terminal_node = is_terminal_buffer(terminal_head, next_view->buffer);
-          if(terminal_node) *terminal_current = terminal_node;
-     }
-}
-
-void view_switch_to_buffer_list(Buffer_t* buffer_list_buffer, BufferView_t* buffer_view, BufferView_t* view_head, const BufferNode_t* buffer_head) {
-     Buffer_t* buffer = buffer_view->buffer;
-     Point_t* cursor = &buffer_view->cursor;
-
-     JumpArray_t* jump_array = &((BufferViewState_t*)(buffer_view->user_data))->jump_array;
-     jump_insert(jump_array, buffer->filename, *cursor);
-
-     buffer->cursor = buffer_view->cursor;
-
-     // try to find a better place to put the cursor to start
-     const BufferNode_t* itr = buffer_head;
-     int64_t buffer_index = 1;
-     bool found_good_buffer_index = false;
-     while(itr){
-          if(itr->buffer->status != BS_READONLY && !ce_buffer_in_view(view_head, itr->buffer)){
-               found_good_buffer_index = true;
-               break;
-          }
-          itr = itr->next;
-          buffer_index++;
-     }
-
-     info_update_buffer_list_buffer(buffer_list_buffer, buffer_head);
-     buffer_view->buffer->cursor = *cursor;
-     buffer_view->buffer = buffer_list_buffer;
-     buffer_view->top_row = 0;
-     buffer_view->cursor = (Point_t){0, found_good_buffer_index ? buffer_index : 1};
-}
-
-void view_override_with_buffer(BufferView_t* view, Buffer_t* new_buffer, Buffer_t** buffer_before_override)
-{
-     *buffer_before_override = view->buffer;
-     (*buffer_before_override)->cursor = view->cursor;
-
-     view->buffer = new_buffer;
-     view->cursor = (Point_t){0, 0};
-     view->top_row = 0;
+     Point_t delta = { 0, view_height / 2 };
+     ce_move_cursor(view->buffer, &view->cursor, delta);
 }
 
 
@@ -940,79 +876,6 @@ pclose_cscope:
 }
 
 
-// section misc
-void move_jump_location_to_end_of_output(TerminalNode_t* terminal_node)
-{
-     terminal_node->last_jump_location = terminal_node->buffer->line_count - 1;
-}
-
-// NOTE: stderr is redirected to stdout
-pid_t bidirectional_popen(const char* cmd, int* in_fd, int* out_fd)
-{
-     int input_fds[2];
-     int output_fds[2];
-
-     if(pipe(input_fds) != 0) return 0;
-     if(pipe(output_fds) != 0) return 0;
-
-     pid_t pid = fork();
-     if(pid < 0) return 0;
-
-     if(pid == 0){
-          close(input_fds[1]);
-          close(output_fds[0]);
-
-          dup2(input_fds[0], STDIN_FILENO);
-          dup2(output_fds[1], STDOUT_FILENO);
-          dup2(output_fds[1], STDERR_FILENO);
-
-          execl("/bin/sh", "/bin/sh", "-c", cmd, NULL);
-          assert(0);
-     }else{
-         close(input_fds[0]);
-         close(output_fds[1]);
-
-         *in_fd = input_fds[1];
-         *out_fd = output_fds[0];
-     }
-
-     return pid;
-}
-
-Point_t get_cursor_on_user_terminal(const Point_t* cursor, const BufferView_t* buffer_view, LineNumberType_t line_number_type)
-{
-     Point_t p = {cursor->x - buffer_view->left_column + buffer_view->top_left.x,
-                  cursor->y - buffer_view->top_row + buffer_view->top_left.y};
-     p.x += ce_get_line_number_column_width(line_number_type, buffer_view->buffer->line_count, buffer_view->top_left.y,
-                                            buffer_view->bottom_right.y);
-     return p;
-}
-
-void get_user_terminal_view_rect(TabView_t* tab_head, Point_t* top_left, Point_t* bottom_right)
-{
-     *top_left = (Point_t){0, 0};
-     *bottom_right = (Point_t){g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 1};
-
-     // if we have multiple tabs
-     if(tab_head->next) top_left->y++;
-}
-
-void move_cursor_half_page_up(BufferView_t* view)
-{
-     int64_t view_height = view->bottom_right.y - view->top_left.y;
-     Point_t delta = { 0, -view_height / 2 };
-     ce_move_cursor(view->buffer, &view->cursor, delta);
-}
-
-void move_cursor_half_page_down(BufferView_t* view)
-{
-     int64_t view_height = view->bottom_right.y - view->top_left.y;
-     Point_t delta = { 0, view_height / 2 };
-     ce_move_cursor(view->buffer, &view->cursor, delta);
-}
-
-
-
 // section terminal
 void view_drawer(void* user_data);
 
@@ -1140,6 +1003,7 @@ bool terminal_in_view_run_command(TerminalNode_t* terminal_head, BufferView_t* v
 
      return false;
 }
+
 
 // section completion
 void completion_update_buffer(Buffer_t* completion_buffer, AutoComplete_t* auto_complete, const char* match)
@@ -1656,6 +1520,7 @@ void mouse_handle_event(BufferView_t* buffer_view, VimState_t* vim_state, Input_
      }
 }
 
+
 // section info buffers
 void info_update_buffer_list_buffer(Buffer_t* buffer_list_buffer, const BufferNode_t* head)
 {
@@ -1799,12 +1664,8 @@ void info_update_macro_list_buffer(ConfigState_t* config_state)
      config_state->macro_list_buffer.status = BS_READONLY;
 }
 
-// section quit
-void quit(ConfigState_t* config_state)
-{
-     config_state->quit = true;
-}
 
+// section quit
 void quit_and_prompt_if_unsaved(ConfigState_t* config_state, BufferNode_t* head)
 {
      uint64_t unsaved_buffers = 0;
@@ -1818,9 +1679,10 @@ void quit_and_prompt_if_unsaved(ConfigState_t* config_state, BufferNode_t* head)
           input_start(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state,
                       "Unsaved buffers... Quit anyway? (y/n)", 'q');
      }else{
-          quit(config_state);
+          config_state->quit = true;
      }
 }
+
 
 // section confirm action
 bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
@@ -1848,7 +1710,7 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                if(!config_state->input.buffer.line_count) break;
 
                if(tolower(config_state->input.buffer.lines[0][0]) == 'y'){
-                    quit(config_state);
+                    config_state->quit = true;
                }
                return true;
           case 2: // Ctrl + b
@@ -2355,7 +2217,7 @@ void command_quit_all(Command_t* command, void* user_data)
      CommandData_t* command_data = (CommandData_t*)(user_data);
      ConfigState_t* config_state = command_data->config_state;
      if(strchr(command->name, '!')) {
-          quit(config_state);
+          config_state->quit = true;
      }else{
           quit_and_prompt_if_unsaved(config_state, command_data->head);
      }
@@ -2542,6 +2404,7 @@ void command_buffers(Command_t* command, void* user_data)
                                 command_data->config_state->tab_current->view_current,
                                 command_data->config_state->tab_current->view_head,
                                 command_data->head);
+     info_update_buffer_list_buffer(&command_data->config_state->buffer_list_buffer, command_data->head);
 }
 
 #define MACRO_BACKSLASHES_HELP "usage: macro_backslashes"
@@ -3156,6 +3019,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                                config_state->tab_current->view_current,
                                                config_state->tab_current->view_head,
                                                *head);
+                    info_update_buffer_list_buffer(&config_state->buffer_list_buffer, *head);
                     break;
                }
           } break;

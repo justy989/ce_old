@@ -9,7 +9,7 @@
 #include "vim.h"
 #include "terminal.h"
 #include "tab_view.h"
-#include "text_history.h"
+#include "input.h"
 #include "auto_complete.h"
 #include "jump.h"
 
@@ -40,27 +40,6 @@ typedef struct{
 }CommandEntry_t;
 
 typedef struct{
-     int key;
-     const char* message;
-
-     VimMode_t vim_mode_save;
-     Point_t visual_save;
-     Point_t cursor_save;
-     int64_t scroll_top_row_save;
-     int64_t scroll_left_column_save;
-     BufferView_t* view_save;
-
-     BufferView_t* view;
-     Buffer_t buffer;
-
-     TextHistory_t search_history;
-     TextHistory_t command_history;
-
-     char* load_file_search_path;
-}Input_t;
-
-typedef struct{
-
      Buffer_t buffer_list_buffer;
      Buffer_t mark_list_buffer;
      Buffer_t yank_list_buffer;
@@ -111,6 +90,8 @@ typedef struct{
      ConfigState_t* config_state;
      BufferNode_t* head;
 }CommandData_t;
+
+pthread_mutex_t view_input_save_lock;
 
 TerminalNode_t* is_terminal_buffer(TerminalNode_t* terminal_head, Buffer_t* buffer);
 

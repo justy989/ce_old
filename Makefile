@@ -34,7 +34,7 @@ ce: main.c ce.o
 %.test.o: %.c
 	$(CC) -c -fpic $(CFLAGS) $^ -o $@
 
-ce_config.so: ce_config.o ce.o vim.o terminal.o syntax.o text_history.o auto_complete.o tab_view.o jump.o view.o buffer.o input.o destination.o
+ce_config.so: ce_config.o ce.o vim.o terminal.o syntax.o text_history.o auto_complete.o tab_view.o jump.o view.o buffer.o input.o destination.o completion.o
 	$(CC) -shared $(CFLAGS) $^ -o $@ $(LINK)
 
 clean: clean_config clean_test

@@ -12,6 +12,7 @@
 #include "input.h"
 #include "auto_complete.h"
 #include "jump.h"
+#include "command.h"
 
 // NOTE: 60 fps limit
 #define DRAW_USEC_LIMIT 16666
@@ -32,12 +33,6 @@ typedef struct TerminalNode_t{
 typedef struct{
      JumpArray_t jump_array;
 }BufferViewState_t;
-
-typedef struct{
-     ce_command* func;
-     const char* name;
-     bool hidden;
-}CommandEntry_t;
 
 typedef struct{
      Buffer_t buffer_list_buffer;
@@ -97,5 +92,6 @@ pthread_mutex_t completion_lock;
 
 void view_drawer(void* user_data);
 TerminalNode_t* is_terminal_buffer(TerminalNode_t* terminal_head, Buffer_t* buffer);
+void terminal_resize_if_in_view(BufferView_t* view_head, TerminalNode_t* terminal_head);
 
 #endif

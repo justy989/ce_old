@@ -1,4 +1,5 @@
 #include "view.h"
+#include "terminal_helper.h"
 
 // location is {left_column, top_line} for the view
 void view_scroll_to_location(BufferView_t* buffer_view, const Point_t* location)

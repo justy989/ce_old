@@ -1,6 +1,8 @@
 CC=clang
 CFLAGS+=-Wall -Werror -Wextra -std=c11 -ggdb3 -D_GNU_SOURCE $(SCROLL_FLAG)
 LINK=-lncurses -lutil -lm
+OBJS=ce_config.o vim.o terminal.o syntax.o text_history.o auto_complete.o tab_view.o jump.o view.o buffer.o input.o \
+     destination.o completion.o command.o info.o terminal_helper.o misc.o
 
 all: LINK += -lpthread
 all: ce ce_config.so
@@ -34,7 +36,7 @@ ce: main.c ce.o
 %.test.o: %.c
 	$(CC) -c -fpic $(CFLAGS) $^ -o $@
 
-ce_config.so: ce_config.o ce.o vim.o terminal.o syntax.o text_history.o auto_complete.o tab_view.o jump.o view.o buffer.o input.o destination.o completion.o command.o info.o misc.o
+ce_config.so: ce.o $(OBJS)
 	$(CC) -shared $(CFLAGS) $^ -o $@ $(LINK)
 
 clean: clean_config clean_test

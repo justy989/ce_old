@@ -91,7 +91,5 @@ pthread_mutex_t draw_lock;
 pthread_mutex_t completion_lock;
 
 void view_drawer(void* user_data);
-TerminalNode_t* is_terminal_buffer(TerminalNode_t* terminal_head, Buffer_t* buffer);
-void terminal_resize_if_in_view(BufferView_t* view_head, TerminalNode_t* terminal_head);
 
 #endif

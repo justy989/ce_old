@@ -4,6 +4,7 @@
 #include "buffer.h"
 #include "destination.h"
 #include "info.h"
+#include "terminal_helper.h"
 #include "misc.h"
 
 #include <ctype.h>
@@ -544,7 +545,7 @@ CommandEntry_t* commands_init(int64_t* command_entry_count)
      *command_entry_count = sizeof(command_entries) / sizeof(command_entries[0]);
      CommandEntry_t* new_command_entries = malloc(*command_entry_count * sizeof(*command_entries));
      for(int64_t i = 0; i < *command_entry_count; ++i){
-          command_entries[i] = command_entries[i];
+          new_command_entries[i] = command_entries[i];
      }
 
      return new_command_entries;

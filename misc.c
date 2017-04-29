@@ -59,6 +59,11 @@ void misc_move_cursor_half_page_down(BufferView_t* view)
      ce_move_cursor(view->buffer, &view->cursor, delta);
 }
 
+void misc_move_jump_location_to_end_of_output(TerminalNode_t* terminal_node)
+{
+     terminal_node->last_jump_location = terminal_node->buffer->line_count - 1;
+}
+
 void misc_quit_and_prompt_if_unsaved(ConfigState_t* config_state, BufferNode_t* head)
 {
      uint64_t unsaved_buffers = 0;

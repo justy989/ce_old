@@ -72,7 +72,7 @@ void mouse_handle_event(BufferView_t* buffer_view, VimState_t* vim_state, Input_
      }
 }
 
-bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
+bool confirm_action(ConfigState_t* config_state, BufferNode_t** head)
 {
      BufferView_t* buffer_view = config_state->tab_current->view_current;
      Buffer_t* buffer = buffer_view->buffer;
@@ -111,7 +111,7 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                     if(!ce_insert_string(&config_state->input.buffer, (Point_t){0, 0}, config_state->auto_complete.current->option)) break;
                }
 
-               BufferNode_t* itr = head;
+               BufferNode_t* itr = *head;
 
                while(itr){
                     if(strcmp(itr->buffer->name, config_state->input.buffer.lines[0]) == 0){
@@ -171,7 +171,7 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
                config_state->input.load_file_search_path = NULL;
 
                if(!switched_to_open_file){
-                    config_state->tab_current->view_current->buffer = head->buffer; // message buffer
+                    config_state->tab_current->view_current->buffer = (*head)->buffer; // message buffer
                     config_state->tab_current->view_current->cursor = (Point_t){0, 0};
                }
 
@@ -337,7 +337,7 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t* head)
      }else if(buffer_view->buffer == &config_state->buffer_list_buffer){
           int64_t line = cursor->y - 1; // account for buffer list row header
           if(line < 0) return false;
-          BufferNode_t* itr = head;
+          BufferNode_t* itr = *head;
 
           while(line > 0){
                itr = itr->next;
@@ -597,7 +597,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
           config_state->completion_buffer->syntax_fn = syntax_highlight_c;
           config_state->completion_buffer->syntax_user_data = realloc(config_state->completion_buffer->syntax_user_data, sizeof(SyntaxC_t));
           config_state->completion_buffer->type = BFT_C;
-          BufferNode_t* new_buffer_node = ce_append_buffer_to_list(*head, config_state->completion_buffer);
+          BufferNode_t* new_buffer_node = ce_append_buffer_to_list(head, config_state->completion_buffer);
           if(!new_buffer_node){
                ce_message("failed to add shell command buffer to list");
                return false;
@@ -619,7 +619,7 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      config_state->tab_current->view_current = config_state->tab_current->view_head;
 
      for(int i = 0; i < argc; ++i){
-          BufferNode_t* node = buffer_create_from_file(*head, argv[i]);
+          BufferNode_t* node = buffer_create_from_file(head, argv[i]);
 
           // if we loaded a file, set the view to point at the file
           if(node){
@@ -1133,7 +1133,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          break;
                     }
 
-                    BufferNode_t* node = buffer_create_from_file(*head, filename);
+                    BufferNode_t* node = buffer_create_from_file(head, filename);
                     if(node){
                          buffer_view->buffer = node->buffer;
                          buffer_view->cursor = (Point_t){0, 0};
@@ -1146,7 +1146,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     assert(word_start.y == word_end.y);
                     int len = (word_end.x - word_start.x) + 1;
                     char* search_word = strndupa(buffer->lines[cursor->y] + word_start.x, len);
-                    dest_cscope_goto_definition(config_state->tab_current->view_current, *head, search_word);
+                    dest_cscope_goto_definition(config_state->tab_current->view_current, head, search_word);
                } break;
                case 'b':
                     terminal_in_view_run_command(config_state->terminal_head, config_state->tab_current->view_head, "make");
@@ -1342,7 +1342,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
      if(!handled_key){
           if(key == KEY_ENTER){
-               if(confirm_action(config_state, *head)){
+               if(confirm_action(config_state, head)){
                     ce_keys_free(&config_state->vim_state.command_head);
                     key = 0;
                     handled_key = true;
@@ -2128,7 +2128,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          node->buffer->syntax_fn = terminal_highlight;
                          node->buffer->syntax_user_data = terminal_highlight_data;
 
-                         BufferNode_t* new_buffer_node = ce_append_buffer_to_list(*head, node->buffer);
+                         BufferNode_t* new_buffer_node = ce_append_buffer_to_list(head, node->buffer);
                          if(!new_buffer_node){
                               ce_message("failed to add shell command buffer to list");
                               break;
@@ -2166,14 +2166,14 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     case 14: // Ctrl + n
                          if(config_state->input.key > 0) break;
 
-                         dest_jump_to_next_in_terminal(*head, config_state->terminal_head, &config_state->terminal_current,
+                         dest_jump_to_next_in_terminal(head, config_state->terminal_head, &config_state->terminal_current,
                                                        config_state->tab_current->view_head, config_state->tab_current->view_current,
                                                        true);
                          break;
                     case 16: // Ctrl + p
                          if(config_state->input.key > 0) break;
 
-                         dest_jump_to_next_in_terminal(*head, config_state->terminal_head, &config_state->terminal_current,
+                         dest_jump_to_next_in_terminal(head, config_state->terminal_head, &config_state->terminal_current,
                                                        config_state->tab_current->view_head, config_state->tab_current->view_current,
                                                        false);
                          break;
@@ -2278,7 +2278,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               }
                               const Jump_t* jump = jump_to_previous(jump_array);
                               if(jump){
-                                   BufferNode_t* new_buffer_node = buffer_create_from_file(*head, jump->filepath);
+                                   BufferNode_t* new_buffer_node = buffer_create_from_file(head, jump->filepath);
                                    if(new_buffer_node){
                                         buffer_view->buffer = new_buffer_node->buffer;
                                         buffer_view->cursor = jump->location;
@@ -2293,7 +2293,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          JumpArray_t* jump_array = &((BufferViewState_t*)(buffer_view->user_data))->jump_array;
                          const Jump_t* jump = jump_to_next(jump_array);
                          if(jump){
-                              BufferNode_t* new_buffer_node = buffer_create_from_file(*head, jump->filepath);
+                              BufferNode_t* new_buffer_node = buffer_create_from_file(head, jump->filepath);
                               if(new_buffer_node){
                                    buffer_view->buffer = new_buffer_node->buffer;
                                    buffer_view->cursor = jump->location;
@@ -2309,7 +2309,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          assert(word_start.y == word_end.y);
                          int len = (word_end.x - word_start.x) + 1;
                          char* search_word = strndupa(buffer->lines[cursor->y] + word_start.x, len);
-                         dest_cscope_goto_definition(config_state->tab_current->view_current, *head, search_word);
+                         dest_cscope_goto_definition(config_state->tab_current->view_current, head, search_word);
                     } break;
                     case 'K':
                     {

@@ -240,7 +240,7 @@ typedef bool ce_key_handler (int, BufferNode_t**, void*);
 
 
 // BufferList Manipulation Functions
-BufferNode_t* ce_append_buffer_to_list (BufferNode_t* head, Buffer_t* buffer); // NOTE: we may want to consider taking tail rather than head
+BufferNode_t* ce_append_buffer_to_list (BufferNode_t** head, Buffer_t* buffer); // NOTE: we may want to consider taking tail rather than head
 bool ce_remove_buffer_from_list        (BufferNode_t** head, Buffer_t* buffer);
 
 

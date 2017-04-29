@@ -17,7 +17,7 @@ coverage: clean_test test
 	llvm-cov gcov vim.test.o
 
 test: LINK += -rdynamic
-test: clean_test test_ce test_vim test_auto_complete
+test: clean_test test_ce test_vim test_auto_complete test_buffer
 
 test_ce: test_ce.c ce.test.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LINK)
@@ -29,6 +29,10 @@ test_vim: test_vim.c ce.test.o vim.test.o
 
 test_auto_complete: test_auto_complete.c auto_complete.test.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LINK)
+	./$@ 2>> test_output.txt || (cat test_output.txt && false)
+
+test_buffer: test_buffer.c buffer.test.o ce.test.o syntax.test.o vim.test.o terminal.test.o
+	$(CC) $(CFLAGS) $^ -o $@ $(LINK) -lpthread
 	./$@ 2>> test_output.txt || (cat test_output.txt && false)
 
 ce: main.c ce.o
@@ -50,4 +54,4 @@ clean_config:
 	rm -f ce_config.so
 
 clean_test:
-	rm -f test_ce test_vim test_auto_complete ce.test.o ce_vim.test.o *.gcda *.gcno *.gcov test_output.txt default.profraw
+	rm -f test_ce test_vim test_auto_complete test_buffer ce.test.o ce_vim.test.o *.gcda *.gcno *.gcov test_output.txt default.profraw

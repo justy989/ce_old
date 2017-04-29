@@ -277,7 +277,7 @@ static void command_quit_all(Command_t* command, void* user_data)
      if(strchr(command->name, '!')) {
           config_state->quit = true;
      }else{
-          misc_quit_and_prompt_if_unsaved(config_state, command_data->head);
+          misc_quit_and_prompt_if_unsaved(config_state, *command_data->head);
      }
 }
 
@@ -405,13 +405,13 @@ static void command_new_buffer(Command_t* command, void* user_data)
      ConfigState_t* config_state = command_data->config_state;
 
      if(command->arg_count == 0){
-          BufferNode_t* new_buffer_node = buffer_new_empty(*config_state->save_buffer_head, "unnamed");
+          BufferNode_t* new_buffer_node = buffer_create_empty(command_data->head, "unnamed");
           if(new_buffer_node){
                config_state->tab_current->view_current->buffer = new_buffer_node->buffer;
                config_state->tab_current->view_current->cursor = (Point_t){0, 0};
           }
      }else if(command->arg_count == 1){
-          BufferNode_t* new_buffer_node = buffer_new_empty(*config_state->save_buffer_head, command->args[0].string);
+          BufferNode_t* new_buffer_node = buffer_create_empty(command_data->head, command->args[0].string);
           if(new_buffer_node){
                config_state->tab_current->view_current->buffer = new_buffer_node->buffer;
                config_state->tab_current->view_current->cursor = (Point_t){0, 0};
@@ -461,8 +461,8 @@ static void command_buffers(Command_t* command, void* user_data)
      view_switch_to_buffer_list(&command_data->config_state->buffer_list_buffer,
                                 command_data->config_state->tab_current->view_current,
                                 command_data->config_state->tab_current->view_head,
-                                command_data->head);
-     info_update_buffer_list_buffer(&command_data->config_state->buffer_list_buffer, command_data->head);
+                                *command_data->head);
+     info_update_buffer_list_buffer(&command_data->config_state->buffer_list_buffer, *command_data->head);
 }
 
 #define MACRO_BACKSLASHES_HELP "usage: macro_backslashes"

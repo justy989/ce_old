@@ -1663,11 +1663,15 @@ bool ce_draw_buffer(const Buffer_t* buffer, const Point_t* cursor, const Point_t
      return true;
 }
 
-BufferNode_t* ce_append_buffer_to_list(BufferNode_t* head, Buffer_t* buffer)
+BufferNode_t* ce_append_buffer_to_list(BufferNode_t** head, Buffer_t* buffer)
 {
-     // find last element
-     while(head->next){
-          head = head->next;
+     BufferNode_t* itr = *head;
+
+     if(itr){
+          // find last element
+          while(itr->next){
+               itr = itr->next;
+          }
      }
 
      BufferNode_t* new = malloc(sizeof(BufferNode_t));
@@ -1676,7 +1680,12 @@ BufferNode_t* ce_append_buffer_to_list(BufferNode_t* head, Buffer_t* buffer)
           return NULL;
      }
 
-     head->next = new;
+     if(itr){
+          itr->next = new;
+     }else{
+          *head = new;
+     }
+
      new->buffer = buffer;
      new->next = NULL;
 

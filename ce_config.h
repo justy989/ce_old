@@ -83,7 +83,7 @@ typedef struct{
 
 typedef struct{
      ConfigState_t* config_state;
-     BufferNode_t* head;
+     BufferNode_t** head;
 }CommandData_t;
 
 pthread_mutex_t view_input_save_lock;

@@ -141,7 +141,7 @@ bool buffer_initialize(Buffer_t* buffer)
      return true;
 }
 
-BufferNode_t* buffer_new_empty(BufferNode_t* head, const char* name)
+BufferNode_t* buffer_create_empty(BufferNode_t** head, const char* name)
 {
      if(access(name, F_OK) == 0){
           ce_message("failed to create new buffer named '%s', file already exists.", name);
@@ -175,17 +175,16 @@ BufferNode_t* buffer_new_empty(BufferNode_t* head, const char* name)
           return NULL;
      }
 
-     ce_alloc_lines(buffer, 1);
      return new_buffer_node;
 }
 
-BufferNode_t* buffer_create_from_file(BufferNode_t* head, const char* filename)
+BufferNode_t* buffer_create_from_file(BufferNode_t** head, const char* filename)
 {
      struct stat new_file_stat;
 
      if(stat(filename, &new_file_stat) == 0){
           struct stat open_file_stat;
-          BufferNode_t* itr = head;
+          BufferNode_t* itr = *head;
           while(itr){
                // NOTE: should we cache inodes?
                if(stat(itr->buffer->name, &open_file_stat) == 0){
@@ -295,7 +294,7 @@ bool buffer_delete_at_index(BufferNode_t** head, TabView_t* tab_head, int64_t bu
           if(term_itr == *terminal_current) *terminal_current = NULL;
 
           pthread_cancel(term_itr->check_update_thread);
-          pthread_join(term_itr->check_update_thread, NULL);
+          pthread_detach(term_itr->check_update_thread);
           terminal_free(&term_itr->terminal);
 
           if(term_prev){
@@ -308,14 +307,12 @@ bool buffer_delete_at_index(BufferNode_t** head, TabView_t* tab_head, int64_t bu
      ce_remove_buffer_from_list(head, delete_buffer);
 
      // change views that are showing this buffer for all tabs
-     if(head){
+     if(*head){
           TabView_t* tab_itr = tab_head;
           while(tab_itr){
                ce_change_buffer_in_views(tab_itr->view_head, delete_buffer, (*head)->buffer);
                tab_itr = tab_itr->next;
           }
-     }else{
-          return false;
      }
 
      // free the buffer and it's state

@@ -16,7 +16,7 @@ static bool str_all_digits(const char* string)
 }
 
 // NOTE: modifies last_jump only if we succeed
-bool dest_goto_file_location_in_buffer(BufferNode_t* head, Buffer_t* buffer, int64_t line, BufferView_t* head_view,
+bool dest_goto_file_location_in_buffer(BufferNode_t** head, Buffer_t* buffer, int64_t line, BufferView_t* head_view,
                                        BufferView_t* view, int64_t* last_jump, char* terminal_current_directory)
 {
      if(!buffer->line_count) return false;
@@ -147,7 +147,7 @@ bool dest_goto_file_location_in_buffer(BufferNode_t* head, Buffer_t* buffer, int
      return false;
 }
 
-void dest_jump_to_next_in_terminal(BufferNode_t* head, TerminalNode_t* terminal_head, TerminalNode_t** terminal_current,
+void dest_jump_to_next_in_terminal(BufferNode_t** head, TerminalNode_t* terminal_head, TerminalNode_t** terminal_current,
                                    BufferView_t* view_head, BufferView_t* view_current, bool forwards)
 {
      if(!terminal_current) return;
@@ -194,7 +194,7 @@ void dest_jump_to_next_in_terminal(BufferNode_t* head, TerminalNode_t* terminal_
      }
 }
 
-void dest_cscope_goto_definition(BufferView_t* view_current, BufferNode_t* head, const char* search_word)
+void dest_cscope_goto_definition(BufferView_t* view_current, BufferNode_t** head, const char* search_word)
 {
      char command[BUFSIZ];
      snprintf(command, BUFSIZ, "cscope -L1%s", search_word);
@@ -250,7 +250,7 @@ pclose_cscope:
      }
 }
 
-bool dest_open_file(BufferNode_t* head, BufferView_t* view, const char* filename, int line, int column)
+bool dest_open_file(BufferNode_t** head, BufferView_t* view, const char* filename, int line, int column)
 {
      BufferNode_t* new_buffer_node = buffer_create_from_file(head, filename);
      if(new_buffer_node){

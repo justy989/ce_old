@@ -49,6 +49,7 @@ static bool parse_arg(CommandArg_t* arg, const char* string)
      while(*itr){
           if(!isdigit(*itr)){
                if(*itr == '.'){
+                    if(decimal) return false;
                     decimal = true;
                }else{
                     digits_only = false;
@@ -130,13 +131,19 @@ bool command_parse(Command_t* command, const char* string)
                memset(buffer, 0, arg_len + 1);
 
                strncpy(buffer, start, arg_len);
-               parse_arg(arg, buffer);
+               if(!parse_arg(arg, buffer)){
+                    command_free(command);
+                    return false;
+               }
           }else{
                int64_t arg_len = strlen(start);
                char buffer[arg_len + 1];
                memset(buffer, 0, arg_len + 1);
                strcpy(buffer, start);
-               parse_arg(arg, buffer);
+               if(!parse_arg(arg, buffer)){
+                    command_free(command);
+                    return false;
+               }
                break;
           }
 

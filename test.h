@@ -1,6 +1,7 @@
 #ifndef TEST_HPP
 #define TEST_HPP
 
+#include <stdio.h>
 #include <stdbool.h>
 
 typedef void test_func_t(bool*);

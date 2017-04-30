@@ -1180,7 +1180,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                if(!isprint(key)) break;
 
                if(key == '?'){
-                    info_update_mark_list_buffer(config_state, buffer);
+                    info_update_mark_list_buffer(&config_state->mark_list_buffer, buffer);
 
                     view_override_with_buffer(config_state->tab_current->view_current, &config_state->mark_list_buffer, &config_state->buffer_before_query);
 
@@ -1194,7 +1194,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                if(!isprint(key)) break;
 
                if(key == '?'){
-                    info_update_yank_list_buffer(config_state);
+                    info_update_yank_list_buffer(&config_state->yank_list_buffer, config_state->vim_state.yank_head);
 
                     view_override_with_buffer(config_state->tab_current->view_current, &config_state->yank_list_buffer, &config_state->buffer_before_query);
 
@@ -1215,7 +1215,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           case 'q':
           case '@':
                if(key == '?'){
-                    info_update_macro_list_buffer(config_state);
+                    info_update_macro_list_buffer(&config_state->macro_list_buffer, &config_state->vim_state);
 
                     view_override_with_buffer(config_state->tab_current->view_current, &config_state->macro_list_buffer, &config_state->buffer_before_query);
 
@@ -2405,15 +2405,15 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
      if(config_state->tab_current->view_current->buffer != &config_state->mark_list_buffer &&
         ce_buffer_in_view(config_state->tab_current->view_head, &config_state->mark_list_buffer)){
-          info_update_mark_list_buffer(config_state, buffer);
+          info_update_mark_list_buffer(&config_state->mark_list_buffer, buffer);
      }
 
      if(ce_buffer_in_view(config_state->tab_current->view_head, &config_state->yank_list_buffer)){
-          info_update_yank_list_buffer(config_state);
+          info_update_yank_list_buffer(&config_state->yank_list_buffer, config_state->vim_state.yank_head);
      }
 
      if(ce_buffer_in_view(config_state->tab_current->view_head, &config_state->macro_list_buffer)){
-          info_update_macro_list_buffer(config_state);
+          info_update_macro_list_buffer(&config_state->macro_list_buffer, &config_state->vim_state);
      }
 
      // grab the draw lock so we can draw

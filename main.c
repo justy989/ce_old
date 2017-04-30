@@ -35,6 +35,7 @@ LITTLE:
 -buffer view of jump list
 -auto complete gets in the way when there is text after the cursor
 -terminal cursor sticks and doesn't allow scrolling up after some commands
+-'dbu' doesn't leave the cursor in the place I'd expect?
 */
 #if 0
 error in string syntax highlighting for <tacos>"

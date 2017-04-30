@@ -47,14 +47,14 @@ void info_update_buffer_list_buffer(Buffer_t* buffer_list_buffer, const BufferNo
      buffer_list_buffer->status = BS_READONLY;
 }
 
-void info_update_mark_list_buffer(ConfigState_t* config_state, const Buffer_t* buffer)
+void info_update_mark_list_buffer(Buffer_t* mark_list_buffer, const Buffer_t* buffer)
 {
      char buffer_info[BUFSIZ];
-     config_state->mark_list_buffer.status = BS_NONE;
-     ce_clear_lines(&config_state->mark_list_buffer);
+     mark_list_buffer->status = BS_NONE;
+     ce_clear_lines(mark_list_buffer);
 
      snprintf(buffer_info, BUFSIZ, "// reg line");
-     ce_append_line(&config_state->mark_list_buffer, buffer_info);
+     ce_append_line(mark_list_buffer, buffer_info);
 
      int max_digits = 1;
      const VimMarkNode_t* itr = ((BufferState_t*)(buffer->user_data))->vim_buffer_state.mark_head;
@@ -69,57 +69,57 @@ void info_update_mark_list_buffer(ConfigState_t* config_state, const Buffer_t* b
           snprintf(buffer_info, BUFSIZ, "  '%c' %*"PRId64" %s",
                    itr->reg_char, max_digits, itr->location.y,
                    itr->location.y < buffer->line_count ? buffer->lines[itr->location.y] : "");
-          ce_append_line(&config_state->mark_list_buffer, buffer_info);
+          ce_append_line(mark_list_buffer, buffer_info);
           itr = itr->next;
      }
 
-     config_state->mark_list_buffer.status = BS_READONLY;
+     mark_list_buffer->status = BS_READONLY;
 }
 
-void info_update_yank_list_buffer(ConfigState_t* config_state)
+void info_update_yank_list_buffer(Buffer_t* yank_list_buffer, const VimYankNode_t* yank_head)
 {
      char buffer_info[BUFSIZ];
-     config_state->yank_list_buffer.status = BS_NONE;
-     ce_clear_lines(&config_state->yank_list_buffer);
+     yank_list_buffer->status = BS_NONE;
+     ce_clear_lines(yank_list_buffer);
 
-     const VimYankNode_t* itr = config_state->vim_state.yank_head;
+     const VimYankNode_t* itr = yank_head;
      while(itr){
           snprintf(buffer_info, BUFSIZ, "// reg '%c'", itr->reg_char);
-          ce_append_line(&config_state->yank_list_buffer, buffer_info);
-          ce_append_line(&config_state->yank_list_buffer, itr->text);
+          ce_append_line(yank_list_buffer, buffer_info);
+          ce_append_line(yank_list_buffer, itr->text);
           itr = itr->next;
      }
 
-     config_state->yank_list_buffer.status = BS_READONLY;
+     yank_list_buffer->status = BS_READONLY;
 }
 
-void info_update_macro_list_buffer(ConfigState_t* config_state)
+void info_update_macro_list_buffer(Buffer_t* macro_list_buffer, const VimState_t* vim_state)
 {
      char buffer_info[BUFSIZ];
-     config_state->macro_list_buffer.status = BS_NONE;
-     ce_clear_lines(&config_state->macro_list_buffer);
+     macro_list_buffer->status = BS_NONE;
+     ce_clear_lines(macro_list_buffer);
 
-     ce_append_line(&config_state->macro_list_buffer, "// reg actions");
+     ce_append_line(macro_list_buffer, "// reg actions");
 
-     const VimMacroNode_t* itr = config_state->vim_state.macro_head;
+     const VimMacroNode_t* itr = vim_state->macro_head;
      while(itr){
           char* char_string = vim_command_string_to_char_string(itr->command);
           snprintf(buffer_info, BUFSIZ, "  '%c' %s", itr->reg, char_string);
-          ce_append_line(&config_state->macro_list_buffer, buffer_info);
+          ce_append_line(macro_list_buffer, buffer_info);
           free(char_string);
           itr = itr->next;
      }
 
-     if(config_state->vim_state.recording_macro){
-          ce_append_line(&config_state->macro_list_buffer, "");
-          ce_append_line(&config_state->macro_list_buffer, "// recording:");
+     if(vim_state->recording_macro){
+          ce_append_line(macro_list_buffer, "");
+          ce_append_line(macro_list_buffer, "// recording:");
 
-          int* int_cmd = ce_keys_get_string(config_state->vim_state.record_macro_head);
+          int* int_cmd = ce_keys_get_string(vim_state->record_macro_head);
 
           if(int_cmd[0]){
                char* char_cmd = vim_command_string_to_char_string(int_cmd);
                if(char_cmd[0]){
-                    ce_append_line(&config_state->macro_list_buffer, char_cmd);
+                    ce_append_line(macro_list_buffer, char_cmd);
                }
 
                free(char_cmd);
@@ -128,18 +128,17 @@ void info_update_macro_list_buffer(ConfigState_t* config_state)
           free(int_cmd);
      }
 
-     ce_append_line(&config_state->macro_list_buffer, "");
-     ce_append_line(&config_state->macro_list_buffer, "// escape conversions");
-     ce_append_line(&config_state->macro_list_buffer, "// \\b -> KEY_BACKSPACE");
-     ce_append_line(&config_state->macro_list_buffer, "// \\e -> KEY_ESCAPE");
-     ce_append_line(&config_state->macro_list_buffer, "// \\r -> KEY_ENTER");
-     ce_append_line(&config_state->macro_list_buffer, "// \\t -> KEY_TAB");
-     ce_append_line(&config_state->macro_list_buffer, "// \\u -> KEY_UP");
-     ce_append_line(&config_state->macro_list_buffer, "// \\d -> KEY_DOWN");
-     ce_append_line(&config_state->macro_list_buffer, "// \\l -> KEY_LEFT");
-     ce_append_line(&config_state->macro_list_buffer, "// \\i -> KEY_RIGHT");
-     ce_append_line(&config_state->macro_list_buffer, "// \\\\ -> \\"); // HAHAHAHAHA
+     ce_append_line(macro_list_buffer, "");
+     ce_append_line(macro_list_buffer, "// escape conversions");
+     ce_append_line(macro_list_buffer, "// \\b -> KEY_BACKSPACE");
+     ce_append_line(macro_list_buffer, "// \\e -> KEY_ESCAPE");
+     ce_append_line(macro_list_buffer, "// \\r -> KEY_ENTER");
+     ce_append_line(macro_list_buffer, "// \\t -> KEY_TAB");
+     ce_append_line(macro_list_buffer, "// \\u -> KEY_UP");
+     ce_append_line(macro_list_buffer, "// \\d -> KEY_DOWN");
+     ce_append_line(macro_list_buffer, "// \\l -> KEY_LEFT");
+     ce_append_line(macro_list_buffer, "// \\i -> KEY_RIGHT");
+     ce_append_line(macro_list_buffer, "// \\\\ -> \\"); // HAHAHAHAHA
 
-     config_state->macro_list_buffer.status = BS_READONLY;
+     macro_list_buffer->status = BS_READONLY;
 }
-

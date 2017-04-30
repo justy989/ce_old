@@ -4,7 +4,7 @@ LINK=-lncurses -lutil -lm
 OBJS=ce_config.o vim.o terminal.o syntax.o text_history.o auto_complete.o tab_view.o jump.o view.o buffer.o input.o \
      destination.o completion.o command.o info.o terminal_helper.o misc.o
 
-TESTS=test_ce test_vim test_auto_complete test_buffer test_command
+TESTS=test_ce test_vim test_auto_complete test_buffer test_command test_completion
 
 all: LINK += -lpthread
 all: ce ce_config.so
@@ -38,6 +38,10 @@ test_buffer: test_buffer.c buffer.test.o ce.test.o syntax.test.o vim.test.o term
 	./$@ 2>> test_output.txt || (cat test_output.txt && false)
 
 test_command: test_command.c command.test.o syntax.test.o view.test.o info.test.o ce.test.o buffer.test.o vim.test.o misc.test.o destination.test.o jump.test.o terminal.test.o terminal_helper.test.o input.test.o text_history.test.o ce_config.test.o auto_complete.test.o completion.test.o tab_view.test.o
+	$(CC) $(CFLAGS) $^ -o $@ $(LINK) -lpthread
+	./$@ 2>> test_output.txt || (cat test_output.txt && false)
+
+test_completion: test_completion.c command.test.o syntax.test.o view.test.o info.test.o ce.test.o buffer.test.o vim.test.o misc.test.o destination.test.o jump.test.o terminal.test.o terminal_helper.test.o input.test.o text_history.test.o ce_config.test.o auto_complete.test.o completion.test.o tab_view.test.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LINK) -lpthread
 	./$@ 2>> test_output.txt || (cat test_output.txt && false)
 

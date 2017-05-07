@@ -16,3 +16,5 @@ void view_switch_to_point(bool input, BufferView_t* view_input, VimState_t* vim_
 void view_switch_to_buffer_list(Buffer_t* buffer_list_buffer, BufferView_t* buffer_view, BufferView_t* view_head,
                                 const BufferNode_t* buffer_head);
 void view_override_with_buffer(BufferView_t* view, Buffer_t* new_buffer, Buffer_t** buffer_before_override);
+void view_move_cursor_half_page_up(BufferView_t* view); // TODO: use direction up/down from ce.h
+void view_move_cursor_half_page_down(BufferView_t* view);

@@ -45,20 +45,6 @@ void misc_get_user_terminal_view_rect(TabView_t* tab_head, Point_t* top_left, Po
      if(tab_head->next) top_left->y++;
 }
 
-void misc_move_cursor_half_page_up(BufferView_t* view)
-{
-     int64_t view_height = view->bottom_right.y - view->top_left.y;
-     Point_t delta = { 0, -view_height / 2 };
-     ce_move_cursor(view->buffer, &view->cursor, delta);
-}
-
-void misc_move_cursor_half_page_down(BufferView_t* view)
-{
-     int64_t view_height = view->bottom_right.y - view->top_left.y;
-     Point_t delta = { 0, view_height / 2 };
-     ce_move_cursor(view->buffer, &view->cursor, delta);
-}
-
 void misc_move_jump_location_to_end_of_output(TerminalNode_t* terminal_node)
 {
      terminal_node->last_jump_location = terminal_node->buffer->line_count - 1;

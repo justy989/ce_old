@@ -1882,11 +1882,11 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     break;
                     case KEY_NPAGE:
                     {
-                         misc_move_cursor_half_page_up(config_state->tab_current->view_current);
+                         view_move_cursor_half_page_up(config_state->tab_current->view_current);
                     } break;
                     case KEY_PPAGE:
                     {
-                         misc_move_cursor_half_page_down(config_state->tab_current->view_current);
+                         view_move_cursor_half_page_down(config_state->tab_current->view_current);
                     } break;
                     case ':':
                     {

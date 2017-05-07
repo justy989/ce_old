@@ -134,3 +134,18 @@ void view_override_with_buffer(BufferView_t* view, Buffer_t* new_buffer, Buffer_
      view->cursor = (Point_t){0, 0};
      view->top_row = 0;
 }
+
+void view_move_cursor_half_page_up(BufferView_t* view)
+{
+     int64_t view_height = view->bottom_right.y - view->top_left.y;
+     Point_t delta = { 0, -view_height / 2 };
+     ce_move_cursor(view->buffer, &view->cursor, delta);
+}
+
+void view_move_cursor_half_page_down(BufferView_t* view)
+{
+     int64_t view_height = view->bottom_right.y - view->top_left.y;
+     Point_t delta = { 0, view_height / 2 };
+     ce_move_cursor(view->buffer, &view->cursor, delta);
+}
+

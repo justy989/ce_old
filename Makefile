@@ -4,7 +4,7 @@ LINK=-lncurses -lutil -lm
 OBJS=ce_config.o vim.o terminal.o syntax.o text_history.o auto_complete.o tab_view.o jump.o view.o buffer.o input.o \
      destination.o completion.o command.o info.o terminal_helper.o misc.o
 
-TESTS=test_ce test_vim test_auto_complete test_buffer test_command test_completion test_info
+TESTS=test_ce test_vim test_auto_complete test_buffer test_command test_completion test_info test_input
 
 all: LINK += -lpthread
 all: ce ce_config.so
@@ -46,6 +46,10 @@ test_completion: test_completion.c command.test.o syntax.test.o view.test.o info
 	./$@ 2>> test_output.txt || (cat test_output.txt && false)
 
 test_info: test_info.c info.test.o vim.test.o ce.test.o misc.test.o input.test.o text_history.test.o
+	$(CC) $(CFLAGS) $^ -o $@ $(LINK) -lpthread
+	./$@ 2>> test_output.txt || (cat test_output.txt && false)
+
+test_input: test_input.c input.test.o ce.test.o vim.test.o text_history.test.o buffer.test.o syntax.test.o terminal.test.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LINK) -lpthread
 	./$@ 2>> test_output.txt || (cat test_output.txt && false)
 

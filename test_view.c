@@ -89,10 +89,44 @@ TEST(split)
      EXPECT(head_view.next_vertical);
 }
 
-//TEST(switch_to_point)
-//{
+// TODO: view_switch_to_point()
+// TODO: view_switch_to_buffer_list()
 
-//}
+TEST(override_with_buffer)
+{
+     Buffer_t old_buffer = {};
+     Buffer_t new_buffer = {};
+     Buffer_t* p_old_buffer = &old_buffer;
+     BufferView_t view = {};
+     view.cursor = (Point_t){5, 7};
+     view.buffer = &old_buffer;
+
+     view_override_with_buffer(&view, &new_buffer, &p_old_buffer);
+
+     EXPECT(view.buffer == &new_buffer);
+     EXPECT(view.cursor.x == 0);
+     EXPECT(view.cursor.y == 0);
+     EXPECT(old_buffer.cursor.x == 5);
+     EXPECT(old_buffer.cursor.y == 7);
+}
+
+TEST(page_up_and_down)
+{
+     Buffer_t buffer = {};
+     buffer.line_count = 100;
+
+     BufferView_t view = {};
+     view.buffer = &buffer;
+     view.top_left.y = 10;
+     view.bottom_right.y = 20;
+     view.cursor.y = 10;
+
+     view_move_cursor_half_page_down(&view);
+     EXPECT(view.cursor.y == 15);
+
+     view_move_cursor_half_page_up(&view);
+     EXPECT(view.cursor.y == 10);
+}
 
 int main()
 {

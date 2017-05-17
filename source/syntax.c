@@ -516,10 +516,11 @@ static int64_t syntax_is_c_func(const char* line, int64_t start_offset)
      return highlighting_left;
 }
 
-static const char* eat_blanks_reverse(const char* string, const char* beginning)
+// TODO: additionally support '[]'
+static const char* eat_blanks_and_stars_and_ampersands_reverse(const char* string, const char* beginning)
 {
      while(string >= beginning){
-          if(!isblank(*string)){
+          if(!isblank(*string) && *string != '*'){
                break;
           }
           string--;
@@ -564,9 +565,7 @@ static int64_t syntax_is_c_variable_declaration(const char* line, int64_t start_
      itr = line + start_offset - 1;
 
      while(!found_typename){
-          itr = eat_blanks_reverse(itr, line);
-          if(*itr == '*') itr--;
-          itr = eat_blanks_reverse(itr, line);
+          itr = eat_blanks_and_stars_and_ampersands_reverse(itr, line);
           itr = eat_c_identifier_reverse(itr, line);
           if(itr == (line + start_offset)) return 0; // if itr has never moved
           itr++;

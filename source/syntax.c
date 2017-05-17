@@ -1256,6 +1256,8 @@ void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data)
                          syntax->current_color = syntax_set_color(S_CONSTANT, syntax->highlight.type);
                     }else if((syntax->current_color_left = syntax_is_python_comment(buffer_line, data->loc.x))){
                          syntax->current_color = syntax_set_color(S_COMMENT, syntax->highlight.type);
+                    }else if((syntax->current_color_left = syntax_is_c_func(buffer_line, data->loc.x))){
+                         syntax->current_color = syntax_set_color(S_FUNC, syntax->highlight.type);
                     }else if(syntax->matched_pair_start.x >= 0){
                          if(ce_points_equal(data->loc, syntax->matched_pair_start) || ce_points_equal(data->loc, syntax->matched_pair_end)){
                               syntax->current_color = syntax_set_color(S_MATCHING_PARENS, syntax->highlight.type);

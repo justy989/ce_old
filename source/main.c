@@ -297,7 +297,9 @@ int main(int argc, char** argv)
           fclose(file);
      }
 
-     current_config.initializer(&buffer_list_head, g_terminal_dimensions, argc - parsed_args, argv + parsed_args, &user_data);
+     if(!current_config.initializer(&buffer_list_head, g_terminal_dimensions, argc - parsed_args, argv + parsed_args, &user_data)){
+          return -1;
+     }
 
      signal(SIGQUIT, SIG_IGN);
      struct sigaction sa = {};

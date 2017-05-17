@@ -3,6 +3,7 @@ CFLAGS+=-Wall -Werror -Wextra -std=c11 -ggdb3 -D_GNU_SOURCE
 LINK=-lncurses -lutil -lm -lpthread
 SRCS=$(filter-out source/main.c,$(wildcard source/*.c))
 OBJS=$(subst source,build,$(SRCS:.c=.o))
+TEST_OBJS=$(OBJS:.o=.test.o)
 
 all: build/ce build/ce_config.so
 
@@ -11,10 +12,10 @@ release: all
 
 cov: coverage
 coverage: CFLAGS+=-fprofile-arcs -ftest-coverage
-coverage: clean test $(OBJS:.o=.test.o)
+coverage: clean test $(TEST_OBJS)
 	mv *.gcno build/.
 	mv *.gcda build/.
-	llvm-cov gcov $(OBJS:.o=.test.o)
+	llvm-cov gcov $(TEST_OBJS)
 	mv *.gcov build/.
 
 test: LINK+=-rdynamic
@@ -25,7 +26,7 @@ build/test_%: test/test_%.c build/libcetest.a
 	$(CC) $(CFLAGS) $^ -o $@ $(LINK)
 	$@ 2> build/test_output.txt || (cat build/test_output.txt && false)
 
-build/libcetest.a: $(OBJS:.o=.test.o)
+build/libcetest.a: $(TEST_OBJS)
 	ar cr $@ $^
 
 build/ce: source/main.c build/ce.o

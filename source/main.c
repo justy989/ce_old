@@ -29,11 +29,15 @@ LITTLE:
 -when auto completing, use double tab to complete current selection
 -when pasting into terminal in insert mode, we get garbage *like* every time
 -crash when deleting newly created buffer when trying to free user_data, ce.c in ce_change_buffer_in_views() at line 2291
--crash when building eg, color_node invalid pointer in ce_terminal.c:603
+-crash when building eg, color_node invalid pointer in terminal.c:603
 -paste blink is incorrectly displaying when you substitute in visual line mode
 -investigate VMT_SEARCH led to location off of the buffer, but in the line range
 -buffer view of jump list
 -auto complete gets in the way when there is text after the cursor
+-terminal cursor sticks and doesn't allow scrolling up after some commands
+-'dbu' doesn't leave the cursor in the place I'd expect?
+-visible marker doesn't show up on empty lines
+-']' pair motions
 */
 #if 0
 error in string syntax highlighting for <tacos>"
@@ -293,7 +297,9 @@ int main(int argc, char** argv)
           fclose(file);
      }
 
-     current_config.initializer(&buffer_list_head, g_terminal_dimensions, argc - parsed_args, argv + parsed_args, &user_data);
+     if(!current_config.initializer(&buffer_list_head, g_terminal_dimensions, argc - parsed_args, argv + parsed_args, &user_data)){
+          return -1;
+     }
 
      signal(SIGQUIT, SIG_IGN);
      struct sigaction sa = {};

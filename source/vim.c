@@ -1,4 +1,4 @@
-#include "ce_vim.h"
+#include "vim.h"
 
 #include <assert.h>
 #include <ctype.h>

@@ -1,6 +1,9 @@
 #ifndef TEST_HPP
 #define TEST_HPP
 
+#include <stdio.h>
+#include <stdbool.h>
+
 typedef void test_func_t(bool*);
 
 // NOTE: we currently rely on __COUNTER__ being 0 to start! We can deal with this in the future if we want to

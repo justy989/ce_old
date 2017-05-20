@@ -1,4 +1,4 @@
-#include "ce_syntax.h"
+#include "syntax.h"
 
 #include <ctype.h>
 
@@ -488,6 +488,106 @@ static int64_t syntax_is_c_preprocessor(const char* line, int64_t start_offset)
      return highlighting_left;
 }
 
+static int64_t syntax_is_c_func(const char* line, int64_t start_offset)
+{
+     int64_t highlighting_left = 0;
+     const char* itr = line + start_offset;
+     bool found_space = false;
+     bool found_paren = false;
+
+     while(*itr){
+          if(iscidentifier(*itr)){
+               if(found_space) return 0;
+               highlighting_left++;
+          }else if(*itr == ' '){
+               found_space = true;
+          }else if(*itr == '('){
+               found_paren = true;
+               break;
+          }else{
+               return 0;
+          }
+
+          itr++;
+     }
+
+     if(!found_paren) return 0;
+
+     return highlighting_left;
+}
+
+// TODO: additionally support '[]'
+static const char* eat_blanks_and_stars_and_ampersands_reverse(const char* string, const char* beginning)
+{
+     while(string >= beginning){
+          if(!isblank(*string) && *string != '*'){
+               break;
+          }
+          string--;
+     }
+
+     return string;
+}
+
+static const char* eat_c_identifier_reverse(const char* string, const char* beginning)
+{
+     while(string >= beginning){
+          if(!iscidentifier(*string)){
+               break;
+          }
+          string--;
+     }
+
+     return string;
+}
+
+static int64_t syntax_is_c_variable_declaration(const char* line, int64_t start_offset)
+{
+     int64_t highlighting_left = 0;
+     const char* itr = line + start_offset;
+
+     // check for c identifiers
+     while(*itr){
+          if(iscidentifier(*itr)){
+               highlighting_left++;
+          }else{
+               break;
+          }
+
+          itr++;
+     }
+
+     if(highlighting_left == 0) return 0;
+
+     // check for type names before it on the line, const, '*', or '&' (references for c++)
+     if(start_offset == 0) return 0;
+     bool found_typename = false;
+     itr = line + start_offset - 1;
+
+     while(!found_typename){
+          itr = eat_blanks_and_stars_and_ampersands_reverse(itr, line);
+          itr = eat_c_identifier_reverse(itr, line);
+          if(itr == (line + start_offset)) return 0; // if itr has never moved
+          itr++;
+          if(iscidentifier(*itr)){
+               if(syntax_is_c_typename(itr, 0) == 0){
+                    // ignore const
+                    if(strncmp(itr, "const", 5) != 0){
+                         return 0;
+                    }
+               }else{
+                    found_typename = true;
+               }
+
+               itr--;
+          }else{
+               return 0;
+          }
+     }
+
+     return highlighting_left;
+}
+
 static void syntax_determine_highlight(SyntaxHighlighterData_t* data, SyntaxHighlight_t* highlight)
 {
      const char* buffer_line = data->buffer->lines[data->loc.y];
@@ -727,6 +827,10 @@ void syntax_highlight_c_like(SyntaxHighlighterData_t* data, void* user_data, syn
                               syntax->current_color = syntax_set_color(S_KEYWORD, syntax->highlight.type);
                          }else if((syntax->current_color_left = syntax_is_c_preprocessor(line_to_print, data->loc.x))){
                               syntax->current_color = syntax_set_color(S_PREPROCESSOR, syntax->highlight.type);
+                         }else if((syntax->current_color_left = syntax_is_c_func(line_to_print, data->loc.x))){
+                              syntax->current_color = syntax_set_color(S_FUNC, syntax->highlight.type);
+                         }else if((syntax->current_color_left = syntax_is_c_variable_declaration(line_to_print, data->loc.x))){
+                              syntax->current_color = syntax_set_color(S_VARIABLE_DECLARATION, syntax->highlight.type);
                          }else if(syntax->matched_pair_start.x >= 0){
                               if(ce_points_equal(data->loc, syntax->matched_pair_start) || ce_points_equal(data->loc, syntax->matched_pair_end)){
                                    syntax->current_color = syntax_set_color(S_MATCHING_PARENS, syntax->highlight.type);
@@ -1151,6 +1255,8 @@ void syntax_highlight_python(SyntaxHighlighterData_t* data, void* user_data)
                          syntax->current_color = syntax_set_color(S_CONSTANT, syntax->highlight.type);
                     }else if((syntax->current_color_left = syntax_is_python_comment(buffer_line, data->loc.x))){
                          syntax->current_color = syntax_set_color(S_COMMENT, syntax->highlight.type);
+                    }else if((syntax->current_color_left = syntax_is_c_func(buffer_line, data->loc.x))){
+                         syntax->current_color = syntax_set_color(S_FUNC, syntax->highlight.type);
                     }else if(syntax->matched_pair_start.x >= 0){
                          if(ce_points_equal(data->loc, syntax->matched_pair_start) || ce_points_equal(data->loc, syntax->matched_pair_end)){
                               syntax->current_color = syntax_set_color(S_MATCHING_PARENS, syntax->highlight.type);

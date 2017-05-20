@@ -1507,19 +1507,19 @@ TEST(sanity_follow_cursor)
 
 TEST(sanity_buffer_list)
 {
-     BufferNode_t* head = calloc(1, sizeof(*head));
-     ASSERT(head);
+     BufferNode_t* head = NULL;
 
-     Buffer_t one;
-     Buffer_t two;
-     Buffer_t three;
+     Buffer_t one = {};
+     Buffer_t two = {};
+     Buffer_t three = {};
 
-     head->buffer = &one;
+     BufferNode_t* one_node = ce_append_buffer_to_list(&head, &one);
+     ASSERT(one_node != NULL);
 
-     BufferNode_t* two_node = ce_append_buffer_to_list(head, &two);
+     BufferNode_t* two_node = ce_append_buffer_to_list(&head, &two);
      ASSERT(two_node != NULL);
 
-     BufferNode_t* three_node = ce_append_buffer_to_list(head, &three);
+     BufferNode_t* three_node = ce_append_buffer_to_list(&head, &three);
      ASSERT(three_node != NULL);
 
      ASSERT(head->buffer == &one);
@@ -1540,7 +1540,9 @@ TEST(sanity_buffer_list)
      ASSERT(head->buffer == &one);
      ASSERT(head->next == NULL);
 
-     free(head);
+     EXPECT(ce_remove_buffer_from_list(&head, &one) == true);
+
+     ASSERT(head == NULL);
 }
 
 TEST(sanity_split_view)

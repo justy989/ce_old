@@ -1,5 +1,4 @@
-#include "ce_terminal.h"
-#include "ce_syntax.h"
+#include "terminal.h"
 
 #include <unistd.h>
 #include <sys/types.h>

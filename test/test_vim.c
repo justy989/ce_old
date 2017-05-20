@@ -1,7 +1,7 @@
 #include <execinfo.h>
 #include <signal.h>
 
-#include "ce_vim.h"
+#include "vim.h"
 #include "test.h"
 
 TEST(marks_sanity)

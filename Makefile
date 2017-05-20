@@ -1,47 +1,49 @@
 CC=clang
-CFLAGS+=-Wall -Werror -Wextra -std=c11 -ggdb3 -fdiagnostics-color -D_GNU_SOURCE $(SCROLL_FLAG)
-LINK=-lncurses -lutil -lm
+CFLAGS+=-Wall -Werror -Wextra -std=c11 -ggdb3 -D_GNU_SOURCE
+LINK=-lncurses -lutil -lm -lpthread
+SRCS=$(filter-out source/main.c,$(wildcard source/*.c))
+OBJS=$(subst source,build,$(SRCS:.c=.o))
+TEST_OBJS=$(OBJS:.o=.test.o)
+BUILD_DIR=build
 
-all: LINK += -lpthread
-all: ce ce_config.so
+all: $(BUILD_DIR) $(BUILD_DIR)/ce $(BUILD_DIR)/ce_config.so
 
-release: CFLAGS += -DNDEBUG -O3
+$(BUILD_DIR):
+	mkdir build
+
+release: CFLAGS+=-DNDEBUG -O3
 release: all
 
 cov: coverage
-coverage: CFLAGS += -fprofile-arcs -ftest-coverage
-coverage: clean_test test
-	llvm-cov gcov ce.test.o
-	llvm-cov gcov ce_vim.test.o
+coverage: CFLAGS+=-fprofile-arcs -ftest-coverage
+coverage: clean $(BUILD_DIR) test $(TEST_OBJS)
+	mv *.gcno $(BUILD_DIR)/.
+	mv *.gcda $(BUILD_DIR)/.
+	llvm-cov gcov $(TEST_OBJS)
+	mv *.gcov $(BUILD_DIR)/.
 
-test: LINK += -rdynamic
-test: clean_test test_ce test_vim
+test: LINK+=-rdynamic
+test: CFLAGS+=-Itest -Isource
+test: $(BUILd_DIR) $(subst test/,$(BUILD_DIR)/,$(basename $(wildcard test/*.c)))
 
-test_ce: test_ce.c ce.test.o
+$(BUILD_DIR)/test_%: test/test_%.c $(BUILD_DIR)/libcetest.a
 	$(CC) $(CFLAGS) $^ -o $@ $(LINK)
-	./$@ 2> test_ce_output.txt || (cat test_ce_output.txt && false)
+	$@ 2> $(BUILD_DIR)/test_output.txt || (cat $(BUILD_DIR)/test_output.txt && false)
 
-test_vim: test_vim.c ce.test.o ce_vim.test.o
-	$(CC) $(CFLAGS) $^ -o $@ $(LINK)
-	./$@ 2> test_vim_output.txt || (cat test_vim_output.txt && false)
+$(BUILD_DIR)/libcetest.a: $(TEST_OBJS)
+	ar cr $@ $^
 
-ce: main.c ce.o
+$(BUILD_DIR)/ce: source/main.c $(BUILD_DIR)/ce.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LINK) -ldl -Wl,-rpath,.
 
-%.o: %.c
+$(BUILD_DIR)/%.o: source/%.c
 	$(CC) -c -fpic $(CFLAGS) $^ -o $@
 
-%.test.o: %.c
+$(BUILD_DIR)/%.test.o: source/%.c
 	$(CC) -c -fpic $(CFLAGS) $^ -o $@
 
-ce_config.so: ce_config.o ce.o ce_vim.o ce_terminal.o ce_syntax.o
+$(BUILD_DIR)/ce_config.so: $(BUILD_DIR)/ce.o $(OBJS)
 	$(CC) -shared $(CFLAGS) $^ -o $@ $(LINK)
 
-clean: clean_config clean_test
-	rm -rf ce *.o valgrind_results.txt *.dSYM
-
-clean_config:
-	rm -f ce_config.so
-
-clean_test:
-	rm -f test_ce test_vim ce.test.o ce_vim.test.o *.gcda *.gcno *.gcov test_ce_output.txt test_vim_output.txt default.profraw
+clean:
+	rm -fr $(BUILD_DIR) default.profraw

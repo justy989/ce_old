@@ -4,42 +4,46 @@ LINK=-lncurses -lutil -lm -lpthread
 SRCS=$(filter-out source/main.c,$(wildcard source/*.c))
 OBJS=$(subst source,build,$(SRCS:.c=.o))
 TEST_OBJS=$(OBJS:.o=.test.o)
+BUILD_DIR=build
 
-all: build/ce build/ce_config.so
+all: $(BUILD_DIR) $(BUILD_DIR)/ce $(BUILD_DIR)/ce_config.so
+
+$(BUILD_DIR):
+	mkdir build
 
 release: CFLAGS+=-DNDEBUG -O3
 release: all
 
 cov: coverage
 coverage: CFLAGS+=-fprofile-arcs -ftest-coverage
-coverage: clean test $(TEST_OBJS)
-	mv *.gcno build/.
-	mv *.gcda build/.
+coverage: clean $(BUILD_DIR) test $(TEST_OBJS)
+	mv *.gcno $(BUILD_DIR)/.
+	mv *.gcda $(BUILD_DIR)/.
 	llvm-cov gcov $(TEST_OBJS)
-	mv *.gcov build/.
+	mv *.gcov $(BUILD_DIR)/.
 
 test: LINK+=-rdynamic
 test: CFLAGS+=-Itest -Isource
-test: $(subst test/,build/,$(basename $(wildcard test/*.c)))
+test: $(BUILd_DIR) $(subst test/,$(BUILD_DIR)/,$(basename $(wildcard test/*.c)))
 
-build/test_%: test/test_%.c build/libcetest.a
+$(BUILD_DIR)/test_%: test/test_%.c $(BUILD_DIR)/libcetest.a
 	$(CC) $(CFLAGS) $^ -o $@ $(LINK)
-	$@ 2> build/test_output.txt || (cat build/test_output.txt && false)
+	$@ 2> $(BUILD_DIR)/test_output.txt || (cat $(BUILD_DIR)/test_output.txt && false)
 
-build/libcetest.a: $(TEST_OBJS)
+$(BUILD_DIR)/libcetest.a: $(TEST_OBJS)
 	ar cr $@ $^
 
-build/ce: source/main.c build/ce.o
+$(BUILD_DIR)/ce: source/main.c $(BUILD_DIR)/ce.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LINK) -ldl -Wl,-rpath,.
 
-build/%.o: source/%.c
+$(BUILD_DIR)/%.o: source/%.c
 	$(CC) -c -fpic $(CFLAGS) $^ -o $@
 
-build/%.test.o: source/%.c
+$(BUILD_DIR)/%.test.o: source/%.c
 	$(CC) -c -fpic $(CFLAGS) $^ -o $@
 
-build/ce_config.so: build/ce.o $(OBJS)
+$(BUILD_DIR)/ce_config.so: $(BUILD_DIR)/ce.o $(OBJS)
 	$(CC) -shared $(CFLAGS) $^ -o $@ $(LINK)
 
 clean:
-	rm -f build/*
+	rm -fr $(BUILD_DIR) default.profraw

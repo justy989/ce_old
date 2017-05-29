@@ -153,6 +153,7 @@ bool command_parse(Command_t* command, const char* string)
                int64_t arg_len = end - start;
                char buffer[arg_len + 1];
                memset(buffer, 0, arg_len + 1);
+               buffer[arg_len] = 0;
 
                strncpy(buffer, start, arg_len);
                if(!parse_arg(arg, buffer)){
@@ -164,6 +165,7 @@ bool command_parse(Command_t* command, const char* string)
                char buffer[arg_len + 1];
                memset(buffer, 0, arg_len + 1);
                strcpy(buffer, start);
+               buffer[arg_len] = 0;
                if(!parse_arg(arg, buffer)){
                     command_free(command);
                     return false;
@@ -465,6 +467,82 @@ void command_cscope_goto_definition(Command_t* command, void* user_data)
      }
 
      dest_cscope_goto_definition(config_state->tab_current->view_current, command_data->head, command->args[0].string);
+}
+
+void command_goto_file_under_cursor(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: goto_file_under_cursor");
+          ce_message("descr: checks the word under the cursor for a valid file, if valid opens that file");
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Buffer_t* buffer = buffer_view->buffer;
+     Point_t* cursor = &buffer_view->cursor;
+
+     if(!buffer->lines[cursor->y]) return;
+     Point_t word_start;
+     Point_t word_end;
+     if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) return;
+
+     // expand left to pick up the beginning of a path
+     char check_word_char = 0;
+     while(true){
+          Point_t save_word_start = word_start;
+
+          if(!ce_move_cursor_to_beginning_of_word(buffer, &word_start, true)) break;
+          if(!ce_get_char(buffer, word_start, &check_word_char)) break;
+          // TODO: probably need more rules for matching filepaths
+          if(isalpha(check_word_char) || isdigit(check_word_char) || check_word_char == '/'){
+               continue;
+          }else{
+               word_start = save_word_start;
+               break;
+          }
+     }
+
+     // expand right to pick up the full path
+     while(true){
+          Point_t save_word_end = word_end;
+
+          if(!ce_move_cursor_to_end_of_word(buffer, &word_end, true)) break;
+          if(!ce_get_char(buffer, word_end, &check_word_char)) break;
+          // TODO: probably need more rules for matching filepaths
+          if(isalpha(check_word_char) || isdigit(check_word_char) || check_word_char == '/'){
+               continue;
+          }else{
+               word_end = save_word_end;
+               break;
+          }
+     }
+
+     word_end.x++;
+
+     char period = 0;
+     if(!ce_get_char(buffer, word_end, &period)) return;
+     if(period != '.') return;
+     Point_t extension_start;
+     Point_t extension_end;
+     if(!ce_get_word_at_location(buffer, (Point_t){word_end.x + 1, word_end.y}, &extension_start, &extension_end)) return;
+     extension_end.x++;
+     char filename[PATH_MAX];
+     snprintf(filename, PATH_MAX, "%.*s.%.*s",
+              (int)(word_end.x - word_start.x), buffer->lines[word_start.y] + word_start.x,
+              (int)(extension_end.x - extension_start.x), buffer->lines[extension_start.y] + extension_start.x);
+
+     if(access(filename, F_OK) != 0){
+          ce_message("no such file: '%s' to go to", filename);
+          return;
+     }
+
+     BufferNode_t* node = buffer_create_from_file(command_data->head, filename);
+     if(node){
+          buffer_view->buffer = node->buffer;
+          buffer_view->cursor = (Point_t){0, 0};
+     }
 }
 
 void command_noh(Command_t* command, void* user_data)
@@ -782,6 +860,47 @@ void command_tab_new(Command_t* command, void* user_data)
      new_tab->view_current = new_tab->view_head;
 
      config_state->tab_current = new_tab;
+}
+
+void command_tab_next(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: tab_next");
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+
+     if(config_state->tab_current->next){
+          config_state->tab_current = config_state->tab_current->next;
+     }else{
+          config_state->tab_current = config_state->tab_head;
+     }
+}
+
+void command_tab_previous(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: tab_previous");
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+
+     if(config_state->tab_current == config_state->tab_head){
+          // find tail
+          TabView_t* itr = config_state->tab_head;
+          while(itr->next) itr = itr->next;
+          config_state->tab_current = itr;
+     }else{
+          TabView_t* itr = config_state->tab_head;
+          while(itr && itr->next != config_state->tab_current) itr = itr->next;
+
+          // what if we don't find our current tab and hit the end of the list?!
+          config_state->tab_current = itr;
+     }
 }
 
 static void command_move_on_screen_help()
@@ -1208,6 +1327,32 @@ void command_terminal_run_man(Command_t* command, void* user_data)
      char cmd_string[BUFSIZ];
      snprintf(cmd_string, BUFSIZ, "man --pager=cat %s", command->args[0].string);
      terminal_in_view_run_command(config_state->terminal_head, config_state->tab_current->view_head, cmd_string);
+}
+
+static void command_terminal_run_command_help()
+{
+     ce_message("usage: terminal_run_command [command]");
+     ce_message("descr: run specified command in current terminal");
+}
+
+void command_terminal_run_command(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 1){
+          command_log(command);
+          command_terminal_run_command_help();
+          return;
+     }
+
+     if(command->args[0].type != CAT_STRING){
+          command_log(command);
+          command_terminal_run_command_help();
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+
+     terminal_in_view_run_command(config_state->terminal_head, config_state->tab_current->view_head, command->args[0].string);
 }
 
 void command_jump_next(Command_t* command, void* user_data)

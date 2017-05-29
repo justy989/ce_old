@@ -55,6 +55,7 @@ void command_rename(Command_t* command, void* user_data);
 void command_save(Command_t* command, void* user_data);
 void command_buffers(Command_t* command, void* user_data);
 void command_macro_backslashes(Command_t* command, void* user_data);
+void command_goto_file_under_cursor(Command_t* command, void* user_data);
 
 void command_move_on_screen(Command_t* command, void* user_data);
 void command_move_half_page(Command_t* command, void* user_data);
@@ -65,6 +66,8 @@ void command_view_scroll(Command_t* command, void* user_data);
 void command_view_switch(Command_t* command, void* user_data);
 
 void command_tab_new(Command_t* command, void* user_data);
+void command_tab_next(Command_t* command, void* user_data);
+void command_tab_previous(Command_t* command, void* user_data);
 
 void command_switch_buffer_dialogue(Command_t* command, void* user_data);
 void command_command_dialogue(Command_t* command, void* user_data);
@@ -77,6 +80,7 @@ void command_terminal_goto(Command_t* command, void* user_data);
 void command_terminal_new(Command_t* command, void* user_data);
 void command_terminal_jump_to_dest(Command_t* command, void* user_data);
 void command_terminal_run_man(Command_t* command, void* user_data);
+void command_terminal_run_command(Command_t* command, void* user_data);
 
 void command_jump_next(Command_t* command, void* user_data);
 void command_jump_previous(Command_t* command, void* user_data);

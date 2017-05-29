@@ -72,6 +72,373 @@ void mouse_handle_event(BufferView_t* buffer_view, VimState_t* vim_state, Input_
      }
 }
 
+static int int_strneq(int* a, int* b, size_t len)
+{
+     for(size_t i = 0; i < len; ++i){
+          if(!*a) return false;
+          if(!*b) return false;
+          if(*a != *b) return false;
+          a++;
+          b++;
+     }
+
+     return true;
+}
+
+static void command_reload_buffer(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: reload_buffer");
+          ce_message("descr: re-load the file that backs the buffer, overwriting any changes");
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Buffer_t* buffer = buffer_view->buffer;
+
+     if(access(buffer->filename, R_OK) != 0){
+          ce_message("failed to read %s: %s", buffer->filename, strerror(errno));
+          return;
+     }
+
+     // reload file
+     if(buffer->status == BS_READONLY){
+          // NOTE: maybe ce_clear_lines shouldn't care about readonly
+          ce_clear_lines_readonly(buffer);
+     }else{
+          ce_clear_lines(buffer);
+     }
+
+     ce_load_file(buffer, buffer->filename);
+     ce_clamp_cursor(buffer, &buffer_view->cursor);
+}
+
+static void command_syntax_help()
+{
+     ce_message("usage: syntax [style]");
+     ce_message("descr: change the syntax mode of the current buffer");
+     ce_message("style: 'c', 'cpp', 'python', 'java', 'config', 'diff', 'plain'");
+}
+
+static void command_syntax(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 1){
+          command_syntax_help();
+          return;
+     }
+
+     if(command->args[0].type != CAT_STRING){
+          command_syntax_help();
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Buffer_t* buffer = buffer_view->buffer;
+
+     if(strcmp(command->args[0].string, "c") == 0){
+          ce_message("syntax 'c' now on %s", buffer->filename);
+          buffer->syntax_fn = syntax_highlight_c;
+          free(buffer->syntax_user_data);
+          buffer->syntax_user_data = malloc(sizeof(SyntaxC_t));
+          buffer->type = BFT_C;
+     }else if(strcmp(command->args[0].string, "cpp") == 0){
+          ce_message("syntax 'cpp' now on %s", buffer->filename);
+          buffer->syntax_fn = syntax_highlight_cpp;
+          free(buffer->syntax_user_data);
+          buffer->syntax_user_data = malloc(sizeof(SyntaxCpp_t));
+          buffer->type = BFT_CPP;
+     }else if(strcmp(command->args[0].string, "python") == 0){
+          ce_message("syntax 'python' now on %s", buffer->filename);
+          buffer->syntax_fn = syntax_highlight_python;
+          free(buffer->syntax_user_data);
+          buffer->syntax_user_data = malloc(sizeof(SyntaxPython_t));
+          buffer->type = BFT_PYTHON;
+     }else if(strcmp(command->args[0].string, "java") == 0){
+          ce_message("syntax 'java' now on %s", buffer->filename);
+          buffer->syntax_fn = syntax_highlight_java;
+          free(buffer->syntax_user_data);
+          buffer->syntax_user_data = malloc(sizeof(SyntaxJava_t));
+          buffer->type = BFT_JAVA;
+     }else if(strcmp(command->args[0].string, "config") == 0){
+          ce_message("syntax 'config' now on %s", buffer->filename);
+          buffer->syntax_fn = syntax_highlight_config;
+          free(buffer->syntax_user_data);
+          buffer->syntax_user_data = malloc(sizeof(SyntaxConfig_t));
+          buffer->type = BFT_CONFIG;
+     }else if(strcmp(command->args[0].string, "diff") == 0){
+          ce_message("syntax 'diff' now on %s", buffer->filename);
+          buffer->syntax_fn = syntax_highlight_diff;
+          free(buffer->syntax_user_data);
+          buffer->syntax_user_data = malloc(sizeof(SyntaxDiff_t));
+          buffer->type = BFT_DIFF;
+     }else if(strcmp(command->args[0].string, "plain") == 0){
+          ce_message("syntax 'plain' now on %s", buffer->filename);
+          buffer->syntax_fn = syntax_highlight_plain;
+          free(buffer->syntax_user_data);
+          buffer->syntax_user_data = malloc(sizeof(SyntaxPlain_t));
+          buffer->type = BFT_PLAIN;
+     }else{
+          ce_message("unknown syntax '%s'", command->args[0].string);
+     }
+}
+
+static void command_quit_all(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: quit_all");
+          ce_message("descr: exit ce");
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     if(strchr(command->name, '!')) {
+          config_state->quit = true;
+     }else{
+          misc_quit_and_prompt_if_unsaved(config_state, *command_data->head);
+     }
+}
+
+static void command_split(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: [v]split");
+          ce_message("descr: split the currently selected window into 2 windows");
+          return;
+     }
+
+     bool vertical;
+     if(command->name[0] == 'v'){
+          vertical = true;
+     }else{
+          vertical = false;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+
+     view_split(config_state->tab_current->view_head, config_state->tab_current->view_current, vertical, config_state->line_number_type);
+     terminal_resize_if_in_view(config_state->tab_current->view_head, config_state->terminal_head);
+
+     // TODO: open file if specified as an argument
+}
+
+static void command_cscope_goto_definition(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 1 || command->args[0].type != CAT_STRING){
+          ce_message("usage: cscope_goto_definition <symbol>");
+          ce_message("descr: jump to the definition of the specified symbol");
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     dest_cscope_goto_definition(config_state->tab_current->view_current, command_data->head, command->args[0].string);
+}
+
+static void command_noh(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: noh");
+          ce_message("descr: toggle off search highlighting (until the next search)");
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+
+     config_state->do_not_highlight_search = true;
+}
+
+static void command_line_number_help()
+{
+     ce_message("usage: line_number [style]");
+     ce_message("descr: change the global mode in which line number are drawn");
+     ce_message(" mode: 'none', 'absolute', 'relative', 'both'");
+}
+
+static void command_line_number(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 1){
+          command_line_number_help();
+          return;
+     }
+
+     if(command->args[0].type != CAT_STRING){
+          command_line_number_help();
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+
+     if(strcmp(command->args[0].string, "none") == 0){
+          config_state->line_number_type = LNT_NONE;
+     }else if(strcmp(command->args[0].string, "absolute") == 0){
+          config_state->line_number_type = LNT_ABSOLUTE;
+     }else if(strcmp(command->args[0].string, "relative") == 0){
+          config_state->line_number_type = LNT_RELATIVE;
+     }else if(strcmp(command->args[0].string, "both") == 0){
+          config_state->line_number_type = LNT_RELATIVE_AND_ABSOLUTE;
+     }
+}
+
+static void command_highlight_line_help()
+{
+     ce_message("usage: highlight_line [style]");
+     ce_message("descr: change the global mode in which the current line is highlighted");
+     ce_message(" mode: 'none', 'text', 'entire'");
+}
+
+static void command_highlight_line(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 1){
+          command_highlight_line_help();
+          return;
+     }
+
+     if(command->args[0].type != CAT_STRING){
+          command_highlight_line_help();
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+
+     if(strcmp(command->args[0].string, "none") == 0){
+          config_state->highlight_line_type = HLT_NONE;
+     }else if(strcmp(command->args[0].string, "text") == 0){
+          config_state->highlight_line_type = HLT_TO_END_OF_TEXT;
+     }else if(strcmp(command->args[0].string, "entire") == 0){
+          config_state->highlight_line_type = HLT_ENTIRE_LINE;
+     }
+}
+
+static void command_new_buffer(Command_t* command, void* user_data)
+{
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+
+     if(command->arg_count == 0){
+          BufferNode_t* new_buffer_node = buffer_create_empty(command_data->head, "unnamed");
+          if(new_buffer_node){
+               config_state->tab_current->view_current->buffer = new_buffer_node->buffer;
+               config_state->tab_current->view_current->cursor = (Point_t){0, 0};
+          }
+     }else if(command->arg_count == 1){
+          BufferNode_t* new_buffer_node = buffer_create_empty(command_data->head, command->args[0].string);
+          if(new_buffer_node){
+               config_state->tab_current->view_current->buffer = new_buffer_node->buffer;
+               config_state->tab_current->view_current->cursor = (Point_t){0, 0};
+          }
+     }else{
+          ce_message("usage: new_buffer [optional filename]");
+          return;
+     }
+}
+
+static void command_rename_help()
+{
+     ce_message("usage: rename [string]");
+     ce_message("descr: rename the current buffer");
+}
+
+static void command_rename(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 1){
+          command_rename_help();
+          return;
+     }
+
+     if(command->args[0].type != CAT_STRING){
+          command_rename_help();
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Buffer_t* buffer = buffer_view->buffer;
+
+     if(buffer->name) free(buffer->name);
+     buffer->name = strdup(command->args[0].string);
+     if(buffer->status != BS_READONLY){
+          buffer->status = BS_MODIFIED;
+     }
+}
+
+static void command_buffers(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: buffers");
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     view_switch_to_buffer_list(&command_data->config_state->buffer_list_buffer,
+                                command_data->config_state->tab_current->view_current,
+                                command_data->config_state->tab_current->view_head,
+                                *command_data->head);
+     info_update_buffer_list_buffer(&command_data->config_state->buffer_list_buffer, *command_data->head);
+}
+
+static void command_macro_backslashes(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: macro_backslashes");
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Buffer_t* buffer = buffer_view->buffer;
+     BufferState_t* buffer_state = buffer->user_data;
+     Point_t* cursor = &buffer_view->cursor;
+
+     if(config_state->vim_state.mode != VM_VISUAL_LINE) return;
+
+     int64_t start_line = 0;
+     int64_t end_line = 0;
+
+     // sort points
+     if(cursor->y > config_state->vim_state.visual_start.y){
+          start_line = config_state->vim_state.visual_start.y;
+          end_line = cursor->y;
+     }else{
+          start_line = cursor->y;
+          end_line = config_state->vim_state.visual_start.y;
+     }
+
+     // figure out longest line TODO: after slurping spaces and backslashes
+     int64_t line_count = end_line - start_line + 1;
+     int64_t longest_line = 0;
+
+     for(int64_t i = 0; i < line_count; ++i){
+          int64_t line_len = strlen(buffer->lines[i + start_line]);
+          if(line_len > longest_line) longest_line = line_len;
+     }
+
+     // insert whitespace and backslash on every line to make it the same length
+     for(int64_t i = 0; i < line_count; ++i){
+          int64_t line = i + start_line;
+          int64_t line_len = strlen(buffer->lines[line]);
+          int64_t space_len = longest_line - line_len + 1;
+          Point_t loc = {line_len, line};
+          for(int64_t s = 0; s < space_len; ++s){
+               ce_insert_char(buffer, loc, ' ');
+               ce_commit_insert_string(&buffer_state->commit_tail, loc, *cursor, *cursor, strdup(" "), BCC_KEEP_GOING);
+               loc.x++;
+          }
+          ce_insert_char(buffer, loc, '\\');
+          ce_commit_insert_string(&buffer_state->commit_tail, loc, *cursor, *cursor, strdup("\\"), BCC_KEEP_GOING);
+     }
+}
+
 bool confirm_action(ConfigState_t* config_state, BufferNode_t** head)
 {
      BufferView_t* buffer_view = config_state->tab_current->view_current;
@@ -750,7 +1117,67 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      auto_complete_end(&config_state->auto_complete);
      config_state->vim_state.insert_start = (Point_t){-1, -1};
 
-     config_state->command_entries = commands_init(&config_state->command_entry_count);
+     // initialize commands
+     {
+          // create a stack array so we can have the compiler track the number of elements
+          CommandEntry_t command_entries[] = {
+               {command_buffers, "buffers", false},
+               {command_highlight_line, "highlight_line", false},
+               {command_line_number, "line_number", false},
+               {command_macro_backslashes, "macro_backslashes", false},
+               {command_new_buffer, "new_buffer", false},
+               {command_noh, "noh", false},
+               {command_reload_buffer, "reload_buffer", false},
+               {command_rename, "rename", false},
+               {command_syntax, "syntax", false},
+               {command_quit_all, "quit_all", false},
+               {command_quit_all, "qa", true}, // hidden vim-compatible shortcut
+               {command_quit_all, "qa!", true}, // hidden vim-compatible shortcut
+               {command_split, "split", false},
+               {command_split, "vsplit", false},
+               {command_cscope_goto_definition, "cscope_goto_definition", false},
+          };
+
+          // init and copy from our stack array
+          config_state->command_entry_count = sizeof(command_entries) / sizeof(command_entries[0]);
+          config_state->command_entries = malloc(config_state->command_entry_count * sizeof(*command_entries));
+          for(int64_t i = 0; i < config_state->command_entry_count; ++i){
+               config_state->command_entries[i] = command_entries[i];
+          }
+     }
+
+     // initialize keybinds
+     {
+          typedef struct{
+               int keys[4];
+               const char* command;
+          }KeyBindDef_t;
+
+          KeyBindDef_t binds[] = {
+               {{'\\', 'p'}, "syntax python"},
+               {{'\\', 'c'}, "syntax c"},
+          };
+
+          config_state->key_bind_count = sizeof(binds) / sizeof(binds[0]);
+          config_state->key_binds = malloc(config_state->key_bind_count * sizeof(*config_state->key_binds));
+          for(int64_t i = 0; i < config_state->key_bind_count; ++i){
+               command_parse(&config_state->key_binds[i].command, binds[i].command);
+               config_state->key_binds[i].key_count = 0;
+
+               for(int k = 0; k < 4; ++k){
+                    if(binds[i].keys[k] == 0) break;
+                    config_state->key_binds[i].key_count++;
+               }
+
+               if(!config_state->key_binds[i].key_count) continue;
+
+               config_state->key_binds[i].keys = malloc(config_state->key_binds[i].key_count * sizeof(config_state->key_binds[i].keys[0]));
+
+               for(int k = 0; k < config_state->key_binds[i].key_count; ++k){
+                    config_state->key_binds[i].keys[k] = binds[i].keys[k];
+               }
+          }
+     }
 
      // read in state file if it exists
      // TODO: load this into a buffer instead of dealing with the freakin scanf nonsense
@@ -980,8 +1407,13 @@ bool destroyer(BufferNode_t** head, void* user_data)
           regfree(&config_state->vim_state.search.regex);
      }
 
-     vim_yanks_free(&config_state->vim_state.yank_head);
+     // key binds
+     for(int64_t i = 0; i < config_state->key_bind_count; ++i){
+          free(config_state->key_binds[i].keys);
+     }
+     free(config_state->key_binds);
 
+     vim_yanks_free(&config_state->vim_state.yank_head);
      vim_macros_free(&config_state->vim_state.macro_head);
 
      VimMacroCommitNode_t* macro_commit_head = config_state->vim_state.macro_commit_current;
@@ -2355,6 +2787,55 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                }
                break;
           }
+     }
+
+     if(config_state->keys){
+          config_state->key_count++;
+          config_state->keys = realloc(config_state->keys, config_state->key_count * sizeof(config_state->keys[0]));
+     }else{
+          config_state->key_count = 1;
+          config_state->keys = malloc(config_state->key_count * sizeof(config_state->keys[0]));
+     }
+
+     config_state->keys[config_state->key_count - 1] = key;
+
+     // if matches a key bind
+     bool no_matches = true;
+
+     for(int64_t i = 0; i < config_state->key_bind_count; ++i){
+          if(int_strneq(config_state->key_binds[i].keys, config_state->keys, config_state->key_count)){
+               no_matches = false;
+
+               // if we have matches, but don't completely match, then wait for more keypresses,
+               // otherwise, execute the action
+               if(config_state->key_binds[i].key_count == config_state->key_count){
+                    Command_t* command = &config_state->key_binds[i].command;
+                    ce_command* command_func = NULL;
+                    for(int64_t i = 0; i < config_state->command_entry_count; ++i){
+                         CommandEntry_t* entry = config_state->command_entries + i;
+                         if(strcmp(entry->name, command->name) == 0){
+                              command_func = entry->func;
+                              break;
+                         }
+                    }
+
+                    if(command_func){
+                         CommandData_t command_data = {config_state, head};
+                         command_func(command, &command_data);
+                    }else{
+                         ce_message("unknown command: '%s'", command->name);
+                    }
+
+                    free(config_state->keys);
+                    config_state->keys = NULL;
+                    break;
+               }
+          }
+     }
+
+     if(no_matches){
+          free(config_state->keys);
+          config_state->keys = NULL;
      }
 
      // incremental search

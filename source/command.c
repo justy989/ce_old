@@ -694,6 +694,74 @@ void command_view_scroll(Command_t* command, void* user_data)
      }
 }
 
+static void command_move_on_screen_help()
+{
+     ce_message("usage: move_on_screen [mode]");
+     ce_message("descr: move the cursor to the part of the view specified by the mode.");
+     ce_message(" mode: 'top', 'center', 'bottom'");
+}
+
+void command_move_on_screen(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 1){
+          command_move_on_screen_help();
+          return;
+     }
+
+     if(command->args[0].type != CAT_STRING){
+          command_move_on_screen_help();
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Buffer_t* buffer = buffer_view->buffer;
+     Point_t* cursor = &buffer_view->cursor;
+
+     if(strcmp(command->args[0].string, "top") == 0){
+          Point_t location = {cursor->x, buffer_view->top_row};
+          ce_set_cursor(buffer, cursor, location);
+     }else if(strcmp(command->args[0].string, "center") == 0){
+          int64_t view_height = buffer_view->bottom_right.y - buffer_view->top_left.y;
+          Point_t location = {cursor->x, buffer_view->top_row + (view_height/2)};
+          ce_set_cursor(buffer, cursor, location);
+     }else if(strcmp(command->args[0].string, "bottom") == 0){
+          int64_t view_height = buffer_view->bottom_right.y - buffer_view->top_left.y;
+          Point_t location = {cursor->x, buffer_view->top_row + view_height};
+          ce_set_cursor(buffer, cursor, location);
+     }
+}
+
+static void command_move_half_page_help()
+{
+     ce_message("usage: move_half_page [dir]");
+     ce_message("descr: move the cursor up or down a half page specified by the dir.");
+     ce_message("  dir: 'up', 'down'");
+}
+
+void command_move_half_page(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 1){
+          command_move_half_page_help();
+          return;
+     }
+
+     if(command->args[0].type != CAT_STRING){
+          command_move_half_page_help();
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+
+     if(strcmp(command->args[0].string, "up") == 0){
+          view_move_cursor_half_page_up(config_state->tab_current->view_current);
+     }else if(strcmp(command->args[0].string, "down") == 0){
+          view_move_cursor_half_page_down(config_state->tab_current->view_current);
+     }
+}
+
 void command_switch_buffer_dialogue(Command_t* command, void* user_data)
 {
      if(command->arg_count != 0){
@@ -722,6 +790,29 @@ void command_switch_buffer_dialogue(Command_t* command, void* user_data)
           input_start(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state,
                       "Switch Buffer", INPUT_SWITCH_BUFFER);
      }
+}
+
+void command_command_dialogue(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: command_dialogue");
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+
+     pthread_mutex_lock(&completion_lock);
+     auto_complete_free(&config_state->auto_complete);
+     for(int64_t i = 0; i < config_state->command_entry_count; ++i){
+          if(config_state->command_entries[i].hidden) continue;
+          auto_complete_insert(&config_state->auto_complete, config_state->command_entries[i].name, NULL);
+     }
+     auto_complete_start(&config_state->auto_complete, ACT_OCCURANCE, (Point_t){0, 0});
+     completion_update_buffer(config_state->completion_buffer, &config_state->auto_complete, NULL);
+     pthread_mutex_unlock(&completion_lock);
+     input_start(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state,
+                 "Command", INPUT_COMMAND);
 }
 
 void command_cancel_dialogue(Command_t* command, void* user_data)

@@ -46,8 +46,6 @@ CommandEntry_t* commands_init(int64_t* command_entry_count);
 void command_reload_buffer(Command_t* command, void* user_data);
 void command_syntax(Command_t* command, void* user_data);
 void command_quit_all(Command_t* command, void* user_data);
-void command_view_split(Command_t* command, void* user_data);
-void command_view_close(Command_t* command, void* user_data);
 void command_cscope_goto_definition(Command_t* command, void* user_data);
 void command_noh(Command_t* command, void* user_data);
 void command_line_number(Command_t* command, void* user_data);
@@ -58,6 +56,14 @@ void command_save(Command_t* command, void* user_data);
 void command_save_and_quit(Command_t* command, void* user_data);
 void command_buffers(Command_t* command, void* user_data);
 void command_macro_backslashes(Command_t* command, void* user_data);
+
+void command_move_on_screen(Command_t* command, void* user_data);
+void command_move_half_page(Command_t* command, void* user_data);
+
+void command_view_split(Command_t* command, void* user_data);
+void command_view_close(Command_t* command, void* user_data);
 void command_view_scroll(Command_t* command, void* user_data);
+
 void command_switch_buffer_dialogue(Command_t* command, void* user_data);
+void command_command_dialogue(Command_t* command, void* user_data);
 void command_cancel_dialogue(Command_t* command, void* user_data);

@@ -793,10 +793,13 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
                {command_view_split, "split", false},
                {command_view_split, "vsplit", false},
                {command_view_close, "view_close", false},
-               {command_cscope_goto_definition, "cscope_goto_definition", false},
                {command_view_scroll, "view_scroll", false},
                {command_view_close, "view_close", false},
+               {command_move_on_screen, "move_on_screen", false},
+               {command_move_half_page, "move_half_page", false},
+               {command_cscope_goto_definition, "cscope_goto_definition", false},
                {command_switch_buffer_dialogue, "switch_buffer_dialogue", false},
+               {command_command_dialogue, "command_dialogue", false},
                {command_cancel_dialogue, "cancel_dialogue", false},
           };
 
@@ -816,9 +819,8 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
           }KeyBindDef_t;
 
           KeyBindDef_t binds[] = {
-               {{'\\', 'p'}, "syntax python"},
-               {{'\\', 'c'}, "syntax c"},
                {{'\\', 'e'}, "buffers"},
+               {{'\\', 'q'}, "quit_all"},
                {{'z', 't'}, "view_scroll top"},
                {{'z', 'z'}, "view_scroll center"},
                {{'z', 'b'}, "view_scroll bottom"},
@@ -826,6 +828,12 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
                {{KEY_SAVE}, "save"},
                {{KEY_ESCAPE}, "cancel_dialogue"},
                {{KEY_CLOSE}, "view_close"},
+               {{':'}, "command_dialogue"},
+               {{'H'}, "move_on_screen top"},
+               {{'M'}, "move_on_screen center"},
+               {{'L'}, "move_on_screen bottom"},
+               {{KEY_NPAGE}, "move_half_page up"},
+               {{KEY_PPAGE}, "move_half_page down"},
           };
 
           config_state->key_bind_count = sizeof(binds) / sizeof(binds[0]);
@@ -1885,50 +1893,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          }
 
                     } break;
-                    case 'H':
-                    {
-                         // move cursor to top line of view
-                         Point_t location = {cursor->x, buffer_view->top_row};
-                         ce_set_cursor(buffer, cursor, location);
-                    } break;
-                    case 'M':
-                    {
-                         // move cursor to middle line of view
-                         int64_t view_height = buffer_view->bottom_right.y - buffer_view->top_left.y;
-                         Point_t location = {cursor->x, buffer_view->top_row + (view_height/2)};
-                         ce_set_cursor(buffer, cursor, location);
-                    } break;
-                    case 'L':
-                    {
-                         // move cursor to bottom line of view
-                         int64_t view_height = buffer_view->bottom_right.y - buffer_view->top_left.y;
-                         Point_t location = {cursor->x, buffer_view->top_row + view_height};
-                         ce_set_cursor(buffer, cursor, location);
-                    } break;
-                    case 'z':
-                    break;
-                    case KEY_NPAGE:
-                    {
-                         view_move_cursor_half_page_up(config_state->tab_current->view_current);
-                    } break;
-                    case KEY_PPAGE:
-                    {
-                         view_move_cursor_half_page_down(config_state->tab_current->view_current);
-                    } break;
-                    case ':':
-                    {
-                         pthread_mutex_lock(&completion_lock);
-                         auto_complete_free(&config_state->auto_complete);
-                         for(int64_t i = 0; i < config_state->command_entry_count; ++i){
-                              if(config_state->command_entries[i].hidden) continue;
-                              auto_complete_insert(&config_state->auto_complete, config_state->command_entries[i].name, NULL);
-                         }
-                         auto_complete_start(&config_state->auto_complete, ACT_OCCURANCE, (Point_t){0, 0});
-                         completion_update_buffer(config_state->completion_buffer, &config_state->auto_complete, NULL);
-                         pthread_mutex_unlock(&completion_lock);
-                         input_start(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state,
-                                     "Command", key);
-                    } break;
                     case '/':
                     {
                          input_start(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state,
@@ -1947,159 +1911,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          config_state->vim_state.search.start = *cursor;
                          break;
                     }
-                    case '=':
-                    {
-#if 0
-                         if(config_state->movement_keys[0] == MOVEMENT_CONTINUE) return true;
-                         else{
-                              int64_t begin_format_line;
-                              int64_t end_format_line;
-                              switch(key){
-                              case '=':
-                                   begin_format_line = cursor->y;
-                                   end_format_line = cursor->y;
-                                   break;
-                              case 'G':
-                                   begin_format_line = cursor->y;
-                                   end_format_line = buffer->line_count-1;
-                                   break;
-                              default:
-                                   clear_keys(config_state);
-                                   return true;
-                              }
-
-                              // TODO support undo with clang-format
-                              ce_commits_free(buffer_state->commit_tail);
-                              buffer_state->commit_tail = NULL;
-
-                              int in_fds[2]; // 0 = child stdin
-                              int out_fds[2]; // 1 = child stdout
-                              if(pipe(in_fds) == -1 || pipe(out_fds) == -1){
-                                   ce_message("pipe failed %s", strerror(errno));
-                                   return true;
-                              }
-                              pid_t pid = fork();
-                              if(pid == -1){
-                                   ce_message("fork failed %s", strerror(errno));
-                                   return true;
-                              }
-                              if(pid == 0){
-                                   // child process
-                                   close(in_fds[1]); // close parent fds
-                                   close(out_fds[0]);
-
-                                   close(0); // close stdin
-                                   close(1); // close stdout
-                                   dup(in_fds[0]); // new stdin
-                                   dup(out_fds[1]); // new stdout
-                                   int64_t cursor_position = cursor->x+1;
-                                   for(int64_t y_itr = 0; y_itr < cursor->y; y_itr++){
-                                        cursor_position += strlen(buffer->lines[y_itr]);
-                                   }
-                                   char* cursor_arg;
-                                   asprintf(&cursor_arg, "-cursor=%"PRId64, cursor_position);
-
-                                   char* line_arg;
-                                   asprintf(&line_arg, "-lines=%"PRId64":%"PRId64, begin_format_line+1, end_format_line+1);
-
-                                   int ret __attribute__((unused)) = execlp("clang-format", "clang-format", line_arg, cursor_arg, (char *)NULL);
-                                   assert(ret != -1);
-                                   exit(1); // we should never reach here
-                              }
-
-                              // parent process
-                              close(in_fds[0]); // close child fds
-                              close(out_fds[1]);
-
-                              FILE* child_stdin = fdopen(in_fds[1], "w");
-                              FILE* child_stdout = fdopen(out_fds[0], "r");
-                              assert(child_stdin);
-                              assert(child_stdout);
-
-                              for(int i = 0; i < buffer->line_count; i++){
-                                   if(fputs(buffer->lines[i], child_stdin) == EOF || fputc('\n', child_stdin) == EOF){
-                                        ce_message("issue with fputs");
-                                        return true;
-                                   }
-                              }
-                              fclose(child_stdin);
-                              close(in_fds[1]);
-
-                              char formatted_line_buf[BUFSIZ];
-                              formatted_line_buf[0] = 0;
-
-                              // read cursor position
-                              fgets(formatted_line_buf, BUFSIZ, child_stdout);
-                              int cursor_position = -1;
-                              sscanf(formatted_line_buf, "{ \"Cursor\": %d", &cursor_position);
-
-                              // blow away all lines in the file
-                              for(int64_t i = buffer->line_count - 1; i >= 0; i--){
-                                   ce_remove_line(buffer, i);
-                              }
-
-                              for(int64_t i = 0; ; i++){
-                                   if(fgets(formatted_line_buf, BUFSIZ, child_stdout) == NULL) break;
-                                   size_t new_line_len = strlen(formatted_line_buf) - 1;
-                                   assert(formatted_line_buf[new_line_len] == '\n');
-                                   formatted_line_buf[new_line_len] = 0;
-                                   ce_insert_line(buffer, i, formatted_line_buf);
-#if 0
-                                   if(cursor_position > 0){
-                                        cursor_position -= new_line_len+1;
-                                        if(cursor_position <= 0){
-                                             Point_t new_cursor_location = {-cursor_position, i};
-                                             ce_message("moving cursor to %ld", -cursor_position);
-                                             ce_set_cursor(buffer, cursor, &new_cursor_location);
-                                        }
-                                   }
-#endif
-                              }
-                              cursor->x = 0;
-                              cursor->y = 0;
-                              if(!ce_advance_cursor(buffer, cursor, cursor_position - 1))
-                                   ce_message("failed to advance cursor");
-
-#if 0
-                              // TODO: use -output-replacements-xml to support undo
-                              char* formatted_line = strdup(formatted_line_buf);
-                              // save the current line in undo history
-                              Point_t delete_begin = {0, cursor->y};
-                              char* save_string = ce_dupe_line(buffer, cursor->y);
-                              if(!ce_remove_line(buffer, cursor->y)){
-                                   ce_message("ce_remove_string failed");
-                                   return true;
-                              }
-                              ce_insert_string(buffer, &delete_begin, formatted_line);
-                              ce_commit_change_string(&buffer_state->commit_tail, &delete_begin, cursor, cursor, formatted_line, save_string);
-#endif
-
-                              fclose(child_stdout);
-                              close(in_fds[0]);
-
-                              // wait for the child process to complete
-                              int wstatus;
-                              do {
-                                   pid_t w = waitpid(pid, &wstatus, WUNTRACED | WCONTINUED);
-                                   if (w == -1) {
-                                        perror("waitpid");
-                                        exit(EXIT_FAILURE);
-                                   }
-
-                                   if (WIFEXITED(wstatus) && WEXITSTATUS(wstatus) != 0) {
-                                        ce_message("clang-format process exited, status=%d\n", WEXITSTATUS(wstatus));
-                                   } else if (WIFSIGNALED(wstatus)) {
-                                        ce_message("clang-format process killed by signal %d\n", WTERMSIG(wstatus));
-                                   } else if (WIFSTOPPED(wstatus)) {
-                                        ce_message("clang-format process stopped by signal %d\n", WSTOPSIG(wstatus));
-                                   } else if (WIFCONTINUED(wstatus)) {
-                                        ce_message("clang-format process continued\n");
-                                   }
-                              } while (!WIFEXITED(wstatus) && !WIFSIGNALED(wstatus));
-                              config_state->command_key = '\0';
-                         }
-#endif
-                    } break;
                     case 24: // Ctrl + x
                          if(config_state->terminal_current){
                               // revive terminal if it is dead !

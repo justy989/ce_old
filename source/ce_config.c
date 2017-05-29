@@ -37,7 +37,7 @@ void mouse_handle_event(BufferView_t* buffer_view, VimState_t* vim_state, Input_
           }
           if(event.bstate & BUTTON1_PRESSED){ // Left click OSX
                Point_t click = {event.x, event.y};
-               view_switch_to_point(input->key > 0, input->view, vim_state, tab_current, terminal_head, terminal_current, click);
+               view_switch_to_point(input->type > INPUT_NONE, input->view, vim_state, tab_current, terminal_head, terminal_current, click);
                click = (Point_t) {event.x - (buffer_view->top_left.x - buffer_view->left_column),
                                   event.y - (buffer_view->top_left.y - buffer_view->top_row)};
                click.x -= ce_get_line_number_column_width(line_number_type, buffer_view->buffer->line_count,
@@ -92,8 +92,8 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t** head)
      Point_t* cursor = &buffer_view->cursor;
      BufferState_t* buffer_state = buffer->user_data;
 
-     if(config_state->input.key > 0 && buffer_view == config_state->input.view){
-          int input_key = config_state->input.key;
+     if(config_state->input.type > INPUT_NONE && buffer_view == config_state->input.view){
+          int input_type = config_state->input.type;
           input_end(&config_state->input, &config_state->vim_state);
           config_state->tab_current->view_current = config_state->input.view_save;
 
@@ -103,7 +103,7 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t** head)
           cursor = &config_state->tab_current->view_current->cursor;
           buffer_state = buffer->user_data;
 
-          switch(input_key){
+          switch(input_type){
           default:
                break;
           case 'q':
@@ -113,7 +113,7 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t** head)
                     config_state->quit = true;
                }
                return true;
-          case 2: // Ctrl + b
+          case INPUT_SWITCH_BUFFER:
           {
                if(!config_state->input.buffer.line_count) break;
 
@@ -506,7 +506,7 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, VimMode_
      if(terminal_current && view->buffer == terminal_current->buffer) printw("$ ");
      if(view == current_view && recording_macro) printw("RECORDING %c ", recording_macro);
 
-#if 0 // NOTE: useful to show key presses when debugging
+#if 1 // NOTE: useful to show key presses when debugging
      if(view == current_view) printw("%s %d ", keyname(last_key), last_key);
 #endif
 }
@@ -785,13 +785,19 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
                {command_reload_buffer, "reload_buffer", false},
                {command_rename, "rename", false},
                {command_syntax, "syntax", false},
+               {command_save, "save", false},
+               {command_save, "w", true}, // hidden vim-compatible shortcut
                {command_quit_all, "quit_all", false},
                {command_quit_all, "qa", true}, // hidden vim-compatible shortcut
                {command_quit_all, "qa!", true}, // hidden vim-compatible shortcut
-               {command_split, "split", false},
-               {command_split, "vsplit", false},
+               {command_view_split, "split", false},
+               {command_view_split, "vsplit", false},
+               {command_view_close, "view_close", false},
                {command_cscope_goto_definition, "cscope_goto_definition", false},
                {command_view_scroll, "view_scroll", false},
+               {command_view_close, "view_close", false},
+               {command_switch_buffer_dialogue, "switch_buffer_dialogue", false},
+               {command_cancel_dialogue, "cancel_dialogue", false},
           };
 
           // init and copy from our stack array
@@ -816,6 +822,10 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
                {{'z', 't'}, "view_scroll top"},
                {{'z', 'z'}, "view_scroll center"},
                {{'z', 'b'}, "view_scroll bottom"},
+               {{2}, "switch_buffer_dialogue"}, // Ctrl + b
+               {{KEY_SAVE}, "save"},
+               {{KEY_ESCAPE}, "cancel_dialogue"},
+               {{KEY_CLOSE}, "view_close"},
           };
 
           config_state->key_bind_count = sizeof(binds) / sizeof(binds[0]);
@@ -1420,10 +1430,10 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
                          completion_update_buffer(config_state->completion_buffer, &config_state->auto_complete, buffer->lines[config_state->auto_complete.start.y]);
 
-                         switch(config_state->input.key){
+                         switch(config_state->input.type){
                          default:
                               break;
-                         case 6: // Ctrl + f
+                         case INPUT_LOAD_FILE:
                               completion_calc_start_and_path(&config_state->auto_complete,
                                                              buffer->lines[cursor->y],
                                                              *cursor,
@@ -1477,7 +1487,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     } break;
                     }
 
-                    if(config_state->input.key > 0){
+                    if(config_state->input.type > INPUT_NONE){
                          switch(key){
                          default:
                               break;
@@ -1493,18 +1503,19 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               break;
                          }
 
-                         switch(config_state->input.key){
+                         switch(config_state->input.type){
                          default:
                               break;
-                         case 6: // load file
+                         case INPUT_LOAD_FILE:
                               completion_calc_start_and_path(&config_state->auto_complete,
                                                              buffer->lines[cursor->y],
                                                              *cursor,
                                                              config_state->completion_buffer,
                                                              config_state->input.load_file_search_path);
                               break;
-                         case ':': // command
-                         case 2: // Ctrl + b
+                         case INPUT_COMMAND:
+                              // intentional fallthrough
+                         case INPUT_SWITCH_BUFFER:
                          {
                               Point_t end = {cursor->x - 1, cursor->y};
                               if(end.x < 0) end.x = 0;
@@ -1744,7 +1755,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          break;
                     }
 
-                    if(config_state->input.key > 0){
+                    if(config_state->input.type > INPUT_NONE){
                          if(input_history_iterate(&config_state->input, false)){
                               if(buffer->line_count && buffer->lines[cursor->y][0]) cursor->x++;
                               vim_enter_normal_mode(&config_state->vim_state);
@@ -1764,7 +1775,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          break;
                     }
 
-                    if(config_state->input.key > 0){
+                    if(config_state->input.type > INPUT_NONE){
                          if(input_history_iterate(&config_state->input, true)){
                               if(buffer->line_count && buffer->lines[cursor->y][0]) cursor->x++;
                               vim_enter_normal_mode(&config_state->vim_state);
@@ -1779,6 +1790,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          break;
                     case '.':
                     {
+                         // TODO: move to vim
                          vim_action_apply(&config_state->vim_state.last_action, buffer, cursor, &config_state->vim_state,
                                           &buffer_state->commit_tail, &buffer_state->vim_buffer_state);
 
@@ -1799,95 +1811,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          ce_keys_free(&config_state->vim_state.command_head);
                          if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
                     } break;
-                    case KEY_ESCAPE:
-                         if(config_state->input.key > 0) input_cancel(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state);
-                         break;
-                    case KEY_SAVE:
-                         ce_save_buffer(buffer, buffer->filename);
-                         break;
-                    case KEY_CLOSE: // Ctrl + q
-                    {
-                         if(config_state->input.key){
-                              input_cancel(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state);
-                              break;
-                         }
-
-                         if(config_state->vim_state.recording_macro){
-                              vim_stop_recording_macro(&config_state->vim_state);
-                              break;
-                         }
-
-                         if(config_state->tab_current == config_state->tab_head &&
-                            config_state->tab_current->next == NULL &&
-                            config_state->tab_current->view_current == config_state->tab_current->view_head &&
-                            config_state->tab_current->view_current->next_horizontal == NULL &&
-                            config_state->tab_current->view_current->next_vertical == NULL ){
-                                 break;
-                         }
-
-                         Point_t save_cursor_on_terminal = misc_get_cursor_on_user_terminal(cursor, buffer_view, config_state->line_number_type);
-                         config_state->tab_current->view_current->buffer->cursor = config_state->tab_current->view_current->cursor;
-
-                         if(ce_remove_view(&config_state->tab_current->view_head, config_state->tab_current->view_current)){
-                              // if head is NULL, then we have removed the view head, and there were no other views, head is NULL
-                              if(!config_state->tab_current->view_head){
-                                   if(config_state->tab_current->next){
-                                        config_state->tab_current->next = config_state->tab_current->next;
-                                        TabView_t* tmp = config_state->tab_current;
-                                        config_state->tab_current = config_state->tab_current->next;
-                                        tab_view_remove(&config_state->tab_head, tmp);
-                                        break;
-                                   }else{
-
-                                        TabView_t* itr = config_state->tab_head;
-                                        while(itr && itr->next != config_state->tab_current) itr = itr->next;
-                                        assert(itr);
-                                        assert(itr->next == config_state->tab_current);
-                                        tab_view_remove(&config_state->tab_head, config_state->tab_current);
-                                        config_state->tab_current = itr;
-                                        break;
-                                   }
-                              }
-
-                              if(config_state->tab_current->view_current == config_state->tab_current->view_previous){
-                                   config_state->tab_current->view_previous = NULL;
-                              }
-
-                              Point_t top_left;
-                              Point_t bottom_right;
-                              misc_get_user_terminal_view_rect(config_state->tab_head, &top_left, &bottom_right);
-
-                              ce_calc_views(config_state->tab_current->view_head, top_left, bottom_right);
-                              BufferView_t* new_view = ce_find_view_at_point(config_state->tab_current->view_head, save_cursor_on_terminal);
-                              if(new_view){
-                                   config_state->tab_current->view_current = new_view;
-                              }else{
-                                   config_state->tab_current->view_current = config_state->tab_current->view_head;
-                              }
-
-                              terminal_resize_if_in_view(config_state->tab_current->view_head, config_state->terminal_head);
-                         }
-                    } break;
-                    case 2: // Ctrl + b
-                         if(config_state->input.key > 0 && config_state->tab_current->view_current == config_state->input.view){
-                              // pass
-                         }else{
-                              pthread_mutex_lock(&completion_lock);
-                              auto_complete_free(&config_state->auto_complete);
-                              BufferNode_t* itr = *head;
-                              while(itr){
-                                   auto_complete_insert(&config_state->auto_complete, itr->buffer->name, NULL);
-                                   itr = itr->next;
-                              }
-                              auto_complete_start(&config_state->auto_complete, ACT_OCCURANCE, (Point_t){0, 0});
-                              completion_update_buffer(config_state->completion_buffer, &config_state->auto_complete, NULL);
-                              pthread_mutex_unlock(&completion_lock);
-
-                              input_start(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state,
-                                          "Switch Buffer", key);
-                         }
-                         break;
                     case 'u':
+                         // TODO: move to vim
                          if(buffer_state->commit_tail && buffer_state->commit_tail->commit.type != BCT_NONE){
                               ce_commit_undo(buffer, &buffer_state->commit_tail, cursor);
                               if(buffer_state->commit_tail->commit.type == BCT_NONE){
@@ -1936,6 +1861,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          break;
                     case KEY_REDO:
                     {
+                         // TODO: move to vim
                          if(buffer_state->commit_tail && buffer_state->commit_tail->next){
                               if(ce_commit_redo(buffer, &buffer_state->commit_tail, cursor)){
                                    if(config_state->vim_state.recording_macro){
@@ -2265,14 +2191,14 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          config_state->vim_state.mode = VM_INSERT;
                     } break;
                     case 14: // Ctrl + n
-                         if(config_state->input.key > 0) break;
+                         if(config_state->input.type > INPUT_NONE) break;
 
                          dest_jump_to_next_in_terminal(head, config_state->terminal_head, &config_state->terminal_current,
                                                        config_state->tab_current->view_head, config_state->tab_current->view_current,
                                                        true);
                          break;
                     case 16: // Ctrl + p
-                         if(config_state->input.key > 0) break;
+                         if(config_state->input.type > INPUT_NONE) break;
 
                          dest_jump_to_next_in_terminal(head, config_state->terminal_head, &config_state->terminal_current,
                                                        config_state->tab_current->view_head, config_state->tab_current->view_current,
@@ -2335,28 +2261,28 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     {
                          Point_t point = {config_state->tab_current->view_current->top_left.x - 2, // account for window separator
                                          cursor->y - config_state->tab_current->view_current->top_row + config_state->tab_current->view_current->top_left.y};
-                         view_switch_to_point(config_state->input.key > 0, config_state->input.view, &config_state->vim_state,
+                         view_switch_to_point(config_state->input.type > INPUT_NONE, config_state->input.view, &config_state->vim_state,
                                                  config_state->tab_current, config_state->terminal_head, &config_state->terminal_current, point);
                     } break;
                     case 10: // Ctrl + j
                     {
                          Point_t point = {cursor->x - config_state->tab_current->view_current->left_column + config_state->tab_current->view_current->top_left.x,
                                           config_state->tab_current->view_current->bottom_right.y + 2}; // account for window separator
-                         view_switch_to_point(config_state->input.key > 0, config_state->input.view, &config_state->vim_state,
+                         view_switch_to_point(config_state->input.type > INPUT_NONE, config_state->input.view, &config_state->vim_state,
                                                  config_state->tab_current, config_state->terminal_head, &config_state->terminal_current, point);
                     } break;
                     case 11: // Ctrl + k
                     {
                          Point_t point = {cursor->x - config_state->tab_current->view_current->left_column + config_state->tab_current->view_current->top_left.x,
                                           config_state->tab_current->view_current->top_left.y - 2};
-                         view_switch_to_point(config_state->input.key > 0, config_state->input.view, &config_state->vim_state,
+                         view_switch_to_point(config_state->input.type > INPUT_NONE, config_state->input.view, &config_state->vim_state,
                                                  config_state->tab_current, config_state->terminal_head, &config_state->terminal_current, point);
                     } break;
                     case 12: // Ctrl + l
                     {
                          Point_t point = {config_state->tab_current->view_current->bottom_right.x + 2, // account for window separator
                                           cursor->y - config_state->tab_current->view_current->top_row + config_state->tab_current->view_current->top_left.y};
-                         view_switch_to_point(config_state->input.key > 0, config_state->input.view, &config_state->vim_state,
+                         view_switch_to_point(config_state->input.type > INPUT_NONE, config_state->input.view, &config_state->vim_state,
                                                  config_state->tab_current, config_state->terminal_head, &config_state->terminal_current, point);
                     } break;
                     case 19: // Ctrl + s
@@ -2447,7 +2373,11 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
      }
 
      // incremental search
-     if(config_state->input.key > 0 && (config_state->input.key == '/' || config_state->input.key == '?')){
+     switch(config_state->input.type){
+     default:
+          break;
+     case INPUT_SEARCH:
+     case INPUT_REVERSE_SEARCH:
           if(config_state->input.buffer.lines == NULL){
                pthread_mutex_lock(&view_input_save_lock);
                config_state->input.view_save->cursor = config_state->vim_state.search.start;
@@ -2490,6 +2420,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     config_state->vim_state.search.valid_regex = false;
                }
           }
+          break;
      }
 
      if(config_state->vim_state.mode != VM_INSERT){
@@ -2554,7 +2485,7 @@ void view_drawer(void* user_data)
      Point_t input_bottom_right = {};
      Point_t auto_complete_top_left = {};
      Point_t auto_complete_bottom_right = {};
-     if(config_state->input.key > 0){
+     if(config_state->input.type > INPUT_NONE){
           int64_t input_view_height = config_state->input.buffer.line_count;
           if(input_view_height) input_view_height--;
           pthread_mutex_lock(&view_input_save_lock);
@@ -2633,7 +2564,8 @@ void view_drawer(void* user_data)
      if(vim_mark) buffer->mark = *vim_mark;
 
      const char* search = NULL;
-     if(config_state->input.key > 0 && (config_state->input.key == '/' || config_state->input.key == '?') &&
+
+     if((config_state->input.type == INPUT_SEARCH || config_state->input.type == INPUT_REVERSE_SEARCH) &&
         config_state->input.buffer.lines && config_state->input.buffer.lines[0][0]){
           search = config_state->input.buffer.lines[0];
      }else{
@@ -2680,7 +2612,7 @@ void view_drawer(void* user_data)
                         config_state->vim_state.mode, config_state->last_key,
                         config_state->vim_state.recording_macro, config_state->terminal_current);
 
-     if(config_state->input.key > 0){
+     if(config_state->input.type > INPUT_NONE){
           if(config_state->input.view == config_state->tab_current->view_current){
                move(input_top_left.y - 1, input_top_left.x);
 

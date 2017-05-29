@@ -9,14 +9,14 @@ TextHistory_t* input_get_history(Input_t* input)
 {
      TextHistory_t* history = NULL;
 
-     switch(input->key){
+     switch(input->type){
      default:
           break;
-     case '/':
-     case '?':
+     case INPUT_SEARCH:
+     case INPUT_REVERSE_SEARCH:
           history = &input->search_history;
           break;
-     case ':':
+     case INPUT_COMMAND:
           history = &input->command_history;
           break;
      }
@@ -24,7 +24,7 @@ TextHistory_t* input_get_history(Input_t* input)
      return history;
 }
 
-void input_start(Input_t* input, BufferView_t** view, VimState_t* vim_state, const char* message, int key)
+void input_start(Input_t* input, BufferView_t** view, VimState_t* vim_state, const char* message, int type)
 {
      ce_clear_lines(&input->buffer);
      ce_alloc_lines(&input->buffer, 1);
@@ -34,7 +34,7 @@ void input_start(Input_t* input, BufferView_t** view, VimState_t* vim_state, con
      input->view->left_column = 0;
      input->view->top_row = 0;
      input->message = message;
-     input->key = key;
+     input->type = type;
      input->vim_mode_save = vim_state->mode;
 
      if(vim_state->mode == VM_VISUAL_LINE || vim_state->mode == VM_VISUAL_RANGE){
@@ -59,7 +59,7 @@ void input_start(Input_t* input, BufferView_t** view, VimState_t* vim_state, con
 
 void input_end(Input_t* input, VimState_t* vim_state)
 {
-     input->key = 0;
+     input->type = 0;
 
      switch(input->vim_mode_save){
      default:
@@ -84,7 +84,7 @@ void input_cancel(Input_t* input, BufferView_t** view, VimState_t* vim_state)
      (*view)->left_column = input->scroll_left_column_save;
      pthread_mutex_unlock(&view_input_save_lock);
 
-     if(input->key == 6 || input->key == ':'){
+     if(input->type == INPUT_LOAD_FILE || input->type == INPUT_COMMAND){
           // free the search path so we can re-use it
           free(input->load_file_search_path);
           input->load_file_search_path = NULL;

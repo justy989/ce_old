@@ -1,5 +1,4 @@
-#ifndef CE_H
-#define CE_H
+#pragma once
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -378,5 +377,3 @@ void*   ce_memrchr              (const void* s, int c, size_t n);
 bool    ce_point_in_range       (Point_t p, Point_t start, Point_t end);
 int64_t ce_last_index           (const char* string);
 bool    ce_connect_border_lines (Point_t location);
-
-#endif

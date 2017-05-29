@@ -6,6 +6,7 @@
 #include "info.h"
 #include "terminal_helper.h"
 #include "misc.h"
+#include "completion.h"
 
 #include <ctype.h>
 #include <unistd.h>
@@ -106,6 +107,9 @@ bool command_parse(Command_t* command, const char* string)
      end = find_end_of_arg(start);
 
      if(!end){
+          command->args = NULL;
+          command->arg_count = 0;
+
           int64_t len = strlen(start);
           if(len >= COMMAND_NAME_MAX_LEN){
                ce_message("error: in command '%s' command name is greater than max %d characters", string, COMMAND_NAME_MAX_LEN);
@@ -193,7 +197,6 @@ void command_log(Command_t* command)
 {
      ce_message("command: '%s', %ld args", command->name, command->arg_count);
 
-#if 0
      for(int64_t i = 0; i < command->arg_count; ++i){
           CommandArg_t* arg = command->args + i;
           switch(arg->type){
@@ -210,7 +213,6 @@ void command_log(Command_t* command)
                break;
           }
      }
-#endif
 }
 
 void command_reload_buffer(Command_t* command, void* user_data)
@@ -331,7 +333,7 @@ void command_quit_all(Command_t* command, void* user_data)
      }
 }
 
-void command_split(Command_t* command, void* user_data)
+void command_view_split(Command_t* command, void* user_data)
 {
      if(command->arg_count != 0){
           ce_message("usage: [v]split");
@@ -353,6 +355,81 @@ void command_split(Command_t* command, void* user_data)
      terminal_resize_if_in_view(config_state->tab_current->view_head, config_state->terminal_head);
 
      // TODO: open file if specified as an argument
+}
+
+void command_view_close(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: view");
+          ce_message("descr: split the currently selected window into 2 windows");
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Point_t* cursor = &buffer_view->cursor;
+
+     if(config_state->input.type > INPUT_NONE){
+          input_cancel(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state);
+          return;
+     }
+
+     // NOTE: probably not exactly where we want this?
+     if(config_state->vim_state.recording_macro){
+          vim_stop_recording_macro(&config_state->vim_state);
+          return;
+     }
+
+     // if this is the only view left, don't kill it !
+     if(config_state->tab_current == config_state->tab_head &&
+        config_state->tab_current->next == NULL &&
+        config_state->tab_current->view_current == config_state->tab_current->view_head &&
+        config_state->tab_current->view_current->next_horizontal == NULL &&
+        config_state->tab_current->view_current->next_vertical == NULL ){
+          return;
+     }
+
+     Point_t save_cursor_on_terminal = misc_get_cursor_on_user_terminal(cursor, buffer_view, config_state->line_number_type);
+     config_state->tab_current->view_current->buffer->cursor = config_state->tab_current->view_current->cursor;
+
+     if(ce_remove_view(&config_state->tab_current->view_head, config_state->tab_current->view_current)){
+          // if head is NULL, then we have removed the view head, and there were no other views, head is NULL
+          if(!config_state->tab_current->view_head){
+               if(config_state->tab_current->next){
+                    config_state->tab_current->next = config_state->tab_current->next;
+                    TabView_t* tmp = config_state->tab_current;
+                    config_state->tab_current = config_state->tab_current->next;
+                    tab_view_remove(&config_state->tab_head, tmp);
+                    return;
+               }else{
+
+                    TabView_t* itr = config_state->tab_head;
+                    while(itr && itr->next != config_state->tab_current) itr = itr->next;
+                    tab_view_remove(&config_state->tab_head, config_state->tab_current);
+                    config_state->tab_current = itr;
+                    return;
+               }
+          }
+
+          if(config_state->tab_current->view_current == config_state->tab_current->view_previous){
+               config_state->tab_current->view_previous = NULL;
+          }
+
+          Point_t top_left;
+          Point_t bottom_right;
+          misc_get_user_terminal_view_rect(config_state->tab_head, &top_left, &bottom_right);
+
+          ce_calc_views(config_state->tab_current->view_head, top_left, bottom_right);
+          BufferView_t* new_view = ce_find_view_at_point(config_state->tab_current->view_head, save_cursor_on_terminal);
+          if(new_view){
+               config_state->tab_current->view_current = new_view;
+          }else{
+               config_state->tab_current->view_current = config_state->tab_current->view_head;
+          }
+
+          terminal_resize_if_in_view(config_state->tab_current->view_head, config_state->terminal_head);
+     }
 }
 
 void command_cscope_goto_definition(Command_t* command, void* user_data)
@@ -499,10 +576,24 @@ void command_rename(Command_t* command, void* user_data)
      }
 }
 
+void command_save(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: save");
+          ce_message("descr: save the current buffer");
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     Buffer_t* buffer = config_state->tab_current->view_current->buffer;
+
+     ce_save_buffer(buffer, buffer->filename);
+}
+
 void command_buffers(Command_t* command, void* user_data)
 {
      if(command->arg_count != 0){
-          command_log(command);
           ce_message("usage: buffers");
           return;
      }
@@ -577,11 +668,6 @@ static void command_view_scroll_help()
 
 void command_view_scroll(Command_t* command, void* user_data)
 {
-     CommandData_t* command_data = (CommandData_t*)(user_data);
-     ConfigState_t* config_state = command_data->config_state;
-     BufferView_t* buffer_view = config_state->tab_current->view_current;
-     Point_t* cursor = &buffer_view->cursor;
-
      if(command->arg_count != 1){
           command_view_scroll_help();
           return;
@@ -592,6 +678,11 @@ void command_view_scroll(Command_t* command, void* user_data)
           return;
      }
 
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Point_t* cursor = &buffer_view->cursor;
+
      if(strcmp(command->args[0].string, "top") == 0){
           Point_t location = (Point_t){0, cursor->y};
           view_scroll_to_location(buffer_view, &location);
@@ -601,4 +692,47 @@ void command_view_scroll(Command_t* command, void* user_data)
           Point_t location = (Point_t){0, cursor->y - buffer_view->bottom_right.y};
           view_scroll_to_location(buffer_view, &location);
      }
+}
+
+void command_switch_buffer_dialogue(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: switch_buffer_dialogue");
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+
+     if(config_state->input.type > INPUT_NONE &&
+        config_state->tab_current->view_current == config_state->input.view){
+          // pass
+     }else{
+          pthread_mutex_lock(&completion_lock);
+          auto_complete_free(&config_state->auto_complete);
+          BufferNode_t* itr = *command_data->head;
+          while(itr){
+               auto_complete_insert(&config_state->auto_complete, itr->buffer->name, NULL);
+               itr = itr->next;
+          }
+          auto_complete_start(&config_state->auto_complete, ACT_OCCURANCE, (Point_t){0, 0});
+          completion_update_buffer(config_state->completion_buffer, &config_state->auto_complete, NULL);
+          pthread_mutex_unlock(&completion_lock);
+
+          input_start(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state,
+                      "Switch Buffer", INPUT_SWITCH_BUFFER);
+     }
+}
+
+void command_cancel_dialogue(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: switch_buffer_dialogue");
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+
+     if(config_state->input.type > INPUT_NONE) input_cancel(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state);
 }

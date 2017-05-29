@@ -38,5 +38,21 @@ typedef struct{
 
 bool command_parse(Command_t* command, const char* string);
 void command_free(Command_t* command);
+void command_log(Command_t* command);
 
 CommandEntry_t* commands_init(int64_t* command_entry_count);
+
+// default commands
+void command_reload_buffer(Command_t* command, void* user_data);
+void command_syntax(Command_t* command, void* user_data);
+void command_quit_all(Command_t* command, void* user_data);
+void command_split(Command_t* command, void* user_data);
+void command_cscope_goto_definition(Command_t* command, void* user_data);
+void command_noh(Command_t* command, void* user_data);
+void command_line_number(Command_t* command, void* user_data);
+void command_highlight_line(Command_t* command, void* user_data);
+void command_new_buffer(Command_t* command, void* user_data);
+void command_rename(Command_t* command, void* user_data);
+void command_buffers(Command_t* command, void* user_data);
+void command_macro_backslashes(Command_t* command, void* user_data);
+void command_view_scroll(Command_t* command, void* user_data);

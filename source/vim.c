@@ -455,6 +455,18 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                     }
                }
           } break;
+          case KEY_REDO:
+          {
+               VimYankNode_t* yank = vim_yank_find(vim_state->yank_head, '"');
+
+               if(!yank) break;
+
+               if(ce_insert_string(buffer, *cursor, yank->text)){
+                    ce_commit_insert_string(commit_tail, *cursor, *cursor,
+                                            *cursor, strdup(yank->text), BCC_STOP);
+                    ce_advance_cursor(buffer, cursor, strlen(yank->text));
+               }
+          } break;
           }
 
           if(recording_macro && recording_macro == vim_state->recording_macro){

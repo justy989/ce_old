@@ -432,16 +432,38 @@ void command_view_close(Command_t* command, void* user_data)
      }
 }
 
+static void command_cscope_goto_definition_help()
+{
+     ce_message("usage: cscope_goto_definition <symbol>");
+     ce_message("descr: jump to the definition of the specified symbol. If no symbol is specified, use word under cursor.");
+}
+
 void command_cscope_goto_definition(Command_t* command, void* user_data)
 {
-     if(command->arg_count != 1 || command->args[0].type != CAT_STRING){
-          ce_message("usage: cscope_goto_definition <symbol>");
-          ce_message("descr: jump to the definition of the specified symbol");
+     if(command->arg_count > 1){
+          command_cscope_goto_definition_help();
           return;
      }
 
      CommandData_t* command_data = (CommandData_t*)(user_data);
      ConfigState_t* config_state = command_data->config_state;
+
+     if(command->arg_count == 0){
+          BufferView_t* buffer_view = config_state->tab_current->view_current;
+          Buffer_t* buffer = buffer_view->buffer;
+          Point_t* cursor = &buffer_view->cursor;
+
+          Point_t word_start, word_end;
+          if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) return;
+          int len = (word_end.x - word_start.x) + 1;
+          char* search_word = strndupa(buffer->lines[cursor->y] + word_start.x, len);
+          dest_cscope_goto_definition(config_state->tab_current->view_current, command_data->head, search_word);
+          return;
+     }else if(command->args[0].type != CAT_STRING){
+          command_cscope_goto_definition_help();
+          return;
+     }
+
      dest_cscope_goto_definition(config_state->tab_current->view_current, command_data->head, command->args[0].string);
 }
 
@@ -694,6 +716,74 @@ void command_view_scroll(Command_t* command, void* user_data)
      }
 }
 
+static void command_view_switch_help()
+{
+     ce_message("usage: view_switch [mode]");
+     ce_message("descr: switch to an adjacent view in the direction specified.");
+     ce_message(" mode: 'up', 'down', 'left', 'right'");
+}
+
+void command_view_switch(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 1){
+          command_view_switch_help();
+          return;
+     }
+
+     if(command->args[0].type != CAT_STRING){
+          command_view_switch_help();
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Point_t* cursor = &buffer_view->cursor;
+     Point_t point = {};
+
+     if(strcmp(command->args[0].string, "up") == 0){
+          point = (Point_t){cursor->x - config_state->tab_current->view_current->left_column + config_state->tab_current->view_current->top_left.x,
+                            config_state->tab_current->view_current->top_left.y - 2};
+     }else if(strcmp(command->args[0].string, "down") == 0){
+          point = (Point_t){cursor->x - config_state->tab_current->view_current->left_column + config_state->tab_current->view_current->top_left.x,
+                            config_state->tab_current->view_current->bottom_right.y + 2}; // account for window separator
+     }else if(strcmp(command->args[0].string, "left") == 0){
+          point = (Point_t){config_state->tab_current->view_current->top_left.x - 2, // account for window separator
+                            cursor->y - config_state->tab_current->view_current->top_row + config_state->tab_current->view_current->top_left.y};
+     }else if(strcmp(command->args[0].string, "right") == 0){
+          point = (Point_t){config_state->tab_current->view_current->bottom_right.x + 2, // account for window separator
+                            cursor->y - config_state->tab_current->view_current->top_row + config_state->tab_current->view_current->top_left.y};
+     }else{
+          command_view_switch_help();
+          return;
+     }
+
+     view_switch_to_point(config_state->input.type > INPUT_NONE, config_state->input.view, &config_state->vim_state,
+                             config_state->tab_current, config_state->terminal_head, &config_state->terminal_current, point);
+}
+
+void command_tab_new(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: tab_new");
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+
+     TabView_t* new_tab = tab_view_insert(config_state->tab_head);
+     if(!new_tab) return;
+
+     // copy view attributes from the current view
+     *new_tab->view_head = *config_state->tab_current->view_current;
+     new_tab->view_head->next_horizontal = NULL;
+     new_tab->view_head->next_vertical = NULL;
+     new_tab->view_current = new_tab->view_head;
+
+     config_state->tab_current = new_tab;
+}
+
 static void command_move_on_screen_help()
 {
      ce_message("usage: move_on_screen [mode]");
@@ -815,10 +905,111 @@ void command_command_dialogue(Command_t* command, void* user_data)
                  "Command", INPUT_COMMAND);
 }
 
+static void command_search_dialogue_help()
+{
+     ce_message("usage: search [dir]");
+     ce_message("descr: open dialogue to start an incremental search.");
+     ce_message("  dir: 'up', 'down'");
+}
+
+void command_search_dialogue(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 1){
+          command_search_dialogue_help();
+          return;
+     }
+
+     if(command->args[0].type != CAT_STRING){
+          command_search_dialogue_help();
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Buffer_t* buffer = buffer_view->buffer;
+     Point_t* cursor = &buffer_view->cursor;
+
+     if(strcmp(command->args[0].string, "up") == 0){
+          input_start(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state,
+                      "Reverse Regex Search", INPUT_SEARCH);
+          config_state->vim_state.search.direction = CE_UP;
+     }else if(strcmp(command->args[0].string, "down") == 0){
+          input_start(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state,
+                      "Regex Search", INPUT_REVERSE_SEARCH);
+          config_state->vim_state.search.direction = CE_DOWN;
+     }
+
+     config_state->vim_state.search.start = *cursor;
+
+     JumpArray_t* jump_array = &((BufferViewState_t*)(buffer_view->user_data))->jump_array;
+     jump_insert(jump_array, buffer->filename, *cursor);
+}
+
+void command_load_file_dialogue(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: load_file_dialogue");
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Buffer_t* buffer = buffer_view->buffer;
+     Point_t* cursor = &buffer_view->cursor;
+
+     buffer->cursor = buffer_view->cursor;
+
+     input_start(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state,
+                 "Load File", INPUT_LOAD_FILE);
+
+     // when searching for a file, see if we would like to use a path other than the one ce was run at.
+     TerminalNode_t* terminal_node = is_terminal_buffer(config_state->terminal_head, buffer);
+     if(terminal_node){
+          // if we are looking at a terminal, use the terminal's cwd
+          config_state->input.load_file_search_path = terminal_get_current_directory(&terminal_node->terminal);
+     }else{
+          // if our file has a relative path in it, use that
+          char* last_slash = strrchr(buffer->filename, '/');
+          if(last_slash){
+               int64_t path_len = last_slash - buffer->filename;
+               config_state->input.load_file_search_path = malloc(path_len + 1);
+               strncpy(config_state->input.load_file_search_path, buffer->filename, path_len);
+               config_state->input.load_file_search_path[path_len] = 0;
+          }
+     }
+
+     completion_calc_start_and_path(&config_state->auto_complete,
+                                    config_state->input.buffer.lines[0],
+                                    *cursor,
+                                    config_state->completion_buffer,
+                                    config_state->input.load_file_search_path);
+}
+
+void command_replace_dialogue(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: replace_dialogue");
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+
+     if(config_state->vim_state.mode == VM_VISUAL_RANGE || config_state->vim_state.mode == VM_VISUAL_LINE){
+          input_start(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state,
+                      "Visual Replace", INPUT_REPLACE);
+     }else{
+          input_start(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state,
+                      "Replace", INPUT_REPLACE);
+     }
+}
+
 void command_cancel_dialogue(Command_t* command, void* user_data)
 {
      if(command->arg_count != 0){
-          ce_message("usage: switch_buffer_dialogue");
+          ce_message("usage: cancel_dialogue");
           return;
      }
 
@@ -826,4 +1017,249 @@ void command_cancel_dialogue(Command_t* command, void* user_data)
      ConfigState_t* config_state = command_data->config_state;
 
      if(config_state->input.type > INPUT_NONE) input_cancel(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state);
+}
+
+void command_terminal_goto(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: terminal_goto");
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Buffer_t* buffer = buffer_view->buffer;
+
+     if(config_state->terminal_current){
+          // revive terminal if it is dead !
+          if(!config_state->terminal_current->terminal.is_alive){
+               pthread_cancel(config_state->terminal_current->terminal.reader_thread);
+               pthread_join(config_state->terminal_current->terminal.reader_thread, NULL);
+
+               if(!terminal_start_in_view(buffer_view, config_state->terminal_current, config_state)){
+                    return;
+               }
+          }
+
+          BufferView_t* terminal_view = ce_buffer_in_view(config_state->tab_current->view_head,
+                                                          config_state->terminal_current->buffer);
+          if(terminal_view){
+               // if terminal is already in view
+               config_state->tab_current->view_previous = config_state->tab_current->view_current; // save previous view
+               config_state->tab_current->view_current = terminal_view;
+               buffer_view = terminal_view;
+          }else{
+               // otherwise use the current view
+               buffer->cursor = buffer_view->cursor; // save cursor before switching
+               buffer_view->buffer = config_state->terminal_current->buffer;
+          }
+
+          buffer_view->cursor = config_state->terminal_current->terminal.cursor;
+          buffer_view->top_row = 0;
+          buffer_view->left_column = 0;
+          view_follow_cursor(buffer_view, config_state->line_number_type);
+          config_state->vim_state.mode = VM_INSERT;
+          return;
+     }else{
+          command_terminal_new(command, user_data);
+     }
+}
+
+void command_terminal_new(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: terminal_new");
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Buffer_t* buffer = buffer_view->buffer;
+
+     TerminalNode_t* node = calloc(1, sizeof(*node));
+     if(!node) return;
+
+     // setup terminal buffer buffer_state
+     BufferState_t* terminal_buffer_state = calloc(1, sizeof(*terminal_buffer_state));
+     if(!terminal_buffer_state){
+          ce_message("failed to allocate buffer state.");
+          return;
+     }
+
+     node->buffer = calloc(1, sizeof(*node->buffer));
+     node->buffer->absolutely_no_line_numbers_under_any_circumstances = true;
+     node->buffer->user_data = terminal_buffer_state;
+
+     TerminalHighlight_t* terminal_highlight_data = calloc(1, sizeof(TerminalHighlight_t));
+     terminal_highlight_data->terminal = &node->terminal;
+     node->buffer->syntax_fn = terminal_highlight;
+     node->buffer->syntax_user_data = terminal_highlight_data;
+
+     BufferNode_t* new_buffer_node = ce_append_buffer_to_list(command_data->head, node->buffer);
+     if(!new_buffer_node){
+          ce_message("failed to add shell command buffer to list");
+          return;
+     }
+
+     if(!terminal_start_in_view(buffer_view, node, config_state)){
+          return;
+     }
+
+     buffer->cursor = buffer_view->cursor; // save cursor before switching
+     buffer_view->buffer = node->buffer;
+
+     // append the node to the list
+     int64_t id = 1;
+     if(config_state->terminal_head){
+          TerminalNode_t* itr = config_state->terminal_head;
+          while(itr->next){
+               itr = itr->next;
+               id++;
+          }
+          id++;
+          itr->next = node;
+     }else{
+          config_state->terminal_head = node;
+     }
+
+     // name terminal
+     char buffer_name[64];
+     snprintf(buffer_name, 64, "[terminal %" PRId64 "]", id);
+     node->buffer->name = strdup(buffer_name);
+
+     config_state->terminal_current = node;
+     config_state->vim_state.mode = VM_INSERT;
+}
+
+static void command_terminal_jump_to_dest_help()
+{
+     ce_message("usage: terminal_jump_to_dest [dir]");
+     ce_message("descr: jump the current view to the next destination found in the current terminal's output.");
+     ce_message("  dir: 'up', 'down'");
+}
+
+void command_terminal_jump_to_dest(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 1){
+          command_terminal_jump_to_dest_help();
+          return;
+     }
+
+     if(command->args[0].type != CAT_STRING){
+          command_terminal_jump_to_dest_help();
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     bool down = false;
+
+     if(strcmp(command->args[0].string, "up") == 0){
+          // pass
+     }else if(strcmp(command->args[0].string, "down") == 0){
+          down = true;
+     }else{
+          command_terminal_jump_to_dest_help();
+          return;
+     }
+
+     if(config_state->input.type == INPUT_NONE){
+          dest_jump_to_next_in_terminal(command_data->head, config_state->terminal_head, &config_state->terminal_current,
+                                        config_state->tab_current->view_head, config_state->tab_current->view_current,
+                                        down);
+     }
+}
+
+static void command_terminal_run_man_help()
+{
+     ce_message("usage: terminal_run_man <symbol>");
+     ce_message("descr: run 'man -Pcat <symbol>' in current terminal. If no symbol is specified, word under cursor is used.");
+}
+
+void command_terminal_run_man(Command_t* command, void* user_data)
+{
+     if(command->arg_count > 1){
+          command_terminal_run_man_help();
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+
+     if(command->arg_count == 0){
+          BufferView_t* buffer_view = config_state->tab_current->view_current;
+          Buffer_t* buffer = buffer_view->buffer;
+          Point_t* cursor = &buffer_view->cursor;
+          Point_t word_start;
+          Point_t word_end;
+          if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) return;
+          int len = (word_end.x - word_start.x) + 1;
+
+          char cmd_string[BUFSIZ];
+          snprintf(cmd_string, BUFSIZ, "man --pager=cat %*.*s", len, len, buffer->lines[cursor->y] + word_start.x);
+          terminal_in_view_run_command(config_state->terminal_head, config_state->tab_current->view_head, cmd_string);
+     }else if(command->args[0].type != CAT_STRING){
+          command_terminal_run_man_help();
+          return;
+     }
+
+     char cmd_string[BUFSIZ];
+     snprintf(cmd_string, BUFSIZ, "man --pager=cat %s", command->args[0].string);
+     terminal_in_view_run_command(config_state->terminal_head, config_state->tab_current->view_head, cmd_string);
+}
+
+void command_jump_next(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: jump_next");
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Buffer_t* buffer = buffer_view->buffer;
+     Point_t* cursor = &buffer_view->cursor;
+
+     JumpArray_t* jump_array = &((BufferViewState_t*)(buffer_view->user_data))->jump_array;
+     if(jump_array->jump_current){
+          if(!jump_array->jumps[jump_array->jump_current].filepath[0]){
+               jump_insert(jump_array, buffer->filename, *cursor);
+               jump_to_previous(jump_array);
+          }
+          const Jump_t* jump = jump_to_previous(jump_array);
+          if(jump){
+               BufferNode_t* new_buffer_node = buffer_create_from_file(command_data->head, jump->filepath);
+               if(new_buffer_node){
+                    buffer_view->buffer = new_buffer_node->buffer;
+                    buffer_view->cursor = jump->location;
+                    view_center(buffer_view);
+               }
+          }
+     }
+}
+
+void command_jump_previous(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: jump_previous");
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
+
+     JumpArray_t* jump_array = &((BufferViewState_t*)(buffer_view->user_data))->jump_array;
+     const Jump_t* jump = jump_to_next(jump_array);
+     if(jump){
+          BufferNode_t* new_buffer_node = buffer_create_from_file(command_data->head, jump->filepath);
+          if(new_buffer_node){
+               buffer_view->buffer = new_buffer_node->buffer;
+               buffer_view->cursor = jump->location;
+               view_center(buffer_view);
+          }
+     }
 }

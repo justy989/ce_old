@@ -132,7 +132,7 @@ static bool confirm_action(ConfigState_t* config_state, BufferNode_t** head)
           switch(input_type){
           default:
                break;
-          case 'q':
+          case INPUT_QUIT:
                if(!config_state->input.buffer.line_count) break;
 
                if(tolower(config_state->input.buffer.lines[0][0]) == 'y'){
@@ -217,11 +217,6 @@ static bool confirm_action(ConfigState_t* config_state, BufferNode_t** head)
                return true;
           } break;
           case INPUT_SEARCH:
-               if(!config_state->input.buffer.line_count) break;
-
-               input_commit_to_history(&config_state->input.buffer, &config_state->input.search_history);
-               vim_yank_add(&config_state->vim_state.yank_head, '/', strdup(config_state->input.buffer.lines[0]), YANK_NORMAL);
-               return true;
           case INPUT_REVERSE_SEARCH:
                if(!config_state->input.buffer.line_count) break;
 
@@ -802,55 +797,62 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      {
           // create a stack array so we can have the compiler track the number of elements
           CommandEntry_t command_entries[] = {
-               {command_show_buffers, "show_buffers", false},
-               {command_show_marks, "show_marks", false},
-               {command_show_macros, "show_macros", false},
-               {command_show_yanks, "show_yanks", false},
-               {command_highlight_line, "highlight_line", false},
-               {command_line_number, "line_number", false},
-               {command_macro_backslashes, "macro_backslashes", false},
-               {command_new_buffer, "new_buffer", false},
-               {command_noh, "noh", false},
-               {command_reload_buffer, "reload_buffer", false},
-               {command_rename, "rename", false},
-               {command_syntax, "syntax", false},
-               {command_save, "save", false},
-               {command_save, "w", true}, // hidden vim-compatible shortcut
-               {command_save_and_close_view, "save_and_close_view", false},
-               {command_quit_all, "quit_all", false},
-               {command_quit_all, "qa", true}, // hidden vim-compatible shortcut
-               {command_quit_all, "qa!", true}, // hidden vim-compatible shortcut
-               {command_redraw, "redraw", false},
-               {command_view_split, "split", false},
-               {command_view_split, "vsplit", false},
-               {command_view_close, "view_close", false},
-               {command_view_scroll, "view_scroll", false},
-               {command_view_close, "view_close", false},
-               {command_view_switch, "view_switch", false},
-               {command_tab_new, "tab_new", false},
-               {command_tab_next, "tab_next", false},
-               {command_tab_previous, "tab_previous", false},
-               {command_move_on_screen, "move_on_screen", false},
-               {command_move_half_page, "move_half_page", false},
-               {command_cscope_goto_definition, "cscope_goto_definition", false},
-               {command_goto_file_under_cursor, "goto_file_under_cursor", false},
-               {command_switch_buffer_dialogue, "switch_buffer_dialogue", false},
-               {command_command_dialogue, "command_dialogue", false},
-               {command_search_dialogue, "search_dialogue", false},
-               {command_load_file_dialogue, "load_file_dialogue", false},
-               {command_replace_dialogue, "replace_dialogue", false},
-               {command_cancel_dialogue, "cancel_dialogue", false},
-               {command_terminal_goto, "terminal_goto", false},
-               {command_terminal_new, "terminal_new", false},
-               {command_terminal_jump_to_dest, "terminal_jump_to_dest", false},
-               {command_terminal_run_man, "terminal_run_man", false},
-               {command_terminal_run_command, "terminal_run_command", false},
-               {command_jump_next, "jump_next", false},
-               {command_jump_previous, "jump_previous", false},
-               {command_completion_toggle, "completion_toggle", false},
-               {command_completion_apply, "completion_apply", false},
-               {command_completion_next, "completion_next", false},
-               {command_completion_previous, "completion_previous", false},
+               {command_help, "help", NULL, "print the commands and their descriptions in the message log", NULL},
+               {command_quit_all, "quit_all", NULL, "exit ce, prompting if you have any unsaved buffers", NULL},
+               {command_save, "save", NULL, "save the current buffer", NULL},
+               {command_save_and_close_view, "save_and_close_view", NULL, "save the current buffer and close the view", NULL},
+               {command_redraw, "redraw", NULL, "clear the screen so it will get fully redrawn", NULL},
+               {command_highlight_line, "highlight_line", "[style]", "change the global style in which the current line is highlighted", "styles: none, text, entire"},
+               {command_line_number, "line_number", "[style]", "change the global style in which line number are drawn", "styles: none, absolute, relative, both"},
+               {command_noh, "noh", NULL, "turn off search highlighting", NULL},
+               {command_keybind_add, "keybind_add", "[key] [mode] [command]", "add/override a keybind dynamically that will run the specified command", NULL},
+
+               {command_buffer_rename, "buffer_rename", "[string]", "rename the current buffer", NULL},
+               {command_buffer_reload, "buffer_reload", NULL, "reload the file that backs the buffer, overwriting any unsaved changes", NULL},
+               {command_buffer_new, "buffer_new", "<string>", "creates a new buffer with an optional filename", NULL},
+               {command_buffer_syntax, "buffer_syntax", "[style]", "change the syntax mode of the current buffer", "styles: c, cpp, python, java, config, diff, plain"},
+
+               {command_move_on_screen, "move_on_screen", "[mode]", "move the cursor to the part of the view specified by the mode", "modes: top, center, bottom"},
+               {command_move_half_page, "move_half_page", "[dir]", "move the cursor up or down a half page specified by the dir", "  dir: up, down"},
+
+               {command_view_split, "view_split", "[dir]", "split the currently selected window into 2 windows", "dir: horizontal, vertical"},
+               {command_view_close, "view_close", NULL, "close the current view", NULL},
+               {command_view_scroll, "view_scroll", "[mode]", "scroll the view keeping the cursor on screen based on the mode specified", "modes: top, center, bottom"},
+               {command_view_switch, "view_switch", "[mode]", "switch to an adjacent view in the direction specified", " mode: up, down, left, right"},
+
+               {command_tab_new, "tab_new", NULL, "add a new tab", NULL},
+               {command_tab_next, "tab_next", NULL, "switch to the next tab", NULL},
+               {command_tab_previous, "tab_previous", NULL, "switch to the previous tab", NULL},
+
+               {command_show_buffers, "show_buffers", NULL, "show all buffers in the current view", NULL},
+               {command_show_marks, "show_marks", NULL, "show all marks in the current view", NULL},
+               {command_show_macros, "show_macros", NULL, "show all macros in the current view", NULL},
+               {command_show_yanks, "show_yanks", NULL, "show all yanks in the current view", NULL},
+
+               {command_switch_buffer_dialogue, "switch_buffer_dialogue", NULL, "open a dialogue to switch buffers", NULL},
+               {command_command_dialogue, "command_dialogue", NULL, "open a dialogue to run a ce command", NULL},
+               {command_search_dialogue, "search_dialogue", "[dir]", "open a dialogue to search the current buffer for a regex", "dirs: up, down"},
+               {command_load_file_dialogue, "load_file_dialogue", NULL, "open a dialogue to load a file", NULL},
+               {command_replace_dialogue, "replace_dialogue", NULL, "open a dialogue to replace in the current buffer", NULL},
+               {command_cancel_dialogue, "cancel_dialogue", NULL, "cancel any open dialogue", NULL},
+
+               {command_terminal_goto, "terminal_goto", NULL, "switch to a terminal in view, if none is in view, switch the current view to an already open terminal. Start's a new terminal if none exists.", NULL},
+               {command_terminal_new, "terminal_new", NULL, "start a new terminal and open it in the current view", NULL},
+               {command_terminal_jump_to_dest, "terminal_jump_to_dest", "[dir]", "jump the current view to the next destination found in the current terminal's output", "dir: up, down"},
+               {command_terminal_run_man, "terminal_run_man", "<symbol>", "run 'man -Pcat <symbol>' in current terminal. If no symbol is specified, word under cursor is used", NULL},
+               {command_terminal_run_command, "terminal_run_command", "[command]", "run specified command in current terminal", NULL},
+
+               {command_jump_next, "jump_next", NULL, "using the jump list, move the cursor to the next destination in the list", NULL},
+               {command_jump_previous, "jump_previous", NULL, "using the jump list, move the cursor to the previous destination in the list", NULL},
+
+               {command_completion_toggle, "completion_toggle", NULL, "toggle auto completion for c using clang", NULL},
+               {command_completion_apply, "completion_apply", NULL, "if auto completion is running, insert the selection option at the cursor", NULL},
+               {command_completion_next, "completion_next", NULL, "if auto completion is running, select the next completion in the list", NULL},
+               {command_completion_previous, "completion_previous", NULL, "if auto completion is running, select the next completion in the list", NULL},
+
+               {command_cscope_goto_definition, "cscope_goto_definition", "<symbol>", "jump to the definition of the specified symbol. If no symbol is specified, use word under cursor", NULL},
+               {command_goto_file_under_cursor, "goto_file_under_cursor", NULL, "checks the word under the cursor for a valid file, if valid opens that file", NULL},
+               {command_macro_backslashes, "macro_backslashes", NULL, "add formatted backslashes around a macro", NULL},
           };
 
           // init and copy from our stack array
@@ -894,8 +896,8 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
                {{10}, "view_switch down"}, // Ctrl + j
                {{11}, "view_switch up"}, // Ctrl + k
                {{12}, "view_switch right"}, // Ctrl + l
-               {{19}, "split"}, // Ctrl + s
-               {{22}, "vsplit"}, // Ctrl + v
+               {{19}, "view_split horizontal"}, // Ctrl + s
+               {{22}, "view_split vertical"}, // Ctrl + v
                {{15}, "jump_next"}, // Ctrl + o
                {{9}, "jump_previous"}, // Ctrl + i
                {{29}, "cscope_goto_definition"}, // Ctrl + ]
@@ -1226,8 +1228,9 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                if(config_state->binds[config_state->vim_state.mode].binds[i].key_count == config_state->key_count){
                     Command_t* command = &config_state->binds[config_state->vim_state.mode].binds[i].command;
                     ce_command* command_func = NULL;
+                    CommandEntry_t* entry = NULL;
                     for(int64_t i = 0; i < config_state->command_entry_count; ++i){
-                         CommandEntry_t* entry = config_state->command_entries + i;
+                         entry = config_state->command_entries + i;
                          if(strcmp(entry->name, command->name) == 0){
                               command_func = entry->func;
                               break;
@@ -1236,7 +1239,19 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
                     if(command_func){
                          CommandData_t command_data = {config_state, head};
-                         command_func(command, &command_data);
+                         CommandStatus_t cs = command_func(command, &command_data);
+                         switch(cs){
+                         default:
+                              break;
+                         case CS_FAILURE:
+                              ce_message("'%s' failed", entry->name);
+                              break;
+                         case CS_PRINT_HELP:
+                              ce_message("command help:");
+                              command_entry_log(entry);
+                              ce_message("");
+                              break;
+                         }
                     }else{
                          ce_message("unknown command: '%s'", command->name);
                     }

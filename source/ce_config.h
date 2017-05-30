@@ -55,8 +55,6 @@ typedef struct{
 
      VimState_t vim_state;
 
-     int last_key;
-
      TabView_t* tab_head;
      TabView_t* tab_current;
 

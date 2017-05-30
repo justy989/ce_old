@@ -19,6 +19,8 @@
 
 #define SCROLL_LINES 1
 
+int g_last_key = 0;
+
 void sigint_handler(int signal)
 {
      ce_message("recieved signal %d", signal);
@@ -452,12 +454,12 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t** head)
      return false;
 }
 
-void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, VimMode_t vim_mode, int last_key,
+void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, VimMode_t vim_mode,
                         char recording_macro, TerminalNode_t* terminal_current)
 {
      // recursively call draw view for all statuses
-     if(view->next_horizontal) draw_view_statuses(view->next_horizontal, current_view, vim_mode, last_key, recording_macro, terminal_current);
-     if(view->next_vertical) draw_view_statuses(view->next_vertical, current_view, vim_mode, last_key, recording_macro, terminal_current);
+     if(view->next_horizontal) draw_view_statuses(view->next_horizontal, current_view, vim_mode, recording_macro, terminal_current);
+     if(view->next_vertical) draw_view_statuses(view->next_vertical, current_view, vim_mode, recording_macro, terminal_current);
 
      // NOTE: mode names need space at the end for OCD ppl like me
      static const char* mode_names[] = {
@@ -507,7 +509,7 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, VimMode_
      if(view == current_view && recording_macro) printw("RECORDING %c ", recording_macro);
 
 #if 1 // NOTE: useful to show key presses when debugging
-     if(view == current_view) printw("%s %d ", keyname(last_key), last_key);
+     if(view == current_view) printw("%s %d ", keyname(g_last_key), g_last_key);
 #endif
 }
 
@@ -776,7 +778,10 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      {
           // create a stack array so we can have the compiler track the number of elements
           CommandEntry_t command_entries[] = {
-               {command_buffers, "buffers", false},
+               {command_show_buffers, "show_buffers", false},
+               {command_show_marks, "show_marks", false},
+               {command_show_macros, "show_macros", false},
+               {command_show_yanks, "show_yanks", false},
                {command_highlight_line, "highlight_line", false},
                {command_line_number, "line_number", false},
                {command_macro_backslashes, "macro_backslashes", false},
@@ -787,9 +792,11 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
                {command_syntax, "syntax", false},
                {command_save, "save", false},
                {command_save, "w", true}, // hidden vim-compatible shortcut
+               {command_save_and_close_view, "save_and_close_view", false},
                {command_quit_all, "quit_all", false},
                {command_quit_all, "qa", true}, // hidden vim-compatible shortcut
                {command_quit_all, "qa!", true}, // hidden vim-compatible shortcut
+               {command_redraw, "redraw", false},
                {command_view_split, "split", false},
                {command_view_split, "vsplit", false},
                {command_view_close, "view_close", false},
@@ -835,10 +842,10 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
 
           // TODO: create bindings for modes other than normal?
           KeyBindDef_t binds[] = {
-               {{'\\', 'e'}, "buffers"},
+               {{'\\', 'e'}, "show_buffers"},
                {{'\\', 'q'}, "quit_all"},
                {{'\\', 'b'}, "terminal_run_command make"},
-               {{'\\', 'm'}, "terminal_run_command \"make clean\""},
+               {{'\\', 'm'}, "terminal_run_command \"make clean\""}, // TODO: fix arg parsing
                {{'z', 't'}, "view_scroll top"},
                {{'z', 'z'}, "view_scroll center"},
                {{'z', 'b'}, "view_scroll bottom"},
@@ -874,6 +881,14 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
                {{'g', 't'}, "tab_next"},
                {{'g', 'T'}, "tab_previous"},
                {{'g', 'f'}, "goto_file_under_cursor"},
+               {{'\\', 'r'}, "redraw"},
+               {{'m', '?'}, "show_marks"},
+               {{'\"', '?'}, "show_marks"},
+               {{'q', '?'}, "show_macros"},
+               {{'@', '?'}, "show_macros"},
+               {{'y', '?'}, "show_yanks"},
+               {{'p', '?'}, "show_yanks"},
+               {{'Z', 'Z'}, "save_and_close_view"},
           };
 
           config_state->key_bind_count = sizeof(binds) / sizeof(binds[0]);
@@ -1210,91 +1225,23 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           }
 
           if(no_matches){
-               // hand off the keys to vim to see if that creates a valid action
-               ce_keys_free(&config_state->vim_state.command_head);
-               for(int64_t i = 0; i < config_state->key_count; ++i){
-                    ce_keys_push(&config_state->vim_state.command_head, config_state->keys[i]);
+               // hand off the keys to vim to see if that creates a valid action if we have at least matched one key
+               if(config_state->key_count > 1){
+                    ce_keys_free(&config_state->vim_state.command_head);
+                    // skip pushing the last key since we are going to pass that one in this loop
+                    for(int64_t i = 0; i < config_state->key_count - 1; ++i){
+                         ce_keys_push(&config_state->vim_state.command_head, config_state->keys[i]);
+                    }
                }
 
                free(config_state->keys);
                config_state->keys = NULL;
+               config_state->key_count = 0;
           }
 
           if(!handled_key){
-               switch(config_state->last_key){
+               switch(key){
                default:
-                    break;
-               case 'g':
-               {
-                    handled_key = true;
-
-                    switch(key){
-                    default:
-                         handled_key = false;
-                         break;
-                    case 'r':
-                         clear();
-                         break;
-                    case 'q':
-                    {
-                         misc_quit_and_prompt_if_unsaved(config_state, *head);
-                    }
-                    }
-
-                    if(handled_key){
-                         key = 0;
-                         ce_keys_free(&config_state->vim_state.command_head);
-                    }
-               } break;
-               case 'm':
-               case '"':
-               {
-                    if(!isprint(key)) break;
-
-                    if(key == '?'){
-                         info_update_mark_list_buffer(&config_state->mark_list_buffer, buffer);
-
-                         view_override_with_buffer(config_state->tab_current->view_current, &config_state->mark_list_buffer, &config_state->buffer_before_query);
-
-                         ce_keys_free(&config_state->vim_state.command_head);
-
-                         handled_key = true;
-                         key = 0;
-                    }
-               } break;
-               case 'y':
-                    if(!isprint(key)) break;
-
-                    if(key == '?'){
-                         info_update_yank_list_buffer(&config_state->yank_list_buffer, config_state->vim_state.yank_head);
-
-                         view_override_with_buffer(config_state->tab_current->view_current, &config_state->yank_list_buffer, &config_state->buffer_before_query);
-
-                         ce_keys_free(&config_state->vim_state.command_head);
-                         handled_key = true;
-                         key = 0;
-                    }
-                    break;
-               case 'Z':
-                    switch(config_state->last_key){
-                    default:
-                         break;
-                    case 'Z':
-                         ce_save_buffer(buffer, buffer->filename);
-                         return false; // quit
-                    }
-                    break;
-               case 'q':
-               case '@':
-                    if(key == '?'){
-                         info_update_macro_list_buffer(&config_state->macro_list_buffer, &config_state->vim_state);
-
-                         view_override_with_buffer(config_state->tab_current->view_current, &config_state->macro_list_buffer, &config_state->buffer_before_query);
-
-                         ce_keys_free(&config_state->vim_state.command_head);
-                         handled_key = true;
-                         key = 0;
-                    }
                     break;
                case KEY_ENTER:
                case -1:
@@ -1663,9 +1610,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     } break;
                     }
                }
-
-               // don't save 'g' if we completed an action with it, this ensures we don't use it in the next update
-               if(key == 'g') key = 0;
           } break;
           case VKH_UNHANDLED_KEY:
                switch(key){
@@ -1719,109 +1663,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     break;
                }
 
-               if(config_state->vim_state.mode != VM_INSERT){
-                    switch(key){
-                    default:
-                         break;
-                    case '.':
-                    {
-                         // TODO: move to vim
-                         vim_action_apply(&config_state->vim_state.last_action, buffer, cursor, &config_state->vim_state,
-                                          &buffer_state->commit_tail, &buffer_state->vim_buffer_state);
-
-                         if(config_state->vim_state.mode != VM_INSERT || !config_state->vim_state.last_insert_command ||
-                            config_state->vim_state.last_action.change.type == VCT_PLAY_MACRO) break;
-
-                         if(!vim_enter_insert_mode(&config_state->vim_state, config_state->tab_current->view_current->buffer)) break;
-
-                         int* cmd_itr = config_state->vim_state.last_insert_command;
-                         while(*cmd_itr){
-                              vim_key_handler(*cmd_itr, &config_state->vim_state, config_state->tab_current->view_current->buffer,
-                                              &config_state->tab_current->view_current->cursor, &buffer_state->commit_tail,
-                                              &buffer_state->vim_buffer_state, true);
-                              cmd_itr++;
-                         }
-
-                         vim_enter_normal_mode(&config_state->vim_state);
-                         ce_keys_free(&config_state->vim_state.command_head);
-                         if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
-                    } break;
-                    case 'u':
-                         // TODO: move to vim
-                         if(buffer_state->commit_tail && buffer_state->commit_tail->commit.type != BCT_NONE){
-                              ce_commit_undo(buffer, &buffer_state->commit_tail, cursor);
-                              if(buffer_state->commit_tail->commit.type == BCT_NONE){
-                                   buffer->status = BS_NONE;
-                              }
-                         }
-
-                         // if we are recording a macro, kill the last command we entered from the key list
-                         if(config_state->vim_state.recording_macro){
-                              VimMacroCommitNode_t* last_macro_commit = config_state->vim_state.macro_commit_current->prev;
-                              if(last_macro_commit){
-                                   do{
-                                        KeyNode_t* itr = config_state->vim_state.record_macro_head;
-                                        if(last_macro_commit->command_begin){
-                                             KeyNode_t* prev = NULL;
-                                             while(itr && itr != last_macro_commit->command_begin){
-                                                  prev = itr;
-                                                  itr = itr->next;
-                                             }
-
-                                             if(itr){
-                                                  // free the keys from our macro recording
-                                                  ce_keys_free(&itr);
-                                                  if(prev){
-                                                       prev->next = NULL;
-                                                  }else{
-                                                       config_state->vim_state.record_macro_head = NULL;
-                                                  }
-                                             }
-                                        }else{
-                                             // NOTE: not sure this case can get hit anymore
-                                             ce_keys_free(&itr);
-                                             config_state->vim_state.record_macro_head = NULL;
-                                        }
-
-                                        if(!last_macro_commit->chain) break;
-
-                                        last_macro_commit = last_macro_commit->prev;
-                                   }while(last_macro_commit);
-
-                                   config_state->vim_state.macro_commit_current = last_macro_commit;
-                              }else{
-                                   vim_stop_recording_macro(&config_state->vim_state);
-                              }
-                         }
-                         break;
-                    case KEY_REDO:
-                    {
-                         // TODO: move to vim
-                         if(buffer_state->commit_tail && buffer_state->commit_tail->next){
-                              if(ce_commit_redo(buffer, &buffer_state->commit_tail, cursor)){
-                                   if(config_state->vim_state.recording_macro){
-                                        do{
-                                             KeyNode_t* itr = config_state->vim_state.macro_commit_current->command_copy;
-                                             KeyNode_t* new_command_begin = NULL;
-                                             while(itr){
-                                                  KeyNode_t* new_key = ce_keys_push(&config_state->vim_state.record_macro_head, itr->key);
-                                                  if(!new_command_begin) new_command_begin = new_key;
-                                                  itr = itr->next;
-                                             }
-
-                                             itr = config_state->vim_state.record_macro_head;
-                                             while(itr->next) itr = itr->next;
-
-                                             config_state->vim_state.macro_commit_current->command_begin = new_command_begin;
-                                             config_state->vim_state.macro_commit_current = config_state->vim_state.macro_commit_current->next;
-                                        }while(config_state->vim_state.macro_commit_current && config_state->vim_state.macro_commit_current->prev->chain);
-                                   }
-                              }
-                         }
-
-                    } break;
-                    }
-               }else{
+               if(config_state->vim_state.mode == VM_INSERT){
                     switch(key){
                     default:
                          break;
@@ -1899,8 +1741,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
      if(config_state->quit) return false;
 
-     config_state->last_key = key;
-
      if(ce_buffer_in_view(config_state->tab_current->view_head, &config_state->buffer_list_buffer)){
           info_update_buffer_list_buffer(&config_state->buffer_list_buffer, *head);
      }
@@ -1924,6 +1764,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           pthread_mutex_unlock(&draw_lock);
      }
 
+     g_last_key = key;
      return true;
 }
 
@@ -1944,6 +1785,7 @@ void view_drawer(void* user_data)
      ce_calc_views(config_state->tab_current->view_head, top_left, bottom_right);
 
      // TODO: don't draw over borders!
+
      LineNumberType_t line_number_type = config_state->line_number_type;
      if(buffer->absolutely_no_line_numbers_under_any_circumstances){
           line_number_type = LNT_NONE;
@@ -1951,6 +1793,7 @@ void view_drawer(void* user_data)
 
      Point_t terminal_cursor = {};
 
+     // draw input dialogue or auto complete if visible
      Point_t input_top_left = {};
      Point_t input_bottom_right = {};
      Point_t auto_complete_top_left = {};
@@ -2004,7 +1847,7 @@ void view_drawer(void* user_data)
           terminal_cursor = misc_get_cursor_on_user_terminal(cursor, buffer_view, line_number_type);
      }
 
-     // setup highlight
+     // setup highlight for visual modes
      if(config_state->vim_state.mode == VM_VISUAL_RANGE){
           const Point_t* start = &config_state->vim_state.visual_start;
           const Point_t* end = &config_state->tab_current->view_current->cursor;
@@ -2030,32 +1873,23 @@ void view_drawer(void* user_data)
           buffer->highlight_end = (Point_t){-1, 0};
      }
 
+     // setup highlight for hotmark
      Point_t* vim_mark = vim_mark_find(buffer_state->vim_buffer_state.mark_head, '0');
      if(vim_mark) buffer->mark = *vim_mark;
 
-     const char* search = NULL;
-
-     if((config_state->input.type == INPUT_SEARCH || config_state->input.type == INPUT_REVERSE_SEARCH) &&
-        config_state->input.buffer.lines && config_state->input.buffer.lines[0][0]){
-          search = config_state->input.buffer.lines[0];
-     }else{
-          VimYankNode_t* yank = vim_yank_find(config_state->vim_state.yank_head, '/');
-          if(yank) search = yank->text;
-     }
-
-     HighlightLineType_t highlight_line_type = config_state->highlight_line_type;
-
      // turn off highlighting the current line when in visual mode
+     HighlightLineType_t highlight_line_type = config_state->highlight_line_type;
      if(config_state->vim_state.mode == VM_VISUAL_RANGE || config_state->vim_state.mode == VM_VISUAL_LINE){
           highlight_line_type = HLT_NONE;
      }
 
+     // set search regex if one is available to highlight all matches
      regex_t* highlight_regex = NULL;
      if(!config_state->do_not_highlight_search && config_state->vim_state.search.valid_regex){
           highlight_regex = &config_state->vim_state.search.regex;
      }
 
-     // NOTE: always draw from the head
+     // draw starting from the head
      ce_draw_views(config_state->tab_current->view_head, highlight_regex, config_state->line_number_type, highlight_line_type);
 
      // draw input status
@@ -2078,10 +1912,12 @@ void view_drawer(void* user_data)
           ce_draw_views(config_state->view_auto_complete, NULL, LNT_NONE, HLT_NONE);
      }
 
+     // draw all view statuses recursively
      draw_view_statuses(config_state->tab_current->view_head, config_state->tab_current->view_current,
-                        config_state->vim_state.mode, config_state->last_key,
-                        config_state->vim_state.recording_macro, config_state->terminal_current);
+                        config_state->vim_state.mode, config_state->vim_state.recording_macro,
+                        config_state->terminal_current);
 
+     // if in input mode, draw input mode's status line
      if(config_state->input.type > INPUT_NONE){
           if(config_state->input.view == config_state->tab_current->view_current){
                move(input_top_left.y - 1, input_top_left.x);
@@ -2106,8 +1942,8 @@ void view_drawer(void* user_data)
 
           ce_draw_views(config_state->input.view, NULL, LNT_NONE, HLT_NONE);
           draw_view_statuses(config_state->input.view, config_state->tab_current->view_current,
-                             config_state->vim_state.mode, config_state->last_key,
-                             config_state->vim_state.recording_macro, config_state->terminal_current);
+                             config_state->vim_state.mode, config_state->vim_state.recording_macro,
+                             config_state->terminal_current);
      }
 
      // draw auto complete

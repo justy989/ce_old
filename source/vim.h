@@ -38,6 +38,9 @@ typedef enum{
      VCT_RECORD_MACRO,
      VCT_PLAY_MACRO,
      VCT_SUBSTITUTE,
+     VCT_UNDO,
+     VCT_REDO,
+     VCT_REPEAT,
 } VimChangeType_t;
 
 typedef struct{

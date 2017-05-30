@@ -560,7 +560,12 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                     }
                }
 
-               if((vim_action.change.type != VCT_MOTION && vim_action.change.type != VCT_YANK) || vim_action.end_in_vim_mode == VM_INSERT){
+               if((vim_action.change.type != VCT_MOTION &&
+                   vim_action.change.type != VCT_YANK &&
+                   vim_action.change.type != VCT_REPEAT &&
+                   vim_action.change.type != VCT_UNDO &&
+                   vim_action.change.type != VCT_REDO) ||
+                  vim_action.end_in_vim_mode == VM_INSERT){
                     if(!vim_state->playing_macro && successful_action){
                          vim_state->last_action = vim_action;
 
@@ -704,6 +709,21 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           built_action.change.type = VCT_MOTION;
           itr--;
           if(visual_mode) get_motion = true; // if we are just executing a motion, use override the built motion
+          break;
+     case '.':
+          built_action.change.type = VCT_REPEAT;
+          built_action.motion.type = VMT_NONE;
+          get_motion = false;
+          break;
+     case 'u':
+          built_action.change.type = VCT_UNDO;
+          built_action.motion.type = VMT_NONE;
+          get_motion = false;
+          break;
+     case KEY_REDO:
+          built_action.change.type = VCT_REDO;
+          built_action.motion.type = VMT_NONE;
+          get_motion = false;
           break;
      case 'd':
           built_action.change.type = VCT_DELETE;
@@ -1757,6 +1777,97 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
      switch(action->change.type){
      default:
           break;
+     case VCT_REPEAT:
+     {
+          vim_action_apply(&vim_state->last_action, buffer, cursor, vim_state,
+                           commit_tail, vim_buffer_state);
+
+          if(vim_state->mode != VM_INSERT || !vim_state->last_insert_command ||
+             vim_state->last_action.change.type == VCT_PLAY_MACRO) break;
+
+          if(!vim_enter_insert_mode(vim_state, buffer)) break;
+
+          int* cmd_itr = vim_state->last_insert_command;
+          while(*cmd_itr){
+               vim_key_handler(*cmd_itr, vim_state, buffer, cursor, commit_tail, vim_buffer_state, true);
+               cmd_itr++;
+          }
+
+          vim_enter_normal_mode(vim_state);
+          if(*commit_tail) (*commit_tail)->commit.chain = BCC_STOP;
+     } break;
+     case VCT_UNDO:
+     {
+          if((*commit_tail) && (*commit_tail)->commit.type != BCT_NONE){
+               ce_commit_undo(buffer, commit_tail, cursor);
+               if((*commit_tail)->commit.type == BCT_NONE){
+                    buffer->status = BS_NONE;
+               }
+          }
+
+          // if we are recording a macro, kill the last command we entered from the key list
+          if(vim_state->recording_macro){
+               VimMacroCommitNode_t* last_macro_commit = vim_state->macro_commit_current->prev;
+               if(last_macro_commit){
+                    do{
+                         KeyNode_t* itr = vim_state->record_macro_head;
+                         if(last_macro_commit->command_begin){
+                              KeyNode_t* prev = NULL;
+                              while(itr && itr != last_macro_commit->command_begin){
+                                   prev = itr;
+                                   itr = itr->next;
+                              }
+
+                              if(itr){
+                                   // free the keys from our macro recording
+                                   ce_keys_free(&itr);
+                                   if(prev){
+                                        prev->next = NULL;
+                                   }else{
+                                        vim_state->record_macro_head = NULL;
+                                   }
+                              }
+                         }else{
+                              // NOTE: not sure this case can get hit anymore
+                              ce_keys_free(&itr);
+                              vim_state->record_macro_head = NULL;
+                         }
+
+                         if(!last_macro_commit->chain) break;
+
+                         last_macro_commit = last_macro_commit->prev;
+                    }while(last_macro_commit);
+
+                    vim_state->macro_commit_current = last_macro_commit;
+               }else{
+                    vim_stop_recording_macro(vim_state);
+               }
+          }
+     } break;
+     case VCT_REDO:
+     {
+          if((*commit_tail) && (*commit_tail)->next){
+               if(ce_commit_redo(buffer, commit_tail, cursor)){
+                    if(vim_state->recording_macro){
+                         do{
+                              KeyNode_t* itr = vim_state->macro_commit_current->command_copy;
+                              KeyNode_t* new_command_begin = NULL;
+                              while(itr){
+                                   KeyNode_t* new_key = ce_keys_push(&vim_state->record_macro_head, itr->key);
+                                   if(!new_command_begin) new_command_begin = new_key;
+                                   itr = itr->next;
+                              }
+
+                              itr = vim_state->record_macro_head;
+                              while(itr->next) itr = itr->next;
+
+                              vim_state->macro_commit_current->command_begin = new_command_begin;
+                              vim_state->macro_commit_current = vim_state->macro_commit_current->next;
+                         }while(vim_state->macro_commit_current && vim_state->macro_commit_current->prev->chain);
+                    }
+               }
+          }
+     } break;
      case VCT_MOTION:
           if(action->end_in_vim_mode == VM_INSERT){
                vim_state->insert_start = *cursor;

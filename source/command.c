@@ -362,8 +362,8 @@ void command_view_split(Command_t* command, void* user_data)
 void command_view_close(Command_t* command, void* user_data)
 {
      if(command->arg_count != 0){
-          ce_message("usage: view");
-          ce_message("descr: split the currently selected window into 2 windows");
+          ce_message("usage: view_close");
+          ce_message("descr: close the current view");
           return;
      }
 
@@ -691,7 +691,19 @@ void command_save(Command_t* command, void* user_data)
      ce_save_buffer(buffer, buffer->filename);
 }
 
-void command_buffers(Command_t* command, void* user_data)
+void command_save_and_close_view(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: save");
+          ce_message("descr: save the current buffer");
+          return;
+     }
+
+     command_save(command, user_data);
+     command_view_close(command, user_data);
+}
+
+void command_show_buffers(Command_t* command, void* user_data)
 {
      if(command->arg_count != 0){
           ce_message("usage: buffers");
@@ -699,11 +711,56 @@ void command_buffers(Command_t* command, void* user_data)
      }
 
      CommandData_t* command_data = (CommandData_t*)(user_data);
-     view_switch_to_buffer_list(&command_data->config_state->buffer_list_buffer,
-                                command_data->config_state->tab_current->view_current,
-                                command_data->config_state->tab_current->view_head,
+     ConfigState_t* config_state = command_data->config_state;
+
+     view_switch_to_buffer_list(&config_state->buffer_list_buffer,
+                                config_state->tab_current->view_current,
+                                config_state->tab_current->view_head,
                                 *command_data->head);
-     info_update_buffer_list_buffer(&command_data->config_state->buffer_list_buffer, *command_data->head);
+     info_update_buffer_list_buffer(&config_state->buffer_list_buffer, *command_data->head);
+}
+
+void command_show_marks(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: show_marks");
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     Buffer_t* buffer = config_state->tab_current->view_current->buffer;
+
+     info_update_mark_list_buffer(&config_state->mark_list_buffer, buffer);
+     view_override_with_buffer(config_state->tab_current->view_current, &config_state->mark_list_buffer, &config_state->buffer_before_query);
+}
+
+void command_show_macros(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: show_macros");
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+
+     info_update_macro_list_buffer(&config_state->macro_list_buffer, &config_state->vim_state);
+     view_override_with_buffer(config_state->tab_current->view_current, &config_state->macro_list_buffer, &config_state->buffer_before_query);
+}
+
+void command_show_yanks(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: show_yanks");
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+
+     info_update_yank_list_buffer(&config_state->yank_list_buffer, config_state->vim_state.yank_head);
+     view_override_with_buffer(config_state->tab_current->view_current, &config_state->yank_list_buffer, &config_state->buffer_before_query);
 }
 
 void command_macro_backslashes(Command_t* command, void* user_data)
@@ -1407,4 +1464,12 @@ void command_jump_previous(Command_t* command, void* user_data)
                view_center(buffer_view);
           }
      }
+}
+
+void command_redraw(Command_t* command, void* user_data)
+{
+     // NOTE: how silly this seems to the average on-looker
+     (void)(command);
+     (void)(user_data);
+     clear();
 }

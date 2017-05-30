@@ -53,9 +53,10 @@ void command_highlight_line(Command_t* command, void* user_data);
 void command_new_buffer(Command_t* command, void* user_data);
 void command_rename(Command_t* command, void* user_data);
 void command_save(Command_t* command, void* user_data);
-void command_buffers(Command_t* command, void* user_data);
+void command_save_and_close_view(Command_t* command, void* user_data);
 void command_macro_backslashes(Command_t* command, void* user_data);
 void command_goto_file_under_cursor(Command_t* command, void* user_data);
+void command_redraw(Command_t* command, void* user_data);
 
 void command_move_on_screen(Command_t* command, void* user_data);
 void command_move_half_page(Command_t* command, void* user_data);
@@ -68,6 +69,11 @@ void command_view_switch(Command_t* command, void* user_data);
 void command_tab_new(Command_t* command, void* user_data);
 void command_tab_next(Command_t* command, void* user_data);
 void command_tab_previous(Command_t* command, void* user_data);
+
+void command_show_buffers(Command_t* command, void* user_data);
+void command_show_marks(Command_t* command, void* user_data);
+void command_show_macros(Command_t* command, void* user_data);
+void command_show_yanks(Command_t* command, void* user_data); // LOL
 
 void command_switch_buffer_dialogue(Command_t* command, void* user_data);
 void command_command_dialogue(Command_t* command, void* user_data);

@@ -16,12 +16,12 @@ TEST(input_sanity)
      view->buffer = &buffer;
      input.view = &input_view;
      input_view.buffer = &input_buffer;
-     input_start(&input, &view, &vim_state, "Input", ':');
-     EXPECT(input.key == ':');
+     input_start(&input, &view, &vim_state, "Input", 1);
+     EXPECT(input.type == 1);
      EXPECT(strcmp(input.message, "Input") == 0);
 
      input_end(&input, &vim_state);
-     EXPECT(input.key == 0);
+     EXPECT(input.type == 0);
 }
 
 TEST(get_history)
@@ -37,13 +37,13 @@ TEST(get_history)
      view->buffer = &buffer;
      input.view = &input_view;
      input_view.buffer = &input_buffer;
-     input_start(&input, &view, &vim_state, "Input", '/');
+     input_start(&input, &view, &vim_state, "Input", INPUT_SEARCH);
      EXPECT(input_get_history(&input) == &input.search_history);
 
-     input_start(&input, &view, &vim_state, "Input", '?');
+     input_start(&input, &view, &vim_state, "Input", INPUT_SEARCH);
      EXPECT(input_get_history(&input) == &input.search_history);
 
-     input_start(&input, &view, &vim_state, "Input", ':');
+     input_start(&input, &view, &vim_state, "Input", INPUT_COMMAND);
      EXPECT(input_get_history(&input) == &input.command_history);
 }
 
@@ -60,12 +60,12 @@ TEST(cancel)
      view->buffer = &buffer;
      input.view = &input_view;
      input_view.buffer = &input_buffer;
-     input_start(&input, &view, &vim_state, "Input", ':');
-     EXPECT(input.key == ':');
+     input_start(&input, &view, &vim_state, "Input", 1);
+     EXPECT(input.type == 1);
      EXPECT(strcmp(input.message, "Input") == 0);
 
      input_cancel(&input, &view, &vim_state);
-     EXPECT(input.key == 0);
+     EXPECT(input.type == 0);
 }
 
 TEST(commit_to_history)
@@ -84,8 +84,8 @@ TEST(commit_to_history)
      view->buffer = &buffer;
      input.view = &input_view;
      input_view.buffer = &input_buffer;
-     input_start(&input, &view, &vim_state, "Input", '/');
-     EXPECT(input.key == '/');
+     input_start(&input, &view, &vim_state, "Input", 1);
+     EXPECT(input.type == 1);
      EXPECT(strcmp(input.message, "Input") == 0);
 
      ce_append_string(&input_buffer, 0, "tacos");
@@ -112,8 +112,8 @@ TEST(history_iterate)
      view->buffer = &buffer;
      input.view = &input_view;
      input_view.buffer = &input_buffer;
-     input_start(&input, &view, &vim_state, "Input", '/');
-     EXPECT(input.key == '/');
+     input_start(&input, &view, &vim_state, "Input", INPUT_SEARCH);
+     EXPECT(input.type == INPUT_SEARCH);
      EXPECT(strcmp(input.message, "Input") == 0);
 
      ce_append_string(&input_buffer, 0, "tacos");

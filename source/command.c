@@ -31,7 +31,11 @@ static const char* find_end_of_arg(const char* string)
           while(*string){
                prev = *string;
                string++;
-               if(*string == '"' && prev != '\\') return string + 1;
+               if(*string == '"' && prev != '\\'){
+                    const char* end = string + 1;
+                    if(*end) return end;
+                    return NULL;
+               }
           }
           return NULL;
      }else{
@@ -1376,6 +1380,7 @@ void command_terminal_run_man(Command_t* command, void* user_data)
           char cmd_string[BUFSIZ];
           snprintf(cmd_string, BUFSIZ, "man --pager=cat %*.*s", len, len, buffer->lines[cursor->y] + word_start.x);
           terminal_in_view_run_command(config_state->terminal_head, config_state->tab_current->view_head, cmd_string);
+          return;
      }else if(command->args[0].type != CAT_STRING){
           command_terminal_run_man_help();
           return;

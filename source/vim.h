@@ -16,6 +16,8 @@ typedef enum{
      VM_VISUAL_RANGE,
      VM_VISUAL_LINE,
      // TODO: VM_VISUAL_BLOCK,
+     // TODO: VM_REPLACE,
+     VM_COUNT,
 } VimMode_t;
 
 typedef enum{

@@ -1478,3 +1478,185 @@ void command_redraw(Command_t* command, void* user_data)
      (void)(user_data);
      clear();
 }
+
+static void command_keybind_add_help()
+{
+     ce_message("usage: keybind_add [key] [mode] [command]");
+     ce_message("descr: add/override a keybind dynamically that will run the specified command");
+}
+
+void command_keybind_add(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 3){
+          command_keybind_add_help();
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+
+     // TODO: implement
+     (void)(config_state);
+}
+
+void command_completion_toggle(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: completion_toggle");
+          ce_message("descr: toggle auto completion for c using clang");
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Buffer_t* buffer = buffer_view->buffer;
+     Point_t* cursor = &config_state->tab_current->view_current->cursor;
+
+     if(auto_completing(&config_state->auto_complete)){
+          if(config_state->clang_complete_thread){
+               pthread_cancel(config_state->clang_complete_thread);
+               pthread_detach(config_state->clang_complete_thread);
+               config_state->clang_complete_thread = 0;
+          }
+
+          auto_complete_end(&config_state->auto_complete);
+     }else{
+          Point_t beginning_of_word = *cursor;
+          char cur_char = 0;
+          if(ce_get_char(buffer, (Point_t){cursor->x - 1, cursor->y}, &cur_char)){
+               if(isalpha(cur_char) || cur_char == '_'){
+                    ce_move_cursor_to_beginning_of_word(buffer, &beginning_of_word, true);
+               }
+          }
+
+          clang_completion(config_state, beginning_of_word);
+     }
+}
+
+void command_completion_apply(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: completion_apply");
+          ce_message("descr: if auto completion is running, insert the selection option at the cursor");
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Buffer_t* buffer = buffer_view->buffer;
+     BufferState_t* buffer_state = buffer->user_data;
+     Point_t* cursor = &config_state->tab_current->view_current->cursor;
+
+     if(auto_completing(&config_state->auto_complete)){
+          if(config_state->auto_complete.type == ACT_EXACT){
+               char* complete = auto_complete_get_completion(&config_state->auto_complete, cursor->x);
+               int64_t complete_len = strlen(complete);
+               if(ce_insert_string(buffer, *cursor, complete)){
+                    Point_t save_cursor = *cursor;
+                    ce_move_cursor(buffer, cursor, (Point_t){complete_len, 0});
+                    cursor->x++;
+                    ce_commit_insert_string(&buffer_state->commit_tail, save_cursor, save_cursor, *cursor, complete, BCC_KEEP_GOING);
+               }else{
+                    free(complete);
+               }
+          }else if(config_state->auto_complete.type == ACT_OCCURANCE){
+               int64_t complete_len = strlen(config_state->auto_complete.current->option);
+               int64_t line_len = strlen(buffer->lines[config_state->auto_complete.start.y]);
+               char* removed = ce_dupe_string(buffer, config_state->auto_complete.start,
+                                              (Point_t){config_state->auto_complete.start.x + line_len - 1, config_state->auto_complete.start.y});
+               if(ce_remove_string(buffer, config_state->auto_complete.start, line_len)){
+                    ce_commit_remove_string(&buffer_state->commit_tail, config_state->auto_complete.start, *cursor, *cursor, removed, BCC_KEEP_GOING);
+                    if(ce_insert_string(buffer, config_state->auto_complete.start, config_state->auto_complete.current->option)){
+                         Point_t save_cursor = *cursor;
+                         cursor->x = config_state->auto_complete.start.x + complete_len;
+                         char* inserted = strdup(config_state->auto_complete.current->option);
+                         ce_commit_insert_string(&buffer_state->commit_tail, config_state->auto_complete.start, save_cursor, *cursor, inserted, BCC_KEEP_GOING);
+                    }
+               }
+          }
+
+          completion_update_buffer(config_state->completion_buffer, &config_state->auto_complete, buffer->lines[config_state->auto_complete.start.y]);
+
+          switch(config_state->input.type){
+          default:
+               break;
+          case INPUT_LOAD_FILE:
+               completion_calc_start_and_path(&config_state->auto_complete,
+                                              buffer->lines[cursor->y],
+                                              *cursor,
+                                              config_state->completion_buffer,
+                                              config_state->input.load_file_search_path);
+               break;
+          }
+     }
+}
+
+void command_completion_next(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: completion_next");
+          ce_message("descr: if auto completion is running, select the next completion in the list");
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Buffer_t* buffer = buffer_view->buffer;
+     Point_t* cursor = &config_state->tab_current->view_current->cursor;
+
+     if(auto_completing(&config_state->auto_complete)){
+          Point_t end = {cursor->x - 1, cursor->y};
+          if(end.x < 0) end.x = 0;
+          char* match = "";
+          if(!ce_points_equal(config_state->auto_complete.start, *cursor)) match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
+          auto_complete_next(&config_state->auto_complete, match);
+          completion_update_buffer(config_state->completion_buffer, &config_state->auto_complete,
+                                   match);
+          if(!ce_points_equal(config_state->auto_complete.start, *cursor)) free(match);
+          return;
+     }
+
+     if(config_state->input.type > INPUT_NONE){
+          if(input_history_iterate(&config_state->input, false)){
+               if(buffer->line_count && buffer->lines[cursor->y][0]) cursor->x++;
+               vim_enter_normal_mode(&config_state->vim_state);
+          }
+     }
+}
+
+void command_completion_previous(Command_t* command, void* user_data)
+{
+     if(command->arg_count != 0){
+          ce_message("usage: completion_previous");
+          ce_message("descr: if auto completion is running, select the next completion in the list");
+          return;
+     }
+
+     CommandData_t* command_data = (CommandData_t*)(user_data);
+     ConfigState_t* config_state = command_data->config_state;
+     BufferView_t* buffer_view = config_state->tab_current->view_current;
+     Buffer_t* buffer = buffer_view->buffer;
+     Point_t* cursor = &config_state->tab_current->view_current->cursor;
+
+     if(auto_completing(&config_state->auto_complete)){
+          Point_t end = {cursor->x - 1, cursor->y};
+          if(end.x < 0) end.x = 0;
+          char* match = "";
+          if(!ce_points_equal(config_state->auto_complete.start, *cursor)) match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
+          auto_complete_prev(&config_state->auto_complete, match);
+          completion_update_buffer(config_state->completion_buffer, &config_state->auto_complete,
+                                   match);
+          if(!ce_points_equal(config_state->auto_complete.start, *cursor)) free(match);
+          return;
+     }
+
+     if(config_state->input.type > INPUT_NONE){
+          if(input_history_iterate(&config_state->input, true)){
+               if(buffer->line_count && buffer->lines[cursor->y][0]) cursor->x++;
+               vim_enter_normal_mode(&config_state->vim_state);
+          }
+     }
+}

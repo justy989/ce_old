@@ -38,7 +38,18 @@ typedef struct{
      int* keys;
      int64_t key_count;
      Command_t command;
+     VimMode_t vim_mode;
 }KeyBind_t;
+
+typedef struct{
+     KeyBind_t* binds;
+     int64_t count;
+}KeyBinds_t;
+
+typedef struct{
+     int keys[4];
+     const char* command;
+}KeyBindDef_t;
 
 typedef struct{
      Buffer_t buffer_list_buffer;
@@ -80,8 +91,7 @@ typedef struct{
      int64_t command_entry_count;
      int64_t max_auto_complete_height;
 
-     KeyBind_t* key_binds;
-     int64_t key_bind_count;
+     KeyBinds_t binds[VM_COUNT];
 
      int* keys;
      int64_t key_count;

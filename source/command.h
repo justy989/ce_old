@@ -90,3 +90,10 @@ void command_terminal_run_command(Command_t* command, void* user_data);
 
 void command_jump_next(Command_t* command, void* user_data);
 void command_jump_previous(Command_t* command, void* user_data);
+
+void command_keybind_add(Command_t* command, void* user_data);
+
+void command_completion_toggle(Command_t* command, void* user_data);
+void command_completion_apply(Command_t* command, void* user_data);
+void command_completion_next(Command_t* command, void* user_data);
+void command_completion_previous(Command_t* command, void* user_data);

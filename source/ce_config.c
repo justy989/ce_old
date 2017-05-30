@@ -87,7 +87,31 @@ static int int_strneq(int* a, int* b, size_t len)
      return true;
 }
 
-bool confirm_action(ConfigState_t* config_state, BufferNode_t** head)
+static void convert_bind_defs(KeyBinds_t* binds, KeyBindDef_t* bind_defs, int64_t bind_def_count)
+{
+     binds->count = bind_def_count;
+     binds->binds = malloc(binds->count * sizeof(*binds->binds));
+
+     for(int64_t i = 0; i < binds->count; ++i){
+          command_parse(&binds->binds[i].command, bind_defs[i].command);
+          binds->binds[i].key_count = 0;
+
+          for(int k = 0; k < 4; ++k){
+               if(bind_defs[i].keys[k] == 0) break;
+               binds->binds[i].key_count++;
+          }
+
+          if(!binds->binds[i].key_count) continue;
+
+          binds->binds[i].keys = malloc(binds->binds[i].key_count * sizeof(binds->binds[i].keys[0]));
+
+          for(int k = 0; k < binds->binds[i].key_count; ++k){
+               binds->binds[i].keys[k] = bind_defs[i].keys[k];
+          }
+     }
+}
+
+static bool confirm_action(ConfigState_t* config_state, BufferNode_t** head)
 {
      BufferView_t* buffer_view = config_state->tab_current->view_current;
      Buffer_t* buffer = buffer_view->buffer;
@@ -823,6 +847,10 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
                {command_terminal_run_command, "terminal_run_command", false},
                {command_jump_next, "jump_next", false},
                {command_jump_previous, "jump_previous", false},
+               {command_completion_toggle, "completion_toggle", false},
+               {command_completion_apply, "completion_apply", false},
+               {command_completion_next, "completion_next", false},
+               {command_completion_previous, "completion_previous", false},
           };
 
           // init and copy from our stack array
@@ -835,17 +863,11 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
 
      // initialize keybinds
      {
-          typedef struct{
-               int keys[4];
-               const char* command;
-          }KeyBindDef_t;
-
-          // TODO: create bindings for modes other than normal?
-          KeyBindDef_t binds[] = {
+          KeyBindDef_t normal_mode_bind_defs[] = {
                {{'\\', 'e'}, "show_buffers"},
                {{'\\', 'q'}, "quit_all"},
                {{'\\', 'b'}, "terminal_run_command make"},
-               {{'\\', 'm'}, "terminal_run_command \"make clean\""}, // TODO: fix arg parsing
+               {{'\\', 'm'}, "terminal_run_command \"make clean\""},
                {{'z', 't'}, "view_scroll top"},
                {{'z', 'z'}, "view_scroll center"},
                {{'z', 'b'}, "view_scroll bottom"},
@@ -889,27 +911,20 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
                {{'y', '?'}, "show_yanks"},
                {{'p', '?'}, "show_yanks"},
                {{'Z', 'Z'}, "save_and_close_view"},
+               {{14}, "completion_next"},
+               {{16}, "completion_previous"},
           };
 
-          config_state->key_bind_count = sizeof(binds) / sizeof(binds[0]);
-          config_state->key_binds = malloc(config_state->key_bind_count * sizeof(*config_state->key_binds));
-          for(int64_t i = 0; i < config_state->key_bind_count; ++i){
-               command_parse(&config_state->key_binds[i].command, binds[i].command);
-               config_state->key_binds[i].key_count = 0;
+          convert_bind_defs(config_state->binds + VM_NORMAL, normal_mode_bind_defs, sizeof(normal_mode_bind_defs) / sizeof(normal_mode_bind_defs[0]));
 
-               for(int k = 0; k < 4; ++k){
-                    if(binds[i].keys[k] == 0) break;
-                    config_state->key_binds[i].key_count++;
-               }
+          KeyBindDef_t insert_mode_bind_defs[] = {
+               {{KEY_TAB}, "completion_apply"},
+               {{25}, "completion_toggle"}, // Ctrl + y
+               {{14}, "completion_next"}, // Ctrl + n
+               {{16}, "completion_previous"}, // Ctrl + p
+          };
 
-               if(!config_state->key_binds[i].key_count) continue;
-
-               config_state->key_binds[i].keys = malloc(config_state->key_binds[i].key_count * sizeof(config_state->key_binds[i].keys[0]));
-
-               for(int k = 0; k < config_state->key_binds[i].key_count; ++k){
-                    config_state->key_binds[i].keys[k] = binds[i].keys[k];
-               }
-          }
+          convert_bind_defs(config_state->binds + VM_INSERT, insert_mode_bind_defs, sizeof(insert_mode_bind_defs) / sizeof(insert_mode_bind_defs[0]));
      }
 
      // read in state file if it exists
@@ -1141,10 +1156,10 @@ bool destroyer(BufferNode_t** head, void* user_data)
      }
 
      // key binds
-     for(int64_t i = 0; i < config_state->key_bind_count; ++i){
-          free(config_state->key_binds[i].keys);
+     for(int64_t i = 0; i < config_state->binds[VM_NORMAL].count; ++i){
+          free(config_state->binds[VM_NORMAL].binds[i].keys);
      }
-     free(config_state->key_binds);
+     free(config_state->binds[VM_NORMAL].binds);
 
      vim_yanks_free(&config_state->vim_state.yank_head);
      vim_macros_free(&config_state->vim_state.macro_head);
@@ -1167,181 +1182,98 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
      bool handled_key = false;
 
-     if(key == KEY_RESIZE){
+     // handle non-keypress events
+     switch(key){
+     default:
+          break;
+     case KEY_RESIZE:
+     {
           Point_t top_left = {0, 0};
           Point_t bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 1};
           ce_calc_views(config_state->tab_current->view_head, top_left, bottom_right);
           terminal_resize_if_in_view(buffer_view, config_state->terminal_head);
           handled_key = true;
+     } break;
+     case KEY_MOUSE:
+          mouse_handle_event(buffer_view, &config_state->vim_state, &config_state->input, config_state->tab_current,
+                             config_state->terminal_head, &config_state->terminal_current, config_state->line_number_type);
+          break;
      }
 
      config_state->save_buffer_head = head;
      buffer->check_left_for_pair = false;
 
-     if(config_state->vim_state.mode == VM_NORMAL){
-          // append to keys
-          if(config_state->keys){
-               config_state->key_count++;
-               config_state->keys = realloc(config_state->keys, config_state->key_count * sizeof(config_state->keys[0]));
-          }else{
-               config_state->key_count = 1;
-               config_state->keys = malloc(config_state->key_count * sizeof(config_state->keys[0]));
-          }
-
-          config_state->keys[config_state->key_count - 1] = key;
-
-          // if matches a key bind
-          bool no_matches = true;
-          for(int64_t i = 0; i < config_state->key_bind_count; ++i){
-               if(int_strneq(config_state->key_binds[i].keys, config_state->keys, config_state->key_count)){
-                    no_matches = false;
-                    handled_key = true;
-
-                    // if we have matches, but don't completely match, then wait for more keypresses,
-                    // otherwise, execute the action
-                    if(config_state->key_binds[i].key_count == config_state->key_count){
-                         Command_t* command = &config_state->key_binds[i].command;
-                         ce_command* command_func = NULL;
-                         for(int64_t i = 0; i < config_state->command_entry_count; ++i){
-                              CommandEntry_t* entry = config_state->command_entries + i;
-                              if(strcmp(entry->name, command->name) == 0){
-                                   command_func = entry->func;
-                                   break;
-                              }
-                         }
-
-                         if(command_func){
-                              CommandData_t command_data = {config_state, head};
-                              command_func(command, &command_data);
-                         }else{
-                              ce_message("unknown command: '%s'", command->name);
-                         }
-
-                         free(config_state->keys);
-                         config_state->keys = NULL;
-                         break;
-                    }
-               }
-          }
-
-          if(no_matches){
-               // hand off the keys to vim to see if that creates a valid action if we have at least matched one key
-               if(config_state->key_count > 1){
-                    ce_keys_free(&config_state->vim_state.command_head);
-                    // skip pushing the last key since we are going to pass that one in this loop
-                    for(int64_t i = 0; i < config_state->key_count - 1; ++i){
-                         ce_keys_push(&config_state->vim_state.command_head, config_state->keys[i]);
-                    }
-               }
-
-               free(config_state->keys);
-               config_state->keys = NULL;
-               config_state->key_count = 0;
-          }
-
-          if(!handled_key){
-               switch(key){
-               default:
-                    break;
-               case KEY_ENTER:
-               case -1:
-               {
-                    TerminalNode_t* terminal_node = is_terminal_buffer(config_state->terminal_head, buffer);
-                    if(terminal_node){
-                         misc_move_jump_location_to_end_of_output(terminal_node);
-                         terminal_send_key(&terminal_node->terminal, key);
-                         config_state->vim_state.mode = VM_INSERT;
-                         buffer_view->cursor = terminal_node->terminal.cursor;
-                         view_follow_cursor(buffer_view, config_state->line_number_type);
-                         handled_key = true;
-                         key = 0;
-                    }
-               } break;
-               }
-          }
+     // append to keys
+     if(config_state->keys){
+          config_state->key_count++;
+          config_state->keys = realloc(config_state->keys, config_state->key_count * sizeof(config_state->keys[0]));
      }else{
-          TerminalNode_t* terminal_node = is_terminal_buffer(config_state->terminal_head, buffer);
-          if(terminal_node){
-               if(key != KEY_ESCAPE){
-                    Terminal_t* terminal = &terminal_node->terminal;
-                    buffer_view->cursor = terminal->cursor;
+          config_state->key_count = 1;
+          config_state->keys = malloc(config_state->key_count * sizeof(config_state->keys[0]));
+     }
 
-                    if(key == KEY_ENTER) misc_move_jump_location_to_end_of_output(terminal_node);
+     config_state->keys[config_state->key_count - 1] = key;
 
-                    if(terminal_send_key(terminal, key)){
-                         handled_key = true;
-                         key = 0;
-                         if(buffer_view->cursor.x < (terminal->width - 1)){
-                              buffer_view->cursor.x++;
-                         }
-                         view_follow_cursor(buffer_view, LNT_NONE);
-                    }
-               }
-          }else{
-               switch(key){
-               default:
-                    break;
-               case KEY_TAB:
-                    if(auto_completing(&config_state->auto_complete)){
-                         if(config_state->auto_complete.type == ACT_EXACT){
-                              char* complete = auto_complete_get_completion(&config_state->auto_complete, cursor->x);
-                              int64_t complete_len = strlen(complete);
-                              if(ce_insert_string(buffer, *cursor, complete)){
-                                   Point_t save_cursor = *cursor;
-                                   ce_move_cursor(buffer, cursor, (Point_t){complete_len, 0});
-                                   cursor->x++;
-                                   ce_commit_insert_string(&buffer_state->commit_tail, save_cursor, save_cursor, *cursor, complete, BCC_KEEP_GOING);
-                              }else{
-                                   free(complete);
-                              }
-                         }else if(config_state->auto_complete.type == ACT_OCCURANCE){
-                              int64_t complete_len = strlen(config_state->auto_complete.current->option);
-                              int64_t line_len = strlen(buffer->lines[config_state->auto_complete.start.y]);
-                              char* removed = ce_dupe_string(buffer, config_state->auto_complete.start,
-                                                             (Point_t){config_state->auto_complete.start.x + line_len - 1, config_state->auto_complete.start.y});
-                              if(ce_remove_string(buffer, config_state->auto_complete.start, line_len)){
-                                   ce_commit_remove_string(&buffer_state->commit_tail, config_state->auto_complete.start, *cursor, *cursor, removed, BCC_KEEP_GOING);
-                                   if(ce_insert_string(buffer, config_state->auto_complete.start, config_state->auto_complete.current->option)){
-                                        Point_t save_cursor = *cursor;
-                                        cursor->x = config_state->auto_complete.start.x + complete_len;
-                                        char* inserted = strdup(config_state->auto_complete.current->option);
-                                        ce_commit_insert_string(&buffer_state->commit_tail, config_state->auto_complete.start, save_cursor, *cursor, inserted, BCC_KEEP_GOING);
-                                   }
-                              }
-                         }
+     // if matches a key bind
+     bool no_matches = true;
+     for(int64_t i = 0; i < config_state->binds[config_state->vim_state.mode].count; ++i){
+          if(int_strneq(config_state->binds[config_state->vim_state.mode].binds[i].keys, config_state->keys, config_state->key_count)){
+               no_matches = false;
+               handled_key = true;
 
-                         completion_update_buffer(config_state->completion_buffer, &config_state->auto_complete, buffer->lines[config_state->auto_complete.start.y]);
-
-                         switch(config_state->input.type){
-                         default:
-                              break;
-                         case INPUT_LOAD_FILE:
-                              completion_calc_start_and_path(&config_state->auto_complete,
-                                                             buffer->lines[cursor->y],
-                                                             *cursor,
-                                                             config_state->completion_buffer,
-                                                             config_state->input.load_file_search_path);
+               // if we have matches, but don't completely match, then wait for more keypresses,
+               // otherwise, execute the action
+               if(config_state->binds[config_state->vim_state.mode].binds[i].key_count == config_state->key_count){
+                    Command_t* command = &config_state->binds[config_state->vim_state.mode].binds[i].command;
+                    ce_command* command_func = NULL;
+                    for(int64_t i = 0; i < config_state->command_entry_count; ++i){
+                         CommandEntry_t* entry = config_state->command_entries + i;
+                         if(strcmp(entry->name, command->name) == 0){
+                              command_func = entry->func;
                               break;
                          }
-
-                         handled_key = true;
-                         key = 0;
                     }
+
+                    if(command_func){
+                         CommandData_t command_data = {config_state, head};
+                         command_func(command, &command_data);
+                    }else{
+                         ce_message("unknown command: '%s'", command->name);
+                    }
+
+                    free(config_state->keys);
+                    config_state->keys = NULL;
                     break;
                }
           }
      }
 
+     if(no_matches){
+          // hand off the keys to vim to see if that creates a valid action if we have at least matched one key
+          if(config_state->key_count > 1){
+               ce_keys_free(&config_state->vim_state.command_head);
+               // skip pushing the last key since we are going to pass that one in this loop
+               for(int64_t i = 0; i < config_state->key_count - 1; ++i){
+                    ce_keys_push(&config_state->vim_state.command_head, config_state->keys[i]);
+               }
+          }
+
+          free(config_state->keys);
+          config_state->keys = NULL;
+          config_state->key_count = 0;
+     }
+
+     // regardless of vim state, if enter is pressed, see if we can perform an action
      if(!handled_key){
           if(key == KEY_ENTER){
                if(confirm_action(config_state, head)){
                     ce_keys_free(&config_state->vim_state.command_head);
-                    key = 0;
                     handled_key = true;
                }
           }
      }
 
+     // send the key to the vim key handler
      if(!handled_key){
           Point_t save_cursor = *cursor;
           Buffer_t* save_buffer = buffer_view->buffer;
@@ -1611,76 +1543,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     }
                }
           } break;
-          case VKH_UNHANDLED_KEY:
-               switch(key){
-               case KEY_MOUSE:
-                    mouse_handle_event(buffer_view, &config_state->vim_state, &config_state->input, config_state->tab_current,
-                                       config_state->terminal_head, &config_state->terminal_current, config_state->line_number_type);
-                    break;
-               case KEY_DC:
-                    // TODO: with our current insert mode undo implementation we can't support this
-                    // ce_remove_char(buffer, cursor);
-                    break;
-               case 14: // Ctrl + n
-                    if(auto_completing(&config_state->auto_complete)){
-                         Point_t end = {cursor->x - 1, cursor->y};
-                         if(end.x < 0) end.x = 0;
-                         char* match = "";
-                         if(!ce_points_equal(config_state->auto_complete.start, *cursor)) match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
-                         auto_complete_next(&config_state->auto_complete, match);
-                         completion_update_buffer(config_state->completion_buffer, &config_state->auto_complete,
-                                                  match);
-                         if(!ce_points_equal(config_state->auto_complete.start, *cursor)) free(match);
-                         break;
-                    }
-
-                    if(config_state->input.type > INPUT_NONE){
-                         if(input_history_iterate(&config_state->input, false)){
-                              if(buffer->line_count && buffer->lines[cursor->y][0]) cursor->x++;
-                              vim_enter_normal_mode(&config_state->vim_state);
-                         }
-                    }
-                    break;
-               case 16: // Ctrl + p
-                    if(auto_completing(&config_state->auto_complete)){
-                         Point_t end = {cursor->x - 1, cursor->y};
-                         if(end.x < 0) end.x = 0;
-                         char* match = "";
-                         if(!ce_points_equal(config_state->auto_complete.start, *cursor)) match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
-                         auto_complete_prev(&config_state->auto_complete, match);
-                         completion_update_buffer(config_state->completion_buffer, &config_state->auto_complete,
-                                                  match);
-                         if(!ce_points_equal(config_state->auto_complete.start, *cursor)) free(match);
-                         break;
-                    }
-
-                    if(config_state->input.type > INPUT_NONE){
-                         if(input_history_iterate(&config_state->input, true)){
-                              if(buffer->line_count && buffer->lines[cursor->y][0]) cursor->x++;
-                              vim_enter_normal_mode(&config_state->vim_state);
-                         }
-                    }
-                    break;
-               }
-
-               if(config_state->vim_state.mode == VM_INSERT){
-                    switch(key){
-                    default:
-                         break;
-                    case 25: // Ctrl + y
-                    {
-                         Point_t beginning_of_word = *cursor;
-                         char cur_char = 0;
-                         if(ce_get_char(buffer, (Point_t){cursor->x - 1, cursor->y}, &cur_char)){
-                              if(isalpha(cur_char) || cur_char == '_'){
-                                   ce_move_cursor_to_beginning_of_word(buffer, &beginning_of_word, true);
-                              }
-                         }
-                         clang_completion(config_state, beginning_of_word);
-                    } break;
-                    }
-               }
-               break;
           }
      }
 

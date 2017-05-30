@@ -508,7 +508,7 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, VimMode_
      if(terminal_current && view->buffer == terminal_current->buffer) printw("$ ");
      if(view == current_view && recording_macro) printw("RECORDING %c ", recording_macro);
 
-#if 1 // NOTE: useful to show key presses when debugging
+#if 0 // NOTE: useful to show key presses when debugging
      if(view == current_view) printw("%s %d ", keyname(g_last_key), g_last_key);
 #endif
 }

@@ -693,7 +693,7 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
 
           if(*itr == '\0'){
                return VCS_CONTINUE;
-          } else if(!isprint(*itr) || *itr == '?'){
+          } else if(!isprint(*itr)){
                return VCS_INVALID;
           }
 

@@ -886,8 +886,8 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
                {{'L'}, "move_on_screen bottom"},
                {{KEY_NPAGE}, "move_half_page up"},
                {{KEY_PPAGE}, "move_half_page down"},
-               {{'/'}, "search_dialogue up"},
-               {{'?'}, "search_dialogue down"},
+               {{'/'}, "search_dialogue down"},
+               {{'?'}, "search_dialogue up"},
                {{24}, "terminal_goto"}, // Ctrl + x
                {{1}, "terminal_new"}, // Ctrl + a
                {{14}, "terminal_jump_to_dest down"}, // Ctrl + n
@@ -1278,13 +1278,27 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           config_state->key_count = 0;
      }
 
-     // regardless of vim state, if enter is pressed, see if we can perform an action
-     if(!handled_key){
-          if(key == KEY_ENTER){
-               if(confirm_action(config_state, head)){
-                    ce_keys_free(&config_state->vim_state.command_head);
+     // if we haven't yet handled the key and we are in insert mode in the terminal, then send that key
+     if(!handled_key && config_state->vim_state.mode == VM_INSERT && key != KEY_ESCAPE){
+          TerminalNode_t* terminal_node = is_terminal_buffer(config_state->terminal_head, buffer);
+          if(terminal_node){
+               buffer_view->cursor = terminal_node->terminal.cursor;
+
+               if(key == KEY_ENTER) misc_move_jump_location_to_end_of_output(terminal_node);
+
+               if(terminal_send_key(&terminal_node->terminal, key)){
                     handled_key = true;
+                    if(cursor->x < (terminal_node->terminal.width - 1)) cursor->x++;
+                    view_follow_cursor(buffer_view, LNT_NONE);
                }
+          }
+     }
+
+     // regardless of vim state, if enter is pressed, see if we can perform an action
+     if(!handled_key && key == KEY_ENTER){
+          if(confirm_action(config_state, head)){
+               ce_keys_free(&config_state->vim_state.command_head);
+               handled_key = true;
           }
      }
 
@@ -1561,7 +1575,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           }
      }
 
-     // incremental search
+     // incremental search, move the cursor and center the view as we find matches
      switch(config_state->input.type){
      default:
           break;
@@ -1582,9 +1596,9 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          Point_t match = {};
                          int64_t match_len = 0;
                          if(config_state->input.buffer.lines[0][0] &&
-                            ce_find_regex(config_state->input.view_save->buffer,
-                                          config_state->vim_state.search.start, &config_state->vim_state.search.regex, &match,
-                                          &match_len, config_state->vim_state.search.direction)){
+                              ce_find_regex(config_state->input.view_save->buffer,
+                                            config_state->vim_state.search.start, &config_state->vim_state.search.regex, &match,
+                                            &match_len, config_state->vim_state.search.direction)){
                               pthread_mutex_lock(&view_input_save_lock);
                               ce_set_cursor(config_state->input.view_save->buffer,
                                             &config_state->input.view_save->cursor, match);
@@ -1598,12 +1612,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          }
                     }else{
                          config_state->vim_state.search.valid_regex = false;
-     #if DEBUG
-                         // NOTE: this might be too noisy in practice
-                         char error_buffer[BUFSIZ];
-                         regerror(rc, &regex, error_buffer, BUFSIZ);
-                         ce_message("regcomp() failed: '%s'", error_buffer);
-     #endif
                     }
                }else{
                     config_state->vim_state.search.valid_regex = false;

@@ -61,7 +61,7 @@ void misc_quit_and_prompt_if_unsaved(ConfigState_t* config_state, BufferNode_t* 
 
      if(unsaved_buffers){
           input_start(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state,
-                      "Unsaved buffers... Quit anyway? (y/n)", 'q');
+                      "Unsaved buffers... Quit anyway? (y/n)", INPUT_QUIT);
      }else{
           config_state->quit = true;
      }

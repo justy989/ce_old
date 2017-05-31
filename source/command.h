@@ -7,6 +7,7 @@ typedef enum{
      CS_SUCCESS,
      CS_FAILURE,
      CS_PRINT_HELP,
+     CS_NO_ACTION, // not handled, but also not a failure
 }CommandStatus_t;
 
 typedef enum{

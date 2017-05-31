@@ -891,7 +891,6 @@ CommandStatus_t command_load_file_dialogue(Command_t* command, void* user_data)
      ConfigState_t* config_state = command_data->config_state;
      BufferView_t* buffer_view = config_state->tab_current->view_current;
      Buffer_t* buffer = buffer_view->buffer;
-     Point_t* cursor = &buffer_view->cursor;
 
      buffer->cursor = buffer_view->cursor;
 
@@ -916,7 +915,7 @@ CommandStatus_t command_load_file_dialogue(Command_t* command, void* user_data)
 
      completion_calc_start_and_path(&config_state->auto_complete,
                                     config_state->input.buffer.lines[0],
-                                    *cursor,
+                                    (Point_t){0, 0},
                                     config_state->completion_buffer,
                                     config_state->input.load_file_search_path);
 
@@ -1195,7 +1194,7 @@ CommandStatus_t command_completion_toggle(Command_t* command, void* user_data)
      ConfigState_t* config_state = command_data->config_state;
      BufferView_t* buffer_view = config_state->tab_current->view_current;
      Buffer_t* buffer = buffer_view->buffer;
-     Point_t* cursor = &config_state->tab_current->view_current->cursor;
+     Point_t* cursor = &buffer_view->cursor;
 
      if(auto_completing(&config_state->auto_complete)){
           if(config_state->clang_complete_thread){
@@ -1272,9 +1271,11 @@ CommandStatus_t command_completion_apply(Command_t* command, void* user_data)
                                               config_state->input.load_file_search_path);
                break;
           }
+
+          return CS_SUCCESS;
      }
 
-     return CS_SUCCESS;
+     return CS_NO_ACTION;
 }
 
 CommandStatus_t command_completion_next(Command_t* command, void* user_data)

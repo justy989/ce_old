@@ -1221,7 +1221,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
      for(int64_t i = 0; i < config_state->binds[config_state->vim_state.mode].count; ++i){
           if(int_strneq(config_state->binds[config_state->vim_state.mode].binds[i].keys, config_state->keys, config_state->key_count)){
                no_matches = false;
-               handled_key = true;
 
                // if we have matches, but don't completely match, then wait for more keypresses,
                // otherwise, execute the action
@@ -1240,8 +1239,12 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     if(command_func){
                          CommandData_t command_data = {config_state, head};
                          CommandStatus_t cs = command_func(command, &command_data);
+
                          switch(cs){
                          default:
+                              handled_key = true;
+                              break;
+                         case CS_NO_ACTION:
                               break;
                          case CS_FAILURE:
                               ce_message("'%s' failed", entry->name);
@@ -1259,6 +1262,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     free(config_state->keys);
                     config_state->keys = NULL;
                     break;
+               }else{
+                    handled_key = true;
                }
           }
      }

@@ -44,7 +44,6 @@ bool text_history_commit_current(TextHistory_t* history)
      history->cur = node;
 
      return true;
-
 }
 
 bool text_history_next(TextHistory_t* history)

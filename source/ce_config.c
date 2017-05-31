@@ -911,7 +911,6 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
                {{'q', '?'}, "show_macros"},
                {{'@', '?'}, "show_macros"},
                {{'y', '?'}, "show_yanks"},
-               {{'p', '?'}, "show_yanks"},
                {{'Z', 'Z'}, "save_and_close_view"},
                {{14}, "completion_next"},
                {{16}, "completion_previous"},
@@ -1205,82 +1204,85 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
      config_state->save_buffer_head = head;
      buffer->check_left_for_pair = false;
 
-     // append to keys
-     if(config_state->keys){
-          config_state->key_count++;
-          config_state->keys = realloc(config_state->keys, config_state->key_count * sizeof(config_state->keys[0]));
-     }else{
-          config_state->key_count = 1;
-          config_state->keys = malloc(config_state->key_count * sizeof(config_state->keys[0]));
-     }
+     // as long as vim isn't in the middle of handling keys, in insert mode vim returns VKH_HANDLED_KEY TODO: is that what we want?
+     if(config_state->last_vim_result_type != VKH_HANDLED_KEY || config_state->vim_state.mode == VM_INSERT){
+          // append to keys
+          if(config_state->keys){
+               config_state->key_count++;
+               config_state->keys = realloc(config_state->keys, config_state->key_count * sizeof(config_state->keys[0]));
+          }else{
+               config_state->key_count = 1;
+               config_state->keys = malloc(config_state->key_count * sizeof(config_state->keys[0]));
+          }
 
-     config_state->keys[config_state->key_count - 1] = key;
+          config_state->keys[config_state->key_count - 1] = key;
 
-     // if matches a key bind
-     bool no_matches = true;
-     for(int64_t i = 0; i < config_state->binds[config_state->vim_state.mode].count; ++i){
-          if(int_strneq(config_state->binds[config_state->vim_state.mode].binds[i].keys, config_state->keys, config_state->key_count)){
-               no_matches = false;
+          // if matches a key bind
+          bool no_matches = true;
+          for(int64_t i = 0; i < config_state->binds[config_state->vim_state.mode].count; ++i){
+               if(int_strneq(config_state->binds[config_state->vim_state.mode].binds[i].keys, config_state->keys, config_state->key_count)){
+                    no_matches = false;
 
-               // if we have matches, but don't completely match, then wait for more keypresses,
-               // otherwise, execute the action
-               if(config_state->binds[config_state->vim_state.mode].binds[i].key_count == config_state->key_count){
-                    Command_t* command = &config_state->binds[config_state->vim_state.mode].binds[i].command;
-                    ce_command* command_func = NULL;
-                    CommandEntry_t* entry = NULL;
-                    for(int64_t i = 0; i < config_state->command_entry_count; ++i){
-                         entry = config_state->command_entries + i;
-                         if(strcmp(entry->name, command->name) == 0){
-                              command_func = entry->func;
-                              break;
+                    // if we have matches, but don't completely match, then wait for more keypresses,
+                    // otherwise, execute the action
+                    if(config_state->binds[config_state->vim_state.mode].binds[i].key_count == config_state->key_count){
+                         Command_t* command = &config_state->binds[config_state->vim_state.mode].binds[i].command;
+                         ce_command* command_func = NULL;
+                         CommandEntry_t* entry = NULL;
+                         for(int64_t i = 0; i < config_state->command_entry_count; ++i){
+                              entry = config_state->command_entries + i;
+                              if(strcmp(entry->name, command->name) == 0){
+                                   command_func = entry->func;
+                                   break;
+                              }
                          }
-                    }
 
-                    if(command_func){
-                         CommandData_t command_data = {config_state, head};
-                         CommandStatus_t cs = command_func(command, &command_data);
+                         if(command_func){
+                              CommandData_t command_data = {config_state, head};
+                              CommandStatus_t cs = command_func(command, &command_data);
 
-                         switch(cs){
-                         default:
-                              handled_key = true;
-                              break;
-                         case CS_NO_ACTION:
-                              break;
-                         case CS_FAILURE:
-                              ce_message("'%s' failed", entry->name);
-                              break;
-                         case CS_PRINT_HELP:
-                              ce_message("command help:");
-                              command_entry_log(entry);
-                              ce_message("");
-                              break;
+                              switch(cs){
+                              default:
+                                   handled_key = true;
+                                   break;
+                              case CS_NO_ACTION:
+                                   break;
+                              case CS_FAILURE:
+                                   ce_message("'%s' failed", entry->name);
+                                   break;
+                              case CS_PRINT_HELP:
+                                   ce_message("command help:");
+                                   command_entry_log(entry);
+                                   ce_message("");
+                                   break;
+                              }
+                         }else{
+                              ce_message("unknown command: '%s'", command->name);
                          }
+
+                         free(config_state->keys);
+                         config_state->keys = NULL;
+                         break;
                     }else{
-                         ce_message("unknown command: '%s'", command->name);
+                         handled_key = true;
                     }
-
-                    free(config_state->keys);
-                    config_state->keys = NULL;
-                    break;
-               }else{
-                    handled_key = true;
-               }
-          }
-     }
-
-     if(no_matches){
-          // hand off the keys to vim to see if that creates a valid action if we have at least matched one key
-          if(config_state->key_count > 1){
-               ce_keys_free(&config_state->vim_state.command_head);
-               // skip pushing the last key since we are going to pass that one in this loop
-               for(int64_t i = 0; i < config_state->key_count - 1; ++i){
-                    ce_keys_push(&config_state->vim_state.command_head, config_state->keys[i]);
                }
           }
 
-          free(config_state->keys);
-          config_state->keys = NULL;
-          config_state->key_count = 0;
+          if(no_matches){
+               // hand off the keys to vim to see if that creates a valid action if we have at least matched one key
+               if(config_state->key_count > 1){
+                    ce_keys_free(&config_state->vim_state.command_head);
+                    // skip pushing the last key since we are going to pass that one in this loop
+                    for(int64_t i = 0; i < config_state->key_count - 1; ++i){
+                         ce_keys_push(&config_state->vim_state.command_head, config_state->keys[i]);
+                    }
+               }
+
+               free(config_state->keys);
+               config_state->keys = NULL;
+               config_state->key_count = 0;
+          }
      }
 
      // if we haven't yet handled the key and we are in insert mode in the terminal, then send that key
@@ -1314,6 +1316,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           VimKeyHandlerResult_t vkh_result = vim_key_handler(key, &config_state->vim_state, config_state->tab_current->view_current->buffer,
                                                              &config_state->tab_current->view_current->cursor, &buffer_state->commit_tail,
                                                              &buffer_state->vim_buffer_state, false);
+          config_state->last_vim_result_type = vkh_result.type;
+
           switch(vkh_result.type){
           default:
                break;

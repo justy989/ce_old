@@ -66,6 +66,7 @@ typedef struct{
 
      VimState_t vim_state;
      VimKeyHandlerResultType_t last_vim_result_type;
+     VimMode_t last_vim_mode;
 
      TabView_t* tab_head;
      TabView_t* tab_current;

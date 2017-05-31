@@ -805,7 +805,6 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
                {command_highlight_line, "highlight_line", "[style]", "change the global style in which the current line is highlighted", "styles: none, text, entire"},
                {command_line_number, "line_number", "[style]", "change the global style in which line number are drawn", "styles: none, absolute, relative, both"},
                {command_noh, "noh", NULL, "turn off search highlighting", NULL},
-               {command_keybind_add, "keybind_add", "[key] [mode] [command]", "add/override a keybind dynamically that will run the specified command", NULL},
 
                {command_buffer_rename, "buffer_rename", "[string]", "rename the current buffer", NULL},
                {command_buffer_reload, "buffer_reload", NULL, "reload the file that backs the buffer, overwriting any unsaved changes", NULL},
@@ -1205,7 +1204,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
      buffer->check_left_for_pair = false;
 
      // as long as vim isn't in the middle of handling keys, in insert mode vim returns VKH_HANDLED_KEY TODO: is that what we want?
-     if(config_state->last_vim_result_type != VKH_HANDLED_KEY || config_state->vim_state.mode == VM_INSERT){
+     if(config_state->last_vim_result_type != VKH_HANDLED_KEY || config_state->last_vim_mode == VM_INSERT){
           // append to keys
           if(config_state->keys){
                config_state->key_count++;
@@ -1311,11 +1310,16 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
      // send the key to the vim key handler
      if(!handled_key){
+          // save the vim mode before running the key handle
+          config_state->last_vim_mode = config_state->vim_state.mode;
+
           Point_t save_cursor = *cursor;
           Buffer_t* save_buffer = buffer_view->buffer;
           VimKeyHandlerResult_t vkh_result = vim_key_handler(key, &config_state->vim_state, config_state->tab_current->view_current->buffer,
                                                              &config_state->tab_current->view_current->cursor, &buffer_state->commit_tail,
                                                              &buffer_state->vim_buffer_state, false);
+
+          // save the key handler result type
           config_state->last_vim_result_type = vkh_result.type;
 
           switch(vkh_result.type){

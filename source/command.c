@@ -328,6 +328,9 @@ CommandStatus_t command_line_number(Command_t* command, void* user_data)
           config_state->line_number_type = LNT_RELATIVE;
      }else if(strcmp(command->args[0].string, "both") == 0){
           config_state->line_number_type = LNT_RELATIVE_AND_ABSOLUTE;
+     }else{
+          ce_message("unrecognized option '%s'", command->args[0].string);
+          return CS_PRINT_HELP;
      }
 
      return CS_SUCCESS;
@@ -341,18 +344,6 @@ CommandStatus_t command_noh(Command_t* command, void* user_data)
      ConfigState_t* config_state = command_data->config_state;
 
      config_state->do_not_highlight_search = true;
-     return CS_SUCCESS;
-}
-
-CommandStatus_t command_keybind_add(Command_t* command, void* user_data)
-{
-     if(command->arg_count != 3) return CS_PRINT_HELP;
-
-     CommandData_t* command_data = (CommandData_t*)(user_data);
-     ConfigState_t* config_state = command_data->config_state;
-
-     // TODO: implement
-     (void)(config_state);
      return CS_SUCCESS;
 }
 

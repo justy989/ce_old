@@ -38,7 +38,6 @@ LITTLE:
 -'dbu' doesn't leave the cursor in the place I'd expect?
 -visible marker doesn't show up on empty lines
 -']' pair motions
--simplify ce api (get rid of char functions)
 -use new layout technology
 -replace terminal with libvterm?
 -make config reloading reliable

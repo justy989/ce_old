@@ -194,70 +194,18 @@ bool ce_point_on_buffer(const Buffer_t* buffer, Point_t location)
      return true;
 }
 
-bool insert_line_impl(Buffer_t* buffer, int64_t line, const char* string);
-
-bool insert_char_impl(Buffer_t* buffer, Point_t location, char c)
-{
-     if(buffer->line_count == 0 && location.x == 0 && location.y == 0) ce_alloc_lines(buffer, 1);
-
-     if(!ce_point_on_buffer(buffer, location)){
-          return false;
-     }
-
-     char* line = buffer->lines[location.y];
-
-     if(c == NEWLINE){
-          // copy the rest of the line to the next line
-          if(!insert_line_impl(buffer, location.y + 1, line + location.x)){
-               return false;
-          }
-
-          // kill the rest of the current line
-          char* new_line = realloc(line, location.x + 1);
-          if(!new_line){
-               ce_message("%s() failed to alloc new line after split", __FUNCTION__);
-               return false;
-          }
-          new_line[location.x] = 0;
-          buffer->lines[location.y] = new_line;
-          mark_buffer_as_modified(buffer);
-          return true;
-     }
-
-     char* new_line = NULL;
-
-     // allocate new line with length + 1 + NULL terminator
-     int64_t line_len = strlen(line);
-     int64_t new_len = line_len + 2;
-     new_line = realloc(line, new_len);
-     if(!new_line){
-          ce_message("%s() failed to allocate line with %"PRId64" characters", __FUNCTION__, new_len);
-          return false;
-     }
-
-     // copy before the insert, add the new char, copy after the insert
-     memmove(new_line + location.x + 1, new_line + location.x, line_len - location.x);
-     new_line[location.x] = c;
-
-     // NULL terminate the newline, and free the old line
-     new_line[new_len - 1] = 0;
-     buffer->lines[location.y] = new_line;
-     mark_buffer_as_modified(buffer);
-     return true;
-}
+static bool insert_line_impl(Buffer_t* buffer, int64_t line, const char* string);
 
 bool ce_insert_char(Buffer_t* buffer, Point_t location, char c)
 {
-     if(buffer->status == BS_READONLY) return false;
-
-     return insert_char_impl(buffer, location, c);
+     const char str[2] = {c, 0};
+     return ce_insert_string(buffer, location, str);
 }
 
 bool ce_insert_char_readonly(Buffer_t* buffer, Point_t location, char c)
 {
-     if(buffer->status != BS_READONLY) return false;
-
-     return insert_char_impl(buffer, location, c);
+     const char str[2] = {c, 0};
+     return ce_insert_string_readonly(buffer, location, str);
 }
 
 bool ce_append_char(Buffer_t* buffer, char c)
@@ -282,7 +230,7 @@ bool ce_append_char_readonly(Buffer_t* buffer, char c)
      return ce_insert_char_readonly(buffer, end, c);
 }
 
-bool insert_string_impl(Buffer_t* buffer, Point_t location, const char* new_string)
+static bool insert_string_impl(Buffer_t* buffer, Point_t location, const char* new_string)
 {
      if(location.x == 0 && location.y == 0){
           // pass
@@ -448,51 +396,14 @@ bool ce_append_string_readonly(Buffer_t* buffer, int64_t line, const char* new_s
      return ce_insert_string_readonly(buffer, end_of_line, new_string);
 }
 
-bool remove_char_impl(Buffer_t* buffer, Point_t location)
-{
-     if(!ce_point_on_buffer(buffer, location)) return false;
-
-     char* line = buffer->lines[location.y];
-     int64_t line_len = strlen(line);
-
-     // remove the line from the list if it is empty
-     if(line_len == 0){
-          return ce_remove_line(buffer, location.y);
-     }
-
-     if(location.x == line_len){
-          // removing the newline at the end of the line
-          return ce_join_line(buffer, location.y);
-     }
-
-     // NOTE: mallocing a new line because I'm thinking about overall memory usage here
-     //       if you trim the a ton of lines, then you would be using a lot more memory then the file requires
-     char* new_line = malloc(line_len);
-
-     // copy before the removed char copy after the removed char
-     for(int64_t i = 0; i <= location.x; ++i){new_line[i] = line[i];}
-     for(int64_t i = location.x + 1; i < line_len; ++i){new_line[i-1] = line[i];}
-     new_line[line_len-1] = 0;
-
-     free(line);
-     buffer->lines[location.y] = new_line;
-
-     mark_buffer_as_modified(buffer);
-     return true;
-}
-
 bool ce_remove_char(Buffer_t* buffer, Point_t location)
 {
-     if(buffer->status == BS_READONLY) return false;
-
-     return remove_char_impl(buffer, location);
+     return ce_remove_string(buffer, location, 1);
 }
 
 bool ce_remove_char_readonly(Buffer_t* buffer, Point_t location)
 {
-     if(buffer->status != BS_READONLY) return false;
-
-     return remove_char_impl(buffer, location);
+     return ce_remove_string_readonly(buffer, location, 1);
 }
 
 char* ce_dupe_string(const Buffer_t* buffer, Point_t start, Point_t end)
@@ -1237,7 +1148,7 @@ char ce_get_char_raw(const Buffer_t* buffer, Point_t location)
      return buffer->lines[location.y][location.x];
 }
 
-bool set_char_impl(Buffer_t* buffer, Point_t location, char c)
+static bool set_char_impl(Buffer_t* buffer, Point_t location, char c)
 {
      if(!ce_point_on_buffer(buffer, location)) return false;
 
@@ -1268,7 +1179,7 @@ bool ce_set_char_readonly(Buffer_t* buffer, Point_t location, char c)
      return set_char_impl(buffer, location, c);
 }
 
-bool insert_line_impl(Buffer_t* buffer, int64_t line, const char* string)
+static bool insert_line_impl(Buffer_t* buffer, int64_t line, const char* string)
 {
      // make sure we are only inserting in the middle or at the very end, or the buffer is empty
      assert(buffer->line_count == 0 || line >= 0 && line <= buffer->line_count);
@@ -1395,7 +1306,7 @@ bool ce_remove_line(Buffer_t* buffer, int64_t line)
      return true;
 }
 
-bool ce_remove_string(Buffer_t* buffer, Point_t location, int64_t length)
+static bool remove_string_impl(Buffer_t* buffer, Point_t location, int64_t length)
 {
      if(buffer->status == BS_READONLY) return false;
 
@@ -1470,6 +1381,20 @@ bool ce_remove_string(Buffer_t* buffer, Point_t location, int64_t length)
 
      mark_buffer_as_modified(buffer);
      return true;
+}
+
+bool ce_remove_string(Buffer_t* buffer, Point_t location, int64_t length)
+{
+     if(buffer->status == BS_READONLY) return false;
+
+     return remove_string_impl(buffer, location, length);
+}
+
+bool ce_remove_string_readonly(Buffer_t* buffer, Point_t location, int64_t length)
+{
+     if(buffer->status != BS_READONLY) return false;
+
+     return remove_string_impl(buffer, location, length);
 }
 
 bool ce_save_buffer(Buffer_t* buffer, const char* filename)

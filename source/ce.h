@@ -279,6 +279,7 @@ bool ce_set_char_readonly       (Buffer_t* buffer, Point_t location, char c);
 bool ce_insert_string           (Buffer_t* buffer, Point_t location, const char* string);
 bool ce_insert_string_readonly  (Buffer_t* buffer, Point_t location, const char* string);
 bool ce_remove_string           (Buffer_t* buffer, Point_t location, int64_t length);
+bool ce_remove_string_readonly  (Buffer_t* buffer, Point_t location, int64_t length);
 bool ce_prepend_string          (Buffer_t* buffer, int64_t line, const char* string);
 bool ce_append_string           (Buffer_t* buffer, int64_t line, const char* string);
 bool ce_append_string_readonly  (Buffer_t* buffer, int64_t line, const char* string);

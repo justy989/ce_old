@@ -139,6 +139,7 @@ TEST(macro_commit_sanity)
 typedef struct{
      VimState_t vim_state;
      Buffer_t buffer;
+     BufferView_t buffer_view;
      BufferCommitNode_t* commit_tail;
      Point_t cursor;
      VimBufferState_t vim_buffer_state;
@@ -148,6 +149,7 @@ void key_handler_test_init(KeyHandlerTest_t* kht)
 {
      memset(kht, 0, sizeof(*kht));
      kht->commit_tail = calloc(1, sizeof(BufferCommitNode_t));
+     kht->buffer_view.buffer = &kht->buffer;
 }
 
 void key_handler_test_run(KeyHandlerTest_t* kht, const char* string_command)
@@ -155,7 +157,7 @@ void key_handler_test_run(KeyHandlerTest_t* kht, const char* string_command)
      int* int_command = vim_char_string_to_command_string(string_command);
      int* itr = int_command;
      while(*itr){
-          vim_key_handler(*itr, &kht->vim_state, &kht->buffer, &kht->cursor, &kht->commit_tail, &kht->vim_buffer_state, false);
+          vim_key_handler(*itr, &kht->vim_state, &kht->buffer_view, &kht->cursor, &kht->commit_tail, &kht->vim_buffer_state, false);
           itr++;
      }
 

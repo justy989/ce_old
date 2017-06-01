@@ -42,7 +42,6 @@ LITTLE:
 -use new layout technology
 -replace terminal with libvterm?
 -make config reloading reliable
--macros are no longer editable
 */
 #if 0
 error in string syntax highlighting for <tacos>"

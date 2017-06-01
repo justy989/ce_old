@@ -195,10 +195,11 @@ static bool line_is_all_whitespace(Buffer_t* buffer, int64_t line)
      return all_whitespace;
 }
 
-VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* buffer, Point_t* cursor,
-                                      BufferCommitNode_t** commit_tail, VimBufferState_t* vim_buffer_state,
+VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, BufferView_t* view,
+                                      Point_t* cursor, BufferCommitNode_t** commit_tail, VimBufferState_t* vim_buffer_state,
                                       bool repeating)
 {
+     Buffer_t* buffer = view->buffer;
      char recording_macro = vim_state->recording_macro;
      VimMode_t vim_mode = vim_state->mode;
 
@@ -538,7 +539,7 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
           case VCS_COMPLETE:
           {
                VimMode_t original_mode = vim_state->mode;
-               bool successful_action = vim_action_apply(&vim_action, buffer, cursor, vim_state, commit_tail,
+               bool successful_action = vim_action_apply(&vim_action, view, cursor, vim_state, commit_tail,
                                                          vim_buffer_state);
 
                if(vim_state->mode != original_mode){
@@ -1082,6 +1083,21 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           case 'E':
                built_action.motion.type = VMT_WORD_END_BIG;
                break;
+          case KEY_NPAGE:
+               built_action.motion.type = VMT_HALF_PAGE_UP;
+               break;
+          case KEY_PPAGE:
+               built_action.motion.type = VMT_HALF_PAGE_DOWN;
+               break;
+          case 'H':
+               built_action.motion.type = VMT_SCREEN_TOP;
+               break;
+          case 'M':
+               built_action.motion.type = VMT_SCREEN_MIDDLE;
+               break;
+          case 'L':
+               built_action.motion.type = VMT_SCREEN_BOTTOM;
+               break;
           case 'f':
                built_action.motion.type = VMT_FIND_NEXT_MATCHING_CHAR;
                built_action.motion.match_char = *(++itr);
@@ -1249,9 +1265,11 @@ static int isnotsinglequote(int c)
      return c != '\'';
 }
 
-bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, VimState_t* vim_state,
+bool vim_action_get_range(VimAction_t* action, BufferView_t* view, Point_t* cursor, VimState_t* vim_state,
                           VimBufferState_t* vim_buffer_state, VimActionRange_t* action_range)
 {
+     Buffer_t* buffer = view->buffer;
+
      action_range->start = *cursor;
      action_range->end = action_range->start;
 
@@ -1332,6 +1350,44 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                case VMT_WORD_END_BIG:
                     ce_move_cursor_to_end_of_word(buffer, &action_range->end, false);
                     break;
+               case VMT_PAGE_UP:
+               {
+                    int64_t view_height = view->bottom_right.y - view->top_left.y;
+                    Point_t delta = { 0, -view_height };
+                    ce_move_cursor(buffer, &action_range->end, delta);
+               } break;
+               case VMT_PAGE_DOWN:
+               {
+                    int64_t view_height = view->bottom_right.y - view->top_left.y;
+                    Point_t delta = { 0, view_height };
+                    ce_move_cursor(buffer, &action_range->end, delta);
+               } break;
+               case VMT_HALF_PAGE_UP:
+               {
+                    int64_t view_height = view->bottom_right.y - view->top_left.y;
+                    Point_t delta = { 0, -view_height / 2 };
+                    ce_move_cursor(buffer, &action_range->end, delta);
+               } break;
+               case VMT_HALF_PAGE_DOWN:
+               {
+                    int64_t view_height = view->bottom_right.y - view->top_left.y;
+                    Point_t delta = { 0, view_height / 2 };
+                    ce_move_cursor(buffer, &action_range->end, delta);
+               } break;
+               case VMT_SCREEN_TOP:
+               {
+                    action_range->end = (Point_t){cursor->x, view->top_row};
+               } break;
+               case VMT_SCREEN_MIDDLE:
+               {
+                    int64_t view_height = view->bottom_right.y - view->top_left.y;
+                    action_range->end = (Point_t){cursor->x, view->top_row + (view_height/2)};
+               } break;
+               case VMT_SCREEN_BOTTOM:
+               {
+                    int64_t view_height = view->bottom_right.y - view->top_left.y;
+                    action_range->end = (Point_t){cursor->x, view->top_row + (view_height)};
+               } break;
                case VMT_LINE:
                     action_range->start.x = 0;
                     action_range->end.x = strlen(buffer->lines[action_range->end.y]);
@@ -1765,13 +1821,14 @@ const char* get_comment_string(BufferFileType_t type)
      return NULL;
 }
 
-bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, VimState_t* vim_state,
+bool vim_action_apply(VimAction_t* action, BufferView_t* view, Point_t* cursor, VimState_t* vim_state,
                       BufferCommitNode_t** commit_tail, VimBufferState_t* vim_buffer_state)
 {
      VimActionRange_t action_range;
      BufferCommitChain_t chain = vim_state->playing_macro ? BCC_KEEP_GOING : BCC_STOP;
+     Buffer_t* buffer = view->buffer;
 
-     if(!vim_action_get_range(action, buffer, cursor, vim_state, vim_buffer_state, &action_range) ) return false;
+     if(!vim_action_get_range(action, view, cursor, vim_state, vim_buffer_state, &action_range) ) return false;
 
      // perform action on range
      switch(action->change.type){
@@ -1779,7 +1836,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
           break;
      case VCT_REPEAT:
      {
-          vim_action_apply(&vim_state->last_action, buffer, cursor, vim_state,
+          vim_action_apply(&vim_state->last_action, view, cursor, vim_state,
                            commit_tail, vim_buffer_state);
 
           if(vim_state->mode != VM_INSERT || !vim_state->last_insert_command ||
@@ -1789,7 +1846,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
 
           int* cmd_itr = vim_state->last_insert_command;
           while(*cmd_itr){
-               vim_key_handler(*cmd_itr, vim_state, buffer, cursor, commit_tail, vim_buffer_state, true);
+               vim_key_handler(*cmd_itr, vim_state, view, cursor, commit_tail, vim_buffer_state, true);
                cmd_itr++;
           }
 
@@ -2425,7 +2482,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                bool unhandled_key = false;
                int* macro_itr = macro->command;
                while(*macro_itr){
-                    VimKeyHandlerResult_t vkh_result =  vim_key_handler(*macro_itr, vim_state, buffer, cursor, commit_tail,
+                    VimKeyHandlerResult_t vkh_result =  vim_key_handler(*macro_itr, vim_state, view, cursor, commit_tail,
                                                                         vim_buffer_state, false);
 
                     if(vkh_result.type == VKH_UNHANDLED_KEY){

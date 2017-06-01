@@ -811,9 +811,6 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
                {command_buffer_new, "buffer_new", "<string>", "creates a new buffer with an optional filename", NULL},
                {command_buffer_syntax, "buffer_syntax", "[style]", "change the syntax mode of the current buffer", "styles: c, cpp, python, java, config, diff, plain"},
 
-               {command_move_on_screen, "move_on_screen", "[mode]", "move the cursor to the part of the view specified by the mode", "modes: top, center, bottom"},
-               {command_move_half_page, "move_half_page", "[dir]", "move the cursor up or down a half page specified by the dir", "  dir: up, down"},
-
                {command_view_split, "view_split", "[dir]", "split the currently selected window into 2 windows", "dir: horizontal, vertical"},
                {command_view_close, "view_close", NULL, "close the current view", NULL},
                {command_view_scroll, "view_scroll", "[mode]", "scroll the view keeping the cursor on screen based on the mode specified", "modes: top, center, bottom"},
@@ -880,11 +877,6 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
                {{':'}, "command_dialogue"},
                {{6}, "load_file_dialogue"},
                {{'R'}, "replace_dialogue"},
-               {{'H'}, "move_on_screen top"},
-               {{'M'}, "move_on_screen center"},
-               {{'L'}, "move_on_screen bottom"},
-               {{KEY_NPAGE}, "move_half_page up"},
-               {{KEY_PPAGE}, "move_half_page down"},
                {{'/'}, "search_dialogue down"},
                {{'?'}, "search_dialogue up"},
                {{24}, "terminal_goto"}, // Ctrl + x
@@ -1315,7 +1307,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
           Point_t save_cursor = *cursor;
           Buffer_t* save_buffer = buffer_view->buffer;
-          VimKeyHandlerResult_t vkh_result = vim_key_handler(key, &config_state->vim_state, config_state->tab_current->view_current->buffer,
+          VimKeyHandlerResult_t vkh_result = vim_key_handler(key, &config_state->vim_state, config_state->tab_current->view_current,
                                                              &config_state->tab_current->view_current->cursor, &buffer_state->commit_tail,
                                                              &buffer_state->vim_buffer_state, false);
 
@@ -1451,7 +1443,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                if(vkh_result.completed_action.change.type == VCT_DELETE &&
                   config_state->tab_current->view_current->buffer == &config_state->buffer_list_buffer){
                     VimActionRange_t action_range;
-                    if(vim_action_get_range(&vkh_result.completed_action, buffer, cursor, &config_state->vim_state,
+                    if(vim_action_get_range(&vkh_result.completed_action, buffer_view, cursor, &config_state->vim_state,
                                             &buffer_state->vim_buffer_state, &action_range)){
                          int64_t delete_index = action_range.sorted_start->y - 1;
                          int64_t buffers_to_delete = (action_range.sorted_end->y - action_range.sorted_start->y) + 1;
@@ -1514,7 +1506,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     jump_insert(jump_array, save_buffer->filename, save_cursor);
                }else if(vkh_result.completed_action.change.type == VCT_YANK){
                     VimActionRange_t action_range;
-                    if(vim_action_get_range(&vkh_result.completed_action, buffer, cursor, &config_state->vim_state,
+                    if(vim_action_get_range(&vkh_result.completed_action, buffer_view, cursor, &config_state->vim_state,
                                             &buffer_state->vim_buffer_state, &action_range)){
                          buffer->blink = true;
                          buffer->highlight_start = *action_range.sorted_start;
@@ -1525,7 +1517,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                                         vkh_result.completed_action.change.reg ? vkh_result.completed_action.change.reg : '"');
                     if(yank){
                          VimActionRange_t action_range;
-                         if(vim_action_get_range(&vkh_result.completed_action, buffer, cursor, &config_state->vim_state,
+                         if(vim_action_get_range(&vkh_result.completed_action, buffer_view, cursor, &config_state->vim_state,
                                                  &buffer_state->vim_buffer_state, &action_range)){
                               buffer->blink = true;
                               buffer->highlight_start = *action_range.sorted_start;

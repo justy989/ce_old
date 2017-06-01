@@ -67,6 +67,13 @@ typedef enum{
      VMT_WORD_BEGINNING_BIG,
      VMT_WORD_END_LITTLE,
      VMT_WORD_END_BIG,
+     VMT_PAGE_DOWN,
+     VMT_PAGE_UP,
+     VMT_HALF_PAGE_DOWN,
+     VMT_HALF_PAGE_UP,
+     VMT_SCREEN_TOP,
+     VMT_SCREEN_MIDDLE,
+     VMT_SCREEN_BOTTOM,
      VMT_LINE,
      VMT_LINE_UP,
      VMT_LINE_DOWN,
@@ -249,7 +256,7 @@ typedef struct {
      VimYankMode_t yank_mode;
 } VimActionRange_t;
 
-VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* buffer, Point_t* cursor,
+VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, BufferView_t* view, Point_t* cursor,
                                       BufferCommitNode_t** commit_tail, VimBufferState_t* vim_buffer_state,
                                       bool repeating);
 
@@ -257,10 +264,10 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
                                          Buffer_t* buffer, Point_t* cursor, Point_t* visual_start,
                                          VimFindCharState_t* find_char_in_line_state, bool recording_macro);
 
-bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, VimState_t* vim_state,
+bool vim_action_get_range(VimAction_t* action, BufferView_t* view, Point_t* cursor, VimState_t* vim_state,
                           VimBufferState_t* vim_buffer_state, VimActionRange_t* action_range);
 
-bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, VimState_t* vim_state,
+bool vim_action_apply(VimAction_t* action, BufferView_t* view, Point_t* cursor, VimState_t* vim_state,
                       BufferCommitNode_t** commit_tail, VimBufferState_t* vim_buffer_state);
 
 void vim_enter_normal_mode(VimState_t* vim_state);

@@ -38,6 +38,11 @@ LITTLE:
 -'dbu' doesn't leave the cursor in the place I'd expect?
 -visible marker doesn't show up on empty lines
 -']' pair motions
+-simplify ce api (get rid of char functions)
+-use new layout technology
+-replace terminal with libvterm?
+-make config reloading reliable
+-macros are no longer editable
 */
 #if 0
 error in string syntax highlighting for <tacos>"

@@ -69,9 +69,6 @@ CommandStatus_t command_buffer_reload(Command_t* command, void* user_data);
 CommandStatus_t command_buffer_new(Command_t* command, void* user_data);
 CommandStatus_t command_buffer_syntax(Command_t* command, void* user_data);
 
-CommandStatus_t command_move_on_screen(Command_t* command, void* user_data);
-CommandStatus_t command_move_half_page(Command_t* command, void* user_data);
-
 CommandStatus_t command_view_split(Command_t* command, void* user_data);
 CommandStatus_t command_view_close(Command_t* command, void* user_data);
 CommandStatus_t command_view_scroll(Command_t* command, void* user_data);

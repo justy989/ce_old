@@ -478,53 +478,6 @@ CommandStatus_t command_buffer_syntax(Command_t* command, void* user_data)
      return CS_SUCCESS;
 }
 
-CommandStatus_t command_move_on_screen(Command_t* command, void* user_data)
-{
-     if(command->arg_count != 1) return CS_PRINT_HELP;
-     if(command->args[0].type != CAT_STRING) return CS_PRINT_HELP;
-
-     CommandData_t* command_data = (CommandData_t*)(user_data);
-     ConfigState_t* config_state = command_data->config_state;
-     BufferView_t* buffer_view = config_state->tab_current->view_current;
-     Buffer_t* buffer = buffer_view->buffer;
-     Point_t* cursor = &buffer_view->cursor;
-
-     if(strcmp(command->args[0].string, "top") == 0){
-          Point_t location = {cursor->x, buffer_view->top_row};
-          ce_set_cursor(buffer, cursor, location);
-     }else if(strcmp(command->args[0].string, "center") == 0){
-          int64_t view_height = buffer_view->bottom_right.y - buffer_view->top_left.y;
-          Point_t location = {cursor->x, buffer_view->top_row + (view_height/2)};
-          ce_set_cursor(buffer, cursor, location);
-     }else if(strcmp(command->args[0].string, "bottom") == 0){
-          int64_t view_height = buffer_view->bottom_right.y - buffer_view->top_left.y;
-          Point_t location = {cursor->x, buffer_view->top_row + view_height};
-          ce_set_cursor(buffer, cursor, location);
-     }else{
-          ce_message("unrecognized option '%s'", command->args[0].string);
-          return CS_PRINT_HELP;
-     }
-
-     return CS_SUCCESS;
-}
-
-CommandStatus_t command_move_half_page(Command_t* command, void* user_data)
-{
-     if(command->arg_count != 1) return CS_PRINT_HELP;
-     if(command->args[0].type != CAT_STRING) return CS_PRINT_HELP;
-
-     CommandData_t* command_data = (CommandData_t*)(user_data);
-     ConfigState_t* config_state = command_data->config_state;
-
-     if(strcmp(command->args[0].string, "up") == 0){
-          view_move_cursor_half_page_up(config_state->tab_current->view_current);
-     }else if(strcmp(command->args[0].string, "down") == 0){
-          view_move_cursor_half_page_down(config_state->tab_current->view_current);
-     }
-
-     return CS_SUCCESS;
-}
-
 CommandStatus_t command_view_split(Command_t* command, void* user_data)
 {
      if(command->arg_count != 1) return CS_PRINT_HELP;

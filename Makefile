@@ -26,7 +26,7 @@ test: LINK+=-rdynamic
 test: CFLAGS+=-Itest -Isource
 test: $(BUILd_DIR) $(subst test/,$(BUILD_DIR)/,$(basename $(wildcard test/*.c)))
 
-$(BUILD_DIR)/test_%: test/test_%.c $(BUILD_DIR)/libcetest.a
+$(BUILD_DIR)/%: test/%.c $(BUILD_DIR)/libcetest.a
 	$(CC) $(CFLAGS) $^ -o $@ $(LINK)
 	$@ 2> $(BUILD_DIR)/test_output.txt || (cat $(BUILD_DIR)/test_output.txt && false)
 

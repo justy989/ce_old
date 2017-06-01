@@ -195,10 +195,11 @@ static bool line_is_all_whitespace(Buffer_t* buffer, int64_t line)
      return all_whitespace;
 }
 
-VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* buffer, Point_t* cursor,
-                                      BufferCommitNode_t** commit_tail, VimBufferState_t* vim_buffer_state,
+VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, BufferView_t* view,
+                                      Point_t* cursor, BufferCommitNode_t** commit_tail, VimBufferState_t* vim_buffer_state,
                                       bool repeating)
 {
+     Buffer_t* buffer = view->buffer;
      char recording_macro = vim_state->recording_macro;
      VimMode_t vim_mode = vim_state->mode;
 
@@ -455,6 +456,18 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                     }
                }
           } break;
+          case KEY_REDO:
+          {
+               VimYankNode_t* yank = vim_yank_find(vim_state->yank_head, '"');
+
+               if(!yank) break;
+
+               if(ce_insert_string(buffer, *cursor, yank->text)){
+                    ce_commit_insert_string(commit_tail, *cursor, *cursor,
+                                            *cursor, strdup(yank->text), BCC_STOP);
+                    ce_advance_cursor(buffer, cursor, strlen(yank->text));
+               }
+          } break;
           }
 
           if(recording_macro && recording_macro == vim_state->recording_macro){
@@ -526,7 +539,7 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
           case VCS_COMPLETE:
           {
                VimMode_t original_mode = vim_state->mode;
-               bool successful_action = vim_action_apply(&vim_action, buffer, cursor, vim_state, commit_tail,
+               bool successful_action = vim_action_apply(&vim_action, view, cursor, vim_state, commit_tail,
                                                          vim_buffer_state);
 
                if(vim_state->mode != original_mode){
@@ -548,7 +561,12 @@ VimKeyHandlerResult_t vim_key_handler(int key, VimState_t* vim_state, Buffer_t* 
                     }
                }
 
-               if((vim_action.change.type != VCT_MOTION && vim_action.change.type != VCT_YANK) || vim_action.end_in_vim_mode == VM_INSERT){
+               if((vim_action.change.type != VCT_MOTION &&
+                   vim_action.change.type != VCT_YANK &&
+                   vim_action.change.type != VCT_REPEAT &&
+                   vim_action.change.type != VCT_UNDO &&
+                   vim_action.change.type != VCT_REDO) ||
+                  vim_action.end_in_vim_mode == VM_INSERT){
                     if(!vim_state->playing_macro && successful_action){
                          vim_state->last_action = vim_action;
 
@@ -676,7 +694,7 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
 
           if(*itr == '\0'){
                return VCS_CONTINUE;
-          } else if(!isprint(*itr) || *itr == '?'){
+          } else if(!isprint(*itr)){
                return VCS_INVALID;
           }
 
@@ -692,6 +710,21 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           built_action.change.type = VCT_MOTION;
           itr--;
           if(visual_mode) get_motion = true; // if we are just executing a motion, use override the built motion
+          break;
+     case '.':
+          built_action.change.type = VCT_REPEAT;
+          built_action.motion.type = VMT_NONE;
+          get_motion = false;
+          break;
+     case 'u':
+          built_action.change.type = VCT_UNDO;
+          built_action.motion.type = VMT_NONE;
+          get_motion = false;
+          break;
+     case KEY_REDO:
+          built_action.change.type = VCT_REDO;
+          built_action.motion.type = VMT_NONE;
+          get_motion = false;
           break;
      case 'd':
           built_action.change.type = VCT_DELETE;
@@ -1050,6 +1083,21 @@ VimCommandState_t vim_action_from_string(const int* string, VimAction_t* action,
           case 'E':
                built_action.motion.type = VMT_WORD_END_BIG;
                break;
+          case KEY_NPAGE:
+               built_action.motion.type = VMT_HALF_PAGE_UP;
+               break;
+          case KEY_PPAGE:
+               built_action.motion.type = VMT_HALF_PAGE_DOWN;
+               break;
+          case 'H':
+               built_action.motion.type = VMT_SCREEN_TOP;
+               break;
+          case 'M':
+               built_action.motion.type = VMT_SCREEN_MIDDLE;
+               break;
+          case 'L':
+               built_action.motion.type = VMT_SCREEN_BOTTOM;
+               break;
           case 'f':
                built_action.motion.type = VMT_FIND_NEXT_MATCHING_CHAR;
                built_action.motion.match_char = *(++itr);
@@ -1217,9 +1265,11 @@ static int isnotsinglequote(int c)
      return c != '\'';
 }
 
-bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, VimState_t* vim_state,
+bool vim_action_get_range(VimAction_t* action, BufferView_t* view, Point_t* cursor, VimState_t* vim_state,
                           VimBufferState_t* vim_buffer_state, VimActionRange_t* action_range)
 {
+     Buffer_t* buffer = view->buffer;
+
      action_range->start = *cursor;
      action_range->end = action_range->start;
 
@@ -1300,6 +1350,44 @@ bool vim_action_get_range(VimAction_t* action, Buffer_t* buffer, Point_t* cursor
                case VMT_WORD_END_BIG:
                     ce_move_cursor_to_end_of_word(buffer, &action_range->end, false);
                     break;
+               case VMT_PAGE_UP:
+               {
+                    int64_t view_height = view->bottom_right.y - view->top_left.y;
+                    Point_t delta = { 0, -view_height };
+                    ce_move_cursor(buffer, &action_range->end, delta);
+               } break;
+               case VMT_PAGE_DOWN:
+               {
+                    int64_t view_height = view->bottom_right.y - view->top_left.y;
+                    Point_t delta = { 0, view_height };
+                    ce_move_cursor(buffer, &action_range->end, delta);
+               } break;
+               case VMT_HALF_PAGE_UP:
+               {
+                    int64_t view_height = view->bottom_right.y - view->top_left.y;
+                    Point_t delta = { 0, -view_height / 2 };
+                    ce_move_cursor(buffer, &action_range->end, delta);
+               } break;
+               case VMT_HALF_PAGE_DOWN:
+               {
+                    int64_t view_height = view->bottom_right.y - view->top_left.y;
+                    Point_t delta = { 0, view_height / 2 };
+                    ce_move_cursor(buffer, &action_range->end, delta);
+               } break;
+               case VMT_SCREEN_TOP:
+               {
+                    action_range->end = (Point_t){cursor->x, view->top_row};
+               } break;
+               case VMT_SCREEN_MIDDLE:
+               {
+                    int64_t view_height = view->bottom_right.y - view->top_left.y;
+                    action_range->end = (Point_t){cursor->x, view->top_row + (view_height/2)};
+               } break;
+               case VMT_SCREEN_BOTTOM:
+               {
+                    int64_t view_height = view->bottom_right.y - view->top_left.y;
+                    action_range->end = (Point_t){cursor->x, view->top_row + (view_height)};
+               } break;
                case VMT_LINE:
                     action_range->start.x = 0;
                     action_range->end.x = strlen(buffer->lines[action_range->end.y]);
@@ -1733,18 +1821,110 @@ const char* get_comment_string(BufferFileType_t type)
      return NULL;
 }
 
-bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, VimState_t* vim_state,
+bool vim_action_apply(VimAction_t* action, BufferView_t* view, Point_t* cursor, VimState_t* vim_state,
                       BufferCommitNode_t** commit_tail, VimBufferState_t* vim_buffer_state)
 {
      VimActionRange_t action_range;
      BufferCommitChain_t chain = vim_state->playing_macro ? BCC_KEEP_GOING : BCC_STOP;
+     Buffer_t* buffer = view->buffer;
 
-     if(!vim_action_get_range(action, buffer, cursor, vim_state, vim_buffer_state, &action_range) ) return false;
+     if(!vim_action_get_range(action, view, cursor, vim_state, vim_buffer_state, &action_range) ) return false;
 
      // perform action on range
      switch(action->change.type){
      default:
           break;
+     case VCT_REPEAT:
+     {
+          vim_action_apply(&vim_state->last_action, view, cursor, vim_state,
+                           commit_tail, vim_buffer_state);
+
+          if(vim_state->mode != VM_INSERT || !vim_state->last_insert_command ||
+             vim_state->last_action.change.type == VCT_PLAY_MACRO) break;
+
+          if(!vim_enter_insert_mode(vim_state, buffer)) break;
+
+          int* cmd_itr = vim_state->last_insert_command;
+          while(*cmd_itr){
+               vim_key_handler(*cmd_itr, vim_state, view, cursor, commit_tail, vim_buffer_state, true);
+               cmd_itr++;
+          }
+
+          vim_enter_normal_mode(vim_state);
+          if(*commit_tail) (*commit_tail)->commit.chain = BCC_STOP;
+     } break;
+     case VCT_UNDO:
+     {
+          if((*commit_tail) && (*commit_tail)->commit.type != BCT_NONE){
+               ce_commit_undo(buffer, commit_tail, cursor);
+               if((*commit_tail)->commit.type == BCT_NONE){
+                    buffer->status = BS_NONE;
+               }
+          }
+
+          // if we are recording a macro, kill the last command we entered from the key list
+          if(vim_state->recording_macro){
+               VimMacroCommitNode_t* last_macro_commit = vim_state->macro_commit_current->prev;
+               if(last_macro_commit){
+                    do{
+                         KeyNode_t* itr = vim_state->record_macro_head;
+                         if(last_macro_commit->command_begin){
+                              KeyNode_t* prev = NULL;
+                              while(itr && itr != last_macro_commit->command_begin){
+                                   prev = itr;
+                                   itr = itr->next;
+                              }
+
+                              if(itr){
+                                   // free the keys from our macro recording
+                                   ce_keys_free(&itr);
+                                   if(prev){
+                                        prev->next = NULL;
+                                   }else{
+                                        vim_state->record_macro_head = NULL;
+                                   }
+                              }
+                         }else{
+                              // NOTE: not sure this case can get hit anymore
+                              ce_keys_free(&itr);
+                              vim_state->record_macro_head = NULL;
+                         }
+
+                         if(!last_macro_commit->chain) break;
+
+                         last_macro_commit = last_macro_commit->prev;
+                    }while(last_macro_commit);
+
+                    vim_state->macro_commit_current = last_macro_commit;
+               }else{
+                    vim_stop_recording_macro(vim_state);
+               }
+          }
+     } break;
+     case VCT_REDO:
+     {
+          if((*commit_tail) && (*commit_tail)->next){
+               if(ce_commit_redo(buffer, commit_tail, cursor)){
+                    if(vim_state->recording_macro){
+                         do{
+                              KeyNode_t* itr = vim_state->macro_commit_current->command_copy;
+                              KeyNode_t* new_command_begin = NULL;
+                              while(itr){
+                                   KeyNode_t* new_key = ce_keys_push(&vim_state->record_macro_head, itr->key);
+                                   if(!new_command_begin) new_command_begin = new_key;
+                                   itr = itr->next;
+                              }
+
+                              itr = vim_state->record_macro_head;
+                              while(itr->next) itr = itr->next;
+
+                              vim_state->macro_commit_current->command_begin = new_command_begin;
+                              vim_state->macro_commit_current = vim_state->macro_commit_current->next;
+                         }while(vim_state->macro_commit_current && vim_state->macro_commit_current->prev->chain);
+                    }
+               }
+          }
+     } break;
      case VCT_MOTION:
           if(action->end_in_vim_mode == VM_INSERT){
                vim_state->insert_start = *cursor;
@@ -2302,7 +2482,7 @@ bool vim_action_apply(VimAction_t* action, Buffer_t* buffer, Point_t* cursor, Vi
                bool unhandled_key = false;
                int* macro_itr = macro->command;
                while(*macro_itr){
-                    VimKeyHandlerResult_t vkh_result =  vim_key_handler(*macro_itr, vim_state, buffer, cursor, commit_tail,
+                    VimKeyHandlerResult_t vkh_result =  vim_key_handler(*macro_itr, vim_state, view, cursor, commit_tail,
                                                                         vim_buffer_state, false);
 
                     if(vkh_result.type == VKH_UNHANDLED_KEY){

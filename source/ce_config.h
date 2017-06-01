@@ -35,6 +35,23 @@ typedef struct{
 }BufferViewState_t;
 
 typedef struct{
+     int* keys;
+     int64_t key_count;
+     Command_t command;
+     VimMode_t vim_mode;
+}KeyBind_t;
+
+typedef struct{
+     KeyBind_t* binds;
+     int64_t count;
+}KeyBinds_t;
+
+typedef struct{
+     int keys[4];
+     const char* command;
+}KeyBindDef_t;
+
+typedef struct{
      Buffer_t buffer_list_buffer;
      Buffer_t mark_list_buffer;
      Buffer_t yank_list_buffer;
@@ -48,8 +65,8 @@ typedef struct{
      Input_t input;
 
      VimState_t vim_state;
-
-     int last_key;
+     VimKeyHandlerResultType_t last_vim_result_type;
+     VimMode_t last_vim_mode;
 
      TabView_t* tab_head;
      TabView_t* tab_current;
@@ -75,6 +92,11 @@ typedef struct{
      CommandEntry_t* command_entries;
      int64_t command_entry_count;
      int64_t max_auto_complete_height;
+
+     KeyBinds_t binds[VM_COUNT];
+
+     int* keys;
+     int64_t key_count;
 
      bool quit;
 

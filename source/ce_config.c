@@ -19,6 +19,8 @@
 
 #define SCROLL_LINES 1
 
+int g_last_key = 0;
+
 void sigint_handler(int signal)
 {
      ce_message("recieved signal %d", signal);
@@ -37,7 +39,7 @@ void mouse_handle_event(BufferView_t* buffer_view, VimState_t* vim_state, Input_
           }
           if(event.bstate & BUTTON1_PRESSED){ // Left click OSX
                Point_t click = {event.x, event.y};
-               view_switch_to_point(input->key > 0, input->view, vim_state, tab_current, terminal_head, terminal_current, click);
+               view_switch_to_point(input->type > INPUT_NONE, input->view, vim_state, tab_current, terminal_head, terminal_current, click);
                click = (Point_t) {event.x - (buffer_view->top_left.x - buffer_view->left_column),
                                   event.y - (buffer_view->top_left.y - buffer_view->top_row)};
                click.x -= ce_get_line_number_column_width(line_number_type, buffer_view->buffer->line_count,
@@ -72,15 +74,52 @@ void mouse_handle_event(BufferView_t* buffer_view, VimState_t* vim_state, Input_
      }
 }
 
-bool confirm_action(ConfigState_t* config_state, BufferNode_t** head)
+static int int_strneq(int* a, int* b, size_t len)
+{
+     for(size_t i = 0; i < len; ++i){
+          if(!*a) return false;
+          if(!*b) return false;
+          if(*a != *b) return false;
+          a++;
+          b++;
+     }
+
+     return true;
+}
+
+static void convert_bind_defs(KeyBinds_t* binds, KeyBindDef_t* bind_defs, int64_t bind_def_count)
+{
+     binds->count = bind_def_count;
+     binds->binds = malloc(binds->count * sizeof(*binds->binds));
+
+     for(int64_t i = 0; i < binds->count; ++i){
+          command_parse(&binds->binds[i].command, bind_defs[i].command);
+          binds->binds[i].key_count = 0;
+
+          for(int k = 0; k < 4; ++k){
+               if(bind_defs[i].keys[k] == 0) break;
+               binds->binds[i].key_count++;
+          }
+
+          if(!binds->binds[i].key_count) continue;
+
+          binds->binds[i].keys = malloc(binds->binds[i].key_count * sizeof(binds->binds[i].keys[0]));
+
+          for(int k = 0; k < binds->binds[i].key_count; ++k){
+               binds->binds[i].keys[k] = bind_defs[i].keys[k];
+          }
+     }
+}
+
+static bool confirm_action(ConfigState_t* config_state, BufferNode_t** head)
 {
      BufferView_t* buffer_view = config_state->tab_current->view_current;
      Buffer_t* buffer = buffer_view->buffer;
      Point_t* cursor = &buffer_view->cursor;
      BufferState_t* buffer_state = buffer->user_data;
 
-     if(config_state->input.key > 0 && buffer_view == config_state->input.view){
-          int input_key = config_state->input.key;
+     if(config_state->input.type > INPUT_NONE && buffer_view == config_state->input.view){
+          int input_type = config_state->input.type;
           input_end(&config_state->input, &config_state->vim_state);
           config_state->tab_current->view_current = config_state->input.view_save;
 
@@ -90,17 +129,17 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t** head)
           cursor = &config_state->tab_current->view_current->cursor;
           buffer_state = buffer->user_data;
 
-          switch(input_key){
+          switch(input_type){
           default:
                break;
-          case 'q':
+          case INPUT_QUIT:
                if(!config_state->input.buffer.line_count) break;
 
                if(tolower(config_state->input.buffer.lines[0][0]) == 'y'){
                     config_state->quit = true;
                }
                return true;
-          case 2: // Ctrl + b
+          case INPUT_SWITCH_BUFFER:
           {
                if(!config_state->input.buffer.line_count) break;
 
@@ -128,7 +167,7 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t** head)
                // return whether we switched to a buffer or not
                return true;
           }
-          case 6: // Ctrl + f
+          case INPUT_LOAD_FILE:
           {
                if(!config_state->input.buffer.line_count) break;
 
@@ -177,19 +216,14 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t** head)
 
                return true;
           } break;
-          case '/':
+          case INPUT_SEARCH:
+          case INPUT_REVERSE_SEARCH:
                if(!config_state->input.buffer.line_count) break;
 
                input_commit_to_history(&config_state->input.buffer, &config_state->input.search_history);
                vim_yank_add(&config_state->vim_state.yank_head, '/', strdup(config_state->input.buffer.lines[0]), YANK_NORMAL);
                return true;
-          case '?':
-               if(!config_state->input.buffer.line_count) break;
-
-               input_commit_to_history(&config_state->input.buffer, &config_state->input.search_history);
-               vim_yank_add(&config_state->vim_state.yank_head, '/', strdup(config_state->input.buffer.lines[0]), YANK_NORMAL);
-               return true;
-          case 'R':
+          case INPUT_REPLACE:
           {
                if(!config_state->input.buffer.line_count) break;
                if(!config_state->vim_state.search.valid_regex) break;
@@ -239,7 +273,7 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t** head)
                free(replace_str);
                return true;
           } break;
-          case '@':
+          case INPUT_EDIT_MACRO:
           {
                if(!config_state->input.buffer.lines) break;
 
@@ -261,7 +295,7 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t** head)
                config_state->editting_register = 0;
                return true;
           } break;
-          case 'y':
+          case INPUT_EDIT_YANK:
           {
                int64_t line = config_state->input.view_save->cursor.y;
                if(line < 0) break;
@@ -274,7 +308,7 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t** head)
                yank->text = new_yank;
                config_state->editting_register = 0;
           } break;
-          case ':':
+          case INPUT_COMMAND:
           {
                if(!config_state->input.buffer.line_count) break;
 
@@ -393,7 +427,7 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t** head)
           if(!itr) return false;
 
           input_start(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state,
-                      "Edit Macro", '@');
+                      "Edit Macro", INPUT_EDIT_MACRO);
           config_state->editting_register = itr->reg;
           vim_enter_normal_mode(&config_state->vim_state);
           char* char_command = vim_command_string_to_char_string(itr->command);
@@ -413,7 +447,7 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t** head)
           }
 
           input_start(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state,
-                      "Edit Yank", 'y');
+                      "Edit Yank", INPUT_EDIT_YANK);
           config_state->editting_register = itr->reg_char;
           vim_enter_normal_mode(&config_state->vim_state);
           ce_insert_string(&config_state->input.buffer, (Point_t){0,0}, itr->text);
@@ -439,12 +473,12 @@ bool confirm_action(ConfigState_t* config_state, BufferNode_t** head)
      return false;
 }
 
-void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, VimMode_t vim_mode, int last_key,
+void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, VimMode_t vim_mode,
                         char recording_macro, TerminalNode_t* terminal_current)
 {
-     Buffer_t* buffer = view->buffer;
-     if(view->next_horizontal) draw_view_statuses(view->next_horizontal, current_view, vim_mode, last_key, recording_macro, terminal_current);
-     if(view->next_vertical) draw_view_statuses(view->next_vertical, current_view, vim_mode, last_key, recording_macro, terminal_current);
+     // recursively call draw view for all statuses
+     if(view->next_horizontal) draw_view_statuses(view->next_horizontal, current_view, vim_mode, recording_macro, terminal_current);
+     if(view->next_vertical) draw_view_statuses(view->next_vertical, current_view, vim_mode, recording_macro, terminal_current);
 
      // NOTE: mode names need space at the end for OCD ppl like me
      static const char* mode_names[] = {
@@ -455,6 +489,9 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, VimMode_
           "VISUAL BLOCK ",
      };
 
+     Buffer_t* buffer = view->buffer;
+
+     // put horizontal line at the bottom of the view
      attron(COLOR_PAIR(S_BORDERS));
      move(view->bottom_right.y, view->top_left.x);
      for(int i = view->top_left.x; i < view->bottom_right.x; ++i) addch(ACS_HLINE);
@@ -464,14 +501,14 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, VimMode_
           right_status_offset = 1;
      }
 
-     // TODO: handle case where filename is too long to fit in the status bar
+     // draw buffer flags and mode
      attron(COLOR_PAIR(S_VIEW_STATUS));
      mvprintw(view->bottom_right.y, view->top_left.x + 1, " %s%s",
               view == current_view ? mode_names[vim_mode] : "", misc_buffer_flag_string(buffer));
      int save_title_y, save_title_x;
      getyx(stdscr, save_title_y, save_title_x);
-     if(terminal_current && view->buffer == terminal_current->buffer) printw("$ ");
-     if(view == current_view && recording_macro) printw("RECORDING %c ", recording_macro);
+
+     // print column, row in bottom right of view
      int64_t row = view->cursor.y + 1;
      int64_t column = view->cursor.x + 1;
      int64_t digits_in_line = misc_count_digits(row);
@@ -479,13 +516,19 @@ void draw_view_statuses(BufferView_t* view, BufferView_t* current_view, VimMode_
      int position_info_x = (view->bottom_right.x - (digits_in_line + 5)) + right_status_offset;
      mvprintw(view->bottom_right.y, position_info_x, " %"PRId64", %"PRId64" ", column, row);
 
+     // draw filename next to mode, accounting for the fact that it may not fit
      int space_for_filename = (position_info_x - save_title_x) - 2; // account for separator and space
      int filename_len = strlen(buffer->filename);
      int filename_offset = 0;
      if(filename_len > space_for_filename) filename_offset = filename_len - space_for_filename;
      mvprintw(save_title_y, save_title_x, "%s ", buffer->filename + filename_offset);
+
+     // finally print extra info for special modes, recording macro, or in terminal
+     if(terminal_current && view->buffer == terminal_current->buffer) printw("$ ");
+     if(view == current_view && recording_macro) printw("RECORDING %c ", recording_macro);
+
 #if 0 // NOTE: useful to show key presses when debugging
-     if(view == current_view) printw("%s %d ", keyname(last_key), last_key);
+     if(view == current_view) printw("%s %d ", keyname(g_last_key), g_last_key);
 #endif
 }
 
@@ -668,8 +711,8 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      CHECK_PAIR(S_NORMAL, COLOR_FOREGROUND, COLOR_BACKGROUND);
      CHECK_PAIR(S_KEYWORD, COLOR_BLUE, COLOR_BACKGROUND);
      CHECK_PAIR(S_TYPE, COLOR_BRIGHT_BLUE, COLOR_BACKGROUND);
-     CHECK_PAIR(S_FUNC, COLOR_BRIGHT_GREEN, COLOR_BACKGROUND);
-     CHECK_PAIR(S_VARIABLE_DECLARATION, COLOR_BRIGHT_WHITE, COLOR_BACKGROUND);
+     CHECK_PAIR(S_FUNC, COLOR_BRIGHT_CYAN, COLOR_BACKGROUND);
+     CHECK_PAIR(S_VARIABLE_DECLARATION, COLOR_BRIGHT_RED, COLOR_BACKGROUND);
      CHECK_PAIR(S_CONTROL, COLOR_YELLOW, COLOR_BACKGROUND);
      CHECK_PAIR(S_COMMENT, COLOR_GREEN, COLOR_BACKGROUND);
      CHECK_PAIR(S_STRING, COLOR_RED, COLOR_BACKGROUND);
@@ -686,8 +729,8 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      CHECK_PAIR(S_NORMAL_HIGHLIGHTED, COLOR_FOREGROUND, COLOR_WHITE);
      CHECK_PAIR(S_KEYWORD_HIGHLIGHTED, COLOR_BLUE, COLOR_WHITE);
      CHECK_PAIR(S_TYPE_HIGHLIGHTED, COLOR_BRIGHT_BLUE, COLOR_WHITE);
-     CHECK_PAIR(S_FUNC_HIGHLIGHTED, COLOR_BRIGHT_GREEN, COLOR_WHITE);
-     CHECK_PAIR(S_VARIABLE_DECLARATION_HIGHLIGHTED, COLOR_BRIGHT_WHITE, COLOR_WHITE);
+     CHECK_PAIR(S_FUNC_HIGHLIGHTED, COLOR_BRIGHT_CYAN, COLOR_WHITE);
+     CHECK_PAIR(S_VARIABLE_DECLARATION_HIGHLIGHTED, COLOR_BRIGHT_RED, COLOR_WHITE);
      CHECK_PAIR(S_CONTROL_HIGHLIGHTED, COLOR_YELLOW, COLOR_WHITE);
      CHECK_PAIR(S_COMMENT_HIGHLIGHTED, COLOR_GREEN, COLOR_WHITE);
      CHECK_PAIR(S_STRING_HIGHLIGHTED, COLOR_RED, COLOR_WHITE);
@@ -704,8 +747,8 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      CHECK_PAIR(S_NORMAL_CURRENT_LINE, COLOR_FOREGROUND, COLOR_BRIGHT_BLACK);
      CHECK_PAIR(S_KEYWORD_CURRENT_LINE, COLOR_BLUE, COLOR_BRIGHT_BLACK);
      CHECK_PAIR(S_TYPE_CURRENT_LINE, COLOR_BRIGHT_BLUE, COLOR_BRIGHT_BLACK);
-     CHECK_PAIR(S_FUNC_CURRENT_LINE, COLOR_BRIGHT_GREEN, COLOR_BRIGHT_BLACK);
-     CHECK_PAIR(S_VARIABLE_DECLARATION_CURRENT_LINE, COLOR_BRIGHT_WHITE, COLOR_BRIGHT_BLACK);
+     CHECK_PAIR(S_FUNC_CURRENT_LINE, COLOR_BRIGHT_CYAN, COLOR_BRIGHT_BLACK);
+     CHECK_PAIR(S_VARIABLE_DECLARATION_CURRENT_LINE, COLOR_BRIGHT_RED, COLOR_BRIGHT_BLACK);
      CHECK_PAIR(S_CONTROL_CURRENT_LINE, COLOR_YELLOW, COLOR_BRIGHT_BLACK);
      CHECK_PAIR(S_COMMENT_CURRENT_LINE, COLOR_GREEN, COLOR_BRIGHT_BLACK);
      CHECK_PAIR(S_STRING_CURRENT_LINE, COLOR_RED, COLOR_BRIGHT_BLACK);
@@ -750,7 +793,130 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      auto_complete_end(&config_state->auto_complete);
      config_state->vim_state.insert_start = (Point_t){-1, -1};
 
-     config_state->command_entries = commands_init(&config_state->command_entry_count);
+     // initialize commands
+     {
+          // create a stack array so we can have the compiler track the number of elements
+          CommandEntry_t command_entries[] = {
+               {command_help, "help", NULL, "print the commands and their descriptions in the message log", NULL},
+               {command_quit_all, "quit_all", NULL, "exit ce, prompting if you have any unsaved buffers", NULL},
+               {command_save, "save", NULL, "save the current buffer", NULL},
+               {command_save_and_close_view, "save_and_close_view", NULL, "save the current buffer and close the view", NULL},
+               {command_redraw, "redraw", NULL, "clear the screen so it will get fully redrawn", NULL},
+               {command_highlight_line, "highlight_line", "[style]", "change the global style in which the current line is highlighted", "styles: none, text, entire"},
+               {command_line_number, "line_number", "[style]", "change the global style in which line number are drawn", "styles: none, absolute, relative, both"},
+               {command_noh, "noh", NULL, "turn off search highlighting", NULL},
+
+               {command_buffer_rename, "buffer_rename", "[string]", "rename the current buffer", NULL},
+               {command_buffer_reload, "buffer_reload", NULL, "reload the file that backs the buffer, overwriting any unsaved changes", NULL},
+               {command_buffer_new, "buffer_new", "<string>", "creates a new buffer with an optional filename", NULL},
+               {command_buffer_syntax, "buffer_syntax", "[style]", "change the syntax mode of the current buffer", "styles: c, cpp, python, java, config, diff, plain"},
+
+               {command_view_split, "view_split", "[dir]", "split the currently selected window into 2 windows", "dir: horizontal, vertical"},
+               {command_view_close, "view_close", NULL, "close the current view", NULL},
+               {command_view_scroll, "view_scroll", "[mode]", "scroll the view keeping the cursor on screen based on the mode specified", "modes: top, center, bottom"},
+               {command_view_switch, "view_switch", "[mode]", "switch to an adjacent view in the direction specified", " mode: up, down, left, right"},
+
+               {command_tab_new, "tab_new", NULL, "add a new tab", NULL},
+               {command_tab_next, "tab_next", NULL, "switch to the next tab", NULL},
+               {command_tab_previous, "tab_previous", NULL, "switch to the previous tab", NULL},
+
+               {command_show_buffers, "show_buffers", NULL, "show all buffers in the current view", NULL},
+               {command_show_marks, "show_marks", NULL, "show all marks in the current view", NULL},
+               {command_show_macros, "show_macros", NULL, "show all macros in the current view", NULL},
+               {command_show_yanks, "show_yanks", NULL, "show all yanks in the current view", NULL},
+
+               {command_switch_buffer_dialogue, "switch_buffer_dialogue", NULL, "open a dialogue to switch buffers", NULL},
+               {command_command_dialogue, "command_dialogue", NULL, "open a dialogue to run a ce command", NULL},
+               {command_search_dialogue, "search_dialogue", "[dir]", "open a dialogue to search the current buffer for a regex", "dirs: up, down"},
+               {command_load_file_dialogue, "load_file_dialogue", NULL, "open a dialogue to load a file", NULL},
+               {command_replace_dialogue, "replace_dialogue", NULL, "open a dialogue to replace in the current buffer", NULL},
+               {command_cancel_dialogue, "cancel_dialogue", NULL, "cancel any open dialogue", NULL},
+
+               {command_terminal_goto, "terminal_goto", NULL, "switch to a terminal in view, if none is in view, switch the current view to an already open terminal. Start's a new terminal if none exists.", NULL},
+               {command_terminal_new, "terminal_new", NULL, "start a new terminal and open it in the current view", NULL},
+               {command_terminal_jump_to_dest, "terminal_jump_to_dest", "[dir]", "jump the current view to the next destination found in the current terminal's output", "dir: up, down"},
+               {command_terminal_run_man, "terminal_run_man", "<symbol>", "run 'man -Pcat <symbol>' in current terminal. If no symbol is specified, word under cursor is used", NULL},
+               {command_terminal_run_command, "terminal_run_command", "[command]", "run specified command in current terminal", NULL},
+
+               {command_jump_next, "jump_next", NULL, "using the jump list, move the cursor to the next destination in the list", NULL},
+               {command_jump_previous, "jump_previous", NULL, "using the jump list, move the cursor to the previous destination in the list", NULL},
+
+               {command_completion_toggle, "completion_toggle", NULL, "toggle auto completion for c using clang", NULL},
+               {command_completion_apply, "completion_apply", NULL, "if auto completion is running, insert the selection option at the cursor", NULL},
+               {command_completion_next, "completion_next", NULL, "if auto completion is running, select the next completion in the list", NULL},
+               {command_completion_previous, "completion_previous", NULL, "if auto completion is running, select the next completion in the list", NULL},
+
+               {command_cscope_goto_definition, "cscope_goto_definition", "<symbol>", "jump to the definition of the specified symbol. If no symbol is specified, use word under cursor", NULL},
+               {command_goto_file_under_cursor, "goto_file_under_cursor", NULL, "checks the word under the cursor for a valid file, if valid opens that file", NULL},
+               {command_macro_backslashes, "macro_backslashes", NULL, "add formatted backslashes around a macro", NULL},
+          };
+
+          // init and copy from our stack array
+          config_state->command_entry_count = sizeof(command_entries) / sizeof(command_entries[0]);
+          config_state->command_entries = malloc(config_state->command_entry_count * sizeof(*command_entries));
+          for(int64_t i = 0; i < config_state->command_entry_count; ++i){
+               config_state->command_entries[i] = command_entries[i];
+          }
+     }
+
+     // initialize keybinds
+     {
+          KeyBindDef_t normal_mode_bind_defs[] = {
+               {{'\\', 'e'}, "show_buffers"},
+               {{'\\', 'q'}, "quit_all"},
+               {{'\\', 'b'}, "terminal_run_command make"},
+               {{'\\', 'm'}, "terminal_run_command \"make clean\""},
+               {{'z', 't'}, "view_scroll top"},
+               {{'z', 'z'}, "view_scroll center"},
+               {{'z', 'b'}, "view_scroll bottom"},
+               {{2}, "switch_buffer_dialogue"}, // Ctrl + b
+               {{KEY_SAVE}, "save"},
+               {{KEY_ESCAPE}, "cancel_dialogue"},
+               {{KEY_CLOSE}, "view_close"},
+               {{20}, "tab_new"}, // Ctrl + t
+               {{':'}, "command_dialogue"},
+               {{6}, "load_file_dialogue"},
+               {{'R'}, "replace_dialogue"},
+               {{'/'}, "search_dialogue down"},
+               {{'?'}, "search_dialogue up"},
+               {{24}, "terminal_goto"}, // Ctrl + x
+               {{1}, "terminal_new"}, // Ctrl + a
+               {{14}, "terminal_jump_to_dest down"}, // Ctrl + n
+               {{16}, "terminal_jump_to_dest up"}, // Ctrl + p
+               {{8}, "view_switch left"}, // Ctrl + h
+               {{10}, "view_switch down"}, // Ctrl + j
+               {{11}, "view_switch up"}, // Ctrl + k
+               {{12}, "view_switch right"}, // Ctrl + l
+               {{19}, "view_split horizontal"}, // Ctrl + s
+               {{22}, "view_split vertical"}, // Ctrl + v
+               {{15}, "jump_next"}, // Ctrl + o
+               {{9}, "jump_previous"}, // Ctrl + i
+               {{29}, "cscope_goto_definition"}, // Ctrl + ]
+               {{'K'}, "terminal_run_man"},
+               {{'g', 't'}, "tab_next"},
+               {{'g', 'T'}, "tab_previous"},
+               {{'g', 'f'}, "goto_file_under_cursor"},
+               {{'\\', 'r'}, "redraw"},
+               {{'m', '?'}, "show_marks"},
+               {{'\"', '?'}, "show_marks"},
+               {{'@', '?'}, "show_macros"},
+               {{'y', '?'}, "show_yanks"},
+               {{'Z', 'Z'}, "save_and_close_view"},
+               {{14}, "completion_next"},
+               {{16}, "completion_previous"},
+          };
+
+          convert_bind_defs(config_state->binds + VM_NORMAL, normal_mode_bind_defs, sizeof(normal_mode_bind_defs) / sizeof(normal_mode_bind_defs[0]));
+
+          KeyBindDef_t insert_mode_bind_defs[] = {
+               {{KEY_TAB}, "completion_apply"},
+               {{25}, "completion_toggle"}, // Ctrl + y
+               {{14}, "completion_next"}, // Ctrl + n
+               {{16}, "completion_previous"}, // Ctrl + p
+          };
+
+          convert_bind_defs(config_state->binds + VM_INSERT, insert_mode_bind_defs, sizeof(insert_mode_bind_defs) / sizeof(insert_mode_bind_defs[0]));
+     }
 
      // read in state file if it exists
      // TODO: load this into a buffer instead of dealing with the freakin scanf nonsense
@@ -980,8 +1146,13 @@ bool destroyer(BufferNode_t** head, void* user_data)
           regfree(&config_state->vim_state.search.regex);
      }
 
-     vim_yanks_free(&config_state->vim_state.yank_head);
+     // key binds
+     for(int64_t i = 0; i < config_state->binds[VM_NORMAL].count; ++i){
+          free(config_state->binds[VM_NORMAL].binds[i].keys);
+     }
+     free(config_state->binds[VM_NORMAL].binds);
 
+     vim_yanks_free(&config_state->vim_state.yank_head);
      vim_macros_free(&config_state->vim_state.macro_head);
 
      VimMacroCommitNode_t* macro_commit_head = config_state->vim_state.macro_commit_current;
@@ -1002,372 +1173,146 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
 
      bool handled_key = false;
 
-     if(key == KEY_RESIZE){
+     // handle non-keypress events
+     switch(key){
+     default:
+          break;
+     case KEY_RESIZE:
+     {
           Point_t top_left = {0, 0};
           Point_t bottom_right = {g_terminal_dimensions->x - 1, g_terminal_dimensions->y - 1};
           ce_calc_views(config_state->tab_current->view_head, top_left, bottom_right);
           terminal_resize_if_in_view(buffer_view, config_state->terminal_head);
           handled_key = true;
+     } break;
+     case KEY_MOUSE:
+          mouse_handle_event(buffer_view, &config_state->vim_state, &config_state->input, config_state->tab_current,
+                             config_state->terminal_head, &config_state->terminal_current, config_state->line_number_type);
+          break;
      }
 
      config_state->save_buffer_head = head;
      buffer->check_left_for_pair = false;
 
-     if(config_state->vim_state.mode != VM_INSERT){
-          switch(config_state->last_key){
-          default:
-               break;
-          case KEY_LEADER:
-          {
-               handled_key = true;
-
-               switch(key){
-               default:
-                    handled_key = false;
-                    break;
-               case 'e':
-                    view_switch_to_buffer_list(&config_state->buffer_list_buffer,
-                                               config_state->tab_current->view_current,
-                                               config_state->tab_current->view_head,
-                                               *head);
-                    info_update_buffer_list_buffer(&config_state->buffer_list_buffer, *head);
-                    break;
-               }
-          } break;
-          case 'z':
-          {
-               Point_t location;
-               handled_key = true;
-               switch(key){
-               default:
-                    handled_key = false;
-                    break;
-               case 't':
-                    location = (Point_t){0, cursor->y};
-                    view_scroll_to_location(buffer_view, &location);
-                    break;
-               case 'z': {
-                    view_center(buffer_view);
-                    // reset key so we don't come in here on the very next iteration
-                    key = 0;
-               } break;
-               case 'b': {
-                    // move current line to bottom of view
-                    location = (Point_t){0, cursor->y - buffer_view->bottom_right.y};
-                    view_scroll_to_location(buffer_view, &location);
-               } break;
-               }
-          } break;
-          case 'g':
-          {
-               handled_key = true;
-
-               switch(key){
-               default:
-                    handled_key = false;
-                    break;
-               case 't':
-                    if(config_state->tab_current->next){
-                         config_state->tab_current = config_state->tab_current->next;
-                    }else{
-                         config_state->tab_current = config_state->tab_head;
-                    }
-                    break;
-               case 'T':
-                    if(config_state->tab_current == config_state->tab_head){
-                         // find tail
-                         TabView_t* itr = config_state->tab_head;
-                         while(itr->next) itr = itr->next;
-                         config_state->tab_current = itr;
-                    }else{
-                         TabView_t* itr = config_state->tab_head;
-                         while(itr && itr->next != config_state->tab_current) itr = itr->next;
-
-                         // what if we don't find our current tab and hit the end of the list?!
-                         assert(itr);
-                         config_state->tab_current = itr;
-                    }
-                    break;
-               case 'f':
-               {
-                    if(!buffer->lines[cursor->y]) break;
-                    Point_t word_start;
-                    Point_t word_end;
-                    if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) break;
-
-                    // expand left to pick up the beginning of a path
-                    char check_word_char = 0;
-                    while(true){
-                         Point_t save_word_start = word_start;
-
-                         if(!ce_move_cursor_to_beginning_of_word(buffer, &word_start, true)) break;
-                         if(!ce_get_char(buffer, word_start, &check_word_char)) break;
-                         // TODO: probably need more rules for matching filepaths
-                         if(isalpha(check_word_char) || isdigit(check_word_char) || check_word_char == '/'){
-                              continue;
-                         }else{
-                              word_start = save_word_start;
-                              break;
-                         }
-                    }
-
-                    // expand right to pick up the full path
-                    while(true){
-                         Point_t save_word_end = word_end;
-
-                         if(!ce_move_cursor_to_end_of_word(buffer, &word_end, true)) break;
-                         if(!ce_get_char(buffer, word_end, &check_word_char)) break;
-                         // TODO: probably need more rules for matching filepaths
-                         if(isalpha(check_word_char) || isdigit(check_word_char) || check_word_char == '/'){
-                              continue;
-                         }else{
-                              word_end = save_word_end;
-                              break;
-                         }
-                    }
-
-                    word_end.x++;
-
-                    char period = 0;
-                    if(!ce_get_char(buffer, word_end, &period)) break;
-                    if(period != '.') break;
-                    Point_t extension_start;
-                    Point_t extension_end;
-                    if(!ce_get_word_at_location(buffer, (Point_t){word_end.x + 1, word_end.y}, &extension_start, &extension_end)) break;
-                    extension_end.x++;
-                    char filename[PATH_MAX];
-                    snprintf(filename, PATH_MAX, "%.*s.%.*s",
-                             (int)(word_end.x - word_start.x), buffer->lines[word_start.y] + word_start.x,
-                             (int)(extension_end.x - extension_start.x), buffer->lines[extension_start.y] + extension_start.x);
-
-                    if(access(filename, F_OK) != 0){
-                         ce_message("no such file: '%s' to go to", filename);
-                         break;
-                    }
-
-                    BufferNode_t* node = buffer_create_from_file(head, filename);
-                    if(node){
-                         buffer_view->buffer = node->buffer;
-                         buffer_view->cursor = (Point_t){0, 0};
-                    }
-               } break;
-               case 'd':
-               {
-                    Point_t word_start, word_end;
-                    if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) break;
-                    assert(word_start.y == word_end.y);
-                    int len = (word_end.x - word_start.x) + 1;
-                    char* search_word = strndupa(buffer->lines[cursor->y] + word_start.x, len);
-                    dest_cscope_goto_definition(config_state->tab_current->view_current, head, search_word);
-               } break;
-               case 'b':
-                    terminal_in_view_run_command(config_state->terminal_head, config_state->tab_current->view_head, "make");
-                    break;
-               case 'm':
-                    terminal_in_view_run_command(config_state->terminal_head, config_state->tab_current->view_head, "make clean");
-                    break;
-#if 0
-               // NOTE: useful for debugging
-               case 'a':
-                    config_state->tab_current->view_current->buffer = &config_state->clang_completion_buffer;
-                    break;
-#endif
-               case 'r':
-                    clear();
-                    break;
-               case 'q':
-               {
-                    misc_quit_and_prompt_if_unsaved(config_state, *head);
-               }
-               }
-
-               if(handled_key){
-                    key = 0;
-                    ce_keys_free(&config_state->vim_state.command_head);
-               }
-          } break;
-          case 'm':
-          case '"':
-          {
-               if(!isprint(key)) break;
-
-               if(key == '?'){
-                    info_update_mark_list_buffer(&config_state->mark_list_buffer, buffer);
-
-                    view_override_with_buffer(config_state->tab_current->view_current, &config_state->mark_list_buffer, &config_state->buffer_before_query);
-
-                    ce_keys_free(&config_state->vim_state.command_head);
-
-                    handled_key = true;
-                    key = 0;
-               }
-          } break;
-          case 'y':
-               if(!isprint(key)) break;
-
-               if(key == '?'){
-                    info_update_yank_list_buffer(&config_state->yank_list_buffer, config_state->vim_state.yank_head);
-
-                    view_override_with_buffer(config_state->tab_current->view_current, &config_state->yank_list_buffer, &config_state->buffer_before_query);
-
-                    ce_keys_free(&config_state->vim_state.command_head);
-                    handled_key = true;
-                    key = 0;
-               }
-               break;
-          case 'Z':
-               switch(config_state->last_key){
-               default:
-                    break;
-               case 'Z':
-                    ce_save_buffer(buffer, buffer->filename);
-                    return false; // quit
-               }
-               break;
-          case 'q':
-          case '@':
-               if(key == '?'){
-                    info_update_macro_list_buffer(&config_state->macro_list_buffer, &config_state->vim_state);
-
-                    view_override_with_buffer(config_state->tab_current->view_current, &config_state->macro_list_buffer, &config_state->buffer_before_query);
-
-                    ce_keys_free(&config_state->vim_state.command_head);
-                    handled_key = true;
-                    key = 0;
-               }
-               break;
-#if 0 // useful for debugging commit history
-          case '!':
-               ce_commits_dump(buffer_state->commit_tail);
-               break;
-#endif
-#if 0 // useful for debugging macro commit history
-          case '!':
-          {
-               MacroCommitNode_t* head = config_state->vim_state.macro_commit_current;
-               while(head->prev) head = head->prev;
-               macro_commits_dump(head);
-          } break;
-#endif
-          case KEY_ENTER:
-          case -1:
-          {
-               TerminalNode_t* terminal_node = is_terminal_buffer(config_state->terminal_head, buffer);
-               if(terminal_node){
-                    misc_move_jump_location_to_end_of_output(terminal_node);
-                    terminal_send_key(&terminal_node->terminal, key);
-                    config_state->vim_state.mode = VM_INSERT;
-                    buffer_view->cursor = terminal_node->terminal.cursor;
-                    view_follow_cursor(buffer_view, config_state->line_number_type);
-                    handled_key = true;
-                    key = 0;
-               }
-          } break;
+     // as long as vim isn't in the middle of handling keys, in insert mode vim returns VKH_HANDLED_KEY TODO: is that what we want?
+     if(config_state->last_vim_result_type != VKH_HANDLED_KEY || config_state->last_vim_mode == VM_INSERT){
+          // append to keys
+          if(config_state->keys){
+               config_state->key_count++;
+               config_state->keys = realloc(config_state->keys, config_state->key_count * sizeof(config_state->keys[0]));
+          }else{
+               config_state->key_count = 1;
+               config_state->keys = malloc(config_state->key_count * sizeof(config_state->keys[0]));
           }
-     }else{
+
+          config_state->keys[config_state->key_count - 1] = key;
+
+          // if matches a key bind
+          bool no_matches = true;
+          for(int64_t i = 0; i < config_state->binds[config_state->vim_state.mode].count; ++i){
+               if(int_strneq(config_state->binds[config_state->vim_state.mode].binds[i].keys, config_state->keys, config_state->key_count)){
+                    no_matches = false;
+
+                    // if we have matches, but don't completely match, then wait for more keypresses,
+                    // otherwise, execute the action
+                    if(config_state->binds[config_state->vim_state.mode].binds[i].key_count == config_state->key_count){
+                         Command_t* command = &config_state->binds[config_state->vim_state.mode].binds[i].command;
+                         ce_command* command_func = NULL;
+                         CommandEntry_t* entry = NULL;
+                         for(int64_t i = 0; i < config_state->command_entry_count; ++i){
+                              entry = config_state->command_entries + i;
+                              if(strcmp(entry->name, command->name) == 0){
+                                   command_func = entry->func;
+                                   break;
+                              }
+                         }
+
+                         if(command_func){
+                              CommandData_t command_data = {config_state, head};
+                              CommandStatus_t cs = command_func(command, &command_data);
+
+                              switch(cs){
+                              default:
+                                   handled_key = true;
+                                   break;
+                              case CS_NO_ACTION:
+                                   break;
+                              case CS_FAILURE:
+                                   ce_message("'%s' failed", entry->name);
+                                   break;
+                              case CS_PRINT_HELP:
+                                   ce_message("command help:");
+                                   command_entry_log(entry);
+                                   ce_message("");
+                                   break;
+                              }
+                         }else{
+                              ce_message("unknown command: '%s'", command->name);
+                         }
+
+                         free(config_state->keys);
+                         config_state->keys = NULL;
+                         break;
+                    }else{
+                         handled_key = true;
+                    }
+               }
+          }
+
+          if(no_matches){
+               // hand off the keys to vim to see if that creates a valid action if we have at least matched one key
+               if(config_state->key_count > 1){
+                    ce_keys_free(&config_state->vim_state.command_head);
+                    // skip pushing the last key since we are going to pass that one in this loop
+                    for(int64_t i = 0; i < config_state->key_count - 1; ++i){
+                         ce_keys_push(&config_state->vim_state.command_head, config_state->keys[i]);
+                    }
+               }
+
+               free(config_state->keys);
+               config_state->keys = NULL;
+               config_state->key_count = 0;
+          }
+     }
+
+     // if we haven't yet handled the key and we are in insert mode in the terminal, then send that key
+     if(!handled_key && config_state->vim_state.mode == VM_INSERT && key != KEY_ESCAPE){
           TerminalNode_t* terminal_node = is_terminal_buffer(config_state->terminal_head, buffer);
           if(terminal_node){
-               if(key != KEY_ESCAPE){
-                    Terminal_t* terminal = &terminal_node->terminal;
-                    buffer_view->cursor = terminal->cursor;
+               buffer_view->cursor = terminal_node->terminal.cursor;
 
-                    if(key == KEY_ENTER) misc_move_jump_location_to_end_of_output(terminal_node);
+               if(key == KEY_ENTER) misc_move_jump_location_to_end_of_output(terminal_node);
 
-                    if(terminal_send_key(terminal, key)){
-                         handled_key = true;
-                         key = 0;
-                         if(buffer_view->cursor.x < (terminal->width - 1)){
-                              buffer_view->cursor.x++;
-                         }
-                         view_follow_cursor(buffer_view, LNT_NONE);
-                    }
-               }
-          }else{
-               switch(key){
-               default:
-                    break;
-               case KEY_TAB:
-                    if(auto_completing(&config_state->auto_complete)){
-                         if(config_state->auto_complete.type == ACT_EXACT){
-                              char* complete = auto_complete_get_completion(&config_state->auto_complete, cursor->x);
-                              int64_t complete_len = strlen(complete);
-                              if(ce_insert_string(buffer, *cursor, complete)){
-                                   Point_t save_cursor = *cursor;
-                                   ce_move_cursor(buffer, cursor, (Point_t){complete_len, 0});
-                                   cursor->x++;
-                                   ce_commit_insert_string(&buffer_state->commit_tail, save_cursor, save_cursor, *cursor, complete, BCC_KEEP_GOING);
-                              }else{
-                                   free(complete);
-                              }
-                         }else if(config_state->auto_complete.type == ACT_OCCURANCE){
-                              int64_t complete_len = strlen(config_state->auto_complete.current->option);
-                              int64_t line_len = strlen(buffer->lines[config_state->auto_complete.start.y]);
-                              char* removed = ce_dupe_string(buffer, config_state->auto_complete.start,
-                                                             (Point_t){config_state->auto_complete.start.x + line_len - 1, config_state->auto_complete.start.y});
-                              if(ce_remove_string(buffer, config_state->auto_complete.start, line_len)){
-                                   ce_commit_remove_string(&buffer_state->commit_tail, config_state->auto_complete.start, *cursor, *cursor, removed, BCC_KEEP_GOING);
-                                   if(ce_insert_string(buffer, config_state->auto_complete.start, config_state->auto_complete.current->option)){
-                                        Point_t save_cursor = *cursor;
-                                        cursor->x = config_state->auto_complete.start.x + complete_len;
-                                        char* inserted = strdup(config_state->auto_complete.current->option);
-                                        ce_commit_insert_string(&buffer_state->commit_tail, config_state->auto_complete.start, save_cursor, *cursor, inserted, BCC_KEEP_GOING);
-                                   }
-                              }
-                         }
-
-                         completion_update_buffer(config_state->completion_buffer, &config_state->auto_complete, buffer->lines[config_state->auto_complete.start.y]);
-
-                         switch(config_state->input.key){
-                         default:
-                              break;
-                         case 6: // Ctrl + f
-                              completion_calc_start_and_path(&config_state->auto_complete,
-                                                             buffer->lines[cursor->y],
-                                                             *cursor,
-                                                             config_state->completion_buffer,
-                                                             config_state->input.load_file_search_path);
-                              break;
-                         }
-
-                         handled_key = true;
-                         key = 0;
-                    }
-                    break;
-               case KEY_REDO:
-               {
-                    VimYankNode_t* yank = vim_yank_find(config_state->vim_state.yank_head, '"');
-
-                    if(!yank) break;
-
-                    if(ce_insert_string(buffer, *cursor, yank->text)){
-                         ce_commit_insert_string(&buffer_state->commit_tail, *cursor, *cursor,
-                                                 *cursor, strdup(yank->text), BCC_STOP);
-                         handled_key = true;
-                         key = 0;
-                    }
-
-                    ce_advance_cursor(buffer, cursor, strlen(yank->text));
-               } break;
-               }
-          }
-     }
-
-     if(!handled_key){
-          if(key == KEY_ENTER){
-               if(confirm_action(config_state, head)){
-                    ce_keys_free(&config_state->vim_state.command_head);
-                    key = 0;
+               if(terminal_send_key(&terminal_node->terminal, key)){
                     handled_key = true;
+                    if(cursor->x < (terminal_node->terminal.width - 1)) cursor->x++;
+                    view_follow_cursor(buffer_view, LNT_NONE);
                }
           }
      }
 
+     // regardless of vim state, if enter is pressed, see if we can perform an action
+     if(!handled_key && key == KEY_ENTER){
+          if(confirm_action(config_state, head)){
+               ce_keys_free(&config_state->vim_state.command_head);
+               handled_key = true;
+          }
+     }
+
+     // send the key to the vim key handler
      if(!handled_key){
+          // save the vim mode before running the key handle
+          config_state->last_vim_mode = config_state->vim_state.mode;
+
           Point_t save_cursor = *cursor;
           Buffer_t* save_buffer = buffer_view->buffer;
-          VimKeyHandlerResult_t vkh_result = vim_key_handler(key, &config_state->vim_state, config_state->tab_current->view_current->buffer,
+          VimKeyHandlerResult_t vkh_result = vim_key_handler(key, &config_state->vim_state, config_state->tab_current->view_current,
                                                              &config_state->tab_current->view_current->cursor, &buffer_state->commit_tail,
                                                              &buffer_state->vim_buffer_state, false);
+
+          // save the key handler result type
+          config_state->last_vim_result_type = vkh_result.type;
+
           switch(vkh_result.type){
           default:
                break;
@@ -1388,7 +1333,8 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          buffer->check_left_for_pair = true;
                     } break;
                     }
-                    if(config_state->input.key > 0){
+
+                    if(config_state->input.type > INPUT_NONE){
                          switch(key){
                          default:
                               break;
@@ -1404,18 +1350,19 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                               break;
                          }
 
-                         switch(config_state->input.key){
+                         switch(config_state->input.type){
                          default:
                               break;
-                         case 6: // load file
+                         case INPUT_LOAD_FILE:
                               completion_calc_start_and_path(&config_state->auto_complete,
                                                              buffer->lines[cursor->y],
                                                              *cursor,
                                                              config_state->completion_buffer,
                                                              config_state->input.load_file_search_path);
                               break;
-                         case ':': // command
-                         case 2: // Ctrl + b
+                         case INPUT_COMMAND:
+                              // intentional fallthrough
+                         case INPUT_SWITCH_BUFFER:
                          {
                               Point_t end = {cursor->x - 1, cursor->y};
                               if(end.x < 0) end.x = 0;
@@ -1495,7 +1442,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                if(vkh_result.completed_action.change.type == VCT_DELETE &&
                   config_state->tab_current->view_current->buffer == &config_state->buffer_list_buffer){
                     VimActionRange_t action_range;
-                    if(vim_action_get_range(&vkh_result.completed_action, buffer, cursor, &config_state->vim_state,
+                    if(vim_action_get_range(&vkh_result.completed_action, buffer_view, cursor, &config_state->vim_state,
                                             &buffer_state->vim_buffer_state, &action_range)){
                          int64_t delete_index = action_range.sorted_start->y - 1;
                          int64_t buffers_to_delete = (action_range.sorted_end->y - action_range.sorted_start->y) + 1;
@@ -1558,7 +1505,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     jump_insert(jump_array, save_buffer->filename, save_cursor);
                }else if(vkh_result.completed_action.change.type == VCT_YANK){
                     VimActionRange_t action_range;
-                    if(vim_action_get_range(&vkh_result.completed_action, buffer, cursor, &config_state->vim_state,
+                    if(vim_action_get_range(&vkh_result.completed_action, buffer_view, cursor, &config_state->vim_state,
                                             &buffer_state->vim_buffer_state, &action_range)){
                          buffer->blink = true;
                          buffer->highlight_start = *action_range.sorted_start;
@@ -1569,7 +1516,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                                                         vkh_result.completed_action.change.reg ? vkh_result.completed_action.change.reg : '"');
                     if(yank){
                          VimActionRange_t action_range;
-                         if(vim_action_get_range(&vkh_result.completed_action, buffer, cursor, &config_state->vim_state,
+                         if(vim_action_get_range(&vkh_result.completed_action, buffer_view, cursor, &config_state->vim_state,
                                                  &buffer_state->vim_buffer_state, &action_range)){
                               buffer->blink = true;
                               buffer->highlight_start = *action_range.sorted_start;
@@ -1628,737 +1575,16 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                     } break;
                     }
                }
-
-               // don't save 'g' if we completed an action with it, this ensures we don't use it in the next update
-               if(key == 'g') key = 0;
           } break;
-          case VKH_UNHANDLED_KEY:
-               switch(key){
-               case KEY_MOUSE:
-                    mouse_handle_event(buffer_view, &config_state->vim_state, &config_state->input, config_state->tab_current,
-                                       config_state->terminal_head, &config_state->terminal_current, config_state->line_number_type);
-                    break;
-               case KEY_DC:
-                    // TODO: with our current insert mode undo implementation we can't support this
-                    // ce_remove_char(buffer, cursor);
-                    break;
-               case 14: // Ctrl + n
-                    if(auto_completing(&config_state->auto_complete)){
-                         Point_t end = {cursor->x - 1, cursor->y};
-                         if(end.x < 0) end.x = 0;
-                         char* match = "";
-                         if(!ce_points_equal(config_state->auto_complete.start, *cursor)) match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
-                         auto_complete_next(&config_state->auto_complete, match);
-                         completion_update_buffer(config_state->completion_buffer, &config_state->auto_complete,
-                                                  match);
-                         if(!ce_points_equal(config_state->auto_complete.start, *cursor)) free(match);
-                         break;
-                    }
-
-                    if(config_state->input.key > 0){
-                         if(input_history_iterate(&config_state->input, false)){
-                              if(buffer->line_count && buffer->lines[cursor->y][0]) cursor->x++;
-                              vim_enter_normal_mode(&config_state->vim_state);
-                         }
-                    }
-                    break;
-               case 16: // Ctrl + p
-                    if(auto_completing(&config_state->auto_complete)){
-                         Point_t end = {cursor->x - 1, cursor->y};
-                         if(end.x < 0) end.x = 0;
-                         char* match = "";
-                         if(!ce_points_equal(config_state->auto_complete.start, *cursor)) match = ce_dupe_string(buffer, config_state->auto_complete.start, end);
-                         auto_complete_prev(&config_state->auto_complete, match);
-                         completion_update_buffer(config_state->completion_buffer, &config_state->auto_complete,
-                                                  match);
-                         if(!ce_points_equal(config_state->auto_complete.start, *cursor)) free(match);
-                         break;
-                    }
-
-                    if(config_state->input.key > 0){
-                         if(input_history_iterate(&config_state->input, true)){
-                              if(buffer->line_count && buffer->lines[cursor->y][0]) cursor->x++;
-                              vim_enter_normal_mode(&config_state->vim_state);
-                         }
-                    }
-                    break;
-               }
-
-               if(config_state->vim_state.mode != VM_INSERT){
-                    switch(key){
-                    default:
-                         break;
-                    case '.':
-                    {
-                         vim_action_apply(&config_state->vim_state.last_action, buffer, cursor, &config_state->vim_state,
-                                          &buffer_state->commit_tail, &buffer_state->vim_buffer_state);
-
-                         if(config_state->vim_state.mode != VM_INSERT || !config_state->vim_state.last_insert_command ||
-                            config_state->vim_state.last_action.change.type == VCT_PLAY_MACRO) break;
-
-                         if(!vim_enter_insert_mode(&config_state->vim_state, config_state->tab_current->view_current->buffer)) break;
-
-                         int* cmd_itr = config_state->vim_state.last_insert_command;
-                         while(*cmd_itr){
-                              vim_key_handler(*cmd_itr, &config_state->vim_state, config_state->tab_current->view_current->buffer,
-                                              &config_state->tab_current->view_current->cursor, &buffer_state->commit_tail,
-                                              &buffer_state->vim_buffer_state, true);
-                              cmd_itr++;
-                         }
-
-                         vim_enter_normal_mode(&config_state->vim_state);
-                         ce_keys_free(&config_state->vim_state.command_head);
-                         if(buffer_state->commit_tail) buffer_state->commit_tail->commit.chain = BCC_STOP;
-                    } break;
-                    case KEY_ESCAPE:
-                         if(config_state->input.key > 0) input_cancel(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state);
-                         break;
-                    case KEY_SAVE:
-                         ce_save_buffer(buffer, buffer->filename);
-                         break;
-                    case KEY_CLOSE: // Ctrl + q
-                    {
-                         if(config_state->input.key){
-                              input_cancel(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state);
-                              break;
-                         }
-
-                         if(config_state->vim_state.recording_macro){
-                              vim_stop_recording_macro(&config_state->vim_state);
-                              break;
-                         }
-
-                         if(config_state->tab_current == config_state->tab_head &&
-                            config_state->tab_current->next == NULL &&
-                            config_state->tab_current->view_current == config_state->tab_current->view_head &&
-                            config_state->tab_current->view_current->next_horizontal == NULL &&
-                            config_state->tab_current->view_current->next_vertical == NULL ){
-                                 break;
-                         }
-
-                         Point_t save_cursor_on_terminal = misc_get_cursor_on_user_terminal(cursor, buffer_view, config_state->line_number_type);
-                         config_state->tab_current->view_current->buffer->cursor = config_state->tab_current->view_current->cursor;
-
-                         if(ce_remove_view(&config_state->tab_current->view_head, config_state->tab_current->view_current)){
-                              // if head is NULL, then we have removed the view head, and there were no other views, head is NULL
-                              if(!config_state->tab_current->view_head){
-                                   if(config_state->tab_current->next){
-                                        config_state->tab_current->next = config_state->tab_current->next;
-                                        TabView_t* tmp = config_state->tab_current;
-                                        config_state->tab_current = config_state->tab_current->next;
-                                        tab_view_remove(&config_state->tab_head, tmp);
-                                        break;
-                                   }else{
-
-                                        TabView_t* itr = config_state->tab_head;
-                                        while(itr && itr->next != config_state->tab_current) itr = itr->next;
-                                        assert(itr);
-                                        assert(itr->next == config_state->tab_current);
-                                        tab_view_remove(&config_state->tab_head, config_state->tab_current);
-                                        config_state->tab_current = itr;
-                                        break;
-                                   }
-                              }
-
-                              if(config_state->tab_current->view_current == config_state->tab_current->view_previous){
-                                   config_state->tab_current->view_previous = NULL;
-                              }
-
-                              Point_t top_left;
-                              Point_t bottom_right;
-                              misc_get_user_terminal_view_rect(config_state->tab_head, &top_left, &bottom_right);
-
-                              ce_calc_views(config_state->tab_current->view_head, top_left, bottom_right);
-                              BufferView_t* new_view = ce_find_view_at_point(config_state->tab_current->view_head, save_cursor_on_terminal);
-                              if(new_view){
-                                   config_state->tab_current->view_current = new_view;
-                              }else{
-                                   config_state->tab_current->view_current = config_state->tab_current->view_head;
-                              }
-
-                              terminal_resize_if_in_view(config_state->tab_current->view_head, config_state->terminal_head);
-                         }
-                    } break;
-                    case 2: // Ctrl + b
-                         if(config_state->input.key > 0 && config_state->tab_current->view_current == config_state->input.view){
-                              // pass
-                         }else{
-                              pthread_mutex_lock(&completion_lock);
-                              auto_complete_free(&config_state->auto_complete);
-                              BufferNode_t* itr = *head;
-                              while(itr){
-                                   auto_complete_insert(&config_state->auto_complete, itr->buffer->name, NULL);
-                                   itr = itr->next;
-                              }
-                              auto_complete_start(&config_state->auto_complete, ACT_OCCURANCE, (Point_t){0, 0});
-                              completion_update_buffer(config_state->completion_buffer, &config_state->auto_complete, NULL);
-                              pthread_mutex_unlock(&completion_lock);
-
-                              input_start(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state,
-                                          "Switch Buffer", key);
-                         }
-                         break;
-                    case 'u':
-                         if(buffer_state->commit_tail && buffer_state->commit_tail->commit.type != BCT_NONE){
-                              ce_commit_undo(buffer, &buffer_state->commit_tail, cursor);
-                              if(buffer_state->commit_tail->commit.type == BCT_NONE){
-                                   buffer->status = BS_NONE;
-                              }
-                         }
-
-                         // if we are recording a macro, kill the last command we entered from the key list
-                         if(config_state->vim_state.recording_macro){
-                              VimMacroCommitNode_t* last_macro_commit = config_state->vim_state.macro_commit_current->prev;
-                              if(last_macro_commit){
-                                   do{
-                                        KeyNode_t* itr = config_state->vim_state.record_macro_head;
-                                        if(last_macro_commit->command_begin){
-                                             KeyNode_t* prev = NULL;
-                                             while(itr && itr != last_macro_commit->command_begin){
-                                                  prev = itr;
-                                                  itr = itr->next;
-                                             }
-
-                                             if(itr){
-                                                  // free the keys from our macro recording
-                                                  ce_keys_free(&itr);
-                                                  if(prev){
-                                                       prev->next = NULL;
-                                                  }else{
-                                                       config_state->vim_state.record_macro_head = NULL;
-                                                  }
-                                             }
-                                        }else{
-                                             // NOTE: not sure this case can get hit anymore
-                                             ce_keys_free(&itr);
-                                             config_state->vim_state.record_macro_head = NULL;
-                                        }
-
-                                        if(!last_macro_commit->chain) break;
-
-                                        last_macro_commit = last_macro_commit->prev;
-                                   }while(last_macro_commit);
-
-                                   config_state->vim_state.macro_commit_current = last_macro_commit;
-                              }else{
-                                   vim_stop_recording_macro(&config_state->vim_state);
-                              }
-                         }
-                         break;
-                    case KEY_REDO:
-                    {
-                         if(buffer_state->commit_tail && buffer_state->commit_tail->next){
-                              if(ce_commit_redo(buffer, &buffer_state->commit_tail, cursor)){
-                                   if(config_state->vim_state.recording_macro){
-                                        do{
-                                             KeyNode_t* itr = config_state->vim_state.macro_commit_current->command_copy;
-                                             KeyNode_t* new_command_begin = NULL;
-                                             while(itr){
-                                                  KeyNode_t* new_key = ce_keys_push(&config_state->vim_state.record_macro_head, itr->key);
-                                                  if(!new_command_begin) new_command_begin = new_key;
-                                                  itr = itr->next;
-                                             }
-
-                                             itr = config_state->vim_state.record_macro_head;
-                                             while(itr->next) itr = itr->next;
-
-                                             config_state->vim_state.macro_commit_current->command_begin = new_command_begin;
-                                             config_state->vim_state.macro_commit_current = config_state->vim_state.macro_commit_current->next;
-                                        }while(config_state->vim_state.macro_commit_current && config_state->vim_state.macro_commit_current->prev->chain);
-                                   }
-                              }
-                         }
-
-                    } break;
-                    case 'H':
-                    {
-                         // move cursor to top line of view
-                         Point_t location = {cursor->x, buffer_view->top_row};
-                         ce_set_cursor(buffer, cursor, location);
-                    } break;
-                    case 'M':
-                    {
-                         // move cursor to middle line of view
-                         int64_t view_height = buffer_view->bottom_right.y - buffer_view->top_left.y;
-                         Point_t location = {cursor->x, buffer_view->top_row + (view_height/2)};
-                         ce_set_cursor(buffer, cursor, location);
-                    } break;
-                    case 'L':
-                    {
-                         // move cursor to bottom line of view
-                         int64_t view_height = buffer_view->bottom_right.y - buffer_view->top_left.y;
-                         Point_t location = {cursor->x, buffer_view->top_row + view_height};
-                         ce_set_cursor(buffer, cursor, location);
-                    } break;
-                    case 'z':
-                    break;
-                    case KEY_NPAGE:
-                    {
-                         view_move_cursor_half_page_up(config_state->tab_current->view_current);
-                    } break;
-                    case KEY_PPAGE:
-                    {
-                         view_move_cursor_half_page_down(config_state->tab_current->view_current);
-                    } break;
-                    case ':':
-                    {
-                         pthread_mutex_lock(&completion_lock);
-                         auto_complete_free(&config_state->auto_complete);
-                         for(int64_t i = 0; i < config_state->command_entry_count; ++i){
-                              if(config_state->command_entries[i].hidden) continue;
-                              auto_complete_insert(&config_state->auto_complete, config_state->command_entries[i].name, NULL);
-                         }
-                         auto_complete_start(&config_state->auto_complete, ACT_OCCURANCE, (Point_t){0, 0});
-                         completion_update_buffer(config_state->completion_buffer, &config_state->auto_complete, NULL);
-                         pthread_mutex_unlock(&completion_lock);
-                         input_start(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state,
-                                     "Command", key);
-                    } break;
-                    case '/':
-                    {
-                         input_start(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state,
-                                     "Regex Search", key);
-                         config_state->vim_state.search.direction = CE_DOWN;
-                         config_state->vim_state.search.start = *cursor;
-                         JumpArray_t* jump_array = &((BufferViewState_t*)(buffer_view->user_data))->jump_array;
-                         jump_insert(jump_array, buffer->filename, *cursor);
-                         break;
-                    }
-                    case '?':
-                    {
-                         input_start(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state,
-                                     "Reverse Regex Search", key);
-                         config_state->vim_state.search.direction = CE_UP;
-                         config_state->vim_state.search.start = *cursor;
-                         break;
-                    }
-                    case '=':
-                    {
-#if 0
-                         if(config_state->movement_keys[0] == MOVEMENT_CONTINUE) return true;
-                         else{
-                              int64_t begin_format_line;
-                              int64_t end_format_line;
-                              switch(key){
-                              case '=':
-                                   begin_format_line = cursor->y;
-                                   end_format_line = cursor->y;
-                                   break;
-                              case 'G':
-                                   begin_format_line = cursor->y;
-                                   end_format_line = buffer->line_count-1;
-                                   break;
-                              default:
-                                   clear_keys(config_state);
-                                   return true;
-                              }
-
-                              // TODO support undo with clang-format
-                              ce_commits_free(buffer_state->commit_tail);
-                              buffer_state->commit_tail = NULL;
-
-                              int in_fds[2]; // 0 = child stdin
-                              int out_fds[2]; // 1 = child stdout
-                              if(pipe(in_fds) == -1 || pipe(out_fds) == -1){
-                                   ce_message("pipe failed %s", strerror(errno));
-                                   return true;
-                              }
-                              pid_t pid = fork();
-                              if(pid == -1){
-                                   ce_message("fork failed %s", strerror(errno));
-                                   return true;
-                              }
-                              if(pid == 0){
-                                   // child process
-                                   close(in_fds[1]); // close parent fds
-                                   close(out_fds[0]);
-
-                                   close(0); // close stdin
-                                   close(1); // close stdout
-                                   dup(in_fds[0]); // new stdin
-                                   dup(out_fds[1]); // new stdout
-                                   int64_t cursor_position = cursor->x+1;
-                                   for(int64_t y_itr = 0; y_itr < cursor->y; y_itr++){
-                                        cursor_position += strlen(buffer->lines[y_itr]);
-                                   }
-                                   char* cursor_arg;
-                                   asprintf(&cursor_arg, "-cursor=%"PRId64, cursor_position);
-
-                                   char* line_arg;
-                                   asprintf(&line_arg, "-lines=%"PRId64":%"PRId64, begin_format_line+1, end_format_line+1);
-
-                                   int ret __attribute__((unused)) = execlp("clang-format", "clang-format", line_arg, cursor_arg, (char *)NULL);
-                                   assert(ret != -1);
-                                   exit(1); // we should never reach here
-                              }
-
-                              // parent process
-                              close(in_fds[0]); // close child fds
-                              close(out_fds[1]);
-
-                              FILE* child_stdin = fdopen(in_fds[1], "w");
-                              FILE* child_stdout = fdopen(out_fds[0], "r");
-                              assert(child_stdin);
-                              assert(child_stdout);
-
-                              for(int i = 0; i < buffer->line_count; i++){
-                                   if(fputs(buffer->lines[i], child_stdin) == EOF || fputc('\n', child_stdin) == EOF){
-                                        ce_message("issue with fputs");
-                                        return true;
-                                   }
-                              }
-                              fclose(child_stdin);
-                              close(in_fds[1]);
-
-                              char formatted_line_buf[BUFSIZ];
-                              formatted_line_buf[0] = 0;
-
-                              // read cursor position
-                              fgets(formatted_line_buf, BUFSIZ, child_stdout);
-                              int cursor_position = -1;
-                              sscanf(formatted_line_buf, "{ \"Cursor\": %d", &cursor_position);
-
-                              // blow away all lines in the file
-                              for(int64_t i = buffer->line_count - 1; i >= 0; i--){
-                                   ce_remove_line(buffer, i);
-                              }
-
-                              for(int64_t i = 0; ; i++){
-                                   if(fgets(formatted_line_buf, BUFSIZ, child_stdout) == NULL) break;
-                                   size_t new_line_len = strlen(formatted_line_buf) - 1;
-                                   assert(formatted_line_buf[new_line_len] == '\n');
-                                   formatted_line_buf[new_line_len] = 0;
-                                   ce_insert_line(buffer, i, formatted_line_buf);
-#if 0
-                                   if(cursor_position > 0){
-                                        cursor_position -= new_line_len+1;
-                                        if(cursor_position <= 0){
-                                             Point_t new_cursor_location = {-cursor_position, i};
-                                             ce_message("moving cursor to %ld", -cursor_position);
-                                             ce_set_cursor(buffer, cursor, &new_cursor_location);
-                                        }
-                                   }
-#endif
-                              }
-                              cursor->x = 0;
-                              cursor->y = 0;
-                              if(!ce_advance_cursor(buffer, cursor, cursor_position - 1))
-                                   ce_message("failed to advance cursor");
-
-#if 0
-                              // TODO: use -output-replacements-xml to support undo
-                              char* formatted_line = strdup(formatted_line_buf);
-                              // save the current line in undo history
-                              Point_t delete_begin = {0, cursor->y};
-                              char* save_string = ce_dupe_line(buffer, cursor->y);
-                              if(!ce_remove_line(buffer, cursor->y)){
-                                   ce_message("ce_remove_string failed");
-                                   return true;
-                              }
-                              ce_insert_string(buffer, &delete_begin, formatted_line);
-                              ce_commit_change_string(&buffer_state->commit_tail, &delete_begin, cursor, cursor, formatted_line, save_string);
-#endif
-
-                              fclose(child_stdout);
-                              close(in_fds[0]);
-
-                              // wait for the child process to complete
-                              int wstatus;
-                              do {
-                                   pid_t w = waitpid(pid, &wstatus, WUNTRACED | WCONTINUED);
-                                   if (w == -1) {
-                                        perror("waitpid");
-                                        exit(EXIT_FAILURE);
-                                   }
-
-                                   if (WIFEXITED(wstatus) && WEXITSTATUS(wstatus) != 0) {
-                                        ce_message("clang-format process exited, status=%d\n", WEXITSTATUS(wstatus));
-                                   } else if (WIFSIGNALED(wstatus)) {
-                                        ce_message("clang-format process killed by signal %d\n", WTERMSIG(wstatus));
-                                   } else if (WIFSTOPPED(wstatus)) {
-                                        ce_message("clang-format process stopped by signal %d\n", WSTOPSIG(wstatus));
-                                   } else if (WIFCONTINUED(wstatus)) {
-                                        ce_message("clang-format process continued\n");
-                                   }
-                              } while (!WIFEXITED(wstatus) && !WIFSIGNALED(wstatus));
-                              config_state->command_key = '\0';
-                         }
-#endif
-                    } break;
-                    case 24: // Ctrl + x
-                         if(config_state->terminal_current){
-                              // revive terminal if it is dead !
-                              if(!config_state->terminal_current->terminal.is_alive){
-                                   pthread_cancel(config_state->terminal_current->terminal.reader_thread);
-                                   pthread_join(config_state->terminal_current->terminal.reader_thread, NULL);
-
-                                   if(!terminal_start_in_view(buffer_view, config_state->terminal_current, config_state)){
-                                        break;
-                                   }
-                              }
-
-                              BufferView_t* terminal_view = ce_buffer_in_view(config_state->tab_current->view_head,
-                                                                              config_state->terminal_current->buffer);
-                              if(terminal_view){
-                                   // if terminal is already in view
-                                   config_state->tab_current->view_previous = config_state->tab_current->view_current; // save previous view
-                                   config_state->tab_current->view_current = terminal_view;
-                                   buffer_view = terminal_view;
-                              }else{
-                                   // otherwise use the current view
-                                   buffer->cursor = buffer_view->cursor; // save cursor before switching
-                                   buffer_view->buffer = config_state->terminal_current->buffer;
-                              }
-
-                              buffer_view->cursor = config_state->terminal_current->terminal.cursor;
-                              buffer_view->top_row = 0;
-                              buffer_view->left_column = 0;
-                              view_follow_cursor(buffer_view, config_state->line_number_type);
-                              config_state->vim_state.mode = VM_INSERT;
-                              break;
-                         }
-
-                         // intentionally fall through if there was no terminal available
-                    case 1: // Ctrl + a
-                    {
-                         TerminalNode_t* node = calloc(1, sizeof(*node));
-                         if(!node) break;
-
-                         // setup terminal buffer buffer_state
-                         BufferState_t* terminal_buffer_state = calloc(1, sizeof(*terminal_buffer_state));
-                         if(!terminal_buffer_state){
-                              ce_message("failed to allocate buffer state.");
-                              return false;
-                         }
-
-                         node->buffer = calloc(1, sizeof(*node->buffer));
-                         node->buffer->absolutely_no_line_numbers_under_any_circumstances = true;
-                         node->buffer->user_data = terminal_buffer_state;
-
-                         TerminalHighlight_t* terminal_highlight_data = calloc(1, sizeof(TerminalHighlight_t));
-                         terminal_highlight_data->terminal = &node->terminal;
-                         node->buffer->syntax_fn = terminal_highlight;
-                         node->buffer->syntax_user_data = terminal_highlight_data;
-
-                         BufferNode_t* new_buffer_node = ce_append_buffer_to_list(head, node->buffer);
-                         if(!new_buffer_node){
-                              ce_message("failed to add shell command buffer to list");
-                              break;
-                         }
-
-                         if(!terminal_start_in_view(buffer_view, node, config_state)){
-                              break;
-                         }
-
-                         buffer->cursor = buffer_view->cursor; // save cursor before switching
-                         buffer_view->buffer = node->buffer;
-
-                         // append the node to the list
-                         int64_t id = 1;
-                         if(config_state->terminal_head){
-                              TerminalNode_t* itr = config_state->terminal_head;
-                              while(itr->next){
-                                   itr = itr->next;
-                                   id++;
-                              }
-                              id++;
-                              itr->next = node;
-                         }else{
-                              config_state->terminal_head = node;
-                         }
-
-                         // name terminal
-                         char buffer_name[64];
-                         snprintf(buffer_name, 64, "[terminal %" PRId64 "]", id);
-                         node->buffer->name = strdup(buffer_name);
-
-                         config_state->terminal_current = node;
-                         config_state->vim_state.mode = VM_INSERT;
-                    } break;
-                    case 14: // Ctrl + n
-                         if(config_state->input.key > 0) break;
-
-                         dest_jump_to_next_in_terminal(head, config_state->terminal_head, &config_state->terminal_current,
-                                                       config_state->tab_current->view_head, config_state->tab_current->view_current,
-                                                       true);
-                         break;
-                    case 16: // Ctrl + p
-                         if(config_state->input.key > 0) break;
-
-                         dest_jump_to_next_in_terminal(head, config_state->terminal_head, &config_state->terminal_current,
-                                                       config_state->tab_current->view_head, config_state->tab_current->view_current,
-                                                       false);
-                         break;
-                    case 6: // Ctrl + f
-                    {
-                         assert(config_state->input.load_file_search_path == NULL);
-
-                         buffer->cursor = buffer_view->cursor;
-
-                         input_start(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state,
-                                     "Load File", key);
-
-                         // when searching for a file, see if we would like to use a path other than the one ce was run at.
-                         TerminalNode_t* terminal_node = is_terminal_buffer(config_state->terminal_head, buffer);
-                         if(terminal_node){
-                              // if we are looking at a terminal, use the terminal's cwd
-                              config_state->input.load_file_search_path = terminal_get_current_directory(&terminal_node->terminal);
-                         }else{
-                              // if our file has a relative path in it, use that
-                              char* last_slash = strrchr(buffer->filename, '/');
-                              if(last_slash){
-                                   int64_t path_len = last_slash - buffer->filename;
-                                   config_state->input.load_file_search_path = malloc(path_len + 1);
-                                   strncpy(config_state->input.load_file_search_path, buffer->filename, path_len);
-                                   config_state->input.load_file_search_path[path_len] = 0;
-                              }
-                         }
-
-                         completion_calc_start_and_path(&config_state->auto_complete,
-                                                        config_state->input.buffer.lines[0],
-                                                        *cursor,
-                                                        config_state->completion_buffer,
-                                                        config_state->input.load_file_search_path);
-                    } break;
-                    case 20: // Ctrl + t
-                    {
-                         TabView_t* new_tab = tab_view_insert(config_state->tab_head);
-                         if(!new_tab) break;
-
-                         // copy view attributes from the current view
-                         *new_tab->view_head = *config_state->tab_current->view_current;
-                         new_tab->view_head->next_horizontal = NULL;
-                         new_tab->view_head->next_vertical = NULL;
-                         new_tab->view_current = new_tab->view_head;
-
-                         config_state->tab_current = new_tab;
-                    } break;
-                    case 'R':
-                         if(config_state->vim_state.mode == VM_VISUAL_RANGE || config_state->vim_state.mode == VM_VISUAL_LINE){
-                              input_start(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state,
-                                          "Visual Replace", key);
-                         }else{
-                              input_start(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state,
-                                          "Replace", key);
-                         }
-                    break;
-                    case 8: // Ctrl + h
-                    {
-                         Point_t point = {config_state->tab_current->view_current->top_left.x - 2, // account for window separator
-                                         cursor->y - config_state->tab_current->view_current->top_row + config_state->tab_current->view_current->top_left.y};
-                         view_switch_to_point(config_state->input.key > 0, config_state->input.view, &config_state->vim_state,
-                                                 config_state->tab_current, config_state->terminal_head, &config_state->terminal_current, point);
-                    } break;
-                    case 10: // Ctrl + j
-                    {
-                         Point_t point = {cursor->x - config_state->tab_current->view_current->left_column + config_state->tab_current->view_current->top_left.x,
-                                          config_state->tab_current->view_current->bottom_right.y + 2}; // account for window separator
-                         view_switch_to_point(config_state->input.key > 0, config_state->input.view, &config_state->vim_state,
-                                                 config_state->tab_current, config_state->terminal_head, &config_state->terminal_current, point);
-                    } break;
-                    case 11: // Ctrl + k
-                    {
-                         Point_t point = {cursor->x - config_state->tab_current->view_current->left_column + config_state->tab_current->view_current->top_left.x,
-                                          config_state->tab_current->view_current->top_left.y - 2};
-                         view_switch_to_point(config_state->input.key > 0, config_state->input.view, &config_state->vim_state,
-                                                 config_state->tab_current, config_state->terminal_head, &config_state->terminal_current, point);
-                    } break;
-                    case 12: // Ctrl + l
-                    {
-                         Point_t point = {config_state->tab_current->view_current->bottom_right.x + 2, // account for window separator
-                                          cursor->y - config_state->tab_current->view_current->top_row + config_state->tab_current->view_current->top_left.y};
-                         view_switch_to_point(config_state->input.key > 0, config_state->input.view, &config_state->vim_state,
-                                                 config_state->tab_current, config_state->terminal_head, &config_state->terminal_current, point);
-                    } break;
-                    case 19: // Ctrl + s
-                    {
-                         view_split(config_state->tab_current->view_head, config_state->tab_current->view_current, false, config_state->line_number_type);
-                         terminal_resize_if_in_view(config_state->tab_current->view_head, config_state->terminal_head);
-                    } break;
-                    case 22: // Ctrl + v
-                    {
-                         view_split(config_state->tab_current->view_head, config_state->tab_current->view_current, true, config_state->line_number_type);
-                         terminal_resize_if_in_view(config_state->tab_current->view_head, config_state->terminal_head);
-                    } break;
-                    case 15: // Ctrl + o
-                    {
-                         JumpArray_t* jump_array = &((BufferViewState_t*)(buffer_view->user_data))->jump_array;
-                         if(jump_array->jump_current){
-                              if(!jump_array->jumps[jump_array->jump_current].filepath[0]){
-                                   jump_insert(jump_array, buffer->filename, *cursor);
-                                   jump_to_previous(jump_array);
-                              }
-                              const Jump_t* jump = jump_to_previous(jump_array);
-                              if(jump){
-                                   BufferNode_t* new_buffer_node = buffer_create_from_file(head, jump->filepath);
-                                   if(new_buffer_node){
-                                        buffer_view->buffer = new_buffer_node->buffer;
-                                        buffer_view->cursor = jump->location;
-                                        view_center(buffer_view);
-                                   }
-                              }
-                         }
-                         handled_key = true;
-                    } break;
-                    case 9: // Ctrl + i (also tab)
-                    {
-                         JumpArray_t* jump_array = &((BufferViewState_t*)(buffer_view->user_data))->jump_array;
-                         const Jump_t* jump = jump_to_next(jump_array);
-                         if(jump){
-                              BufferNode_t* new_buffer_node = buffer_create_from_file(head, jump->filepath);
-                              if(new_buffer_node){
-                                   buffer_view->buffer = new_buffer_node->buffer;
-                                   buffer_view->cursor = jump->location;
-                                   view_center(buffer_view);
-                              }
-                         }
-                         handled_key = true;
-                    } break;
-                    case 29: // Ctrl + ]
-                    {
-                         Point_t word_start, word_end;
-                         if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) break;
-                         assert(word_start.y == word_end.y);
-                         int len = (word_end.x - word_start.x) + 1;
-                         char* search_word = strndupa(buffer->lines[cursor->y] + word_start.x, len);
-                         dest_cscope_goto_definition(config_state->tab_current->view_current, head, search_word);
-                    } break;
-                    case 'K':
-                    {
-                         Point_t word_start;
-                         Point_t word_end;
-                         if(!ce_get_word_at_location(buffer, *cursor, &word_start, &word_end)) break;
-                         assert(word_start.y == word_end.y);
-                         int len = (word_end.x - word_start.x) + 1;
-
-                         char command[BUFSIZ];
-                         snprintf(command, BUFSIZ, "man --pager=cat %*.*s", len, len, buffer->lines[cursor->y] + word_start.x);
-                         terminal_in_view_run_command(config_state->terminal_head, config_state->tab_current->view_head, command);
-                    } break;
-                    }
-               }else{
-                    switch(key){
-                    default:
-                         break;
-                    case 25: // Ctrl + y
-                    {
-                         Point_t beginning_of_word = *cursor;
-                         char cur_char = 0;
-                         if(ce_get_char(buffer, (Point_t){cursor->x - 1, cursor->y}, &cur_char)){
-                              if(isalpha(cur_char) || cur_char == '_'){
-                                   ce_move_cursor_to_beginning_of_word(buffer, &beginning_of_word, true);
-                              }
-                         }
-                         clang_completion(config_state, beginning_of_word);
-                    } break;
-                    }
-               }
-               break;
           }
      }
 
-     // incremental search
-     if(config_state->input.key > 0 && (config_state->input.key == '/' || config_state->input.key == '?')){
+     // incremental search, move the cursor and center the view as we find matches
+     switch(config_state->input.type){
+     default:
+          break;
+     case INPUT_SEARCH:
+     case INPUT_REVERSE_SEARCH:
           if(config_state->input.buffer.lines == NULL){
                pthread_mutex_lock(&view_input_save_lock);
                config_state->input.view_save->cursor = config_state->vim_state.search.start;
@@ -2374,9 +1600,9 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          Point_t match = {};
                          int64_t match_len = 0;
                          if(config_state->input.buffer.lines[0][0] &&
-                            ce_find_regex(config_state->input.view_save->buffer,
-                                          config_state->vim_state.search.start, &config_state->vim_state.search.regex, &match,
-                                          &match_len, config_state->vim_state.search.direction)){
+                              ce_find_regex(config_state->input.view_save->buffer,
+                                            config_state->vim_state.search.start, &config_state->vim_state.search.regex, &match,
+                                            &match_len, config_state->vim_state.search.direction)){
                               pthread_mutex_lock(&view_input_save_lock);
                               ce_set_cursor(config_state->input.view_save->buffer,
                                             &config_state->input.view_save->cursor, match);
@@ -2390,17 +1616,12 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
                          }
                     }else{
                          config_state->vim_state.search.valid_regex = false;
-     #if DEBUG
-                         // NOTE: this might be too noisy in practice
-                         char error_buffer[BUFSIZ];
-                         regerror(rc, &regex, error_buffer, BUFSIZ);
-                         ce_message("regcomp() failed: '%s'", error_buffer);
-     #endif
                     }
                }else{
                     config_state->vim_state.search.valid_regex = false;
                }
           }
+          break;
      }
 
      if(config_state->vim_state.mode != VM_INSERT){
@@ -2408,8 +1629,6 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
      }
 
      if(config_state->quit) return false;
-
-     config_state->last_key = key;
 
      if(ce_buffer_in_view(config_state->tab_current->view_head, &config_state->buffer_list_buffer)){
           info_update_buffer_list_buffer(&config_state->buffer_list_buffer, *head);
@@ -2434,6 +1653,7 @@ bool key_handler(int key, BufferNode_t** head, void* user_data)
           pthread_mutex_unlock(&draw_lock);
      }
 
+     g_last_key = key;
      return true;
 }
 
@@ -2454,6 +1674,7 @@ void view_drawer(void* user_data)
      ce_calc_views(config_state->tab_current->view_head, top_left, bottom_right);
 
      // TODO: don't draw over borders!
+
      LineNumberType_t line_number_type = config_state->line_number_type;
      if(buffer->absolutely_no_line_numbers_under_any_circumstances){
           line_number_type = LNT_NONE;
@@ -2461,11 +1682,12 @@ void view_drawer(void* user_data)
 
      Point_t terminal_cursor = {};
 
+     // draw input dialogue or auto complete if visible
      Point_t input_top_left = {};
      Point_t input_bottom_right = {};
      Point_t auto_complete_top_left = {};
      Point_t auto_complete_bottom_right = {};
-     if(config_state->input.key > 0){
+     if(config_state->input.type > INPUT_NONE){
           int64_t input_view_height = config_state->input.buffer.line_count;
           if(input_view_height) input_view_height--;
           pthread_mutex_lock(&view_input_save_lock);
@@ -2514,7 +1736,7 @@ void view_drawer(void* user_data)
           terminal_cursor = misc_get_cursor_on_user_terminal(cursor, buffer_view, line_number_type);
      }
 
-     // setup highlight
+     // setup highlight for visual modes
      if(config_state->vim_state.mode == VM_VISUAL_RANGE){
           const Point_t* start = &config_state->vim_state.visual_start;
           const Point_t* end = &config_state->tab_current->view_current->cursor;
@@ -2540,31 +1762,23 @@ void view_drawer(void* user_data)
           buffer->highlight_end = (Point_t){-1, 0};
      }
 
+     // setup highlight for hotmark
      Point_t* vim_mark = vim_mark_find(buffer_state->vim_buffer_state.mark_head, '0');
      if(vim_mark) buffer->mark = *vim_mark;
 
-     const char* search = NULL;
-     if(config_state->input.key > 0 && (config_state->input.key == '/' || config_state->input.key == '?') &&
-        config_state->input.buffer.lines && config_state->input.buffer.lines[0][0]){
-          search = config_state->input.buffer.lines[0];
-     }else{
-          VimYankNode_t* yank = vim_yank_find(config_state->vim_state.yank_head, '/');
-          if(yank) search = yank->text;
-     }
-
-     HighlightLineType_t highlight_line_type = config_state->highlight_line_type;
-
      // turn off highlighting the current line when in visual mode
+     HighlightLineType_t highlight_line_type = config_state->highlight_line_type;
      if(config_state->vim_state.mode == VM_VISUAL_RANGE || config_state->vim_state.mode == VM_VISUAL_LINE){
           highlight_line_type = HLT_NONE;
      }
 
+     // set search regex if one is available to highlight all matches
      regex_t* highlight_regex = NULL;
      if(!config_state->do_not_highlight_search && config_state->vim_state.search.valid_regex){
           highlight_regex = &config_state->vim_state.search.regex;
      }
 
-     // NOTE: always draw from the head
+     // draw starting from the head
      ce_draw_views(config_state->tab_current->view_head, highlight_regex, config_state->line_number_type, highlight_line_type);
 
      // draw input status
@@ -2587,11 +1801,13 @@ void view_drawer(void* user_data)
           ce_draw_views(config_state->view_auto_complete, NULL, LNT_NONE, HLT_NONE);
      }
 
+     // draw all view statuses recursively
      draw_view_statuses(config_state->tab_current->view_head, config_state->tab_current->view_current,
-                        config_state->vim_state.mode, config_state->last_key,
-                        config_state->vim_state.recording_macro, config_state->terminal_current);
+                        config_state->vim_state.mode, config_state->vim_state.recording_macro,
+                        config_state->terminal_current);
 
-     if(config_state->input.key > 0){
+     // if in input mode, draw input mode's status line
+     if(config_state->input.type > INPUT_NONE){
           if(config_state->input.view == config_state->tab_current->view_current){
                move(input_top_left.y - 1, input_top_left.x);
 
@@ -2615,8 +1831,8 @@ void view_drawer(void* user_data)
 
           ce_draw_views(config_state->input.view, NULL, LNT_NONE, HLT_NONE);
           draw_view_statuses(config_state->input.view, config_state->tab_current->view_current,
-                             config_state->vim_state.mode, config_state->last_key,
-                             config_state->vim_state.recording_macro, config_state->terminal_current);
+                             config_state->vim_state.mode, config_state->vim_state.recording_macro,
+                             config_state->terminal_current);
      }
 
      // draw auto complete

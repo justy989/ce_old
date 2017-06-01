@@ -46,6 +46,14 @@ TEST(parse_sanity)
      EXPECT(command.args[2].type == CAT_DECIMAL);
      EXPECT(command.args[2].decimal == 3.2);
      command_free(&command);
+
+     EXPECT(command_parse(&command, "command \"make clean\""));
+     command_log(&command);
+     EXPECT(strcmp(command.name, "command") == 0);
+     EXPECT(command.arg_count == 1);
+     EXPECT(command.args[0].type == CAT_STRING);
+     EXPECT(strcmp(command.args[0].string, "make clean") == 0);
+     command_free(&command);
 }
 
 int main()

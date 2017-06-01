@@ -4,8 +4,22 @@
 #include "vim.h"
 #include "text_history.h"
 
+typedef enum{
+     INPUT_NONE,
+     INPUT_QUIT,
+     INPUT_SWITCH_BUFFER,
+     INPUT_LOAD_FILE,
+     INPUT_SEARCH,
+     INPUT_REVERSE_SEARCH,
+     INPUT_REPLACE,
+     INPUT_EDIT_MACRO,
+     INPUT_EDIT_YANK,
+     INPUT_COMMAND,
+     INPUT_COUNT,
+}InputType_t;
+
 typedef struct{
-     int key;
+     int type;
      const char* message;
 
      VimMode_t vim_mode_save;
@@ -25,7 +39,7 @@ typedef struct{
 }Input_t;
 
 TextHistory_t* input_get_history(Input_t* input);
-void input_start(Input_t* input, BufferView_t** view, VimState_t* vim_state, const char* message, int key);
+void input_start(Input_t* input, BufferView_t** view, VimState_t* vim_state, const char* message, int type);
 void input_end(Input_t* input, VimState_t* vim_state);
 void input_cancel(Input_t* input, BufferView_t** view, VimState_t* vim_state);
 void input_commit_to_history(Buffer_t* input_buffer, TextHistory_t* history);

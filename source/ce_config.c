@@ -427,7 +427,7 @@ static bool confirm_action(ConfigState_t* config_state, BufferNode_t** head)
           if(!itr) return false;
 
           input_start(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state,
-                      "Edit Macro", '@');
+                      "Edit Macro", INPUT_EDIT_MACRO);
           config_state->editting_register = itr->reg;
           vim_enter_normal_mode(&config_state->vim_state);
           char* char_command = vim_command_string_to_char_string(itr->command);
@@ -447,7 +447,7 @@ static bool confirm_action(ConfigState_t* config_state, BufferNode_t** head)
           }
 
           input_start(&config_state->input, &config_state->tab_current->view_current, &config_state->vim_state,
-                      "Edit Yank", 'y');
+                      "Edit Yank", INPUT_EDIT_YANK);
           config_state->editting_register = itr->reg_char;
           vim_enter_normal_mode(&config_state->vim_state);
           ce_insert_string(&config_state->input.buffer, (Point_t){0,0}, itr->text);
@@ -711,8 +711,8 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      CHECK_PAIR(S_NORMAL, COLOR_FOREGROUND, COLOR_BACKGROUND);
      CHECK_PAIR(S_KEYWORD, COLOR_BLUE, COLOR_BACKGROUND);
      CHECK_PAIR(S_TYPE, COLOR_BRIGHT_BLUE, COLOR_BACKGROUND);
-     CHECK_PAIR(S_FUNC, COLOR_BRIGHT_GREEN, COLOR_BACKGROUND);
-     CHECK_PAIR(S_VARIABLE_DECLARATION, COLOR_BRIGHT_WHITE, COLOR_BACKGROUND);
+     CHECK_PAIR(S_FUNC, COLOR_BRIGHT_CYAN, COLOR_BACKGROUND);
+     CHECK_PAIR(S_VARIABLE_DECLARATION, COLOR_BRIGHT_RED, COLOR_BACKGROUND);
      CHECK_PAIR(S_CONTROL, COLOR_YELLOW, COLOR_BACKGROUND);
      CHECK_PAIR(S_COMMENT, COLOR_GREEN, COLOR_BACKGROUND);
      CHECK_PAIR(S_STRING, COLOR_RED, COLOR_BACKGROUND);
@@ -729,8 +729,8 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      CHECK_PAIR(S_NORMAL_HIGHLIGHTED, COLOR_FOREGROUND, COLOR_WHITE);
      CHECK_PAIR(S_KEYWORD_HIGHLIGHTED, COLOR_BLUE, COLOR_WHITE);
      CHECK_PAIR(S_TYPE_HIGHLIGHTED, COLOR_BRIGHT_BLUE, COLOR_WHITE);
-     CHECK_PAIR(S_FUNC_HIGHLIGHTED, COLOR_BRIGHT_GREEN, COLOR_WHITE);
-     CHECK_PAIR(S_VARIABLE_DECLARATION_HIGHLIGHTED, COLOR_BRIGHT_WHITE, COLOR_WHITE);
+     CHECK_PAIR(S_FUNC_HIGHLIGHTED, COLOR_BRIGHT_CYAN, COLOR_WHITE);
+     CHECK_PAIR(S_VARIABLE_DECLARATION_HIGHLIGHTED, COLOR_BRIGHT_RED, COLOR_WHITE);
      CHECK_PAIR(S_CONTROL_HIGHLIGHTED, COLOR_YELLOW, COLOR_WHITE);
      CHECK_PAIR(S_COMMENT_HIGHLIGHTED, COLOR_GREEN, COLOR_WHITE);
      CHECK_PAIR(S_STRING_HIGHLIGHTED, COLOR_RED, COLOR_WHITE);
@@ -747,8 +747,8 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
      CHECK_PAIR(S_NORMAL_CURRENT_LINE, COLOR_FOREGROUND, COLOR_BRIGHT_BLACK);
      CHECK_PAIR(S_KEYWORD_CURRENT_LINE, COLOR_BLUE, COLOR_BRIGHT_BLACK);
      CHECK_PAIR(S_TYPE_CURRENT_LINE, COLOR_BRIGHT_BLUE, COLOR_BRIGHT_BLACK);
-     CHECK_PAIR(S_FUNC_CURRENT_LINE, COLOR_BRIGHT_GREEN, COLOR_BRIGHT_BLACK);
-     CHECK_PAIR(S_VARIABLE_DECLARATION_CURRENT_LINE, COLOR_BRIGHT_WHITE, COLOR_BRIGHT_BLACK);
+     CHECK_PAIR(S_FUNC_CURRENT_LINE, COLOR_BRIGHT_CYAN, COLOR_BRIGHT_BLACK);
+     CHECK_PAIR(S_VARIABLE_DECLARATION_CURRENT_LINE, COLOR_BRIGHT_RED, COLOR_BRIGHT_BLACK);
      CHECK_PAIR(S_CONTROL_CURRENT_LINE, COLOR_YELLOW, COLOR_BRIGHT_BLACK);
      CHECK_PAIR(S_COMMENT_CURRENT_LINE, COLOR_GREEN, COLOR_BRIGHT_BLACK);
      CHECK_PAIR(S_STRING_CURRENT_LINE, COLOR_RED, COLOR_BRIGHT_BLACK);
@@ -899,7 +899,6 @@ bool initializer(BufferNode_t** head, Point_t* terminal_dimensions, int argc, ch
                {{'\\', 'r'}, "redraw"},
                {{'m', '?'}, "show_marks"},
                {{'\"', '?'}, "show_marks"},
-               {{'q', '?'}, "show_macros"},
                {{'@', '?'}, "show_macros"},
                {{'y', '?'}, "show_yanks"},
                {{'Z', 'Z'}, "save_and_close_view"},

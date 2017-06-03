@@ -63,6 +63,13 @@ typedef struct{
      int64_t y;
 }Point_t;
 
+typedef struct{
+     int64_t left;
+     int64_t top;
+     int64_t right;
+     int64_t bottom;
+}Rect_t;
+
 struct Buffer_t;
 
 typedef enum{

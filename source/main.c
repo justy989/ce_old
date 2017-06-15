@@ -2,7 +2,7 @@
 TODOS:
 
 BIG:
--unicode support
+-unicode support (link -lncursesw, and call setlocale() before initializing curses)
 -network editing
 -autocomplete for code
 -parse c to do real syntax highlighting/autocomplete?

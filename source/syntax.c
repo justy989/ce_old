@@ -570,7 +570,7 @@ static int64_t syntax_is_c_variable_declaration(const char* line, int64_t start_
           if(itr == (line + start_offset)) return 0; // if itr has never moved
           itr++;
           if(iscidentifier(*itr)){
-               if(syntax_is_c_typename(itr, 0) == 0){
+               if(!syntax_is_c_typename(itr, 0)){
                     // ignore const
                     if(strncmp(itr, "const", 5) != 0){
                          return 0;
@@ -579,7 +579,9 @@ static int64_t syntax_is_c_variable_declaration(const char* line, int64_t start_
                     found_typename = true;
                }
 
-               itr--;
+               // keep reversing
+               itr -= 2;
+               if(itr < line) return 0;
           }else{
                return 0;
           }
